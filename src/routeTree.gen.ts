@@ -10,33 +10,189 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as DashRouteImport } from './routes/_dash'
+import { Route as DashActivityRouteImport } from './routes/_dash.activity'
+import { Route as DashAnalyticsRouteImport } from './routes/_dash.analytics'
+import { Route as DashDashboardRouteImport } from './routes/_dash.dashboard'
+import { Route as DashIpoRouteImport } from './routes/_dash.ipo'
+import { Route as DashPortfolioRouteImport } from './routes/_dash.portfolio'
+import { Route as DashProfileRouteImport } from './routes/_dash.profile'
+import { Route as DashReportsRouteImport } from './routes/_dash.reports'
+import { Route as DashResultsRouteImport } from './routes/_dash.results'
+import { Route as DashSettingsRouteImport } from './routes/_dash.settings'
+import { Route as DashSharesRouteImport } from './routes/_dash.shares'
+import { Route as DashTransactionsRouteImport } from './routes/_dash.transactions'
+import { Route as DashWaccRouteImport } from './routes/_dash.wacc'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DashRoute = DashRouteImport.update({
+  id: '/_dash',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DashActivityRoute = DashActivityRouteImport.update({
+  id: '/activity',
+  path: '/activity',
+  getParentRoute: () => DashRoute,
+} as any)
+const DashAnalyticsRoute = DashAnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
+  getParentRoute: () => DashRoute,
+} as any)
+const DashDashboardRoute = DashDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => DashRoute,
+} as any)
+const DashIpoRoute = DashIpoRouteImport.update({
+  id: '/ipo',
+  path: '/ipo',
+  getParentRoute: () => DashRoute,
+} as any)
+const DashPortfolioRoute = DashPortfolioRouteImport.update({
+  id: '/portfolio',
+  path: '/portfolio',
+  getParentRoute: () => DashRoute,
+} as any)
+const DashProfileRoute = DashProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => DashRoute,
+} as any)
+const DashReportsRoute = DashReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => DashRoute,
+} as any)
+const DashResultsRoute = DashResultsRouteImport.update({
+  id: '/results',
+  path: '/results',
+  getParentRoute: () => DashRoute,
+} as any)
+const DashSettingsRoute = DashSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => DashRoute,
+} as any)
+const DashSharesRoute = DashSharesRouteImport.update({
+  id: '/shares',
+  path: '/shares',
+  getParentRoute: () => DashRoute,
+} as any)
+const DashTransactionsRoute = DashTransactionsRouteImport.update({
+  id: '/transactions',
+  path: '/transactions',
+  getParentRoute: () => DashRoute,
+} as any)
+const DashWaccRoute = DashWaccRouteImport.update({
+  id: '/wacc',
+  path: '/wacc',
+  getParentRoute: () => DashRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/activity': typeof DashActivityRoute
+  '/analytics': typeof DashAnalyticsRoute
+  '/dashboard': typeof DashDashboardRoute
+  '/ipo': typeof DashIpoRoute
+  '/portfolio': typeof DashPortfolioRoute
+  '/profile': typeof DashProfileRoute
+  '/reports': typeof DashReportsRoute
+  '/results': typeof DashResultsRoute
+  '/settings': typeof DashSettingsRoute
+  '/shares': typeof DashSharesRoute
+  '/transactions': typeof DashTransactionsRoute
+  '/wacc': typeof DashWaccRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/activity': typeof DashActivityRoute
+  '/analytics': typeof DashAnalyticsRoute
+  '/dashboard': typeof DashDashboardRoute
+  '/ipo': typeof DashIpoRoute
+  '/portfolio': typeof DashPortfolioRoute
+  '/profile': typeof DashProfileRoute
+  '/reports': typeof DashReportsRoute
+  '/results': typeof DashResultsRoute
+  '/settings': typeof DashSettingsRoute
+  '/shares': typeof DashSharesRoute
+  '/transactions': typeof DashTransactionsRoute
+  '/wacc': typeof DashWaccRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_dash': typeof DashRouteWithChildren
+  '/_dash/activity': typeof DashActivityRoute
+  '/_dash/analytics': typeof DashAnalyticsRoute
+  '/_dash/dashboard': typeof DashDashboardRoute
+  '/_dash/ipo': typeof DashIpoRoute
+  '/_dash/portfolio': typeof DashPortfolioRoute
+  '/_dash/profile': typeof DashProfileRoute
+  '/_dash/reports': typeof DashReportsRoute
+  '/_dash/results': typeof DashResultsRoute
+  '/_dash/settings': typeof DashSettingsRoute
+  '/_dash/shares': typeof DashSharesRoute
+  '/_dash/transactions': typeof DashTransactionsRoute
+  '/_dash/wacc': typeof DashWaccRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/activity'
+    | '/analytics'
+    | '/dashboard'
+    | '/ipo'
+    | '/portfolio'
+    | '/profile'
+    | '/reports'
+    | '/results'
+    | '/settings'
+    | '/shares'
+    | '/transactions'
+    | '/wacc'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/activity'
+    | '/analytics'
+    | '/dashboard'
+    | '/ipo'
+    | '/portfolio'
+    | '/profile'
+    | '/reports'
+    | '/results'
+    | '/settings'
+    | '/shares'
+    | '/transactions'
+    | '/wacc'
+  id:
+    | '__root__'
+    | '/'
+    | '/_dash'
+    | '/_dash/activity'
+    | '/_dash/analytics'
+    | '/_dash/dashboard'
+    | '/_dash/ipo'
+    | '/_dash/portfolio'
+    | '/_dash/profile'
+    | '/_dash/reports'
+    | '/_dash/results'
+    | '/_dash/settings'
+    | '/_dash/shares'
+    | '/_dash/transactions'
+    | '/_dash/wacc'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  DashRoute: typeof DashRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -48,22 +204,136 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_dash': {
+      id: '/_dash'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof DashRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_dash/activity': {
+      id: '/_dash/activity'
+      path: '/activity'
+      fullPath: '/activity'
+      preLoaderRoute: typeof DashActivityRouteImport
+      parentRoute: typeof DashRoute
+    }
+    '/_dash/analytics': {
+      id: '/_dash/analytics'
+      path: '/analytics'
+      fullPath: '/analytics'
+      preLoaderRoute: typeof DashAnalyticsRouteImport
+      parentRoute: typeof DashRoute
+    }
+    '/_dash/dashboard': {
+      id: '/_dash/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashDashboardRouteImport
+      parentRoute: typeof DashRoute
+    }
+    '/_dash/ipo': {
+      id: '/_dash/ipo'
+      path: '/ipo'
+      fullPath: '/ipo'
+      preLoaderRoute: typeof DashIpoRouteImport
+      parentRoute: typeof DashRoute
+    }
+    '/_dash/portfolio': {
+      id: '/_dash/portfolio'
+      path: '/portfolio'
+      fullPath: '/portfolio'
+      preLoaderRoute: typeof DashPortfolioRouteImport
+      parentRoute: typeof DashRoute
+    }
+    '/_dash/profile': {
+      id: '/_dash/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof DashProfileRouteImport
+      parentRoute: typeof DashRoute
+    }
+    '/_dash/reports': {
+      id: '/_dash/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof DashReportsRouteImport
+      parentRoute: typeof DashRoute
+    }
+    '/_dash/results': {
+      id: '/_dash/results'
+      path: '/results'
+      fullPath: '/results'
+      preLoaderRoute: typeof DashResultsRouteImport
+      parentRoute: typeof DashRoute
+    }
+    '/_dash/settings': {
+      id: '/_dash/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof DashSettingsRouteImport
+      parentRoute: typeof DashRoute
+    }
+    '/_dash/shares': {
+      id: '/_dash/shares'
+      path: '/shares'
+      fullPath: '/shares'
+      preLoaderRoute: typeof DashSharesRouteImport
+      parentRoute: typeof DashRoute
+    }
+    '/_dash/transactions': {
+      id: '/_dash/transactions'
+      path: '/transactions'
+      fullPath: '/transactions'
+      preLoaderRoute: typeof DashTransactionsRouteImport
+      parentRoute: typeof DashRoute
+    }
+    '/_dash/wacc': {
+      id: '/_dash/wacc'
+      path: '/wacc'
+      fullPath: '/wacc'
+      preLoaderRoute: typeof DashWaccRouteImport
+      parentRoute: typeof DashRoute
+    }
   }
 }
 
+interface DashRouteChildren {
+  DashActivityRoute: typeof DashActivityRoute
+  DashAnalyticsRoute: typeof DashAnalyticsRoute
+  DashDashboardRoute: typeof DashDashboardRoute
+  DashIpoRoute: typeof DashIpoRoute
+  DashPortfolioRoute: typeof DashPortfolioRoute
+  DashProfileRoute: typeof DashProfileRoute
+  DashReportsRoute: typeof DashReportsRoute
+  DashResultsRoute: typeof DashResultsRoute
+  DashSettingsRoute: typeof DashSettingsRoute
+  DashSharesRoute: typeof DashSharesRoute
+  DashTransactionsRoute: typeof DashTransactionsRoute
+  DashWaccRoute: typeof DashWaccRoute
+}
+
+const DashRouteChildren: DashRouteChildren = {
+  DashActivityRoute: DashActivityRoute,
+  DashAnalyticsRoute: DashAnalyticsRoute,
+  DashDashboardRoute: DashDashboardRoute,
+  DashIpoRoute: DashIpoRoute,
+  DashPortfolioRoute: DashPortfolioRoute,
+  DashProfileRoute: DashProfileRoute,
+  DashReportsRoute: DashReportsRoute,
+  DashResultsRoute: DashResultsRoute,
+  DashSettingsRoute: DashSettingsRoute,
+  DashSharesRoute: DashSharesRoute,
+  DashTransactionsRoute: DashTransactionsRoute,
+  DashWaccRoute: DashWaccRoute,
+}
+
+const DashRouteWithChildren = DashRoute._addFileChildren(DashRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  DashRoute: DashRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
