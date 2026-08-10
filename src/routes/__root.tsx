@@ -16,6 +16,8 @@ import { reportLovableError } from "../lib/lovable-error-reporting";
 import { logout } from "@/lib/meroshare/auth.functions";
 import { isSessionError } from "@/lib/format";
 import { SettingsProvider } from "@/lib/settings";
+import { WatchlistProvider } from "@/lib/watchlist";
+
 import { SecurityDialogs } from "@/components/security-dialog";
 
 function NotFoundComponent() {
