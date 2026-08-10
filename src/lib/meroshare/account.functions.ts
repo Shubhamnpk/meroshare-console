@@ -6,6 +6,7 @@ import {
   fetchActivityLog,
   fetchBankDetail,
   fetchBankList,
+  fetchBankRequest,
   fetchMyDetail,
   requireAuth,
 } from "./api.server";
@@ -26,6 +27,23 @@ export const getBankDetail = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<BankDetail> =>
     fetchBankDetail(await requireAuth(), data.bankId),
   );
+
+/**
+ * ASBA bank request detail (CRN, branch, KYC state) used to prefill the apply
+ * form. Falls back to an empty record when the bank has no linked request.
+ */
+export const getBankRequest = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) =>
+    z.object({ bankCode: z.string().trim().min(1).max(32) }).parse(input),
+  )
+  .handler(async ({ data }): Promise<JsonRecord> => {
+    try {
+      return await fetchBankRequest(await requireAuth(), data.bankCode);
+    } catch {
+      return {};
+    }
+  });
+
 
 export const getActivityLog = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) =>

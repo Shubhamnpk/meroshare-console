@@ -105,6 +105,34 @@ export async function fetchApplicableIssues(
   });
 }
 
+/** Every open / upcoming / recently closed issue, not just the ones this BOID can apply for. */
+export async function fetchCurrentIssues(auth: AuthContext): Promise<Paged<ApplicableIssue>> {
+  return cdscRequest<Paged<ApplicableIssue>>(CDSC_URLS.currentIssues, {
+    method: "POST",
+    token: auth.token,
+    body: {
+      filterFieldParams: [
+        { key: "companyIssue.companyISIN.script", alias: "Scrip" },
+        { key: "companyIssue.companyISIN.company.name", alias: "Company Name" },
+        { key: "companyIssue.assignedToClient.name", value: "", alias: "Issue Manager" },
+      ],
+      page: 1,
+      size: 200,
+      searchRoleViewConstants: "VIEW_OPEN_SHARE",
+      filterDateParams: [
+        { key: "minIssueOpenDate", condition: "", alias: "", value: "" },
+        { key: "maxIssueCloseDate", condition: "", alias: "", value: "" },
+      ],
+    },
+  });
+}
+
+/** CRN / branch / KYC detail for an ASBA bank, keyed by the bank code. */
+export async function fetchBankRequest(auth: AuthContext, bankCode: string): Promise<JsonRecord> {
+  return cdscRequest<JsonRecord>(CDSC_URLS.bankRequest(bankCode), { token: auth.token });
+}
+
+
 export async function checkCanApply(
   auth: AuthContext,
   companyShareId: number,

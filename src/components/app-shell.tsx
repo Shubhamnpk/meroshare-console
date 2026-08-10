@@ -10,10 +10,14 @@ import {
   ClipboardList,
   Coins,
   LayoutDashboard,
+  LineChart,
   LogOut,
+
   Menu,
   Rocket,
   Settings,
+  Star,
+
   Trophy,
   UserRound,
   Wallet,
@@ -37,6 +41,8 @@ type NavItem = { to: string; label: string; icon: typeof LayoutDashboard };
 const PRIMARY_NAV: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/portfolio", label: "Portfolio", icon: Briefcase },
+  { to: "/market", label: "Market", icon: LineChart },
+  { to: "/watchlist", label: "Watchlist", icon: Star },
   { to: "/shares", label: "My Shares", icon: Wallet },
   { to: "/transactions", label: "Transactions", icon: Activity },
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
@@ -58,9 +64,11 @@ const ACCOUNT_NAV: NavItem[] = [
 const MOBILE_NAV: NavItem[] = [
   { to: "/dashboard", label: "Home", icon: LayoutDashboard },
   { to: "/portfolio", label: "Portfolio", icon: Briefcase },
+  { to: "/market", label: "Market", icon: LineChart },
   { to: "/ipo", label: "IPO", icon: Rocket },
   { to: "/reports", label: "Reports", icon: ClipboardList },
 ];
+
 
 function initials(name: string) {
   return (
