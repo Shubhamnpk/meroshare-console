@@ -118,13 +118,12 @@ function NavGroup({
 function Brand() {
   return (
     <div className="flex items-center gap-2.5 px-3 py-4">
-      <div
-        className="flex size-9 items-center justify-center rounded-xl text-sm font-bold text-primary-foreground"
-        style={{ background: "var(--gradient-brand)" }}
+      <img
+        src="/logo-512.png"
+        alt="MeroShare Next logo"
+        className="size-9 rounded-xl"
         aria-hidden
-      >
-        MS
-      </div>
+      />
       <div className="leading-tight">
         <p className="font-display text-sm font-semibold">MeroShare</p>
         <p className="text-[0.7rem] text-muted-foreground">CDSC Investor Console</p>

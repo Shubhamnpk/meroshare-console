@@ -125,13 +125,12 @@ function LoginPage() {
         <div className="absolute inset-0 bg-background/72" aria-hidden />
         <div className="relative">
           <div className="flex items-center gap-3">
-            <div
-              className="flex size-11 items-center justify-center rounded-2xl text-sm font-bold text-primary-foreground"
-              style={{ background: "var(--gradient-brand)" }}
+            <img
+              src="/logo-512.png"
+              alt="MeroShare Console logo"
+              className="size-11 rounded-2xl"
               aria-hidden
-            >
-              MS
-            </div>
+            />
             <div>
               <p className="font-display text-lg font-semibold">MeroShare Console</p>
               <p className="text-xs text-muted-foreground">CDSC &amp; Clearing Ltd. account access</p>
@@ -168,13 +167,12 @@ function LoginPage() {
       <section className="flex flex-col justify-center px-5 py-10 sm:px-10">
         <div className="mb-6 flex items-center justify-between lg:hidden">
           <div className="flex items-center gap-2.5">
-            <div
-              className="flex size-9 items-center justify-center rounded-xl text-sm font-bold text-primary-foreground"
-              style={{ background: "var(--gradient-brand)" }}
+            <img
+              src="/logo-512.png"
+              alt="MeroShare Console logo"
+              className="size-9 rounded-xl"
               aria-hidden
-            >
-              MS
-            </div>
+            />
             <p className="font-display text-base font-semibold">MeroShare Console</p>
           </div>
           <ThemeToggle />
