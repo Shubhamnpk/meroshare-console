@@ -177,12 +177,15 @@ function RootComponent() {
   return (
     <SettingsProvider>
       <QueryClientProvider client={queryClient}>
-        {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-        <Outlet />
-        <SessionExpiryHandler />
-        <SecurityDialogs />
-        <Toaster position="top-center" richColors />
+        <WatchlistProvider>
+          {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+          <Outlet />
+          <SessionExpiryHandler />
+          <SecurityDialogs />
+          <Toaster position="top-center" richColors />
+        </WatchlistProvider>
       </QueryClientProvider>
     </SettingsProvider>
+
   );
 }
