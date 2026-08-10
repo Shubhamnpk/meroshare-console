@@ -1,25 +1,14 @@
-import { useEffect, useState } from "react";
 import { Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
-const STORAGE_KEY = "ms-theme";
+import { useSettings } from "@/lib/settings";
 
 export function ThemeToggle({ className }: { className?: string }) {
-  const [light, setLight] = useState(false);
+  const { theme, setTheme } = useSettings();
+  const light =
+    theme === "light" ||
+    (theme === "system" && typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: light)").matches);
 
-  useEffect(() => {
-    const stored = window.localStorage.getItem(STORAGE_KEY);
-    const isLight = stored === "light";
-    setLight(isLight);
-    document.documentElement.classList.toggle("light", isLight);
-  }, []);
-
-  const toggle = () => {
-    const next = !light;
-    setLight(next);
-    document.documentElement.classList.toggle("light", next);
-    window.localStorage.setItem(STORAGE_KEY, next ? "light" : "dark");
-  };
+  const toggle = () => setTheme(light ? "dark" : "light");
 
   return (
     <Button

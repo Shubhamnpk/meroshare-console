@@ -9,6 +9,7 @@ import {
 } from "./meroshare/portfolio.functions";
 import {
   getApplicableIssues,
+  getApplicationDetails,
   getApplicationReports,
   getIpoResultCompanies,
   getOldApplicationReports,
@@ -79,6 +80,13 @@ export const oldApplicationReportsQuery = () =>
     queryKey: ["old-application-reports"],
     queryFn: () => getOldApplicationReports(),
     staleTime: 5 * 60_000,
+  });
+
+export const applicationDetailsQuery = (items: { formId: number; old?: boolean }[]) =>
+  queryOptions({
+    queryKey: ["application-details", JSON.stringify(items)],
+    queryFn: () => getApplicationDetails({ data: { items } }),
+    staleTime: 60_000,
   });
 
 export const ipoResultCompaniesQuery = () =>

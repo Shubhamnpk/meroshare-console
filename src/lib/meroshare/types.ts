@@ -48,6 +48,7 @@ export interface OwnDetail {
   username?: string;
   accountNumber?: string;
   capital?: string;
+  panNumber?: string;
   [key: string]: JsonValue;
 }
 
@@ -57,8 +58,11 @@ export interface PortfolioItem {
   previousClosingPrice?: string;
   scrip?: string;
   script?: string;
+  scriptDesc?: string;
   valueAsOfLastTransactionPrice?: string;
   valueAsOfPreviousClosingPrice?: string;
+  valueOfLastTransPrice?: string | number;
+  valueOfPrevClosingPrice?: string | number;
   [key: string]: JsonValue;
 }
 
@@ -76,6 +80,12 @@ export interface MyShareItem {
   freeBalance?: number;
   pledgedBalance?: number;
   lockInBalance?: number;
+  lastTransactionPrice?: string | number;
+  previousClosingPrice?: string | number;
+  valueAsOfLastTransactionPrice?: string | number;
+  valueAsOfPreviousClosingPrice?: string | number;
+  valueOfLastTransPrice?: string | number;
+  valueOfPrevClosingPrice?: string | number;
   [key: string]: JsonValue;
 }
 
@@ -140,10 +150,12 @@ export interface BankDetail {
 
 export interface ActivityLogItem {
   browserName?: string;
+  broswerVersion?: string;
   ipAddress?: string;
   recordedDate?: string;
   activityType?: string;
   osName?: string;
+  description?: string;
   [key: string]: JsonValue;
 }
 
@@ -155,7 +167,26 @@ export interface PurchaseSourceItem {
   amount?: number;
   transactionDate?: string;
   source?: string;
+  purchaseSource?: string;
+  purchasePrice?: number;
+  transactionQuantity?: number;
+  userPrice?: number;
+  userCost?: number;
+  remarks?: string;
+  postDate?: string;
+  updatedDate?: string;
+  isEdit?: boolean;
+  contractId?: number | string;
+  demat?: string;
   [key: string]: JsonValue;
+}
+
+export interface WaccSearchResponse {
+  waccUpdateResponse?: PurchaseSourceItem[];
+  waccSummaryResponse?: PurchaseSourceItem[];
+  viewSummary?: boolean;
+  success?: boolean;
+  message?: string;
 }
 
 export interface IpoResultCompany {

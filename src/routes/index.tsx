@@ -18,6 +18,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 import { errorMessage } from "@/lib/format";
 import { getCapitals, getCurrentUser, login } from "@/lib/meroshare/auth.functions";
+import type { Capital } from "@/lib/meroshare/types";
 
 export const Route = createFileRoute("/")({
   beforeLoad: async () => {
@@ -49,9 +50,32 @@ const HIGHLIGHTS = [
   { icon: ShieldCheck, title: "Credentials never stored", text: "Your login lives only in an encrypted session cookie for this visit." },
 ];
 
+function CapitalItem({
+  capital,
+  selected,
+  onSelect,
+}: {
+  capital: Capital;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <CommandItem
+      value={`${capital.code} ${capital.name}`}
+      onSelect={onSelect}
+      className={cn(selected && "bg-accent/30")}
+    >
+      <Check className={cn("mr-2 size-4", selected ? "opacity-100" : "opacity-0")} />
+      <span className="num mr-2 text-xs text-muted-foreground">{capital.code}</span>
+      <span className="truncate">{capital.name}</span>
+    </CommandItem>
+  );
+}
+
 function LoginPage() {
   const navigate = useNavigate();
   const [capitalOpen, setCapitalOpen] = useState(false);
+  const [capitalSearch, setCapitalSearch] = useState("");
   const [capitalId, setCapitalId] = useState<number | null>(null);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -168,7 +192,13 @@ function LoginPage() {
           <form onSubmit={onSubmit} className="mt-7 space-y-4">
             <div className="space-y-2">
               <Label htmlFor="dp">Depository Participant (DP)</Label>
-              <Popover open={capitalOpen} onOpenChange={setCapitalOpen}>
+              <Popover
+                open={capitalOpen}
+                onOpenChange={(open) => {
+                  setCapitalOpen(open);
+                  if (!open) setCapitalSearch("");
+                }}
+              >
                 <PopoverTrigger asChild>
                   <Button
                     id="dp"
@@ -191,32 +221,57 @@ function LoginPage() {
                 </PopoverTrigger>
                 <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
                   <Command>
-                    <CommandInput placeholder="Search DP by name or code…" />
+                    <CommandInput
+                      autoFocus
+                      value={capitalSearch}
+                      onValueChange={setCapitalSearch}
+                      placeholder="Search DP by name or code…"
+                    />
                     <CommandList>
                       <CommandEmpty>No DP found.</CommandEmpty>
-                      <CommandGroup>
-                        {(capitals.data ?? []).map((capital) => (
-                          <CommandItem
-                            key={capital.id}
-                            value={`${capital.code} ${capital.name}`}
-                            onSelect={() => {
-                              setCapitalId(capital.id);
-                              setCapitalOpen(false);
-                            }}
-                          >
-                            <Check
-                              className={cn(
-                                "mr-2 size-4",
-                                capitalId === capital.id ? "opacity-100" : "opacity-0",
-                              )}
+                      {capitalSearch.trim() === "" && selected ? (
+                        <>
+                          <CommandGroup heading="Currently selected">
+                            <CapitalItem
+                              capital={selected}
+                              selected
+                              onSelect={() => {
+                                setCapitalId(selected.id);
+                                setCapitalOpen(false);
+                              }}
                             />
-                            <span className="num mr-2 text-xs text-muted-foreground">
-                              {capital.code}
-                            </span>
-                            <span className="truncate">{capital.name}</span>
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
+                          </CommandGroup>
+                          <CommandGroup heading="All DPs">
+                            {(capitals.data ?? [])
+                              .filter((capital) => capital.id !== selected.id)
+                              .map((capital) => (
+                                <CapitalItem
+                                  key={capital.id}
+                                  capital={capital}
+                                  selected={false}
+                                  onSelect={() => {
+                                    setCapitalId(capital.id);
+                                    setCapitalOpen(false);
+                                  }}
+                                />
+                              ))}
+                          </CommandGroup>
+                        </>
+                      ) : (
+                        <CommandGroup>
+                          {(capitals.data ?? []).map((capital) => (
+                            <CapitalItem
+                              key={capital.id}
+                              capital={capital}
+                              selected={capitalId === capital.id}
+                              onSelect={() => {
+                                setCapitalId(capital.id);
+                                setCapitalOpen(false);
+                              }}
+                            />
+                          ))}
+                        </CommandGroup>
+                      )}
                     </CommandList>
                   </Command>
                 </PopoverContent>

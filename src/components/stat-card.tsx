@@ -46,12 +46,11 @@ export function StatCard({
 }
 
 export function DeltaPill({ value, children }: { value: number; children: ReactNode }) {
-  const up = value >= 0;
   return (
     <span
       className={cn(
         "num inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold",
-        up ? "bg-gain/15 text-gain" : "bg-loss/15 text-loss",
+        value > 0 ? "bg-gain/15 text-gain" : value < 0 ? "bg-loss/15 text-loss" : "bg-muted text-muted-foreground",
       )}
     >
       {children}

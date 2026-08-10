@@ -6,6 +6,7 @@ import {
   BarChart3,
   Briefcase,
   CalendarClock,
+  ChevronDown,
   ClipboardList,
   Coins,
   LayoutDashboard,
@@ -20,7 +21,14 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { ThemeToggle } from "@/components/theme-toggle";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { logout } from "@/lib/meroshare/auth.functions";
 import type { SessionUser } from "@/lib/meroshare/types";
 
@@ -158,17 +166,6 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-sidebar-border bg-sidebar lg:flex">
         <Brand />
         {navBody()}
-        <div className="border-t border-sidebar-border p-3">
-          <button
-            type="button"
-            onClick={handleSignOut}
-            disabled={signingOut}
-            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-60"
-          >
-            <LogOut className="size-4" aria-hidden />
-            {signingOut ? "Signing out…" : "Sign out"}
-          </button>
-        </div>
       </aside>
 
       <div className="lg:pl-64">
@@ -184,17 +181,6 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
               <div className="flex h-full flex-col">
                 <Brand />
                 {navBody(() => setMenuOpen(false))}
-                <div className="border-t border-sidebar-border p-3">
-                  <button
-                    type="button"
-                    onClick={handleSignOut}
-                    disabled={signingOut}
-                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                  >
-                    <LogOut className="size-4" aria-hidden />
-                    Sign out
-                  </button>
-                </div>
               </div>
             </SheetContent>
           </Sheet>
@@ -208,13 +194,45 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
             </p>
           </div>
 
-          <ThemeToggle />
-          <div
-            className="flex size-9 items-center justify-center rounded-full border border-border bg-secondary text-xs font-semibold"
-            aria-hidden
-          >
-            {initials(user.name || user.username)}
-          </div>
+          <Button variant="ghost" size="icon" asChild aria-label="Open settings">
+            <Link to="/settings"><Settings className="size-4" /></Link>
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label="Account menu"
+                className="flex items-center gap-1 rounded-full border border-border bg-secondary py-1 pl-1 pr-2 transition-colors hover:bg-accent"
+              >
+                <span className="flex size-7 items-center justify-center rounded-full text-xs font-semibold" aria-hidden>
+                  {initials(user.name || user.username)}
+                </span>
+                <ChevronDown className="size-3.5 text-muted-foreground" aria-hidden />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-60">
+              <DropdownMenuLabel>
+                <div className="flex flex-col">
+                  <span className="truncate font-display font-semibold">{user.name || user.username}</span>
+                  <span className="num truncate text-xs font-normal text-muted-foreground">BOID {user.demat}</span>
+                </div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => navigate({ to: "/settings" })}>
+                <Settings className="size-4" aria-hidden />
+                Settings
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={handleSignOut}
+                disabled={signingOut}
+                className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+              >
+                <LogOut className="size-4" aria-hidden />
+                {signingOut ? "Signing out…" : "Sign out"}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </header>
 
         <main className="mx-auto w-full max-w-7xl px-4 pb-28 pt-6 sm:px-6 lg:pb-12">

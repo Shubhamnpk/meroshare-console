@@ -16,10 +16,10 @@ export function toNumber(value: unknown): number {
 export function formatNpr(value: unknown, opts?: { compact?: boolean }): string {
   const n = toNumber(value);
   if (opts?.compact && Math.abs(n) >= 1_00_000) {
-    if (Math.abs(n) >= 1_00_00_000) return `Rs ${NUM2.format(n / 1_00_00_000)} Cr`;
-    return `Rs ${NUM2.format(n / 1_00_000)} L`;
+    if (Math.abs(n) >= 1_00_00_000) return `\u0930\u0941 ${NUM2.format(n / 1_00_00_000)} Cr`;
+    return `\u0930\u0941 ${NUM2.format(n / 1_00_000)} L`;
   }
-  return `Rs ${NUM2.format(n)}`;
+  return `\u0930\u0941 ${NUM2.format(n)}`;
 }
 
 export function formatNumber(value: unknown): string {
@@ -31,12 +31,12 @@ export function formatQty(value: unknown): string {
 }
 
 export function formatPercent(value: number): string {
-  if (!Number.isFinite(value)) return "0.00%";
-  return `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
+  if (!Number.isFinite(value) || value === 0) return "0.00%";
+  return `${value > 0 ? "+" : "-"}${Math.abs(value).toFixed(2)}%`;
 }
 
 export function formatSignedNpr(value: number): string {
-  return `${value >= 0 ? "+" : "-"}Rs ${NUM2.format(Math.abs(value))}`;
+  return `${value >= 0 ? "+" : "-"}\u0930\u0941 ${NUM2.format(Math.abs(value))}`;
 }
 
 export function formatDate(value: unknown): string {

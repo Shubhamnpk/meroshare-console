@@ -34,7 +34,7 @@ export const CDSC_URLS = {
   myShares: `${CDSC_BASE}/api/meroShareView/myShare/`,
   myPortfolio: `${CDSC_BASE}/api/meroShareView/myPortfolio/`,
   transactions: `${CDSC_BASE}/api/meroShareView/myTransaction/`,
-  waccPending: `${CDSC_BASE}/api/myPurchase/search/`,
+  waccPending: `${CDSC_BASE}/api/myPurchase/search/wacc/`,
   waccCalculated: `${CDSC_BASE}/api/myPurchase/view/`,
   waccSubmit: `${CDSC_BASE}/api/myPurchase/upload/`,
   ipoResultCompanies: `${IPO_RESULT_BASE}/result/companyShares/fileUploaded`,
@@ -72,6 +72,14 @@ interface RequestOptions {
 async function parseBody(res: Response): Promise<unknown> {
   const text = await res.text();
   if (!text) return null;
+  const contentType = res.headers.get("content-type") ?? "";
+  if (!contentType.includes("json") && /^\s*</.test(text)) {
+    throw new CdscError(
+      "MeroShare returned a non-JSON response, possibly blocked by a security filter. Please try again.",
+      403,
+      text.slice(0, 200),
+    );
+  }
   try {
     return JSON.parse(text);
   } catch {
@@ -110,11 +118,11 @@ export async function cdscRequest<T = unknown>(
     throw new CdscError("Could not reach MeroShare. Please try again in a moment.", 503);
   }
 
+  const payload = await parseBody(res);
+
   if (res.status === 401 || res.status === 403) {
     throw new SessionExpiredError();
   }
-
-  const payload = await parseBody(res);
 
   if (!res.ok) {
     throw new CdscError(

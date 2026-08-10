@@ -63,6 +63,25 @@ export const getAppliedDetail = createServerFn({ method: "POST" })
     fetchAppliedDetail(await requireAuth(), data.formId, data.old === true),
   );
 
+export const getApplicationDetails = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        items: z
+          .array(z.object({ formId: z.number().int().positive(), old: z.boolean().optional() }))
+          .min(1)
+          .max(100),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data }): Promise<(JsonRecord | null)[]> => {
+    const auth = await requireAuth();
+    const settled = await Promise.allSettled(
+      data.items.map((it) => fetchAppliedDetail(auth, it.formId, it.old === true)),
+    );
+    return settled.map((r) => (r.status === "fulfilled" ? r.value : null));
+  });
+
 export const canApplyToIssue = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) =>
     z.object({ companyShareId: z.number().int().positive() }).parse(input),

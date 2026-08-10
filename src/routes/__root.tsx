@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import {
   Outlet,
   Link,
@@ -7,11 +7,16 @@ import {
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
+import { toast } from "sonner";
 
 import appCss from "../styles.css?url";
 import { Toaster } from "@/components/ui/sonner";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { logout } from "@/lib/meroshare/auth.functions";
+import { isSessionError } from "@/lib/format";
+import { SettingsProvider } from "@/lib/settings";
+import { SecurityDialogs } from "@/components/security-dialog";
 
 function NotFoundComponent() {
   return (
@@ -119,6 +124,11 @@ function RootShell({ children }: { children: ReactNode }) {
     <html lang="en">
       <head>
         <HeadContent />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{var s=JSON.parse(localStorage.getItem("ms-settings")||"{}");var t=s.theme||localStorage.getItem("ms-theme")||"system";var l=t==="light"||(t==="system"&&matchMedia("(prefers-color-scheme: light)").matches);document.documentElement.classList.toggle("light",l)}catch(e){}`,
+          }}
+        />
       </head>
       <body>
         {children}
@@ -128,14 +138,49 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+function SessionExpiryHandler() {
+  const queryClient = useQueryClient();
+  const router = useRouter();
+  const handling = useRef(false);
+
+  useEffect(() => {
+    const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
+      if (event.type !== "updated") return;
+      const error = event.query.state.error;
+      if (!error || !isSessionError(error)) return;
+      if (handling.current) return;
+      handling.current = true;
+      void (async () => {
+        try {
+          await logout();
+        } catch {
+          // local logout is best-effort; clearing the cache is what matters
+        }
+        queryClient.clear();
+        toast("Session expired", {
+          description: "Your MeroShare session has expired. Please log in again.",
+        });
+        await router.navigate({ to: "/" });
+      })();
+    });
+    return unsubscribe;
+  }, [queryClient, router]);
+
+  return null;
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
   return (
-    <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
-      <Toaster position="top-center" richColors />
-    </QueryClientProvider>
+    <SettingsProvider>
+      <QueryClientProvider client={queryClient}>
+        {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+        <Outlet />
+        <SessionExpiryHandler />
+        <SecurityDialogs />
+        <Toaster position="top-center" richColors />
+      </QueryClientProvider>
+    </SettingsProvider>
   );
 }

@@ -17,8 +17,8 @@ import type {
   PurchaseSourceItem,
   TransactionItem,
   JsonRecord,
+  WaccSearchResponse,
 } from "./types";
-
 export async function fetchCapitals(): Promise<Capital[]> {
   return cdscRequest<Capital[]>(CDSC_URLS.capitals);
 }
@@ -42,8 +42,8 @@ export async function fetchBankDetail(
   return cdscRequest<BankDetail>(CDSC_URLS.bankDetail(bankId), { token: auth.token });
 }
 
-export async function fetchHoldingSymbols(auth: AuthContext): Promise<string[]> {
-  return cdscRequest<string[]>(CDSC_URLS.holdingSymbols, { token: auth.token });
+export async function fetchHoldingSymbols(auth: AuthContext): Promise<unknown> {
+  return cdscRequest<unknown>(CDSC_URLS.holdingSymbols, { token: auth.token });
 }
 
 export async function fetchPortfolio(auth: AuthContext): Promise<PortfolioResponse> {
@@ -61,28 +61,10 @@ export async function fetchPortfolio(auth: AuthContext): Promise<PortfolioRespon
   });
 }
 
-export async function fetchMyShares(auth: AuthContext): Promise<{
-  meroShareMyShare?: MyShareItem[];
-  totalItems?: number;
-}> {
-  return cdscRequest<JsonRecord>(CDSC_URLS.myShares, {
-    method: "POST",
-    token: auth.token,
-    body: {
-      sortBy: "CCY_SHORT_NAME",
-      demat: [auth.demat],
-      clientCode: String(auth.clientCode),
-      page: 1,
-      size: 500,
-      sortAsc: true,
-    },
-  });
-}
-
 export async function fetchTransactions(
   auth: AuthContext,
   input: { symbol?: string | null | undefined; page?: number | undefined; size?: number | undefined },
-): Promise<{ meroShareMyTransaction?: TransactionItem[]; totalItems?: number }> {
+): Promise<{ transactionView?: TransactionItem[]; totalItems?: number }> {
   const symbol = input.symbol ?? null;
   return cdscRequest<JsonRecord>(CDSC_URLS.transactions, {
     method: "POST",
@@ -290,8 +272,8 @@ export async function fetchActivityLog(
 export async function fetchWaccPending(
   auth: AuthContext,
   scrip: string,
-): Promise<PurchaseSourceItem[]> {
-  return cdscRequest<PurchaseSourceItem[]>(CDSC_URLS.waccPending, {
+): Promise<WaccSearchResponse> {
+  return cdscRequest<WaccSearchResponse>(CDSC_URLS.waccPending, {
     method: "POST",
     token: auth.token,
     body: { demat: auth.demat, scrip: scrip.toUpperCase() },
