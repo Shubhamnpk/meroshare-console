@@ -18,6 +18,8 @@ export const CDSC_URLS = {
   activityLog: `${CDSC_BASE}/api/meroShare/activityLog/search/`,
   holdingSymbols: `${CDSC_BASE}/api/myPurchase/myShare/`,
   applicableIssues: `${CDSC_BASE}/api/meroShare/companyShare/applicableIssue/`,
+  currentIssues: `${CDSC_BASE}/api/meroShare/companyShare/currentIssue`,
+
   canApply: (companyShareId: number | string, demat: string) =>
     `${CDSC_BASE}/api/meroShare/applicantForm/customerType/${companyShareId}/${demat}`,
   applyShare: `${CDSC_BASE}/api/meroShare/applicantForm/share/apply`,

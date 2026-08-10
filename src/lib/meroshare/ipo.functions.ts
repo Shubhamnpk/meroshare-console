@@ -8,6 +8,7 @@ import {
   fetchApplicableIssues,
   fetchAppliedDetail,
   fetchApplicationReports,
+  fetchCurrentIssues,
   fetchIpoResultCompanies,
   fetchIssueManagerDetail,
   fetchOldApplicationReports,
@@ -28,6 +29,20 @@ export const getApplicableIssues = createServerFn({ method: "GET" }).handler(
   },
 );
 
+export const getCurrentIssues = createServerFn({ method: "GET" }).handler(
+  async (): Promise<ApplicableIssue[]> => {
+    const auth = await requireAuth();
+    try {
+      const res = await fetchCurrentIssues(auth);
+      if (res.object?.length) return res.object;
+    } catch {
+      // fall through to the applicable list
+    }
+    const fallback = await fetchApplicableIssues(auth);
+    return fallback.object ?? [];
+  },
+);
+
 export const getApplicationReports = createServerFn({ method: "GET" }).handler(
   async (): Promise<ApplicationReportItem[]> => {
     const res = await fetchApplicationReports(await requireAuth());
@@ -41,6 +56,37 @@ export const getOldApplicationReports = createServerFn({ method: "GET" }).handle
     return res.object ?? [];
   },
 );
+
+/** Check the allotment result for several issues in one round trip. */
+export const getBulkIpoResults = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        companyShareIds: z.array(z.number().int().positive()).min(1).max(40),
+      })
+      .parse(input),
+  )
+  .handler(
+    async ({ data }): Promise<{ companyShareId: number; message: string; alloted: boolean }[]> => {
+      const auth = await requireAuth();
+      const settled = await Promise.allSettled(
+        data.companyShareIds.map((id) => checkIpoResult(auth.demat, id)),
+      );
+      return settled.map((res, index) => {
+        const companyShareId = data.companyShareIds[index] ?? 0;
+        if (res.status !== "fulfilled") {
+          return { companyShareId, message: "Result not published yet.", alloted: false };
+        }
+        const message = String(res.value["message"] ?? "");
+        return {
+          companyShareId,
+          message: message || "No response from the result service.",
+          alloted: /alloted|allotted|congratulation/i.test(message),
+        };
+      });
+    },
+  );
+
 
 export const getIssueDetail = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) =>
