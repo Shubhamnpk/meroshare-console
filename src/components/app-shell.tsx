@@ -16,6 +16,8 @@ import {
   Menu,
   Rocket,
   Settings,
+  Star,
+
   Trophy,
   UserRound,
   Wallet,
