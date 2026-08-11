@@ -8,9 +8,19 @@ import {
   fetchBankList,
   fetchBankRequest,
   fetchMyDetail,
+  fetchOwnDetail,
+  readSession,
   requireAuth,
 } from "./api.server";
-import type { ActivityLogItem, BankDetail, BankListItem, JsonRecord } from "./types";
+import type {
+  AccountBank,
+  AccountProfile,
+  ActivityLogItem,
+  BankDetail,
+  BankListItem,
+  JsonRecord,
+  OwnDetail,
+} from "./types";
 
 export const getMyDetail = createServerFn({ method: "GET" }).handler(
   async (): Promise<JsonRecord> => fetchMyDetail(await requireAuth()),
@@ -84,3 +94,78 @@ export const updatePin = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data }): Promise<JsonRecord> => changePin(await requireAuth(), data));
+
+function str(value: unknown): string | undefined {
+  if (typeof value === "string" && value.trim() !== "") return value.trim();
+  if (typeof value === "number") return String(value);
+  return undefined;
+}
+
+function pick(record: JsonRecord, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = str(record[key]);
+    if (value) return value;
+  }
+  return undefined;
+}
+
+/**
+ * One round-trip snapshot of everything MeroShare exposes about the account:
+ * ownDetail, the DP-side myDetail record, and every linked ASBA bank enriched
+ * with its account/CRN/KYC state.
+ */
+export const getAccountProfile = createServerFn({ method: "GET" }).handler(
+  async (): Promise<AccountProfile> => {
+    const auth = await requireAuth();
+    const session = await readSession();
+
+    const [own, detail, bankList] = await Promise.all([
+      fetchOwnDetail(auth).catch(() => ({}) as OwnDetail),
+      fetchMyDetail(auth).catch(() => ({}) as JsonRecord),
+      fetchBankList(auth).catch(() => [] as BankListItem[]),
+    ]);
+
+    const banks: AccountBank[] = await Promise.all(
+      bankList.slice(0, 12).map(async (bank): Promise<AccountBank> => {
+        const [bankDetail, bankRequest] = await Promise.all([
+          fetchBankDetail(auth, bank.id).catch(() => ({}) as BankDetail),
+          bank.code
+            ? fetchBankRequest(auth, bank.code).catch(() => ({}) as JsonRecord)
+            : Promise.resolve({} as JsonRecord),
+        ]);
+        const merged: JsonRecord = { ...bankRequest, ...(bankDetail as JsonRecord) };
+        const out: AccountBank = {
+          id: bank.id,
+          code: bank.code ?? "",
+          name: bank.name ?? "",
+          raw: merged,
+        };
+        const accountNumber = pick(merged, ["accountNumber", "bankAccountNumber"]);
+        if (accountNumber) out.accountNumber = accountNumber;
+        const branchName = pick(merged, ["branchName", "branch"]);
+        if (branchName) out.branchName = branchName;
+        const crnNumber = pick(merged, ["crnNumber", "crn"]);
+        if (crnNumber) out.crnNumber = crnNumber;
+        const accountStatus = pick(merged, ["accountStatus", "statusName", "status"]);
+        if (accountStatus) out.accountStatus = accountStatus;
+        const kycStatus = pick(merged, ["kycStatus", "kycStatusName", "isKycApproved"]);
+        if (kycStatus) out.kycStatus = kycStatus;
+        return out;
+      }),
+    );
+
+    return {
+      own,
+      detail,
+      banks,
+      session: {
+        username: auth.username,
+        demat: auth.demat,
+        boid: auth.boid,
+        clientCode: auth.clientCode,
+        accountNumber: auth.accountNumber,
+        expiresAt: session.expiresAt ?? null,
+      },
+    };
+  },
+);
