@@ -1,31 +1,36 @@
-# Finishing the leftovers
+# Complete account profile + user tools
 
-I audited the app against the round-2 checklist. Most of it is already live: market overview, watchlist, scrip sheet, command palette, live-price portfolio enrichment, IPO calendar + archive, CRN auto-fill, CSV exports on portfolio/transactions/reports/activity/WACC, and auto-refresh from settings.
+Dropping the dividends / mutual-fund / broker pages from the earlier list. Focus: surface every field the MeroShare API returns about the user, and add tools that are genuinely useful on top of it.
 
-## Already done (no work needed)
-- Market page with indices, movers, sectors, full scrip search
-- Watchlist (device-local)
-- Enriched portfolio with live LTP, day change, P/L, sector weights
-- IPO calendar (current issues) + IPO archive + CRN/bank auto-fill
-- CSV export on all report-style pages
-- Trading-hours auto-refresh wired to Settings
+## What's there now
+The profile page reads only `ownDetail` — name, demat, a few expiry badges. The account API already exposes `myDetail`, `bankList`, `bankDetail` and `bankRequest`, but none of that extra detail reaches the UI.
 
-## Leftovers to build
+## 1. Full profile coverage
 
-1. **Dividends page** — proposed/announced dividends as its own screen (currently only a small panel inside Portfolio), split into "my holdings" vs "all listed", with estimated cash and bonus value per holding, and CSV export.
+Rebuild `/profile` around every field the API returns, grouped into sections:
 
-2. **Mutual fund NAV tracker** — open-ended fund NAV list with search, sort and change indicators. The previously-planned feed path for funds returns 404, so I will re-verify a working source first; if none is live, the page ships reading NAVs from the existing scrip feed for listed closed-end funds only, clearly labelled.
+- **Identity** — full name, gender, date of birth (BS and AD), father/mother/spouse name, grandfather name where returned
+- **Citizenship & documents** — citizenship number, issue date, issue district, PAN if present
+- **Contact** — email, mobile, address (district, municipality, ward, street), permanent vs temporary
+- **Demat / BOID** — demat number, BOID, client code, account status, account open date, demat expiry, renewal state, suspension/blocked flags
+- **Depository participant** — DP name, DP code, branch, contact
+- **MeroShare account** — username, account status, password expiry, last login, KYC status, profile picture if the API returns one
+- **Banks** — every linked ASBA bank with account number, branch, CRN and KYC state (from `bankList` + `bankDetail` + `bankRequest`), not just the one used at apply time
 
-3. **Broker directory** — searchable list of brokers (number, name, address, contact). Same feed caveat as above: verify a live source, otherwise fall back to a maintained static list bundled with the app and labelled as reference data.
+Fields the API omits for a given user are hidden rather than shown blank. Anything sensitive (citizenship, account numbers) is masked by default with a reveal toggle, and copy buttons on the identifiers.
 
-4. **Bulk IPO result check** — one action on Reports that resolves allotment status for every applied issue in a single pass, with a per-row status column instead of checking one at a time.
+## 2. Extra tools worth having
 
-5. **Navigation + mobile pass** — add Dividends, Funds and Brokers to the sidebar; mobile bottom bar stays at five items with the extras behind a "More" sheet.
+- **Account health panel** — one card that flags what needs action: password expiring soon, demat expiring, CRN missing on a bank, KYC incomplete, PIN never changed. Each item links to the place that fixes it.
+- **Export my data** — download the full account profile (identity, banks, DP) as JSON/CSV for the user's own records.
+- **Quick actions on profile** — change password, change PIN, and sign out of the session, inline instead of only under Settings.
+- **Session info** — when the session started, when it expires, and last login device from the activity log.
 
-6. **Per-route head metadata** — unique title/description/OG tags on the new routes.
+## 3. Design
+Same dark-first financial style. Two-column definition grids on desktop, stacked cards on mobile, sticky section nav on the left for long profiles, masked values in tabular numerals.
 
 ## Technical notes
-- New routes: `src/routes/_dash.dividends.tsx`, `_dash.funds.tsx`, `_dash.brokers.tsx`.
-- New server functions in `src/lib/nepse/market.functions.ts` (`getMutualFunds`, `getBrokers`) backed by `feed.server.ts` with the same TTL cache and graceful-degrade behaviour; queries added to `src/lib/queries.ts`.
-- Bulk result check reuses the existing `getApplicationDetails` batching in `ipo.functions.ts`; no new CDSC endpoint required.
-- No new backend, no stored credentials — session stays cookie-only as today.
+- New server function `getAccountProfile` in `account.functions.ts` that fans out `ownDetail`, `myDetail`, `bankList` (+ per-bank `bankDetail` / `bankRequest`) in one server round-trip and returns one normalised, serialization-safe DTO — so the client makes a single request.
+- Typed `AccountProfile` shape in `meroshare/types.ts`; unknown/extra CDSC keys kept in a raw section so nothing the API returns is lost.
+- `/profile` rewritten to use it via a new `accountProfileQuery`; masking and export are client-side only.
+- No credential storage changes — session stays cookie-only, PIN and password never returned to the browser.
