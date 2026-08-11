@@ -14,9 +14,9 @@ import type { TransactionItem } from "@/lib/meroshare/types";
 export const Route = createFileRoute("/_dash/transactions")({
   head: () => ({
     meta: [
-      { title: "Transactions — MeroShare Investor Console" },
+      { title: "Transactions | MeroShare Investor Console" },
       { name: "description", content: "Credit and debit history for every scrip in your demat account." },
-      { property: "og:title", content: "Transactions — MeroShare Investor Console" },
+      { property: "og:title", content: "Transactions | MeroShare Investor Console" },
       { property: "og:description", content: "Credit and debit history for every scrip in your demat account." },
     ],
   }),

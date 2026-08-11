@@ -15,6 +15,8 @@ export interface LivePrice {
   trades: number;
   lastUpdated: string | null;
   sector: string | null;
+  fiftyTwoWeekHigh: number | null;
+  fiftyTwoWeekLow: number | null;
 }
 
 export interface MarketIndex {
@@ -64,6 +66,46 @@ export interface MarketStatus {
   lastChecked: string | null;
 }
 
+export interface PricePoint {
+  time: number;
+  value: number;
+}
+
+export interface ScripOverview {
+  symbol: string;
+  name: string;
+  sector: string | null;
+  instrumentType: string | null;
+  isin: string | null;
+  faceValue: number | null;
+  listingDate: string | null;
+  paidUpCapital: number | null;
+  marketCapitalization: number | null;
+  publicShares: number | null;
+  publicPercentage: number | null;
+  promoterPercentage: number | null;
+  totalShares: number | null;
+  website: string | null;
+  email: string | null;
+  contactPerson: string | null;
+  lastUpdated: string | null;
+}
+
+export interface DailyBar {
+  date: string;
+  close: number;
+  high: number;
+  low: number;
+  volume: number;
+}
+
+export interface ScripDetail {
+  overview: ScripOverview | null;
+  history: DailyBar[];
+  intraday: PricePoint[];
+  dividend: DividendRow | null;
+}
+
 export interface MarketSnapshot {
   status: MarketStatus;
   indices: MarketIndex[];
@@ -83,25 +125,30 @@ export interface DividendRow {
   fiscalYear: string | null;
 }
 
-export interface MutualFundRow {
-  symbol: string;
-  fundName: string;
-  fundSize: number;
-  dailyNav: number;
-  dailyNavDate: string | null;
-  weeklyNav: number;
-  monthlyNav: number;
+/** NEPSE exchange message / notice from the YONEPSE news mirror. */
+export interface ExchangeMessageRow {
+  id: number;
+  symbol: string | null;
+  title: string;
+  body: string | null;
+  publishedAt: string | null;
+  fileUrl: string | null;
 }
 
-export interface BrokerRow {
-  id: number;
-  memberCode: number | string;
-  memberName: string;
-  membershipType: string | null;
-  phone: string | null;
-  districts: string[];
-  tmsLink: string | null;
-  branchCount: number | null;
+/**
+ * Resolution of one portfolio history point.
+ * - `day` — a point per trading day (best-available: months without daily
+ *   coverage contribute one month-end point each).
+ * - `month` — a point per month-end close.
+ * - `year` — a point per year (year-end close).
+ */
+export type PortfolioGranularity = "day" | "month" | "year";
+
+/** One snapshot of a portfolio's value at a point, with per-scrip detail. */
+export interface PortfolioHistoryPoint {
+  time: number;
+  value: number;
+  breakdown: { symbol: string; units: number; close: number; value: number }[];
 }
 
 export interface IpoArchiveRow {

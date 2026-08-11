@@ -1,19 +1,12 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Check, ChevronsUpDown, Eye, EyeOff, Loader2, Lock, ShieldCheck, TrendingUp, Zap } from "lucide-react";
+import {Check,ChevronsUpDown,Eye,EyeOff,Loader2,Lock,ShieldCheck,TrendingUp,Zap,} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
+import {Command,CommandEmpty,CommandGroup,CommandInput,CommandItem,CommandList,} from "@/components/ui/command";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 import { errorMessage } from "@/lib/format";
@@ -27,7 +20,7 @@ export const Route = createFileRoute("/")({
   },
   head: () => ({
     meta: [
-      { title: "Sign in — MeroShare Investor Console" },
+      { title: "Sign in | MeroShare Investor Console" },
       {
         name: "description",
         content:
@@ -45,29 +38,59 @@ export const Route = createFileRoute("/")({
 });
 
 const HIGHLIGHTS = [
-  { icon: TrendingUp, title: "Live portfolio value", text: "Holdings valued at LTP and previous close, refreshed automatically." },
-  { icon: Zap, title: "Full IPO parity", text: "Apply, edit and withdraw ASBA applications and check allotment results." },
-  { icon: ShieldCheck, title: "Credentials never stored", text: "Your login lives only in an encrypted session cookie for this visit." },
+  {
+    icon: TrendingUp,
+    title: "Live portfolio value",
+    text: "Holdings valued at LTP and previous close, refreshed automatically.",
+  },
+  {
+    icon: Zap,
+    title: "Full IPO parity",
+    text: "Apply, edit and withdraw ASBA applications and check allotment results.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Credentials never stored",
+    text: "Your login lives only in an encrypted session cookie for this visit.",
+  },
 ];
+
+function Highlighted({ text, query }: { text: string; query: string }) {
+  const trimmed = query.trim();
+  if (!trimmed) return <span className="truncate">{text}</span>;
+  const idx = text.toLowerCase().indexOf(trimmed.toLowerCase());
+  if (idx === -1) return <span className="truncate">{text}</span>;
+  return (
+    <span className="truncate">
+      {text.slice(0, idx)}
+      <span className="rounded-sm bg-primary/15 text-primary">
+        {text.slice(idx, idx + trimmed.length)}
+      </span>
+      {text.slice(idx + trimmed.length)}
+    </span>
+  );
+}
 
 function CapitalItem({
   capital,
   selected,
   onSelect,
+  query,
 }: {
   capital: Capital;
   selected: boolean;
   onSelect: () => void;
+  query: string;
 }) {
   return (
     <CommandItem
       value={`${capital.code} ${capital.name}`}
       onSelect={onSelect}
-      className={cn(selected && "bg-accent/30")}
+      className={cn("gap-1.5", selected && "bg-accent/30")}
     >
-      <Check className={cn("mr-2 size-4", selected ? "opacity-100" : "opacity-0")} />
-      <span className="num mr-2 text-xs text-muted-foreground">{capital.code}</span>
-      <span className="truncate">{capital.name}</span>
+      {selected ? <Check className="size-4 shrink-0 text-primary" /> : null}
+      <span className="num shrink-0 text-xs text-muted-foreground">{capital.code}</span>
+      <Highlighted text={capital.name} query={query} />
     </CommandItem>
   );
 }
@@ -133,7 +156,9 @@ function LoginPage() {
             />
             <div>
               <p className="font-display text-lg font-semibold">MeroShare Console</p>
-              <p className="text-xs text-muted-foreground">CDSC &amp; Clearing Ltd. account access</p>
+              <p className="text-xs text-muted-foreground">
+                CDSC &amp; Clearing Ltd. account access
+              </p>
             </div>
           </div>
         </div>
@@ -204,14 +229,14 @@ function LoginPage() {
                     variant="outline"
                     role="combobox"
                     aria-expanded={capitalOpen}
-                    className="h-11 w-full justify-between font-normal"
+                    className="h-9 w-full justify-between font-normal"
                     disabled={capitals.isLoading}
                   >
                     <span className={cn("truncate", !selected && "text-muted-foreground")}>
                       {capitals.isLoading
                         ? "Loading DP list…"
                         : selected
-                          ? `${selected.code} — ${selected.name}`
+                          ? selected.name
                           : "Select your DP"}
                     </span>
                     <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
@@ -227,49 +252,20 @@ function LoginPage() {
                     />
                     <CommandList>
                       <CommandEmpty>No DP found.</CommandEmpty>
-                      {capitalSearch.trim() === "" && selected ? (
-                        <>
-                          <CommandGroup heading="Currently selected">
-                            <CapitalItem
-                              capital={selected}
-                              selected
-                              onSelect={() => {
-                                setCapitalId(selected.id);
-                                setCapitalOpen(false);
-                              }}
-                            />
-                          </CommandGroup>
-                          <CommandGroup heading="All DPs">
-                            {(capitals.data ?? [])
-                              .filter((capital) => capital.id !== selected.id)
-                              .map((capital) => (
-                                <CapitalItem
-                                  key={capital.id}
-                                  capital={capital}
-                                  selected={false}
-                                  onSelect={() => {
-                                    setCapitalId(capital.id);
-                                    setCapitalOpen(false);
-                                  }}
-                                />
-                              ))}
-                          </CommandGroup>
-                        </>
-                      ) : (
-                        <CommandGroup>
-                          {(capitals.data ?? []).map((capital) => (
-                            <CapitalItem
-                              key={capital.id}
-                              capital={capital}
-                              selected={capitalId === capital.id}
-                              onSelect={() => {
-                                setCapitalId(capital.id);
-                                setCapitalOpen(false);
-                              }}
-                            />
-                          ))}
-                        </CommandGroup>
-                      )}
+                      <CommandGroup>
+                        {(capitals.data ?? []).map((capital) => (
+                          <CapitalItem
+                            key={capital.id}
+                            capital={capital}
+                            selected={capitalId === capital.id}
+                            query={capitalSearch}
+                            onSelect={() => {
+                              setCapitalId(capital.id);
+                              setCapitalOpen(false);
+                            }}
+                          />
+                        ))}
+                      </CommandGroup>
                     </CommandList>
                   </Command>
                 </PopoverContent>

@@ -3,7 +3,6 @@ import { getCurrentUser } from "./meroshare/auth.functions";
 import {
   getEnrichedPortfolio,
   getHoldingSymbols,
-  getMyShares,
   getOwnDetail,
   getPortfolio,
   getTransactions,
@@ -13,19 +12,22 @@ import {
   getApplicationDetails,
   getApplicationReports,
   getCurrentIssues,
-  getIpoResultCompanies,
   getOldApplicationReports,
 } from "./meroshare/ipo.functions";
 import { getActivityLog, getBanks, getMyDetail } from "./meroshare/account.functions";
 import {
-  getBrokerDirectory,
-  getFunds,
+  getIndexGraph,
   getIpoArchiveList,
   getMarketMovers,
   getMarketSectors,
   getMarketSnapshot,
+  getNews,
+  getPortfolioHistorySeries,
   getProposedDividends,
+  getScripDetail,
+  getScripFaceValues,
 } from "./nepse/market.functions";
+import type { PortfolioGranularity } from "./nepse/types";
 import { isoDate } from "./format";
 
 export const marketSnapshotQuery = () =>
@@ -56,24 +58,59 @@ export const dividendsQuery = () =>
     staleTime: 30 * 60_000,
   });
 
-export const fundsQuery = () =>
-  queryOptions({
-    queryKey: ["mutual-funds"],
-    queryFn: () => getFunds(),
-    staleTime: 30 * 60_000,
-  });
-
-export const brokersQuery = () =>
-  queryOptions({
-    queryKey: ["brokers"],
-    queryFn: () => getBrokerDirectory(),
-    staleTime: 6 * 60 * 60_000,
-  });
-
 export const ipoArchiveQuery = () =>
   queryOptions({
     queryKey: ["ipo-archive"],
     queryFn: () => getIpoArchiveList(),
+    staleTime: 30 * 60_000,
+  });
+
+export const indexGraphQuery = (indexName: string) =>
+  queryOptions({
+    queryKey: ["index-graph", indexName],
+    queryFn: () => getIndexGraph({ data: { indexName } }),
+    staleTime: 5 * 60_000,
+  });
+
+export const scripDetailQuery = (symbol: string | null) =>
+  queryOptions({
+    queryKey: ["scrip-detail", symbol],
+    queryFn: () => getScripDetail({ data: { symbol: symbol ?? "" } }),
+    enabled: Boolean(symbol),
+    staleTime: 5 * 60_000,
+  });
+
+export const faceValuesQuery = (symbols: string[]) =>
+  queryOptions({
+    queryKey: ["face-values", JSON.stringify([...symbols].sort())],
+    queryFn: () => getScripFaceValues({ data: { symbols } }),
+    enabled: symbols.length > 0,
+    staleTime: 30 * 60_000,
+  });
+
+export const exchangeMessagesQuery = (enabled = true) =>
+  queryOptions({
+    queryKey: ["exchange-messages"],
+    queryFn: () => getNews(),
+    enabled,
+    staleTime: 30 * 60_000,
+  });
+
+export const portfolioHistoryQuery = (
+  holdings: { scrip: string; units: number }[],
+  months: number,
+  granularity: PortfolioGranularity,
+  enabled = true,
+) =>
+  queryOptions({
+    queryKey: [
+      "portfolio-history",
+      months,
+      granularity,
+      JSON.stringify(holdings.map((h) => h.scrip)),
+    ],
+    queryFn: () => getPortfolioHistorySeries({ data: { holdings, months, granularity } }),
+    enabled: enabled && holdings.length > 0,
     staleTime: 30 * 60_000,
   });
 
@@ -90,7 +127,6 @@ export const currentIssuesQuery = () =>
     queryFn: () => getCurrentIssues(),
     staleTime: 5 * 60_000,
   });
-
 
 export const sessionQuery = () =>
   queryOptions({
@@ -112,13 +148,6 @@ export const portfolioQuery = () =>
     queryFn: () => getPortfolio(),
     staleTime: 30_000,
     refetchInterval: 60_000,
-  });
-
-export const mySharesQuery = () =>
-  queryOptions({
-    queryKey: ["my-shares"],
-    queryFn: () => getMyShares(),
-    staleTime: 60_000,
   });
 
 export const holdingSymbolsQuery = () =>
@@ -162,13 +191,6 @@ export const applicationDetailsQuery = (items: { formId: number; old?: boolean }
     queryKey: ["application-details", JSON.stringify(items)],
     queryFn: () => getApplicationDetails({ data: { items } }),
     staleTime: 60_000,
-  });
-
-export const ipoResultCompaniesQuery = () =>
-  queryOptions({
-    queryKey: ["ipo-result-companies"],
-    queryFn: () => getIpoResultCompanies(),
-    staleTime: 5 * 60_000,
   });
 
 export const banksQuery = () =>

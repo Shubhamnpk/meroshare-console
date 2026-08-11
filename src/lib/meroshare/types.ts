@@ -189,13 +189,6 @@ export interface WaccSearchResponse {
   message?: string;
 }
 
-export interface IpoResultCompany {
-  id: number;
-  name: string;
-  scrip?: string;
-  [key: string]: JsonValue;
-}
-
 export interface Paged<T> {
   object: T[];
   totalCount: number;

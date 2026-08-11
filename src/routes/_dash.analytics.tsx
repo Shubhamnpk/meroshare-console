@@ -8,9 +8,9 @@ import { formatNpr, toNumber } from "@/lib/format";
 export const Route = createFileRoute("/_dash/analytics")({
   head: () => ({
     meta: [
-      { title: "Analytics — MeroShare Investor Console" },
+      { title: "Analytics : MeroShare Investor Console" },
       { name: "description", content: "Concentration, weight and day-change analytics across your holdings." },
-      { property: "og:title", content: "Analytics — MeroShare Investor Console" },
+      { property: "og:title", content: "Analytics : MeroShare Investor Console" },
       { property: "og:description", content: "Concentration, weight and day-change analytics across your holdings." },
     ],
   }),

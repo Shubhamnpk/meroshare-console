@@ -39,8 +39,6 @@ export const CDSC_URLS = {
   waccPending: `${CDSC_BASE}/api/myPurchase/search/wacc/`,
   waccCalculated: `${CDSC_BASE}/api/myPurchase/view/`,
   waccSubmit: `${CDSC_BASE}/api/myPurchase/upload/`,
-  ipoResultCompanies: `${IPO_RESULT_BASE}/result/companyShares/fileUploaded`,
-  ipoResultCheck: `${IPO_RESULT_BASE}/result/result/check`,
 } as const;
 
 const BASE_HEADERS: Record<string, string> = {
@@ -69,6 +67,8 @@ interface RequestOptions {
   token?: string;
   body?: unknown;
   raw?: boolean;
+  /** Retry transient failures (429 / 5xx / network blips). Default true; writes pass false. */
+  retry?: boolean;
 }
 
 async function parseBody(res: Response): Promise<unknown> {
@@ -101,40 +101,55 @@ function messageFrom(payload: unknown, fallback: string): string {
   return fallback;
 }
 
+const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
+const MAX_ATTEMPTS = 3;
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
 export async function cdscRequest<T = unknown>(
   url: string,
   options: RequestOptions = {},
 ): Promise<T> {
-  const { method = "GET", token, body } = options;
+  const { method = "GET", token, body, retry = true } = options;
   const headers: Record<string, string> = { ...BASE_HEADERS };
   if (token) headers["Authorization"] = token;
 
-  let res: Response;
-  try {
-    res = await fetch(url, {
-      method,
-      headers,
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    });
-  } catch {
-    throw new CdscError("Could not reach MeroShare. Please try again in a moment.", 503);
+  for (let attempt = 1; ; attempt++) {
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method,
+        headers,
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+    } catch {
+      if (retry && attempt < MAX_ATTEMPTS) {
+        await sleep(350 * attempt);
+        continue;
+      }
+      throw new CdscError("Could not reach MeroShare. Please try again in a moment.", 503);
+    }
+
+    const payload = await parseBody(res);
+
+    if (res.status === 401 || res.status === 403) {
+      throw new SessionExpiredError();
+    }
+
+    if (retry && RETRYABLE_STATUS.has(res.status) && attempt < MAX_ATTEMPTS) {
+      await sleep(350 * attempt);
+      continue;
+    }
+
+    if (!res.ok) {
+      throw new CdscError(
+        messageFrom(payload, `MeroShare request failed (${res.status})`),
+        res.status,
+        payload,
+      );
+    }
+
+    return payload as T;
   }
-
-  const payload = await parseBody(res);
-
-  if (res.status === 401 || res.status === 403) {
-    throw new SessionExpiredError();
-  }
-
-  if (!res.ok) {
-    throw new CdscError(
-      messageFrom(payload, `MeroShare request failed (${res.status})`),
-      res.status,
-      payload,
-    );
-  }
-
-  return payload as T;
 }
 
 export async function cdscRequestWithHeaders<T = unknown>(

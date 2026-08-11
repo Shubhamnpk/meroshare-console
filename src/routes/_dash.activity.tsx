@@ -13,10 +13,10 @@ import type { ActivityLogItem } from "@/lib/meroshare/types";
 export const Route = createFileRoute("/_dash/activity")({
   head: () => ({
     meta: [
-      { title: "Activity Log — MeroShare Investor Console" },
-      { name: "description", content: "Recent sign-ins and account activity recorded by MeroShare." },
-      { property: "og:title", content: "Activity Log — MeroShare Investor Console" },
-      { property: "og:description", content: "Recent sign-ins and account activity recorded by MeroShare." },
+      { title: "Activity Log : MeroShare Investor Console" },
+      { name: "description", content: "Recent signins and account activity recorded by MeroShare." },
+      { property: "og:title", content: "Activity Log : MeroShare Investor Console" },
+      { property: "og:description", content: "Recent signins and account activity recorded by MeroShare." },
     ],
   }),
   component: ActivityPage,

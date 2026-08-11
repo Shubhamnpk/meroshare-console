@@ -2,25 +2,18 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import {
   checkCanApply,
-  checkIpoResult,
   deleteIpoApplication,
   editIpoApplication,
   fetchApplicableIssues,
   fetchAppliedDetail,
   fetchApplicationReports,
   fetchCurrentIssues,
-  fetchIpoResultCompanies,
   fetchIssueManagerDetail,
   fetchOldApplicationReports,
   requireAuth,
   submitIpoApplication,
 } from "./api.server";
-import type {
-  ApplicableIssue,
-  ApplicationReportItem,
-  IpoResultCompany,
-  JsonRecord,
-} from "./types";
+import type { ApplicableIssue, ApplicationReportItem, JsonRecord } from "./types";
 
 export const getApplicableIssues = createServerFn({ method: "GET" }).handler(
   async (): Promise<ApplicableIssue[]> => {
@@ -57,37 +50,6 @@ export const getOldApplicationReports = createServerFn({ method: "GET" }).handle
   },
 );
 
-/** Check the allotment result for several issues in one round trip. */
-export const getBulkIpoResults = createServerFn({ method: "POST" })
-  .inputValidator((input: unknown) =>
-    z
-      .object({
-        companyShareIds: z.array(z.number().int().positive()).min(1).max(40),
-      })
-      .parse(input),
-  )
-  .handler(
-    async ({ data }): Promise<{ companyShareId: number; message: string; alloted: boolean }[]> => {
-      const auth = await requireAuth();
-      const settled = await Promise.allSettled(
-        data.companyShareIds.map((id) => checkIpoResult(auth.demat, id)),
-      );
-      return settled.map((res, index) => {
-        const companyShareId = data.companyShareIds[index] ?? 0;
-        if (res.status !== "fulfilled") {
-          return { companyShareId, message: "Result not published yet.", alloted: false };
-        }
-        const message = String(res.value["message"] ?? "");
-        return {
-          companyShareId,
-          message: message || "No response from the result service.",
-          alloted: /alloted|allotted|congratulation/i.test(message),
-        };
-      });
-    },
-  );
-
-
 export const getIssueDetail = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) =>
     z.object({ companyShareId: z.number().int().positive() }).parse(input),
@@ -122,10 +84,19 @@ export const getApplicationDetails = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }): Promise<(JsonRecord | null)[]> => {
     const auth = await requireAuth();
-    const settled = await Promise.allSettled(
-      data.items.map((it) => fetchAppliedDetail(auth, it.formId, it.old === true)),
-    );
-    return settled.map((r) => (r.status === "fulfilled" ? r.value : null));
+    // CDSC rate-limits aggressively — fetch in small chunks with a pause so a
+    // burst of detail calls can't 429 the whole batch (and stall every row).
+    const results: (JsonRecord | null)[] = [];
+    const chunkSize = 6;
+    for (let i = 0; i < data.items.length; i += chunkSize) {
+      const chunk = data.items.slice(i, i + chunkSize);
+      const settled = await Promise.allSettled(
+        chunk.map((it) => fetchAppliedDetail(auth, it.formId, it.old === true)),
+      );
+      results.push(...settled.map((r) => (r.status === "fulfilled" ? r.value : null)));
+      if (i + chunkSize < data.items.length) await new Promise((r) => setTimeout(r, 250));
+    }
+    return results;
   });
 
 export const canApplyToIssue = createServerFn({ method: "POST" })
@@ -157,9 +128,7 @@ export const editIpoApply = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) =>
     applySchema.extend({ applicantFormId: z.number().int().positive() }).parse(input),
   )
-  .handler(async ({ data }): Promise<JsonRecord> =>
-    editIpoApplication(await requireAuth(), data),
-  );
+  .handler(async ({ data }): Promise<JsonRecord> => editIpoApplication(await requireAuth(), data));
 
 export const deleteIpoApply = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) =>
@@ -174,20 +143,3 @@ export const deleteIpoApply = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<JsonRecord> =>
     deleteIpoApplication(await requireAuth(), data),
   );
-
-export const getIpoResultCompanies = createServerFn({ method: "GET" }).handler(
-  async (): Promise<IpoResultCompany[]> => {
-    await requireAuth();
-    const res = await fetchIpoResultCompanies();
-    return res.body ?? [];
-  },
-);
-
-export const getIpoResult = createServerFn({ method: "POST" })
-  .inputValidator((input: unknown) =>
-    z.object({ companyShareId: z.number().int().positive() }).parse(input),
-  )
-  .handler(async ({ data }): Promise<JsonRecord> => {
-    const auth = await requireAuth();
-    return checkIpoResult(auth.demat, data.companyShareId);
-  });

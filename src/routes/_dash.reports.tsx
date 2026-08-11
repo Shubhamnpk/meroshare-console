@@ -2,49 +2,132 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { ErrorBlock, LoadingBlock, EmptyBlock } from "@/components/states";
 import { useMemo, useState } from "react";
-import { FileDown, Search } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  CheckCircle2,
+  Clock,
+  FileDown,
+  Lock,
+  Search,
+  XCircle,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { applicationDetailsQuery, applicationReportsQuery, oldApplicationReportsQuery } from "@/lib/queries";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  applicationDetailsQuery,
+  applicationReportsQuery,
+  oldApplicationReportsQuery,
+} from "@/lib/queries";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { formatDateTime, formatQty, isoDate, toNumber } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import type { ApplicationReportItem, JsonRecord, JsonValue } from "@/lib/meroshare/types";
 
 export const Route = createFileRoute("/_dash/reports")({
   head: () => ({
     meta: [
-      { title: "Application Report — MeroShare Investor Console" },
-      { name: "description", content: "Track the status of your current and past ASBA share applications." },
-      { property: "og:title", content: "Application Report — MeroShare Investor Console" },
-      { property: "og:description", content: "Track the status of your current and past ASBA share applications." },
+      { title: "Application Report | MeroShare Investor Console" },
+      {
+        name: "description",
+        content: "Track the status of your current and past ASBA share applications.",
+      },
+      { property: "og:title", content: "Application Report | MeroShare Investor Console" },
+      {
+        property: "og:description",
+        content: "Track the status of your current and past ASBA share applications.",
+      },
     ],
   }),
   component: ReportsPage,
 });
 
-type Outcome = { kind: "allotted" | "not-allotted" | "pending"; label: string };
+type Outcome = { kind: "allotted" | "not-allotted" | "blocked" | "pending"; label: string };
 
 function str(value: unknown): string | null {
   return typeof value === "string" && value.trim() !== "" ? value : null;
 }
 
+/**
+ * Classify an application's allotment state from its raw MeroShare fields.
+ * Status is authoritative ("Alloted" / "Not Alloted" / "Allotted" / "Not
+ * Allotted" / "Rejected"); Stage/Remark/Reason only fill in blocked / released
+ * / pending states. Note "Not Alloted" must not match the allotted branch.
+ */
 function deriveOutcome(d: JsonRecord): Outcome {
   const rk = toNumber(d["receivedKitta"]);
-  const stage = str(d["stageName"]) ?? "";
-  const status = str(d["statusName"]) ?? "";
+  const status = (str(d["statusName"]) ?? "").toUpperCase().replace(/\s+/g, " ").trim();
+  const stage = (str(d["stageName"]) ?? "").toUpperCase();
+  const remark = (str(d["meroshareRemark"]) ?? "").toUpperCase();
+  const reason = (str(d["reasonOrRemark"]) ?? "").toUpperCase();
+  const hay = [stage, remark, reason].join(" | ");
+
   if (rk > 0) return { kind: "allotted", label: "Allotted" };
-  if (stage === "ALLOTMENT_RESULT_UPLOADED" || /NOT_ALLOTED|REJECTED/.test(status)) {
+  if (/^ALLOTED$/.test(status) || /^ALLOTTED$/.test(status)) {
+    return { kind: "allotted", label: "Allotted" };
+  }
+  if (/^NOT ALLOTED$/.test(status) || /^NOT ALLOTTED$/.test(status) || /REJECTED/.test(status)) {
     return { kind: "not-allotted", label: "Not allotted" };
+  }
+  if (/\bBLOCKED\b|BLOCK AMOUNT/.test(hay) && !/RELEASED/.test(hay)) {
+    return { kind: "blocked", label: "Amount blocked" };
+  }
+  if (/AMOUNT RELEASED/.test(hay)) {
+    return { kind: "not-allotted", label: "Not allotted" };
+  }
+  if (/ALLOTMENT_RESULT_UPLOADED|ALLOTMENT_RESULT_PUBLISHED/.test(stage)) {
+    return { kind: "not-allotted", label: "Not allotted" };
+  }
+  if (/PENDING|RESULT NOT PUBLISHED/.test(hay)) {
+    return { kind: "pending", label: "Pending" };
   }
   return { kind: "pending", label: "Pending result" };
 }
 
 const outcomeStyles: Record<Outcome["kind"], string> = {
-  allotted: "bg-emerald-500/10 text-emerald-600",
-  "not-allotted": "bg-red-500/10 text-red-600",
-  pending: "bg-amber-500/10 text-amber-600",
+  allotted: "bg-gain/15 text-gain",
+  "not-allotted": "bg-loss/15 text-loss",
+  blocked: "bg-warning/15 text-warning",
+  pending: "bg-muted text-muted-foreground",
 };
+
+function StatusBadge({ outcome }: { outcome: Outcome }) {
+  const icon =
+    outcome.kind === "allotted" ? (
+      <CheckCircle2 className="size-3.5" />
+    ) : outcome.kind === "not-allotted" ? (
+      <XCircle className="size-3.5" />
+    ) : outcome.kind === "blocked" ? (
+      <Lock className="size-3.5" />
+    ) : (
+      <Clock className="size-3.5" />
+    );
+  return (
+    <span
+      className={cn(
+        "num inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[0.68rem] font-semibold",
+        outcomeStyles[outcome.kind],
+      )}
+    >
+      {icon}
+      {outcome.label}
+    </span>
+  );
+}
 
 function Chip({ label, value, valueClass }: { label: string; value: string; valueClass?: string }) {
   return (
@@ -58,7 +141,7 @@ function Chip({ label, value, valueClass }: { label: string; value: string; valu
 function Summary({ details }: { details: (JsonRecord | null)[] }) {
   const valid = details.filter((d): d is JsonRecord => d !== null);
   const outcomes = valid.map(deriveOutcome);
-  const counts = { allotted: 0, "not-allotted": 0, pending: 0 };
+  const counts = { allotted: 0, "not-allotted": 0, blocked: 0, pending: 0 };
   for (const o of outcomes) counts[o.kind] += 1;
   const kittaApplied = valid.reduce((s, d) => s + Math.max(0, toNumber(d["appliedKitta"])), 0);
   const kittaAllotted = valid.reduce((s, d) => s + Math.max(0, toNumber(d["receivedKitta"])), 0);
@@ -67,7 +150,8 @@ function Summary({ details }: { details: (JsonRecord | null)[] }) {
       <Chip label="Applied" value={String(valid.length)} />
       <Chip label="Allotted" value={String(counts.allotted)} valueClass="text-gain" />
       <Chip label="Not allotted" value={String(counts["not-allotted"])} valueClass="text-loss" />
-      <Chip label="Awaiting result" value={String(counts.pending)} valueClass="text-amber-600" />
+      <Chip label="Amount blocked" value={String(counts.blocked)} valueClass="text-warning" />
+      <Chip label="Awaiting result" value={String(counts.pending)} />
       <Chip label="Kitta applied" value={formatQty(kittaApplied)} />
       <Chip label="Kitta allotted" value={formatQty(kittaAllotted)} valueClass="text-gain" />
     </div>
@@ -109,18 +193,26 @@ function renderValue(value: JsonValue): string {
   return String(value);
 }
 
+const HIDDEN_FIELDS = new Set([
+  "remarks",
+  "statusDescription",
+  "suspectStatusName",
+  "meroShareId",
+  "accountNumber",
+  "accountTypeName",
+  "registeredBranchName",
+  "reasonOrRemark",
+  "stageName",
+  "companyShareId",
+  "demat",
+]);
+
 function DetailGrid({ detail }: { detail: JsonRecord }) {
   const known = new Set(Object.keys(knownFields));
-  const extraRows = Object.entries(detail).filter(
-    ([k, v]) =>
-      !known.has(k) &&
-      v !== null &&
-      v !== undefined &&
-      v !== "" &&
-      !(typeof v === "object" && Object.keys(v as object).length === 0),
-  );
+  const skipped = new Set(HIDDEN_FIELDS);
   const rows: [string, string][] = [];
   for (const k of Object.keys(knownFields)) {
+    if (skipped.has(k)) continue;
     const v = detail[k];
     if (v !== null && v !== undefined && v !== "") {
       const formatted =
@@ -132,13 +224,24 @@ function DetailGrid({ detail }: { detail: JsonRecord }) {
       rows.push([humanize(k), formatted]);
     }
   }
+  const extraRows = Object.entries(detail).filter(
+    ([k, v]) =>
+      !known.has(k) &&
+      !skipped.has(k) &&
+      v !== null &&
+      v !== undefined &&
+      v !== "" &&
+      !(typeof v === "object" && Object.keys(v as object).length === 0),
+  );
   for (const [k, v] of extraRows) rows.push([humanize(k), renderValue(v)]);
   return (
     <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
       {rows.map(([label, value]) => (
         <div key={label}>
           <dt className="text-xs text-muted-foreground">{label}</dt>
-          <dd className="truncate text-sm font-medium" title={value}>{value}</dd>
+          <dd className="truncate text-sm font-medium" title={value}>
+            {value}
+          </dd>
         </div>
       ))}
     </dl>
@@ -152,11 +255,109 @@ function matches(item: ApplicationReportItem, detail: JsonRecord | null, term: s
     item.statusName,
     item.shareTypeName,
     item.shareGroupName,
-    detail ? str(detail["stageName"]) ?? "" : "",
-    detail ? str(detail["meroshareRemark"]) ?? "" : "",
-    detail ? str(detail["applicantFormId"]) ?? "" : "",
+    detail ? (str(detail["stageName"]) ?? "") : "",
+    detail ? (str(detail["meroshareRemark"]) ?? "") : "",
+    detail ? (str(detail["applicantFormId"]) ?? "") : "",
   ];
   return haystack.some((s) => s && s.toLowerCase().includes(term));
+}
+
+type SortKey = "appliedDate" | "companyName" | "scrip" | "appliedKitta" | "status" | "amount";
+type SortCycle = "default" | "asc" | "desc";
+
+const SORT_LABELS: Record<SortKey, string> = {
+  appliedDate: "Date",
+  companyName: "Company",
+  scrip: "Scrip",
+  appliedKitta: "Kitta",
+  status: "Status",
+  amount: "Amount",
+};
+
+function sortValue(
+  pair: { item: ApplicationReportItem; detail: JsonRecord | null },
+  key: SortKey,
+): string | number {
+  const { item, detail } = pair;
+  switch (key) {
+    case "companyName":
+      return item.companyName ?? "";
+    case "scrip":
+      return item.scrip ?? "";
+    case "status":
+      return (detail ? (str(detail["statusName"]) ?? "") : "") || item.statusName || "";
+    case "appliedKitta":
+      return detail ? toNumber(detail["appliedKitta"]) : 0;
+    case "amount":
+      return detail ? toNumber(detail["amount"]) : 0;
+    default:
+      return detail ? String(detail["appliedDate"] ?? "") : "";
+  }
+}
+
+function comparePairs(
+  a: { item: ApplicationReportItem; detail: JsonRecord | null },
+  b: { item: ApplicationReportItem; detail: JsonRecord | null },
+  key: SortKey,
+  dir: "asc" | "desc",
+): number {
+  const av = sortValue(a, key);
+  const bv = sortValue(b, key);
+  const cmp =
+    typeof av === "number" && typeof bv === "number"
+      ? av - bv
+      : String(av).localeCompare(String(bv));
+  return dir === "asc" ? cmp : -cmp;
+}
+
+function SortBar({
+  sortKey,
+  cycle,
+  onKey,
+  onCycle,
+}: {
+  sortKey: SortKey;
+  cycle: SortCycle;
+  onKey: (key: SortKey) => void;
+  onCycle: () => void;
+}) {
+  return (
+    <>
+      <Select value={sortKey} onValueChange={(v) => onKey(v as SortKey)}>
+        <SelectTrigger className="h-8 w-32 text-xs" aria-label="Sort applications by">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
+            <SelectItem key={k} value={k}>
+              {SORT_LABELS[k]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={onCycle}
+        aria-label="Cycle sort direction"
+        title={
+          cycle === "asc"
+            ? "Ascending — tap to sort descending"
+            : cycle === "desc"
+              ? "Descending — tap to reset to default order"
+              : "Default order — tap to sort ascending"
+        }
+      >
+        {cycle === "asc" ? (
+          <ArrowUp className="size-4" />
+        ) : cycle === "desc" ? (
+          <ArrowDown className="size-4" />
+        ) : (
+          <ArrowUpDown className="size-4" />
+        )}
+      </Button>
+    </>
+  );
 }
 
 function exportCsv(items: ApplicationReportItem[], details: (JsonRecord | null)[]) {
@@ -177,7 +378,12 @@ function exportCsv(items: ApplicationReportItem[], details: (JsonRecord | null)[
       .map(esc)
       .join(",");
   });
-  const csv = [["SN", "Company", "Scrip", "Applied", "Allotted", "Amount", "Status", "Stage", "Remark"].map(esc).join(","), ...rows].join("\n");
+  const csv = [
+    ["SN", "Company", "Scrip", "Applied", "Allotted", "Amount", "Status", "Stage", "Remark"]
+      .map(esc)
+      .join(","),
+    ...rows,
+  ].join("\n");
   const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -193,22 +399,32 @@ function ReportList({
   loadingDetails,
   search,
   onSearch,
+  sortKey,
+  sortCycle,
 }: {
   items: ApplicationReportItem[];
   details: (JsonRecord | null)[];
   loadingDetails: boolean;
   search: string;
   onSearch: (value: string) => void;
+  sortKey: SortKey;
+  sortCycle: SortCycle;
 }) {
   const shown = useMemo(() => {
     const pairs = items.map((item, idx) => ({ item, detail: details[idx] ?? null }));
     const term = search.trim().toLowerCase();
     const filtered = term ? pairs.filter(({ item, detail }) => matches(item, detail, term)) : pairs;
+    filtered.sort((a, b) => comparePairs(a, b, sortKey, sortCycle === "asc" ? "asc" : "desc"));
     return { items: filtered.map((p) => p.item), details: filtered.map((p) => p.detail) };
-  }, [items, details, search]);
+  }, [items, details, search, sortKey, sortCycle]);
 
   if (items.length === 0) {
-    return <EmptyBlock title="No applications" description="Applications you submit will be listed here." />;
+    return (
+      <EmptyBlock
+        title="No applications"
+        description="Applications you submit will be listed here."
+      />
+    );
   }
 
   return (
@@ -223,33 +439,56 @@ function ReportList({
           className="h-10 rounded-xl pl-9"
         />
       </div>
-      {loadingDetails && <p className="text-xs text-muted-foreground">Loading application results…</p>}
+      {loadingDetails && (
+        <p className="text-xs text-muted-foreground">Loading application results…</p>
+      )}
       {shown.items.length === 0 ? (
         <EmptyBlock title="No matches" description="Nothing matches your search." />
       ) : (
         <>
           {shown.items.length !== items.length ? (
-            <p className="text-xs text-muted-foreground">Showing {shown.items.length} of {items.length} applications.</p>
+            <p className="text-xs text-muted-foreground">
+              Showing {shown.items.length} of {items.length} applications.
+            </p>
           ) : null}
-          <Accordion type="single" collapsible className="overflow-hidden rounded-2xl border border-border/70 bg-card">
+          <Accordion
+            type="single"
+            collapsible
+            className="overflow-hidden rounded-2xl border border-border/70 bg-card"
+          >
             {shown.items.map((item, idx) => {
               const detail = shown.details[idx] ?? null;
               const outcome = detail ? deriveOutcome(detail) : null;
               return (
-                <AccordionItem key={`${item.companyShareId}-${item.applicantFormId ?? 0}`} value={`${item.companyShareId}-${item.applicantFormId ?? 0}`}>
+                <AccordionItem
+                  key={`${item.companyShareId}-${item.applicantFormId ?? 0}`}
+                  value={`${item.companyShareId}-${item.applicantFormId ?? 0}`}
+                >
                   <AccordionTrigger className="px-4">
                     <span className="flex min-w-0 flex-1 items-center justify-between gap-3 pr-2">
                       <span className="min-w-0 text-left">
-                        <span className="block truncate text-sm font-semibold">{item.companyName}</span>
-                        <span className="num block truncate text-xs text-muted-foreground">{item.scrip} · {item.shareTypeName} {item.shareGroupName}</span>
+                        <span className="block truncate text-sm font-semibold">
+                          {item.companyName}
+                        </span>
+                        <span className="num block truncate text-xs text-muted-foreground">
+                          {item.scrip} · {item.shareTypeName} {item.shareGroupName}
+                        </span>
                       </span>
-                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[0.68rem] font-semibold ${outcome ? outcomeStyles[outcome.kind] : "bg-secondary text-secondary-foreground"}`}>
-                        {outcome ? outcome.label : (item.statusName ?? "—")}
-                      </span>
+                      {outcome ? (
+                        <StatusBadge outcome={outcome} />
+                      ) : (
+                        <span className="shrink-0 rounded-full bg-muted px-2.5 py-1 text-[0.68rem] font-semibold text-muted-foreground">
+                          {item.statusName ?? "—"}
+                        </span>
+                      )}
                     </span>
                   </AccordionTrigger>
                   <AccordionContent className="px-4">
-                    {detail ? <DetailGrid detail={detail} /> : <p className="text-xs text-muted-foreground">Result not loaded.</p>}
+                    {detail ? (
+                      <DetailGrid detail={detail} />
+                    ) : (
+                      <p className="text-xs text-muted-foreground">Result not loaded.</p>
+                    )}
                   </AccordionContent>
                 </AccordionItem>
               );
@@ -265,14 +504,22 @@ function ReportsPage() {
   const current = useQuery(applicationReportsQuery());
   const old = useQuery(oldApplicationReportsQuery());
   const [search, setSearch] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("appliedDate");
+  const [sortCycle, setSortCycle] = useState<SortCycle>("default");
+  const cycleSort = () =>
+    setSortCycle((c) => (c === "asc" ? "desc" : c === "desc" ? "default" : "asc"));
   const currentItems = current.data ?? [];
   const oldItems = old.data ?? [];
   const currentDetails = useQuery({
-    ...applicationDetailsQuery(currentItems.map((i) => ({ formId: i.applicantFormId ?? 0, old: false }))),
+    ...applicationDetailsQuery(
+      currentItems.map((i) => ({ formId: i.applicantFormId ?? 0, old: false })),
+    ),
     enabled: currentItems.length > 0,
   });
   const oldDetails = useQuery({
-    ...applicationDetailsQuery(oldItems.map((i) => ({ formId: i.applicantFormId ?? 0, old: true }))),
+    ...applicationDetailsQuery(
+      oldItems.map((i) => ({ formId: i.applicantFormId ?? 0, old: true })),
+    ),
     enabled: oldItems.length > 0,
   });
   return (
@@ -280,11 +527,21 @@ function ReportsPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl font-semibold sm:text-3xl">Application Report</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Status of your ASBA share applications.</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Status of your ASBA share applications.
+          </p>
         </div>
-        <Button variant="outline" size="sm" disabled={currentItems.length === 0} onClick={() => exportCsv(currentItems, currentDetails.data ?? [])}>
-          <FileDown /> Export
-        </Button>
+        <div className="flex items-center gap-2">
+          <SortBar sortKey={sortKey} cycle={sortCycle} onKey={setSortKey} onCycle={cycleSort} />
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={currentItems.length === 0}
+            onClick={() => exportCsv(currentItems, currentDetails.data ?? [])}
+          >
+            <FileDown /> Export
+          </Button>
+        </div>
       </div>
       <Tabs defaultValue="current" onValueChange={() => setSearch("")}>
         <TabsList>
@@ -292,14 +549,38 @@ function ReportsPage() {
           <TabsTrigger value="old">Old</TabsTrigger>
         </TabsList>
         <TabsContent value="current" className="mt-4">
-          {current.isLoading ? <LoadingBlock label="Loading applications" />
-            : current.isError ? <ErrorBlock error={current.error} retry={() => void current.refetch()} />
-            : <ReportList items={currentItems} details={currentDetails.data ?? []} loadingDetails={currentDetails.isFetching} search={search} onSearch={setSearch} />}
+          {current.isLoading ? (
+            <LoadingBlock label="Loading applications" />
+          ) : current.isError ? (
+            <ErrorBlock error={current.error} retry={() => void current.refetch()} />
+          ) : (
+            <ReportList
+              items={currentItems}
+              details={currentDetails.data ?? []}
+              loadingDetails={currentDetails.isFetching}
+              search={search}
+              onSearch={setSearch}
+              sortKey={sortKey}
+              sortCycle={sortCycle}
+            />
+          )}
         </TabsContent>
         <TabsContent value="old" className="mt-4">
-          {old.isLoading ? <LoadingBlock label="Loading history" />
-            : old.isError ? <ErrorBlock error={old.error} retry={() => void old.refetch()} />
-            : <ReportList items={oldItems} details={oldDetails.data ?? []} loadingDetails={oldDetails.isFetching} search={search} onSearch={setSearch} />}
+          {old.isLoading ? (
+            <LoadingBlock label="Loading history" />
+          ) : old.isError ? (
+            <ErrorBlock error={old.error} retry={() => void old.refetch()} />
+          ) : (
+            <ReportList
+              items={oldItems}
+              details={oldDetails.data ?? []}
+              loadingDetails={oldDetails.isFetching}
+              search={search}
+              onSearch={setSearch}
+              sortKey={sortKey}
+              sortCycle={sortCycle}
+            />
+          )}
         </TabsContent>
       </Tabs>
     </div>

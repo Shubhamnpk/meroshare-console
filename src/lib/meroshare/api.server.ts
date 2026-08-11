@@ -9,7 +9,6 @@ import type {
   BankDetail,
   BankListItem,
   Capital,
-  IpoResultCompany,
   MyShareItem,
   OwnDetail,
   Paged,
@@ -63,7 +62,11 @@ export async function fetchPortfolio(auth: AuthContext): Promise<PortfolioRespon
 
 export async function fetchTransactions(
   auth: AuthContext,
-  input: { symbol?: string | null | undefined; page?: number | undefined; size?: number | undefined },
+  input: {
+    symbol?: string | null | undefined;
+    page?: number | undefined;
+    size?: number | undefined;
+  },
 ): Promise<{ transactionView?: TransactionItem[]; totalItems?: number }> {
   const symbol = input.symbol ?? null;
   return cdscRequest<JsonRecord>(CDSC_URLS.transactions, {
@@ -82,9 +85,7 @@ export async function fetchTransactions(
   });
 }
 
-export async function fetchApplicableIssues(
-  auth: AuthContext,
-): Promise<Paged<ApplicableIssue>> {
+export async function fetchApplicableIssues(auth: AuthContext): Promise<Paged<ApplicableIssue>> {
   return cdscRequest<Paged<ApplicableIssue>>(CDSC_URLS.applicableIssues, {
     method: "POST",
     token: auth.token,
@@ -132,12 +133,13 @@ export async function fetchBankRequest(auth: AuthContext, bankCode: string): Pro
   return cdscRequest<JsonRecord>(CDSC_URLS.bankRequest(bankCode), { token: auth.token });
 }
 
-
 export async function checkCanApply(
   auth: AuthContext,
   companyShareId: number,
 ): Promise<JsonRecord> {
-  return cdscRequest<JsonRecord>(CDSC_URLS.canApply(companyShareId, auth.demat), { token: auth.token });
+  return cdscRequest<JsonRecord>(CDSC_URLS.canApply(companyShareId, auth.demat), {
+    token: auth.token,
+  });
 }
 
 export async function fetchApplicationReports(
@@ -190,7 +192,9 @@ export async function fetchIssueManagerDetail(
   auth: AuthContext,
   companyShareId: number,
 ): Promise<JsonRecord> {
-  return cdscRequest<JsonRecord>(CDSC_URLS.issueManagerDetail(companyShareId), { token: auth.token });
+  return cdscRequest<JsonRecord>(CDSC_URLS.issueManagerDetail(companyShareId), {
+    token: auth.token,
+  });
 }
 
 export async function fetchAppliedDetail(
@@ -213,9 +217,13 @@ export interface ApplyIpoInput {
   transactionPIN: string;
 }
 
-export async function submitIpoApplication(auth: AuthContext, input: ApplyIpoInput): Promise<JsonRecord> {
+export async function submitIpoApplication(
+  auth: AuthContext,
+  input: ApplyIpoInput,
+): Promise<JsonRecord> {
   return cdscRequest<JsonRecord>(CDSC_URLS.applyShare, {
     method: "POST",
+    retry: false,
     token: auth.token,
     body: {
       accountBranchId: input.accountBranchId,
@@ -238,6 +246,7 @@ export async function editIpoApplication(
 ): Promise<JsonRecord> {
   return cdscRequest<JsonRecord>(CDSC_URLS.applyShare, {
     method: "PUT",
+    retry: false,
     token: auth.token,
     body: {
       applicantFormId: input.applicantFormId,
@@ -261,6 +270,7 @@ export async function deleteIpoApplication(
 ): Promise<JsonRecord> {
   return cdscRequest<JsonRecord>(CDSC_URLS.applyShare, {
     method: "DELETE",
+    retry: false,
     token: auth.token,
     body: {
       applicantFormId: input.applicantFormId,
@@ -274,7 +284,12 @@ export async function deleteIpoApplication(
 
 export async function fetchActivityLog(
   auth: AuthContext,
-  input: { startDate: string; endDate: string; page?: number | undefined; size?: number | undefined },
+  input: {
+    startDate: string;
+    endDate: string;
+    page?: number | undefined;
+    size?: number | undefined;
+  },
 ): Promise<Paged<ActivityLogItem>> {
   return cdscRequest<Paged<ActivityLogItem>>(CDSC_URLS.activityLog, {
     method: "POST",
@@ -308,10 +323,7 @@ export async function fetchWaccPending(
   });
 }
 
-export async function fetchWaccCalculated(
-  auth: AuthContext,
-  scrip: string,
-): Promise<JsonRecord> {
+export async function fetchWaccCalculated(auth: AuthContext, scrip: string): Promise<JsonRecord> {
   return cdscRequest<JsonRecord>(CDSC_URLS.waccCalculated, {
     method: "POST",
     token: auth.token,
@@ -319,22 +331,15 @@ export async function fetchWaccCalculated(
   });
 }
 
-export async function submitWacc(auth: AuthContext, rows: PurchaseSourceItem[]): Promise<JsonRecord> {
+export async function submitWacc(
+  auth: AuthContext,
+  rows: PurchaseSourceItem[],
+): Promise<JsonRecord> {
   return cdscRequest<JsonRecord>(CDSC_URLS.waccSubmit, {
     method: "POST",
+    retry: false,
     token: auth.token,
     body: rows,
-  });
-}
-
-export async function fetchIpoResultCompanies(): Promise<{ body?: IpoResultCompany[] }> {
-  return cdscRequest<{ body?: IpoResultCompany[] }>(CDSC_URLS.ipoResultCompanies);
-}
-
-export async function checkIpoResult(demat: string, companyShareId: number): Promise<JsonRecord> {
-  return cdscRequest<JsonRecord>(CDSC_URLS.ipoResultCheck, {
-    method: "POST",
-    body: { companyShareId, boid: demat },
   });
 }
 
@@ -344,6 +349,7 @@ export async function changePassword(
 ): Promise<JsonRecord> {
   return cdscRequest<JsonRecord>(CDSC_URLS.changePassword, {
     method: "POST",
+    retry: false,
     token: auth.token,
     body: {
       oldPassword: input.oldPassword,
@@ -359,6 +365,7 @@ export async function changePin(
 ): Promise<JsonRecord> {
   return cdscRequest<JsonRecord>(CDSC_URLS.changePin, {
     method: "POST",
+    retry: false,
     token: auth.token,
     body: {
       oldTransactionPIN: input.oldPin,

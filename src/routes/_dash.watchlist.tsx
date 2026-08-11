@@ -14,10 +14,17 @@ import { useWatchlist } from "@/lib/watchlist";
 export const Route = createFileRoute("/_dash/watchlist")({
   head: () => ({
     meta: [
-      { title: "Watchlist — MeroShare Investor Console" },
-      { name: "description", content: "Track NEPSE scrips you do not hold yet, with live prices saved privately on your device." },
-      { property: "og:title", content: "Watchlist — MeroShare Investor Console" },
-      { property: "og:description", content: "Track NEPSE scrips you do not hold yet, with live prices." },
+      { title: "Watchlist | MeroShare Investor Console" },
+      {
+        name: "description",
+        content:
+          "Track NEPSE scrips you do not hold yet, with live prices saved privately on your device.",
+      },
+      { property: "og:title", content: "Watchlist | MeroShare Investor Console" },
+      {
+        property: "og:description",
+        content: "Track NEPSE scrips you do not hold yet, with live prices.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -33,7 +40,11 @@ function WatchlistPage() {
 
   const prices = snapshot.data?.prices ?? [];
   const rows = useMemo(
-    () => watchlist.symbols.map((symbol) => ({ symbol, price: prices.find((p) => p.symbol === symbol) ?? null })),
+    () =>
+      watchlist.symbols.map((symbol) => ({
+        symbol,
+        price: prices.find((p) => p.symbol === symbol) ?? null,
+      })),
     [watchlist.symbols, prices],
   );
 
@@ -68,10 +79,16 @@ function WatchlistPage() {
               <li key={s.symbol}>
                 <button
                   type="button"
-                  onClick={() => { watchlist.toggle(s.symbol); setTerm(""); }}
+                  onClick={() => {
+                    watchlist.toggle(s.symbol);
+                    setTerm("");
+                  }}
                   className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-sm transition-colors hover:bg-accent/10"
                 >
-                  <span><span className="font-semibold">{s.symbol}</span> <span className="text-muted-foreground">{s.name}</span></span>
+                  <span>
+                    <span className="font-semibold">{s.symbol}</span>{" "}
+                    <span className="text-muted-foreground">{s.name}</span>
+                  </span>
                   <Star className="size-4 text-muted-foreground" />
                 </button>
               </li>
@@ -95,21 +112,39 @@ function WatchlistPage() {
           {rows.map(({ symbol, price }) => (
             <li key={symbol} className="rounded-2xl border border-border/70 bg-card p-4">
               <div className="flex items-start justify-between gap-3">
-                <button type="button" className="min-w-0 text-left" onClick={() => setPicked(symbol)}>
+                <button
+                  type="button"
+                  className="min-w-0 text-left"
+                  onClick={() => setPicked(symbol)}
+                >
                   <p className="font-display text-base font-semibold">{symbol}</p>
-                  <p className="truncate text-xs text-muted-foreground">{price?.name ?? "Not in the live feed"}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {price?.name ?? "Not in the live feed"}
+                  </p>
                 </button>
-                <Button variant="ghost" size="icon" aria-label={`Remove ${symbol}`} onClick={() => watchlist.remove(symbol)}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={`Remove ${symbol}`}
+                  onClick={() => watchlist.remove(symbol)}
+                >
                   <Trash2 className="size-4" />
                 </Button>
               </div>
               <div className="mt-3 flex items-end justify-between gap-2">
-                <p className="num font-display text-xl font-semibold">{price ? formatNpr(price.ltp) : "—"}</p>
-                {price ? <DeltaPill value={price.percentChange}>{formatPercent(price.percentChange)}</DeltaPill> : null}
+                <p className="num font-display text-xl font-semibold">
+                  {price ? formatNpr(price.ltp) : "—"}
+                </p>
+                {price ? (
+                  <DeltaPill value={price.percentChange}>
+                    {formatPercent(price.percentChange)}
+                  </DeltaPill>
+                ) : null}
               </div>
               {price ? (
                 <p className="num mt-2 text-xs text-muted-foreground">
-                  Vol {formatQty(price.volume)} · H {formatNpr(price.high)} · L {formatNpr(price.low)}
+                  Vol {formatQty(price.volume)} · H {formatNpr(price.high)} · L{" "}
+                  {formatNpr(price.low)}
                 </p>
               ) : null}
             </li>
@@ -117,7 +152,12 @@ function WatchlistPage() {
         </ul>
       )}
 
-      <ScripSheet symbol={picked} onOpenChange={(open) => { if (!open) setPicked(null); }} />
+      <ScripSheet
+        symbol={picked}
+        onOpenChange={(open) => {
+          if (!open) setPicked(null);
+        }}
+      />
     </div>
   );
 }

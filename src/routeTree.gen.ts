@@ -19,9 +19,7 @@ import { Route as DashMarketRouteImport } from './routes/_dash.market'
 import { Route as DashPortfolioRouteImport } from './routes/_dash.portfolio'
 import { Route as DashProfileRouteImport } from './routes/_dash.profile'
 import { Route as DashReportsRouteImport } from './routes/_dash.reports'
-import { Route as DashResultsRouteImport } from './routes/_dash.results'
 import { Route as DashSettingsRouteImport } from './routes/_dash.settings'
-import { Route as DashSharesRouteImport } from './routes/_dash.shares'
 import { Route as DashTransactionsRouteImport } from './routes/_dash.transactions'
 import { Route as DashWaccRouteImport } from './routes/_dash.wacc'
 import { Route as DashWatchlistRouteImport } from './routes/_dash.watchlist'
@@ -75,19 +73,9 @@ const DashReportsRoute = DashReportsRouteImport.update({
   path: '/reports',
   getParentRoute: () => DashRoute,
 } as any)
-const DashResultsRoute = DashResultsRouteImport.update({
-  id: '/results',
-  path: '/results',
-  getParentRoute: () => DashRoute,
-} as any)
 const DashSettingsRoute = DashSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
-  getParentRoute: () => DashRoute,
-} as any)
-const DashSharesRoute = DashSharesRouteImport.update({
-  id: '/shares',
-  path: '/shares',
   getParentRoute: () => DashRoute,
 } as any)
 const DashTransactionsRoute = DashTransactionsRouteImport.update({
@@ -116,9 +104,7 @@ export interface FileRoutesByFullPath {
   '/portfolio': typeof DashPortfolioRoute
   '/profile': typeof DashProfileRoute
   '/reports': typeof DashReportsRoute
-  '/results': typeof DashResultsRoute
   '/settings': typeof DashSettingsRoute
-  '/shares': typeof DashSharesRoute
   '/transactions': typeof DashTransactionsRoute
   '/wacc': typeof DashWaccRoute
   '/watchlist': typeof DashWatchlistRoute
@@ -133,9 +119,7 @@ export interface FileRoutesByTo {
   '/portfolio': typeof DashPortfolioRoute
   '/profile': typeof DashProfileRoute
   '/reports': typeof DashReportsRoute
-  '/results': typeof DashResultsRoute
   '/settings': typeof DashSettingsRoute
-  '/shares': typeof DashSharesRoute
   '/transactions': typeof DashTransactionsRoute
   '/wacc': typeof DashWaccRoute
   '/watchlist': typeof DashWatchlistRoute
@@ -152,9 +136,7 @@ export interface FileRoutesById {
   '/_dash/portfolio': typeof DashPortfolioRoute
   '/_dash/profile': typeof DashProfileRoute
   '/_dash/reports': typeof DashReportsRoute
-  '/_dash/results': typeof DashResultsRoute
   '/_dash/settings': typeof DashSettingsRoute
-  '/_dash/shares': typeof DashSharesRoute
   '/_dash/transactions': typeof DashTransactionsRoute
   '/_dash/wacc': typeof DashWaccRoute
   '/_dash/watchlist': typeof DashWatchlistRoute
@@ -171,9 +153,7 @@ export interface FileRouteTypes {
     | '/portfolio'
     | '/profile'
     | '/reports'
-    | '/results'
     | '/settings'
-    | '/shares'
     | '/transactions'
     | '/wacc'
     | '/watchlist'
@@ -188,9 +168,7 @@ export interface FileRouteTypes {
     | '/portfolio'
     | '/profile'
     | '/reports'
-    | '/results'
     | '/settings'
-    | '/shares'
     | '/transactions'
     | '/wacc'
     | '/watchlist'
@@ -206,9 +184,7 @@ export interface FileRouteTypes {
     | '/_dash/portfolio'
     | '/_dash/profile'
     | '/_dash/reports'
-    | '/_dash/results'
     | '/_dash/settings'
-    | '/_dash/shares'
     | '/_dash/transactions'
     | '/_dash/wacc'
     | '/_dash/watchlist'
@@ -291,25 +267,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashReportsRouteImport
       parentRoute: typeof DashRoute
     }
-    '/_dash/results': {
-      id: '/_dash/results'
-      path: '/results'
-      fullPath: '/results'
-      preLoaderRoute: typeof DashResultsRouteImport
-      parentRoute: typeof DashRoute
-    }
     '/_dash/settings': {
       id: '/_dash/settings'
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof DashSettingsRouteImport
-      parentRoute: typeof DashRoute
-    }
-    '/_dash/shares': {
-      id: '/_dash/shares'
-      path: '/shares'
-      fullPath: '/shares'
-      preLoaderRoute: typeof DashSharesRouteImport
       parentRoute: typeof DashRoute
     }
     '/_dash/transactions': {
@@ -345,9 +307,7 @@ interface DashRouteChildren {
   DashPortfolioRoute: typeof DashPortfolioRoute
   DashProfileRoute: typeof DashProfileRoute
   DashReportsRoute: typeof DashReportsRoute
-  DashResultsRoute: typeof DashResultsRoute
   DashSettingsRoute: typeof DashSettingsRoute
-  DashSharesRoute: typeof DashSharesRoute
   DashTransactionsRoute: typeof DashTransactionsRoute
   DashWaccRoute: typeof DashWaccRoute
   DashWatchlistRoute: typeof DashWatchlistRoute
@@ -362,9 +322,7 @@ const DashRouteChildren: DashRouteChildren = {
   DashPortfolioRoute: DashPortfolioRoute,
   DashProfileRoute: DashProfileRoute,
   DashReportsRoute: DashReportsRoute,
-  DashResultsRoute: DashResultsRoute,
   DashSettingsRoute: DashSettingsRoute,
-  DashSharesRoute: DashSharesRoute,
   DashTransactionsRoute: DashTransactionsRoute,
   DashWaccRoute: DashWaccRoute,
   DashWatchlistRoute: DashWatchlistRoute,
@@ -379,3 +337,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

@@ -13,9 +13,9 @@ import type { PurchaseSourceItem } from "@/lib/meroshare/types";
 export const Route = createFileRoute("/_dash/wacc")({
   head: () => ({
     meta: [
-      { title: "Purchase Source — MeroShare Investor Console" },
+      { title: "Purchase Source | MeroShare Investor Console" },
       { name: "description", content: "Review pending purchase source entries and your completed WACC calculation." },
-      { property: "og:title", content: "Purchase Source — MeroShare Investor Console" },
+      { property: "og:title", content: "Purchase Source | MeroShare Investor Console" },
       { property: "og:description", content: "Review pending purchase source entries and your completed WACC calculation." },
     ],
   }),

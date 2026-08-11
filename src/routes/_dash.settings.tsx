@@ -8,9 +8,9 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/_dash/settings")({
   head: () => ({
     meta: [
-      { title: "Settings — MeroShare Investor Console" },
+      { title: "Settings | MeroShare Investor Console" },
       { name: "description", content: "Theme, data preferences and security for your MeroShare console." },
-      { property: "og:title", content: "Settings — MeroShare Investor Console" },
+      { property: "og:title", content: "Settings | MeroShare Investor Console" },
       { property: "og:description", content: "Theme, data preferences and security for your MeroShare console." },
     ],
   }),
