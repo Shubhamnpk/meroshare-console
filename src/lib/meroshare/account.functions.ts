@@ -21,6 +21,7 @@ import type {
   JsonRecord,
   OwnDetail,
 } from "./types";
+import { pick } from "./profile.server";
 
 export const getMyDetail = createServerFn({ method: "GET" }).handler(
   async (): Promise<JsonRecord> => fetchMyDetail(await requireAuth()),
@@ -94,20 +95,6 @@ export const updatePin = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data }): Promise<JsonRecord> => changePin(await requireAuth(), data));
-
-function str(value: unknown): string | undefined {
-  if (typeof value === "string" && value.trim() !== "") return value.trim();
-  if (typeof value === "number") return String(value);
-  return undefined;
-}
-
-function pick(record: JsonRecord, keys: string[]): string | undefined {
-  for (const key of keys) {
-    const value = str(record[key]);
-    if (value) return value;
-  }
-  return undefined;
-}
 
 /**
  * One round-trip snapshot of everything MeroShare exposes about the account:
