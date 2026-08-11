@@ -5,7 +5,14 @@ import { useMemo, useState } from "react";
 import { FileDown, Globe, History, MonitorSmartphone, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { activityLogQuery, defaultActivityRange } from "@/lib/queries";
 import { formatDateTime, formatNumber, isoDate } from "@/lib/format";
 import type { ActivityLogItem } from "@/lib/meroshare/types";
@@ -14,9 +21,15 @@ export const Route = createFileRoute("/_dash/activity")({
   head: () => ({
     meta: [
       { title: "Activity Log : MeroShare Investor Console" },
-      { name: "description", content: "Recent signins and account activity recorded by MeroShare." },
+      {
+        name: "description",
+        content: "Recent signins and account activity recorded by MeroShare.",
+      },
       { property: "og:title", content: "Activity Log : MeroShare Investor Console" },
-      { property: "og:description", content: "Recent signins and account activity recorded by MeroShare." },
+      {
+        property: "og:description",
+        content: "Recent signins and account activity recorded by MeroShare.",
+      },
     ],
   }),
   component: ActivityPage,
@@ -37,7 +50,12 @@ function exportCsv(items: ActivityLogItem[]) {
       .map(esc)
       .join(","),
   );
-  const csv = [["SN", "Activity", "Browser", "Browser version", "OS", "IP address", "Recorded on"].map(esc).join(","), ...rows].join("\n");
+  const csv = [
+    ["SN", "Activity", "Browser", "Browser version", "OS", "IP address", "Recorded on"]
+      .map(esc)
+      .join(","),
+    ...rows,
+  ].join("\n");
   const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -69,13 +87,23 @@ function ActivityPage() {
     const term = search.trim().toLowerCase();
     if (!term) return all;
     return all.filter((item) =>
-      [item.description, item.activityType, item.browserName, item.broswerVersion, item.osName, item.ipAddress]
+      [
+        item.description,
+        item.activityType,
+        item.browserName,
+        item.broswerVersion,
+        item.osName,
+        item.ipAddress,
+      ]
         .filter((v): v is string => typeof v === "string" && v.trim() !== "")
         .some((v) => v.toLowerCase().includes(term)),
     );
   }, [all, search]);
 
-  const uniqueIps = useMemo(() => new Set(all.map((i) => i.ipAddress).filter((v): v is string => !!v)).size, [all]);
+  const uniqueIps = useMemo(
+    () => new Set(all.map((i) => i.ipAddress).filter((v): v is string => !!v)).size,
+    [all],
+  );
   const uniqueBrowsers = useMemo(
     () => new Set(all.map((i) => String(i.browserName ?? "")).filter((v) => v.trim() !== "")).size,
     [all],
@@ -86,9 +114,16 @@ function ActivityPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl font-semibold sm:text-3xl">Activity Log</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Last 30 days of account activity.</p>
+          <p className="mt-1 hidden text-sm text-muted-foreground sm:block">
+            Last 30 days of account activity.
+          </p>
         </div>
-        <Button variant="outline" size="sm" disabled={items.length === 0} onClick={() => exportCsv(items)}>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={items.length === 0}
+          onClick={() => exportCsv(items)}
+        >
           <FileDown /> Export
         </Button>
       </div>
@@ -104,9 +139,21 @@ function ActivityPage() {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <StatChip icon={<History className="size-4" />} label="Records" value={formatNumber(all.length)} />
-        <StatChip icon={<Globe className="size-4" />} label="Unique IPs" value={formatNumber(uniqueIps)} />
-        <StatChip icon={<MonitorSmartphone className="size-4" />} label="Unique browsers" value={formatNumber(uniqueBrowsers)} />
+        <StatChip
+          icon={<History className="size-4" />}
+          label="Records"
+          value={formatNumber(all.length)}
+        />
+        <StatChip
+          icon={<Globe className="size-4" />}
+          label="Unique IPs"
+          value={formatNumber(uniqueIps)}
+        />
+        <StatChip
+          icon={<MonitorSmartphone className="size-4" />}
+          label="Unique browsers"
+          value={formatNumber(uniqueBrowsers)}
+        />
       </div>
 
       {q.isLoading ? (
@@ -134,16 +181,27 @@ function ActivityPage() {
               {items.map((item, idx) => (
                 <TableRow key={`${String(item.recordedDate)}-${item.ipAddress}-${idx}`}>
                   <TableCell className="pl-4 text-xs text-muted-foreground">{idx + 1}</TableCell>
-                  <TableCell className="max-w-64 truncate font-medium" title={String(item.description ?? item.activityType ?? "")}>
+                  <TableCell
+                    className="max-w-64 truncate font-medium"
+                    title={String(item.description ?? item.activityType ?? "")}
+                  >
                     {item.description ?? item.activityType ?? "—"}
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-xs">
                     {item.browserName ?? "—"}
-                    {item.broswerVersion ? <span className="text-muted-foreground"> {item.broswerVersion}</span> : null}
+                    {item.broswerVersion ? (
+                      <span className="text-muted-foreground"> {item.broswerVersion}</span>
+                    ) : null}
                   </TableCell>
-                  <TableCell className="hidden text-xs text-muted-foreground md:table-cell">{item.osName ?? "—"}</TableCell>
-                  <TableCell className="num hidden text-xs sm:table-cell">{item.ipAddress ?? "—"}</TableCell>
-                  <TableCell className="num whitespace-nowrap pr-4 text-right text-xs">{formatDateTime(item.recordedDate)}</TableCell>
+                  <TableCell className="hidden text-xs text-muted-foreground md:table-cell">
+                    {item.osName ?? "—"}
+                  </TableCell>
+                  <TableCell className="num hidden text-xs sm:table-cell">
+                    {item.ipAddress ?? "—"}
+                  </TableCell>
+                  <TableCell className="num whitespace-nowrap pr-4 text-right text-xs">
+                    {formatDateTime(item.recordedDate)}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

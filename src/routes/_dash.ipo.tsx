@@ -7,10 +7,27 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogFooter,} from "@/components/ui/dialog";
-import {Select,SelectContent,SelectItem,SelectTrigger,SelectValue,} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ErrorBlock, LoadingBlock, EmptyBlock } from "@/components/states";
-import {applicableIssuesQuery,banksQuery,currentIssuesQuery,ipoArchiveQuery,} from "@/lib/queries";
+import {
+  applicableIssuesQuery,
+  banksQuery,
+  currentIssuesQuery,
+  ipoArchiveQuery,
+} from "@/lib/queries";
 import { applyForIpo } from "@/lib/meroshare/ipo.functions";
 import { getBankDetail } from "@/lib/meroshare/account.functions";
 import { daysUntil, errorMessage, formatDate, formatNumber, toNumber } from "@/lib/format";
@@ -324,7 +341,7 @@ function IpoPage() {
     <div className="space-y-5">
       <div>
         <h1 className="font-display text-2xl font-semibold sm:text-3xl">Issues</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="mt-1 hidden text-sm text-muted-foreground sm:block">
           Apply for open issues, browse the issue calendar, or check the archive.
         </p>
       </div>

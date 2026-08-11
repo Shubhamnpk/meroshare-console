@@ -1,12 +1,37 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import {Check,ChevronsUpDown,Eye,EyeOff,Loader2,Lock,ShieldCheck,TrendingUp,Zap,} from "lucide-react";
+import {
+  Check,
+  ChevronsUpDown,
+  Eye,
+  EyeOff,
+  Loader2,
+  Lock,
+  ShieldCheck,
+  TrendingUp,
+  Zap,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {Command,CommandEmpty,CommandGroup,CommandInput,CommandItem,CommandList,} from "@/components/ui/command";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 import { errorMessage } from "@/lib/format";
@@ -123,6 +148,96 @@ function LoginPage() {
     onError: (error) => setFormError(errorMessage(error, "Unable to sign in. Check your details.")),
   });
 
+  const isMobile = useIsMobile();
+
+  const capitalList = (
+    <Command>
+      <CommandInput
+        autoFocus
+        value={capitalSearch}
+        onValueChange={setCapitalSearch}
+        placeholder="Search DP by name or code…"
+      />
+      <CommandList>
+        <CommandEmpty>No DP found.</CommandEmpty>
+        <CommandGroup>
+          {(capitals.data ?? []).map((capital) => (
+            <CapitalItem
+              key={capital.id}
+              capital={capital}
+              selected={capitalId === capital.id}
+              query={capitalSearch}
+              onSelect={() => {
+                setCapitalId(capital.id);
+                setCapitalOpen(false);
+              }}
+            />
+          ))}
+        </CommandGroup>
+      </CommandList>
+    </Command>
+  );
+
+  const capitalTrigger = (
+    <Button
+      id="dp"
+      type="button"
+      variant="outline"
+      role="combobox"
+      aria-expanded={capitalOpen}
+      className="h-9 w-full justify-between font-normal"
+      disabled={capitals.isLoading}
+      onClick={() => setCapitalOpen(true)}
+    >
+      <span className={cn("truncate", !selected && "text-muted-foreground")}>
+        {capitals.isLoading ? "Loading DP list…" : selected ? selected.name : "Select your DP"}
+      </span>
+      <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
+    </Button>
+  );
+
+  const capitalPicker = isMobile ? (
+    <>
+      {capitalTrigger}
+      <Sheet
+        open={capitalOpen}
+        onOpenChange={(open) => {
+          setCapitalOpen(open);
+          if (!open) setCapitalSearch("");
+        }}
+      >
+        <SheetContent
+          side="bottom"
+          className="h-[70dvh] px-0 pt-2"
+          onClose={() => {
+            setCapitalOpen(false);
+            setCapitalSearch("");
+          }}
+        >
+          <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-muted-foreground/30" />
+          <SheetHeader className="px-4 text-left">
+            <SheetTitle>Select your DP</SheetTitle>
+            <SheetDescription>Depository Participant for your account.</SheetDescription>
+          </SheetHeader>
+          <div className="mt-2 overflow-y-auto px-2">{capitalList}</div>
+        </SheetContent>
+      </Sheet>
+    </>
+  ) : (
+    <Popover
+      open={capitalOpen}
+      onOpenChange={(open) => {
+        setCapitalOpen(open);
+        if (!open) setCapitalSearch("");
+      }}
+    >
+      <PopoverTrigger asChild>{capitalTrigger}</PopoverTrigger>
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+        {capitalList}
+      </PopoverContent>
+    </Popover>
+  );
+
   const onSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     setFormError(null);
@@ -215,61 +330,7 @@ function LoginPage() {
           <form onSubmit={onSubmit} className="mt-7 space-y-4">
             <div className="space-y-2">
               <Label htmlFor="dp">Depository Participant (DP)</Label>
-              <Popover
-                open={capitalOpen}
-                onOpenChange={(open) => {
-                  setCapitalOpen(open);
-                  if (!open) setCapitalSearch("");
-                }}
-              >
-                <PopoverTrigger asChild>
-                  <Button
-                    id="dp"
-                    type="button"
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={capitalOpen}
-                    className="h-9 w-full justify-between font-normal"
-                    disabled={capitals.isLoading}
-                  >
-                    <span className={cn("truncate", !selected && "text-muted-foreground")}>
-                      {capitals.isLoading
-                        ? "Loading DP list…"
-                        : selected
-                          ? selected.name
-                          : "Select your DP"}
-                    </span>
-                    <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                  <Command>
-                    <CommandInput
-                      autoFocus
-                      value={capitalSearch}
-                      onValueChange={setCapitalSearch}
-                      placeholder="Search DP by name or code…"
-                    />
-                    <CommandList>
-                      <CommandEmpty>No DP found.</CommandEmpty>
-                      <CommandGroup>
-                        {(capitals.data ?? []).map((capital) => (
-                          <CapitalItem
-                            key={capital.id}
-                            capital={capital}
-                            selected={capitalId === capital.id}
-                            query={capitalSearch}
-                            onSelect={() => {
-                              setCapitalId(capital.id);
-                              setCapitalOpen(false);
-                            }}
-                          />
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
+              {capitalPicker}
               {capitals.isError ? (
                 <p className="text-xs text-destructive">
                   Could not load the DP list. Check your connection and refresh.

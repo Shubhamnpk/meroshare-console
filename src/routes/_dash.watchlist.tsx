@@ -61,7 +61,7 @@ function WatchlistPage() {
     <div className="space-y-5">
       <div>
         <h1 className="font-display text-2xl font-semibold sm:text-3xl">Watchlist</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="mt-1 hidden text-sm text-muted-foreground sm:block">
           Scrips you are tracking. Stored privately on this device only.
         </p>
       </div>

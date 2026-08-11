@@ -9,9 +9,15 @@ export const Route = createFileRoute("/_dash/analytics")({
   head: () => ({
     meta: [
       { title: "Analytics : MeroShare Investor Console" },
-      { name: "description", content: "Concentration, weight and day-change analytics across your holdings." },
+      {
+        name: "description",
+        content: "Concentration, weight and day-change analytics across your holdings.",
+      },
       { property: "og:title", content: "Analytics : MeroShare Investor Console" },
-      { property: "og:description", content: "Concentration, weight and day-change analytics across your holdings." },
+      {
+        property: "og:description",
+        content: "Concentration, weight and day-change analytics across your holdings.",
+      },
     ],
   }),
   component: AnalyticsPage,
@@ -41,20 +47,33 @@ function AnalyticsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="font-display text-2xl font-semibold sm:text-3xl">Analytics</h1>
-        <p className="mt-1 text-sm text-muted-foreground">How your capital is distributed today.</p>
+        <p className="mt-1 hidden text-sm text-muted-foreground sm:block">
+          How your capital is distributed today.
+        </p>
       </div>
       {q.isLoading ? (
         <LoadingBlock label="Crunching numbers" />
       ) : q.isError ? (
         <ErrorBlock error={q.error} retry={() => void q.refetch()} />
       ) : rows.length === 0 ? (
-        <EmptyBlock title="Nothing to analyse" description="Analytics appear once you hold at least one scrip." />
+        <EmptyBlock
+          title="Nothing to analyse"
+          description="Analytics appear once you hold at least one scrip."
+        />
       ) : (
         <>
           <div className="grid gap-3 sm:grid-cols-3">
             <StatCard label="Total value" value={formatNpr(total)} tone="brand" />
-            <StatCard label="Top 5 concentration" value={`${top5.toFixed(1)}%`} sub="Share of portfolio in largest 5 scrips" />
-            <StatCard label="Gainers today" value={`${gainers}/${rows.length}`} sub="Scrips trading above previous close" />
+            <StatCard
+              label="Top 5 concentration"
+              value={`${top5.toFixed(1)}%`}
+              sub="Share of portfolio in largest 5 scrips"
+            />
+            <StatCard
+              label="Gainers today"
+              value={`${gainers}/${rows.length}`}
+              sub="Scrips trading above previous close"
+            />
           </div>
           <section className="rounded-2xl border border-border/70 bg-card p-4 sm:p-5">
             <h2 className="mb-4 font-display text-base font-semibold">Allocation by scrip</h2>
@@ -63,10 +82,18 @@ function AnalyticsPage() {
                 <li key={r.scrip}>
                   <div className="flex items-baseline justify-between gap-3 text-sm">
                     <span className="font-medium">{r.scrip}</span>
-                    <span className="num text-muted-foreground">{formatNpr(r.value)} · {r.weight.toFixed(1)}%</span>
+                    <span className="num text-muted-foreground">
+                      {formatNpr(r.value)} · {r.weight.toFixed(1)}%
+                    </span>
                   </div>
                   <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-secondary">
-                    <div className="h-full rounded-full" style={{ width: `${Math.max(r.weight, 1)}%`, background: "var(--gradient-brand)" }} />
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: `${Math.max(r.weight, 1)}%`,
+                        background: "var(--gradient-brand)",
+                      }}
+                    />
                   </div>
                 </li>
               ))}

@@ -1,37 +1,306 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Building2, ExternalLink, Maximize2, Star, StarOff } from "lucide-react";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Building2, ExternalLink, FileText, Info, Maximize2, Star, StarOff } from "lucide-react";
+import {Sheet,SheetContent,SheetDescription,SheetHeader,SheetTitle,} from "@/components/ui/sheet";
+import {Accordion,AccordionContent,AccordionItem,AccordionTrigger,} from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import {Table,TableBody,TableCell,TableHead,TableHeader,TableRow,} from "@/components/ui/table";
 import { DeltaPill } from "@/components/stat-card";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AreaChart } from "@/components/market/area-chart";
-import {
-  ChartModal,
-  buildScripRanges,
-  chartDayLabel,
-  chartTimeLabel,
-} from "@/components/market/chart-modal";
+import {ChartModal,buildScripRanges,chartDayLabel,chartTimeLabel,} from "@/components/market/chart-modal";
 import {
   dividendsQuery,
   enrichedPortfolioQuery,
   exchangeMessagesQuery,
   marketSnapshotQuery,
   scripDetailQuery,
+  scripFinancialsQuery,
   transactionsQuery,
 } from "@/lib/queries";
 import { formatDate, formatNpr, formatPercent, formatQty } from "@/lib/format";
 import { useWatchlist } from "@/lib/watchlist";
 import { cn } from "@/lib/utils";
-import type { PricePoint } from "@/lib/nepse/types";
+import type { FinancialReport, PricePoint } from "@/lib/nepse/types";
+
+function TermInfo({ text }: { text: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        type="button"
+        className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        aria-label="Learn more"
+      >
+        <Info className="size-3.5" />
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-64 whitespace-normal text-left">
+        {text}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function Delta({
+  current,
+  previous,
+  compact = false,
+}: {
+  current: number | null;
+  previous: number | null;
+  compact?: boolean;
+}) {
+  if (current == null || previous == null || previous === 0) return null;
+  const diff = current - previous;
+  const pct = (diff / Math.abs(previous)) * 100;
+  return (
+    <span
+      className={cn(
+        "num ml-1.5 inline-flex items-center gap-0.5 text-xs font-semibold",
+        diff > 0 ? "text-gain" : diff < 0 ? "text-loss" : "text-muted-foreground",
+      )}
+      title={`Full: ${formatNpr(current)}  ·  Previous: ${formatNpr(previous)}`}
+    >
+      {diff > 0 ? "▲" : diff < 0 ? "▼" : "◆"} {formatNpr(Math.abs(diff), { compact })}
+      <span className="whitespace-nowrap">({formatPercent(pct)})</span>
+    </span>
+  );
+}
+
+function FinancialSummary({
+  report,
+  previous,
+  holdings,
+}: {
+  report: FinancialReport;
+  previous: FinancialReport | null;
+  holdings: number | null;
+}) {
+  const estProfit = report.eps != null && holdings != null ? report.eps * holdings : null;
+  return (
+    <TooltipProvider delayDuration={150}>
+      <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
+        <div>
+          <dt className="text-xs text-muted-foreground">Period</dt>
+          <dd className="num font-medium">
+            {report.quarter ? `${report.quarter} · ` : ""}
+            {report.fy ?? "—"}
+            {report.fyNepali ? (
+              <span className="ml-1 font-normal text-muted-foreground">({report.fyNepali})</span>
+            ) : null}
+            {previous ? (
+              <span className="ml-2 font-normal text-muted-foreground">
+                vs {previous.quarter ? `${previous.quarter} · ` : ""}
+                {previous.fy ?? "—"}
+              </span>
+            ) : null}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">Report type</dt>
+          <dd className="font-medium">{report.type}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">
+            Earnings per share
+            <TermInfo text="Earnings per share (EPS) = net profit ÷ total outstanding shares. It shows how much profit the company earned for each share in the reporting period." />
+          </dt>
+          <dd className="num font-medium">
+            {report.eps != null ? formatNpr(report.eps) : "—"}
+            <Delta current={report.eps} previous={previous?.eps ?? null} />
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">
+            P/E ratio
+            <TermInfo text="Price-to-earnings ratio = market price ÷ earnings per share. A lower P/E often means the stock is cheaper relative to its earnings, but compare it with industry peers." />
+          </dt>
+          <dd className="num font-medium">
+            {report.pe != null ? formatNpr(report.pe) : "—"}
+            <Delta current={report.pe} previous={previous?.pe ?? null} />
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">
+            Net profit
+            <TermInfo text="Net profit is the company's total earnings after all expenses, interest and taxes for the reporting period." />
+          </dt>
+          <dd
+            className="num font-medium"
+            title={report.profit != null ? formatNpr(report.profit) : undefined}
+          >
+            {report.profit != null ? formatNpr(report.profit, { compact: true }) : "—"}
+            {report.profit != null && previous?.profit != null ? (
+              <Delta current={report.profit} previous={previous.profit} compact />
+            ) : null}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">
+            Net worth / share
+            <TermInfo text="Net worth per share = total shareholder equity ÷ total outstanding shares. It is also called book value and indicates the company's net asset value per share." />
+          </dt>
+          <dd className="num font-medium">
+            {report.netWorthPerShare != null ? formatNpr(report.netWorthPerShare) : "—"}
+            <Delta
+              current={report.netWorthPerShare}
+              previous={previous?.netWorthPerShare ?? null}
+            />
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">
+            Paid-up capital
+            <TermInfo text="Paid-up capital is the portion of issued share capital that shareholders have actually paid for. It reflects the company's base equity from shares." />
+          </dt>
+          <dd
+            className="num font-medium"
+            title={report.paidUpCapital != null ? formatNpr(report.paidUpCapital) : undefined}
+          >
+            {report.paidUpCapital != null
+              ? formatNpr(report.paidUpCapital, { compact: true })
+              : "—"}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">Submitted</dt>
+          <dd className="num font-medium">
+            {report.submittedDate ? formatDate(report.submittedDate) : "—"}
+          </dd>
+        </div>
+        {estProfit != null ? (
+          <div className="col-span-2">
+            <dt className="text-xs text-muted-foreground">Earnings implied for your holding</dt>
+            <dd className="num font-medium text-gain">
+              ≈ {formatNpr(estProfit)} across {formatQty(holdings)} units
+              <span className="font-normal text-muted-foreground"> (EPS × units)</span>
+            </dd>
+          </div>
+        ) : null}
+      </dl>
+    </TooltipProvider>
+  );
+}
+
+function ReportGroups({ reports }: { reports: FinancialReport[] }) {
+  const groups = useMemo(() => {
+    const byFy = new Map<string, FinancialReport[]>();
+    for (const r of reports) {
+      const fy = r.fy ?? "Unknown";
+      const list = byFy.get(fy);
+      if (list) list.push(r);
+      else byFy.set(fy, [r]);
+    }
+    return Array.from(byFy.entries()).sort((a, b) => (a[0] > b[0] ? -1 : 1));
+  }, [reports]);
+
+  return (
+    <div className="mt-3">
+      <dl className="grid grid-cols-2 gap-3 text-sm">
+        <div>
+          <dt className="text-xs text-muted-foreground">Reports</dt>
+          <dd className="num font-medium">{reports.length}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">Fiscal years</dt>
+          <dd className="num font-medium">{groups.length}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">Latest EPS</dt>
+          <dd className="num font-medium">
+            {reports[0]?.eps != null ? formatNpr(reports[0].eps) : "—"}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">Latest P/E</dt>
+          <dd className="num font-medium">
+            {reports[0]?.pe != null ? formatNpr(reports[0].pe) : "—"}
+          </dd>
+        </div>
+      </dl>
+
+      <Accordion type="multiple" className="mt-4 w-full">
+        {groups.map(([fy, list]) => {
+          const latest = list[0];
+          const diff =
+            list.length > 1 && list[0]?.eps != null && list[1]?.eps != null
+              ? list[0].eps - list[1].eps
+              : null;
+          const diffPct = diff != null ? (diff / Math.abs(list[1]!.eps!)) * 100 : null;
+          return (
+            <AccordionItem key={fy} value={fy} className="rounded-xl border-border/60">
+              <AccordionTrigger className="rounded-xl px-3 py-2.5 text-xs hover:no-underline [&[data-state=open]]:rounded-b-none">
+                <span className="flex w-full items-center justify-between gap-3 pr-1">
+                  <span className="font-display text-sm font-semibold">{fy}</span>
+                  <span className="flex items-center gap-3 text-xs text-muted-foreground">
+                    {latest?.eps != null ? (
+                      <span className="num">
+                        EPS {formatNpr(latest.eps)}
+                        {diff != null ? (
+                          <span
+                            className={cn(
+                              "ml-1 font-semibold",
+                              diff > 0 ? "text-gain" : diff < 0 ? "text-loss" : "",
+                            )}
+                          >
+                            ({diff > 0 ? "▲" : diff < 0 ? "▼" : "◆"}
+                            {formatPercent(diffPct ?? 0)})
+                          </span>
+                        ) : null}
+                      </span>
+                    ) : null}
+                    <span className="rounded-full bg-surface px-2 py-0.5 font-medium">
+                      {list.length} {list.length === 1 ? "report" : "reports"}
+                    </span>
+                  </span>
+                </span>
+              </AccordionTrigger>
+              <AccordionContent className="text-xs">
+                <ul className="space-y-1.5 px-1 pb-2">
+                  {list.map((r, i) => (
+                    <li
+                      key={`${r.type}-${r.quarter ?? r.fy ?? i}`}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-surface px-3 py-2 text-xs"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-semibold">
+                          {r.type}
+                          {r.quarter ? (
+                            <span className="num ml-1.5 font-normal text-muted-foreground">
+                              {r.quarter}
+                            </span>
+                          ) : null}
+                        </p>
+                        <p className="num text-muted-foreground">
+                          {r.eps != null ? `EPS ${formatNpr(r.eps)}` : "EPS —"}
+                          {" · "}
+                          {r.pe != null ? `P/E ${formatNpr(r.pe)}` : "P/E —"}
+                          {r.netWorthPerShare != null
+                            ? ` · NWPS ${formatNpr(r.netWorthPerShare)}`
+                            : ""}
+                        </p>
+                      </div>
+                      {r.documentUrl ? (
+                        <a
+                          href={r.documentUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="shrink-0 rounded-lg border border-border/70 px-2 py-1 font-medium text-primary transition-colors hover:bg-primary/10"
+                        >
+                          Report
+                        </a>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              </AccordionContent>
+            </AccordionItem>
+          );
+        })}
+      </Accordion>
+    </div>
+  );
+}
 
 export function ScripSheet({
   symbol,
@@ -43,6 +312,7 @@ export function ScripSheet({
   const snapshot = useQuery(marketSnapshotQuery());
   const portfolio = useQuery(enrichedPortfolioQuery());
   const detail = useQuery(scripDetailQuery(symbol));
+  const financials = useQuery(scripFinancialsQuery(symbol));
   const dividends = useQuery({ ...dividendsQuery(), enabled: Boolean(symbol) });
   const news = useQuery(exchangeMessagesQuery(Boolean(symbol)));
   const watchlist = useWatchlist();
@@ -171,15 +441,19 @@ export function ScripSheet({
 
   return (
     <Sheet open={Boolean(symbol)} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-2xl">
-        <SheetHeader>
+      <SheetContent side="right" className="w-full overflow-y-auto p-0 sm:max-w-xl">
+        <SheetHeader className="items-start px-4 pb-0 pt-6 text-left">
           <SheetTitle className="font-display text-xl">{upper || "Scrip"}</SheetTitle>
+          {price || overview ? (
+            <SheetDescription className="text-left">
+              {overview?.name ?? price?.name}
+            </SheetDescription>
+          ) : null}
         </SheetHeader>
         <div className="space-y-5 px-4 pb-8">
           {price ? (
             <>
               <div>
-                <p className="text-sm text-muted-foreground">{overview?.name ?? price.name}</p>
                 <div className="mt-2 flex items-end gap-3">
                   <p className="num font-display text-3xl font-semibold">{formatNpr(price.ltp)}</p>
                   <DeltaPill value={price.percentChange}>
@@ -211,21 +485,74 @@ export function ScripSheet({
           <Tabs value={tab} onValueChange={setTab}>
             <TabsList className="w-full justify-start">
               <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="chart">Price chart</TabsTrigger>
-              <TabsTrigger value="dividend" disabled={!dividend && yearlyDividends.length === 0}>
-                Dividend
-              </TabsTrigger>
-              <TabsTrigger value="history" disabled={!holding}>
-                History
-              </TabsTrigger>
-              <TabsTrigger value="news" disabled={newsItems.length === 0}>
-                News
-              </TabsTrigger>
+              {financials.data ? <TabsTrigger value="financials">Financials</TabsTrigger> : null}
+              {dividend || yearlyDividends.length > 0 ? (
+                <TabsTrigger value="dividend">Dividend</TabsTrigger>
+              ) : null}
+              {holding ? <TabsTrigger value="history">History</TabsTrigger> : null}
+              {newsItems.length > 0 ? <TabsTrigger value="news">News</TabsTrigger> : null}
             </TabsList>
 
             <TabsContent value="overview" className="space-y-4">
+              <div className="rounded-2xl border border-border/70 bg-card p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="font-display text-sm font-semibold">Price history</h3>
+                  {ranges.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => setChartOpen(true)}
+                      className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                    >
+                      <Maximize2 className="size-3.5" /> Enlarge
+                    </button>
+                  ) : null}
+                </div>
+
+                {ranges.length > 0 ? (
+                  <>
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {ranges.map((range) => (
+                        <button
+                          key={range.key}
+                          type="button"
+                          onClick={() => setRangeKey(range.key)}
+                          className={cn(
+                            "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                            activeRange?.key === range.key
+                              ? "border-primary/50 bg-primary/15 text-primary"
+                              : "border-border/60 bg-surface text-muted-foreground hover:border-primary/30",
+                          )}
+                        >
+                          {range.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mt-3">
+                      <AreaChart
+                        points={activeRange?.points ?? []}
+                        height={200}
+                        formatValue={(v) => formatNpr(v)}
+                        formatLabel={(t) =>
+                          activeRange?.key === "1D" ? chartTimeLabel(t) : chartDayLabel(t)
+                        }
+                      />
+                    </div>
+                    <p className="mt-2 text-[0.68rem] text-muted-foreground">
+                      {activeRange?.key === "1D"
+                        ? `Today's intraday session (${intradayPoints.length} ticks). `
+                        : `Daily closes from the YONEPSE LTP archive, ${activeRange?.label ?? ""}. `}
+                      Hover over the chart to inspect each point.
+                    </p>
+                  </>
+                ) : (
+                  <p className="mt-3 rounded-xl border border-border/60 bg-surface px-3 py-2.5 text-sm text-muted-foreground">
+                    No price history in the feed for this scrip yet.
+                  </p>
+                )}
+              </div>
+
               {stats.length > 0 ? (
-                <dl className="grid grid-cols-2 gap-3">
+                <dl className="grid grid-cols-3 gap-3">
                   {stats.map((row) => (
                     <div
                       key={row.label}
@@ -304,63 +631,34 @@ export function ScripSheet({
               ) : null}
             </TabsContent>
 
-            <TabsContent value="chart" className="space-y-4">
-              <div className="rounded-2xl border border-border/70 bg-card p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="font-display text-sm font-semibold">Price history</h3>
-                  {ranges.length > 0 ? (
-                    <button
-                      type="button"
-                      onClick={() => setChartOpen(true)}
-                      className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-                    >
-                      <Maximize2 className="size-3.5" /> Enlarge
-                    </button>
-                  ) : null}
-                </div>
-
-                {ranges.length > 0 ? (
-                  <>
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      {ranges.map((range) => (
-                        <button
-                          key={range.key}
-                          type="button"
-                          onClick={() => setRangeKey(range.key)}
-                          className={cn(
-                            "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-                            activeRange?.key === range.key
-                              ? "border-primary/50 bg-primary/15 text-primary"
-                              : "border-border/60 bg-surface text-muted-foreground hover:border-primary/30",
-                          )}
-                        >
-                          {range.label}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="mt-3">
-                      <AreaChart
-                        points={activeRange?.points ?? []}
-                        height={200}
-                        formatValue={(v) => formatNpr(v)}
-                        formatLabel={(t) =>
-                          activeRange?.key === "1D" ? chartTimeLabel(t) : chartDayLabel(t)
-                        }
-                      />
-                    </div>
-                    <p className="mt-2 text-[0.68rem] text-muted-foreground">
-                      {activeRange?.key === "1D"
-                        ? `Today's intraday session (${intradayPoints.length} ticks). `
-                        : `Daily closes from the YONEPSE LTP archive, ${activeRange?.label ?? ""}. `}
-                      Hover over the chart to inspect each point.
-                    </p>
-                  </>
+            <TabsContent value="financials" className="space-y-4">
+              <section className="rounded-2xl border border-border/70 bg-card p-4">
+                <h3 className="flex items-center gap-2 font-display text-sm font-semibold">
+                  <FileText className="size-4 text-primary" /> Latest financials
+                </h3>
+                {financials.data && financials.data.reports.length > 0 ? (
+                  <FinancialSummary
+                    report={financials.data.reports[0]!}
+                    previous={financials.data.reports[1] ?? null}
+                    holdings={holding ? holding.units : null}
+                  />
                 ) : (
                   <p className="mt-3 rounded-xl border border-border/60 bg-surface px-3 py-2.5 text-sm text-muted-foreground">
-                    No price history in the feed for this scrip yet.
+                    No financial data in the feed for this scrip yet.
                   </p>
                 )}
-              </div>
+              </section>
+
+              {financials.data && financials.data.reports.length > 1 ? (
+                <section className="rounded-2xl border border-border/70 bg-card p-4">
+                  <h3 className="font-display text-sm font-semibold">Report history</h3>
+                  <ReportGroups reports={financials.data.reports} />
+                  <p className="mt-3 text-[0.68rem] text-muted-foreground">
+                    Figures are indicative from the YONEPSE community feed and follow NEPSE-reported
+                    annual / quarterly results.
+                  </p>
+                </section>
+              ) : null}
             </TabsContent>
 
             <TabsContent value="dividend" className="space-y-3">

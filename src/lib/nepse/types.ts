@@ -106,6 +106,29 @@ export interface ScripDetail {
   dividend: DividendRow | null;
 }
 
+/** One published financial statement period (annual or quarterly). */
+export interface FinancialReport {
+  type: string;
+  fy: string | null;
+  fyNepali: string | null;
+  quarter: string | null;
+  pe: number | null;
+  eps: number | null;
+  paidUpCapital: number | null;
+  profit: number | null;
+  netWorthPerShare: number | null;
+  submittedDate: string | null;
+  /** URL of the source PDF (NEPSE annual/quarterly report). */
+  documentUrl: string | null;
+}
+
+/** Structured financial history for one scrip from the YONEPSE feed. */
+export interface ScripFinancials {
+  symbol: string;
+  reports: FinancialReport[];
+  updatedAt: string | null;
+}
+
 export interface MarketSnapshot {
   status: MarketStatus;
   indices: MarketIndex[];

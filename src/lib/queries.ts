@@ -31,6 +31,7 @@ import {
   getProposedDividends,
   getScripDetail,
   getScripFaceValues,
+  getScripFinancials,
 } from "./nepse/market.functions";
 import type { PortfolioGranularity } from "./nepse/types";
 import { isoDate } from "./format";
@@ -83,6 +84,14 @@ export const scripDetailQuery = (symbol: string | null) =>
     queryFn: () => getScripDetail({ data: { symbol: symbol ?? "" } }),
     enabled: Boolean(symbol),
     staleTime: 5 * 60_000,
+  });
+
+export const scripFinancialsQuery = (symbol: string | null) =>
+  queryOptions({
+    queryKey: ["scrip-financials", symbol],
+    queryFn: () => getScripFinancials({ data: { symbol: symbol ?? "" } }),
+    enabled: Boolean(symbol),
+    staleTime: 30 * 60_000,
   });
 
 export const faceValuesQuery = (symbols: string[]) =>

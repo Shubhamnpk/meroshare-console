@@ -12,6 +12,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { StatCard, DeltaPill } from "@/components/stat-card";
+import { SwipeableCards } from "@/components/swipeable-cards";
 import { ErrorBlock, LoadingBlock, EmptyBlock } from "@/components/states";
 import { ScripSheet } from "@/components/market/scrip-sheet";
 import { ChartModal, chartTimeLabel } from "@/components/market/chart-modal";
@@ -59,39 +60,39 @@ function MoverCard({
   return (
     <div
       className={cn(
-        "rounded-xl border p-4",
+        "rounded-xl border px-3 py-2.5",
         tone === "gain" ? "border-gain/30 bg-gain/5" : "border-loss/30 bg-loss/5",
       )}
     >
       <div className="flex items-center justify-between">
-        <p className="text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        <p className="text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
           {label}
         </p>
         {tone === "gain" ? (
-          <TrendingUp className="size-4 text-gain" aria-hidden />
+          <TrendingUp className="size-3.5 text-gain" aria-hidden />
         ) : (
-          <TrendingDown className="size-4 text-loss" aria-hidden />
+          <TrendingDown className="size-3.5 text-loss" aria-hidden />
         )}
       </div>
       {holding ? (
         <button
           type="button"
           onClick={onOpen}
-          className="mt-2 block w-full rounded-lg p-1 text-left transition-colors hover:bg-background/50"
+          className="mt-1 block w-full rounded-md p-0.5 text-left transition-colors hover:bg-background/50"
         >
           <p className="truncate text-sm font-semibold">{holding.scrip}</p>
-          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="num text-lg font-semibold">{formatNpr(holding.ltp)}</span>
+          <div className="mt-0.5 flex items-center justify-between gap-2">
+            <span className="num text-base font-semibold">{formatNpr(holding.ltp)}</span>
             <DeltaPill value={holding.percentChange}>
               {formatPercent(holding.percentChange)}
             </DeltaPill>
           </div>
-          <p className="num mt-1 text-xs text-muted-foreground">
+          <p className="num mt-0.5 text-xs text-muted-foreground">
             {formatQty(holding.units)} units · {formatNpr(holding.value)}
           </p>
         </button>
       ) : (
-        <p className="mt-2 text-sm text-muted-foreground">—</p>
+        <p className="mt-1 text-sm text-muted-foreground">—</p>
       )}
     </div>
   );
@@ -122,6 +123,54 @@ function DashboardPage() {
   const isRefreshing =
     portfolio.isFetching || issues.isFetching || market.isFetching || nepseGraph.isFetching;
 
+  const statCards = [
+    <StatCard
+      key="live"
+      label="Portfolio value (live)"
+      value={formatNpr(data?.totalValue ?? 0)}
+      tone="brand"
+      icon={<Briefcase className="size-4" />}
+      sub={
+        <span className="flex items-center gap-2">
+          <DeltaPill value={change}>
+            {change > 0 ? (
+              <TrendingUp className="size-3" />
+            ) : change < 0 ? (
+              <TrendingDown className="size-3" />
+            ) : null}
+            {formatPercent(changePct)}
+          </DeltaPill>
+          vs previous close
+        </span>
+      }
+    />,
+    <StatCard
+      key="prev"
+      label="Value at previous close"
+      value={formatNpr(data?.totalPreviousValue ?? 0)}
+      sub="Yesterday's closing valuation"
+    />,
+    <StatCard
+      key="change"
+      label="Day change"
+      value={`${change > 0 ? "+" : change < 0 ? "-" : ""}${formatNpr(Math.abs(change))}`}
+      tone={change > 0 ? "gain" : change < 0 ? "loss" : "neutral"}
+      sub={
+        change > 0
+          ? "Unrealised gain today"
+          : change < 0
+            ? "Unrealised loss today"
+            : "No change today"
+      }
+    />,
+    <StatCard
+      key="scrips"
+      label="Scrips held"
+      value={holdings.length}
+      sub={`${formatQty(data?.totalUnits ?? 0)} total units`}
+    />,
+  ];
+
   const refreshAll = () => {
     void portfolio.refetch();
     void issues.refetch();
@@ -134,7 +183,7 @@ function DashboardPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl font-semibold sm:text-3xl">Dashboard</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-1 hidden text-sm text-muted-foreground sm:block">
             Your holdings valued at live NEPSE prices
             {data && data.marketStale
               ? ", showing MeroShare prices (feed temporarily unreachable)"
@@ -158,48 +207,9 @@ function DashboardPage() {
         <ErrorBlock error={portfolio.error} retry={() => void portfolio.refetch()} />
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <StatCard
-              label="Portfolio value (live)"
-              value={formatNpr(data?.totalValue ?? 0)}
-              tone="brand"
-              icon={<Briefcase className="size-4" />}
-              sub={
-                <span className="flex items-center gap-2">
-                  <DeltaPill value={change}>
-                    {change > 0 ? (
-                      <TrendingUp className="size-3" />
-                    ) : change < 0 ? (
-                      <TrendingDown className="size-3" />
-                    ) : null}
-                    {formatPercent(changePct)}
-                  </DeltaPill>
-                  vs previous close
-                </span>
-              }
-            />
-            <StatCard
-              label="Value at previous close"
-              value={formatNpr(data?.totalPreviousValue ?? 0)}
-              sub="Yesterday's closing valuation"
-            />
-            <StatCard
-              label="Day change"
-              value={`${change > 0 ? "+" : change < 0 ? "-" : ""}${formatNpr(Math.abs(change))}`}
-              tone={change > 0 ? "gain" : change < 0 ? "loss" : "neutral"}
-              sub={
-                change > 0
-                  ? "Unrealised gain today"
-                  : change < 0
-                    ? "Unrealised loss today"
-                    : "No change today"
-              }
-            />
-            <StatCard
-              label="Scrips held"
-              value={holdings.length}
-              sub={`${formatQty(data?.totalUnits ?? 0)} total units`}
-            />
+          <div className="hidden gap-3 sm:grid sm:grid-cols-2 xl:grid-cols-4">{statCards}</div>
+          <div className="sm:hidden">
+            <SwipeableCards cards={statCards} />
           </div>
 
           <button
@@ -245,7 +255,7 @@ function DashboardPage() {
           </button>
 
           <section className="rounded-2xl border border-border/70 bg-card p-4 sm:p-5">
-            <div className="mb-4 flex items-center justify-between gap-3">
+            <div className="mb-3 flex items-center justify-between gap-3">
               <h2 className="font-display text-base font-semibold">Today's movers</h2>
               <Link to="/portfolio" className="text-xs font-medium text-primary hover:underline">
                 View portfolio
@@ -257,7 +267,7 @@ function DashboardPage() {
                 description="Scrips in your demat account will appear here."
               />
             ) : (
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-2 sm:grid-cols-2">
                 <MoverCard
                   label="Top gainer"
                   holding={topGainer}

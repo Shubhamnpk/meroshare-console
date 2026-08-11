@@ -5,15 +5,28 @@ import { Activity, Maximize2, RefreshCw, Search, Star } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {Table,TableBody,TableCell,TableHead,TableHeader,TableRow,} from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { ErrorBlock, LoadingBlock, EmptyBlock } from "@/components/states";
 import { DeltaPill } from "@/components/stat-card";
 import { ScripSheet } from "@/components/market/scrip-sheet";
 import { ChartModal, chartTimeLabel } from "@/components/market/chart-modal";
-import {marketMoversQuery,marketSectorsQuery,marketSnapshotQuery,indexGraphQuery,} from "@/lib/queries";
+import {
+  marketMoversQuery,
+  marketSectorsQuery,
+  marketSnapshotQuery,
+  indexGraphQuery,
+} from "@/lib/queries";
 import { formatDateTime, formatNpr, formatNumber, formatPercent, formatQty } from "@/lib/format";
 import { useWatchlist } from "@/lib/watchlist";
 import { useSettings } from "@/lib/settings";
+import { cn } from "@/lib/utils";
 import { Sparkline } from "@/components/market/sparkline";
 import type { MarketIndex, MoverRow, PricePoint } from "@/lib/nepse/types";
 
@@ -52,26 +65,30 @@ function MoverList({
       <EmptyBlock title="No data" description="The market feed has nothing for this bucket yet." />
     );
   return (
-    <ul className="grid gap-2 sm:grid-cols-2">
+    <ul className="grid grid-cols-1 gap-1.5 min-[420px]:grid-cols-2 sm:gap-2">
       {rows.map((row) => (
-        <li key={row.symbol}>
+        <li key={row.symbol} className="min-w-0">
           <button
             type="button"
             onClick={() => onPick(row.symbol)}
-            className="flex w-full items-center justify-between gap-3 rounded-xl border border-border/60 bg-surface px-3 py-2.5 text-left transition-colors hover:border-primary/40"
+            className="flex w-full items-center justify-between gap-2 rounded-xl border border-border/60 bg-surface px-2.5 py-2 text-left transition-colors hover:border-primary/40 sm:px-3 sm:py-2.5"
           >
             <div className="min-w-0">
-              <p className="text-sm font-semibold">{row.symbol}</p>
+              <p className="text-[0.8125rem] font-semibold leading-tight sm:text-sm">
+                {row.symbol}
+              </p>
               <p className="truncate text-xs text-muted-foreground">{row.name}</p>
             </div>
             {kind === "%" ? (
               <DeltaPill value={row.value}>{formatPercent(row.value)}</DeltaPill>
             ) : kind === "npr" ? (
-              <span className="num text-sm font-medium">
+              <span className="num shrink-0 text-[0.8125rem] font-medium sm:text-sm">
                 {formatNpr(row.value, { compact: true })}
               </span>
             ) : (
-              <span className="num text-sm font-medium">{formatQty(row.value)}</span>
+              <span className="num shrink-0 text-[0.8125rem] font-medium sm:text-sm">
+                {formatQty(row.value)}
+              </span>
             )}
           </button>
         </li>
@@ -86,7 +103,15 @@ const INDEX_GRAPH_NAMES: Record<string, string> = {
   "Float Index": "Float",
 };
 
-function IndexCard({ index, onExpand }: { index: MarketIndex; onExpand: () => void }) {
+function IndexCard({
+  index,
+  onExpand,
+  className,
+}: {
+  index: MarketIndex;
+  onExpand: () => void;
+  className?: string;
+}) {
   const graphName = INDEX_GRAPH_NAMES[index.name];
   const graph = useQuery({
     ...(graphName
@@ -101,7 +126,10 @@ function IndexCard({ index, onExpand }: { index: MarketIndex; onExpand: () => vo
     <button
       type="button"
       onClick={onExpand}
-      className="group rounded-2xl border border-border/70 bg-card p-4 text-left transition-colors hover:border-primary/40"
+      className={cn(
+        "group rounded-2xl border border-border/70 bg-card p-4 text-left transition-colors hover:border-primary/40",
+        className,
+      )}
     >
       <p className="flex items-center gap-1.5 text-xs uppercase tracking-wider text-muted-foreground">
         {index.name}
@@ -181,7 +209,7 @@ function MarketPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl font-semibold sm:text-3xl">Market</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-1 hidden text-sm text-muted-foreground sm:block">
             Live NEPSE prices, indices and movers.{" "}
             {snapshot.data
               ? snapshot.data.status.isOpen
@@ -192,7 +220,7 @@ function MarketPage() {
         </div>
         <div className="flex items-center gap-3">
           {snapshot.data?.fetchedAt ? (
-            <span className="num text-xs text-muted-foreground">
+            <span className="num hidden text-xs text-muted-foreground sm:inline">
               Updated {formatDateTime(snapshot.data.fetchedAt)}
             </span>
           ) : null}
@@ -219,12 +247,23 @@ function MarketPage() {
             </p>
           ) : null}
 
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-2 sm:snap-none sm:overflow-x-visible sm:pb-0 xl:grid-cols-4">
             {indices.map((index) => (
-              <IndexCard key={index.name} index={index} onExpand={() => setChartIndex(index)} />
+              <IndexCard
+                key={index.name}
+                index={index}
+                onExpand={() => setChartIndex(index)}
+                className="w-[15.5rem] shrink-0 snap-start sm:w-auto"
+              />
             ))}
+          </div>
+
+          <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-2 sm:snap-none sm:overflow-x-visible sm:pb-0 xl:grid-cols-4">
             {(snapshot.data?.summary ?? []).slice(0, 4).map((row) => (
-              <div key={row.detail} className="rounded-2xl border border-border/70 bg-card p-4">
+              <div
+                key={row.detail}
+                className="w-[12.5rem] shrink-0 snap-start rounded-2xl border border-border/70 bg-card p-4 sm:w-auto"
+              >
                 <p className="text-xs uppercase tracking-wider text-muted-foreground">
                   {row.detail.replace(/:$/, "").replace(/^Total\s*/, "")}
                 </p>
@@ -248,7 +287,7 @@ function MarketPage() {
               <ErrorBlock error={movers.error} retry={() => void movers.refetch()} />
             ) : (
               <Tabs defaultValue="gainers">
-                <TabsList className="flex w-full flex-wrap justify-start">
+                <TabsList className="flex w-full justify-start gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:flex-wrap sm:overflow-x-visible">
                   <TabsTrigger value="gainers">Gainers</TabsTrigger>
                   <TabsTrigger value="losers">Losers</TabsTrigger>
                   <TabsTrigger value="turnover">Turnover</TabsTrigger>

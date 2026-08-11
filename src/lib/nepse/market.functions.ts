@@ -17,6 +17,7 @@ import {
   getMarketSummary,
   getPortfolioHistory,
   getScripDetail as fetchScripDetail,
+  getScripFinancials as fetchScripFinancials,
   getSectorIndices,
   getTopStocks,
 } from "./feed.server";
@@ -31,6 +32,7 @@ import type {
   PricePoint,
   SectorIndex,
   ScripDetail,
+  ScripFinancials,
   TopStocks,
 } from "./types";
 
@@ -122,6 +124,15 @@ export const getScripDetail = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<ScripDetail | null> => {
     await requireAuth();
     return fetchScripDetail(data.symbol);
+  });
+
+export const getScripFinancials = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) =>
+    z.object({ symbol: z.string().trim().min(1).max(24) }).parse(input),
+  )
+  .handler(async ({ data }): Promise<ScripFinancials | null> => {
+    await requireAuth();
+    return fetchScripFinancials(data.symbol);
   });
 
 export const getScripFaceValues = createServerFn({ method: "POST" })

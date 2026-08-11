@@ -8,6 +8,7 @@ import type {
   DailyBar,
   DividendRow,
   ExchangeMessageRow,
+  FinancialReport,
   IpoArchiveRow,
   LivePrice,
   MarketIndex,
@@ -19,6 +20,7 @@ import type {
   PricePoint,
   SectorIndex,
   ScripDetail,
+  ScripFinancials,
   ScripOverview,
   TopStocks,
 } from "./types";
@@ -669,4 +671,55 @@ export async function getScripDetail(symbol: string): Promise<ScripDetail> {
   const dividend = latest ?? null;
 
   return { overview, history: bars, intraday: points, dividend };
+}
+
+/**
+ * Structured financial history (EPS, P/E, profit, net worth, paid-up capital)
+ * per reported period for one scrip, from the YONEPSE company financials feed.
+ * Sorted newest-first by submission date. Reports without a document carry a
+ * null URL; the rest link to the NEPSE source PDF.
+ */
+export async function getScripFinancials(symbol: string): Promise<ScripFinancials | null> {
+  const upper = symbol.toUpperCase();
+  const [financials, metadata] = await Promise.all([
+    feedJson<Rec[]>(`${YONEPSE_BASE}/data/company/financials.json`, TTL.slow),
+    feedJson<Rec>(`${YONEPSE_BASE}/data/company/metadata.json`, TTL.slow),
+  ]);
+
+  const baseUrl = str(metadata.data?.["document_base_url"]);
+  const row = (financials.data ?? []).find((r) => (str(r["symbol"]) ?? "").toUpperCase() === upper);
+  const rawReports = Array.isArray(row?.["reports"]) ? (row["reports"] as unknown[]) : [];
+
+  const reports: FinancialReport[] = rawReports
+    .flatMap((raw): FinancialReport[] => {
+      const rec = raw as Rec;
+      const doc = Array.isArray(rec["documents"])
+        ? ((rec["documents"] as unknown[])[0] as Rec)
+        : null;
+      const path = str(doc?.["path"]);
+      return [
+        {
+          type: str(rec["type"]) ?? "Report",
+          fy: str(rec["fy"]),
+          fyNepali: str(rec["fy_nepali"]),
+          quarter: str(rec["quarter"]),
+          pe: num(rec["pe"]) || null,
+          eps: num(rec["eps"]) || null,
+          paidUpCapital: num(rec["paid_up_capital"]) || null,
+          profit: num(rec["profit"]) || null,
+          netWorthPerShare: num(rec["net_worth_per_share"]) || null,
+          submittedDate: str(doc?.["submitted_date"]),
+          documentUrl: path && baseUrl ? `${baseUrl}${encodeURIComponent(path)}` : null,
+        },
+      ];
+    })
+    .sort((a, b) => (b.submittedDate ?? "").localeCompare(a.submittedDate ?? ""));
+
+  if (reports.length === 0) return null;
+
+  return {
+    symbol: upper,
+    reports,
+    updatedAt: str(metadata.data?.["last_updated"]),
+  };
 }

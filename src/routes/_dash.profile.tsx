@@ -124,7 +124,10 @@ function Section({
 }) {
   if (items.length === 0) return null;
   return (
-    <section id={id} className="scroll-mt-24 overflow-hidden rounded-2xl border border-border/70 bg-card">
+    <section
+      id={id}
+      className="scroll-mt-24 overflow-hidden rounded-2xl border border-border/70 bg-card"
+    >
       <header className="flex items-center gap-2 border-b border-border/70 px-4 py-3">
         <Icon className="size-4 text-muted-foreground" />
         <h2 className="text-sm font-semibold">{title}</h2>
@@ -303,7 +306,9 @@ function BankCard({ bank, reveal }: { bank: AccountBank; reveal: boolean }) {
                 {row.label}
               </dt>
               <dd className="mt-0.5 flex items-start break-words text-sm font-medium">
-                <span className="num">{row.sensitive && !reveal ? mask(row.value) : row.value}</span>
+                <span className="num">
+                  {row.sensitive && !reveal ? mask(row.value) : row.value}
+                </span>
                 {row.copy ? <CopyButton value={row.value} label={row.label} /> : null}
               </dd>
             </div>
@@ -482,7 +487,7 @@ function ProfilePage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl font-semibold sm:text-3xl">My Account</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-1 hidden text-sm text-muted-foreground sm:block">
             Every detail MeroShare and your depository participant hold about you.
           </p>
         </div>

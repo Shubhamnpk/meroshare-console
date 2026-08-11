@@ -1054,7 +1054,7 @@ function PortfolioPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl font-semibold sm:text-3xl">Portfolio</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-1 hidden text-sm text-muted-foreground sm:block">
             {holdings.length} scrip{holdings.length === 1 ? "" : "s"} · {liveCount} valued at live
             NEPSE prices. Click any scrip for its full detail.
           </p>
