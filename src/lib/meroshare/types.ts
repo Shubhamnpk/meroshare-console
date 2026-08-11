@@ -194,3 +194,31 @@ export interface Paged<T> {
   totalCount: number;
   totalPage?: number;
 }
+
+/** One linked ASBA bank, merged from bankList + bankDetail + bankRequest. */
+export interface AccountBank {
+  id: number;
+  code: string;
+  name: string;
+  accountNumber?: string;
+  branchName?: string;
+  crnNumber?: string;
+  accountStatus?: string;
+  kycStatus?: string;
+  raw: JsonRecord;
+}
+
+/** Everything MeroShare knows about the signed-in user, in one payload. */
+export interface AccountProfile {
+  own: OwnDetail;
+  detail: JsonRecord;
+  banks: AccountBank[];
+  session: {
+    username: string;
+    demat: string;
+    boid: string;
+    clientCode: string;
+    accountNumber: string;
+    expiresAt: number | null;
+  };
+}

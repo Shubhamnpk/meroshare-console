@@ -14,7 +14,12 @@ import {
   getCurrentIssues,
   getOldApplicationReports,
 } from "./meroshare/ipo.functions";
-import { getActivityLog, getBanks, getMyDetail } from "./meroshare/account.functions";
+import {
+  getAccountProfile,
+  getActivityLog,
+  getBanks,
+  getMyDetail,
+} from "./meroshare/account.functions";
 import {
   getIndexGraph,
   getIpoArchiveList,
@@ -198,6 +203,13 @@ export const banksQuery = () =>
     queryKey: ["banks"],
     queryFn: () => getBanks(),
     staleTime: 10 * 60_000,
+  });
+
+export const accountProfileQuery = () =>
+  queryOptions({
+    queryKey: ["account-profile"],
+    queryFn: () => getAccountProfile(),
+    staleTime: 5 * 60_000,
   });
 
 export const myDetailQuery = () =>

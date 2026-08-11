@@ -1,7 +1,7 @@
 // Server-only MeroShare operations. Every function here talks to CDSC with the
 // caller's own bearer token, taken from the encrypted session cookie.
 import { CDSC_URLS, cdscRequest } from "./cdsc.server";
-import { requireAuth, type AuthContext } from "./session.server";
+import { readSession, requireAuth, type AuthContext } from "./session.server";
 import type {
   ActivityLogItem,
   ApplicableIssue,
@@ -383,4 +383,4 @@ export async function logoutCdsc(auth: AuthContext) {
   }
 }
 
-export { requireAuth };
+export { readSession, requireAuth };
