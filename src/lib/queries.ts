@@ -200,6 +200,13 @@ export const banksQuery = () =>
     staleTime: 10 * 60_000,
   });
 
+export const accountProfileQuery = () =>
+  queryOptions({
+    queryKey: ["account-profile"],
+    queryFn: () => getAccountProfile(),
+    staleTime: 5 * 60_000,
+  });
+
 export const myDetailQuery = () =>
   queryOptions({
     queryKey: ["my-detail"],
