@@ -14,7 +14,12 @@ import {
   getCurrentIssues,
   getOldApplicationReports,
 } from "./meroshare/ipo.functions";
-import { getActivityLog, getBanks, getMyDetail } from "./meroshare/account.functions";
+import {
+  getAccountProfile,
+  getActivityLog,
+  getBanks,
+  getMyDetail,
+} from "./meroshare/account.functions";
 import {
   getIndexGraph,
   getIpoArchiveList,
