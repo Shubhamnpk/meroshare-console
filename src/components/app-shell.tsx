@@ -6,6 +6,7 @@ import {
   BarChart3,
   Briefcase,
   CalendarClock,
+  CandlestickChart,
   ChevronDown,
   ChevronsLeft,
   ChevronsRight,
@@ -41,6 +42,7 @@ const PRIMARY_NAV: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/portfolio", label: "Portfolio", icon: Briefcase },
   { to: "/market", label: "Market", icon: LineChart },
+  { to: "/chart", label: "Trading Chart", icon: CandlestickChart },
   { to: "/watchlist", label: "Watchlist", icon: Star },
   { to: "/transactions", label: "Transactions", icon: Activity },
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
@@ -62,6 +64,7 @@ const MOBILE_NAV: NavItem[] = [
   { to: "/dashboard", label: "Home", icon: LayoutDashboard },
   { to: "/portfolio", label: "Portfolio", icon: Briefcase },
   { to: "/market", label: "Market", icon: LineChart },
+  { to: "/chart", label: "Chart", icon: CandlestickChart },
   { to: "/ipo", label: "IPO", icon: Rocket },
   { to: "/reports", label: "Reports", icon: ClipboardList },
 ];
@@ -336,7 +339,7 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
       </div>
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border/70 bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
-        <div className="grid grid-cols-5">
+        <div className="grid grid-cols-6">
           {MOBILE_NAV.map((item) => {
             const active = pathname === item.to;
             return (
