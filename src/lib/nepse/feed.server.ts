@@ -5,6 +5,9 @@
 // Everything is fetched server-side and cached in-memory so the browser never
 // hits a third party and each provider can be swapped without touching the UI.
 import type {
+  ChartBar,
+  ChartRange,
+  ChartSeries,
   DailyBar,
   DividendRow,
   ExchangeMessageRow,
@@ -721,5 +724,180 @@ export async function getScripFinancials(symbol: string): Promise<ScripFinancial
     symbol: upper,
     reports,
     updatedAt: str(metadata.data?.["last_updated"]),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Trading terminal chart series
+// ---------------------------------------------------------------------------
+
+/** How far back each range button reaches, in calendar months. */
+const RANGE_MONTHS: Record<ChartRange, number> = {
+  "1D": 1,
+  "1W": 1,
+  "1M": 2,
+  "3M": 4,
+  "6M": 7,
+  "1Y": 13,
+  "3Y": 37,
+  "5Y": 61,
+  MAX: 180,
+};
+
+/** Approximate trading days kept per range once the bars are merged. */
+const RANGE_BARS: Record<ChartRange, number> = {
+  "1D": 2,
+  "1W": 6,
+  "1M": 23,
+  "3M": 68,
+  "6M": 134,
+  "1Y": 265,
+  "3Y": 790,
+  "5Y": 1310,
+  MAX: 5000,
+};
+
+/**
+ * Daily closes for one scrip out of the YONEPSE monthly archive (2012 →
+ * today). The monthly files are date-major and cover every scrip, so only the
+ * extracted per-symbol slice is cached — the 300 KB source document is parsed
+ * and dropped, keeping the worker's memory flat.
+ */
+async function archiveMonthBars(symbol: string, month: string): Promise<DailyBar[]> {
+  const key = `arch:${symbol}:${month}`;
+  const hit = cache.get(key);
+  const now = Date.now();
+  if (hit && hit.expires > now) return hit.value as DailyBar[];
+
+  let bars: DailyBar[] = [];
+  try {
+    const res = await fetch(`${YONEPSE_BASE}/data/ltp/monthly/${month}.json`, {
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) throw new Error(`archive ${res.status}`);
+    const doc = (await res.json()) as Rec;
+    const dates = (doc["dates"] ?? []) as string[];
+    const series = (doc["series"] ?? {}) as Record<string, unknown>;
+    const rows = Array.isArray(series[symbol]) ? (series[symbol] as unknown[][]) : [];
+    bars = rows.flatMap((row): DailyBar[] => {
+      const date = dates[num(row?.[0])];
+      const close = num(row?.[1]);
+      if (!date || close <= 0) return [];
+      return [{ date, close, high: close, low: close, volume: num(row?.[2]) }];
+    });
+  } catch {
+    if (hit) return hit.value as DailyBar[];
+    return [];
+  }
+  // Finished months never change; the running month refreshes hourly.
+  const finished = month < monthKeyFromEpoch(Math.floor(now / 1000));
+  cache.set(key, { value: bars, expires: now + (finished ? 30 * TTL.daily : 60 * 60_000), fetchedAt: now });
+  return bars;
+}
+
+/** Run `worker` over `items` with bounded concurrency. */
+async function mapLimit<T, R>(items: T[], limit: number, worker: (item: T) => Promise<R>) {
+  const out: R[] = new Array(items.length) as R[];
+  let cursor = 0;
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    for (;;) {
+      const index = cursor++;
+      if (index >= items.length) return;
+      out[index] = await worker(items[index]!);
+    }
+  });
+  await Promise.all(runners);
+  return out;
+}
+
+/** Deep daily-close history from the archive, oldest → newest. */
+async function getArchiveBars(symbol: string, months: number): Promise<DailyBar[]> {
+  const { data: manifest } = await feedJson<Rec>(
+    `${YONEPSE_BASE}/data/ltp/manifest.json`,
+    TTL.daily,
+  );
+  const available = [...((manifest?.["availableMonths"] ?? []) as string[])].sort();
+  const wanted = available.slice(Math.max(0, available.length - months));
+  const chunks = await mapLimit(wanted, 8, (month) => archiveMonthBars(symbol, month));
+  return chunks.flat();
+}
+
+/**
+ * Everything the trading terminal draws for one symbol.
+ *
+ * Two free sources are merged:
+ *  - bitnepal's NEPSE mirror — reported high/low/close and volume for roughly
+ *    the last year, plus today's tick series;
+ *  - the YONEPSE monthly archive — daily closes back to 2012 for the long
+ *    ranges, where high/low are unavailable and the candle body is derived
+ *    from the previous close (flagged as `synthetic`).
+ */
+export async function getChartSeries(symbol: string, range: ChartRange): Promise<ChartSeries> {
+  const upper = symbol.toUpperCase();
+  const months = RANGE_MONTHS[range];
+  const needsArchive = months > 11;
+
+  const [history, intradayRaw, archive, live] = await Promise.all([
+    bitnepalJson<Rec[]>(`/securities/${encodeURIComponent(upper)}/history`, TTL.medium),
+    range === "1D"
+      ? bitnepalJson<Rec[]>(`/securities/${encodeURIComponent(upper)}/graph`, TTL.fast)
+      : Promise.resolve({ data: null as Rec[] | null, stale: false }),
+    needsArchive ? getArchiveBars(upper, months) : Promise.resolve<DailyBar[]>([]),
+    getLivePrices(),
+  ]);
+
+  const byDate = new Map<string, DailyBar & { reported: boolean }>();
+  for (const bar of archive) byDate.set(bar.date, { ...bar, reported: false });
+  for (const row of history.data ?? []) {
+    const date = str(row["businessDate"]);
+    const close = num(row["closePrice"]);
+    if (!date || close <= 0) continue;
+    byDate.set(date, {
+      date,
+      close,
+      high: num(row["highPrice"]) || close,
+      low: num(row["lowPrice"]) || close,
+      volume: num(row["totalTradedQuantity"]),
+      reported: true,
+    });
+  }
+
+  const ordered = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+  const bars: ChartBar[] = [];
+  let previousClose = ordered[0]?.close ?? 0;
+  for (const bar of ordered) {
+    const open = previousClose > 0 ? previousClose : bar.close;
+    bars.push({
+      date: bar.date,
+      open,
+      high: Math.max(bar.high, open, bar.close),
+      low: Math.min(bar.low || bar.close, open, bar.close),
+      close: bar.close,
+      volume: bar.volume,
+      synthetic: !bar.reported,
+    });
+    previousClose = bar.close;
+  }
+
+  const sliced = bars.slice(Math.max(0, bars.length - RANGE_BARS[range]));
+
+  const intraday: PricePoint[] = (intradayRaw.data ?? []).flatMap((row): PricePoint[] => {
+    const time = num(row["time"]);
+    const value = num(row["contractRate"]);
+    if (!time || !value) return [];
+    return [{ time, value }];
+  });
+
+  const quote = live.prices.find((p) => p.symbol === upper);
+
+  return {
+    symbol: upper,
+    name: quote?.name ?? null,
+    range,
+    bars: sliced,
+    intraday,
+    hasSynthetic: sliced.some((b) => b.synthetic),
+    source: FEED_ATTRIBUTION,
+    fetchedAt: new Date().toISOString(),
   };
 }

@@ -99,6 +99,37 @@ export interface DailyBar {
   volume: number;
 }
 
+/** Range buttons on the trading terminal. */
+export type ChartRange = "1D" | "1W" | "1M" | "3M" | "6M" | "1Y" | "3Y" | "5Y" | "MAX";
+
+/** One OHLCV candle. `synthetic` marks bars whose open/high/low were derived
+ * from close-only archive data rather than reported by the exchange. */
+export interface ChartBar {
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  synthetic: boolean;
+}
+
+/** Everything the terminal needs to draw one symbol at one range. */
+export interface ChartSeries {
+  symbol: string;
+  name: string | null;
+  range: ChartRange;
+  /** Daily candles, ascending. Empty for a pure-intraday (1D) response. */
+  bars: ChartBar[];
+  /** Same-day tick series, only populated for the 1D range. */
+  intraday: PricePoint[];
+  /** True when any bar in `bars` was synthesised from close-only archive data. */
+  hasSynthetic: boolean;
+  source: string;
+  fetchedAt: string;
+}
+
+
 export interface ScripDetail {
   overview: ScripOverview | null;
   history: DailyBar[];
