@@ -13,7 +13,6 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as DashRouteImport } from './routes/_dash'
 import { Route as DashActivityRouteImport } from './routes/_dash.activity'
 import { Route as DashAnalyticsRouteImport } from './routes/_dash.analytics'
-import { Route as DashChartRouteImport } from './routes/_dash.chart'
 import { Route as DashDashboardRouteImport } from './routes/_dash.dashboard'
 import { Route as DashIpoRouteImport } from './routes/_dash.ipo'
 import { Route as DashMarketRouteImport } from './routes/_dash.market'
@@ -43,11 +42,6 @@ const DashActivityRoute = DashActivityRouteImport.update({
 const DashAnalyticsRoute = DashAnalyticsRouteImport.update({
   id: '/analytics',
   path: '/analytics',
-  getParentRoute: () => DashRoute,
-} as any)
-const DashChartRoute = DashChartRouteImport.update({
-  id: '/chart',
-  path: '/chart',
   getParentRoute: () => DashRoute,
 } as any)
 const DashDashboardRoute = DashDashboardRouteImport.update({
@@ -110,7 +104,6 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/activity': typeof DashActivityRoute
   '/analytics': typeof DashAnalyticsRoute
-  '/chart': typeof DashChartRoute
   '/dashboard': typeof DashDashboardRoute
   '/ipo': typeof DashIpoRoute
   '/market': typeof DashMarketRoute
@@ -127,7 +120,6 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/activity': typeof DashActivityRoute
   '/analytics': typeof DashAnalyticsRoute
-  '/chart': typeof DashChartRoute
   '/dashboard': typeof DashDashboardRoute
   '/ipo': typeof DashIpoRoute
   '/market': typeof DashMarketRoute
@@ -146,7 +138,6 @@ export interface FileRoutesById {
   '/_dash': typeof DashRouteWithChildren
   '/_dash/activity': typeof DashActivityRoute
   '/_dash/analytics': typeof DashAnalyticsRoute
-  '/_dash/chart': typeof DashChartRoute
   '/_dash/dashboard': typeof DashDashboardRoute
   '/_dash/ipo': typeof DashIpoRoute
   '/_dash/market': typeof DashMarketRoute
@@ -165,7 +156,6 @@ export interface FileRouteTypes {
     | '/'
     | '/activity'
     | '/analytics'
-    | '/chart'
     | '/dashboard'
     | '/ipo'
     | '/market'
@@ -182,7 +172,6 @@ export interface FileRouteTypes {
     | '/'
     | '/activity'
     | '/analytics'
-    | '/chart'
     | '/dashboard'
     | '/ipo'
     | '/market'
@@ -200,7 +189,6 @@ export interface FileRouteTypes {
     | '/_dash'
     | '/_dash/activity'
     | '/_dash/analytics'
-    | '/_dash/chart'
     | '/_dash/dashboard'
     | '/_dash/ipo'
     | '/_dash/market'
@@ -247,13 +235,6 @@ declare module '@tanstack/react-router' {
       path: '/analytics'
       fullPath: '/analytics'
       preLoaderRoute: typeof DashAnalyticsRouteImport
-      parentRoute: typeof DashRoute
-    }
-    '/_dash/chart': {
-      id: '/_dash/chart'
-      path: '/chart'
-      fullPath: '/chart'
-      preLoaderRoute: typeof DashChartRouteImport
       parentRoute: typeof DashRoute
     }
     '/_dash/dashboard': {
@@ -339,7 +320,6 @@ declare module '@tanstack/react-router' {
 interface DashRouteChildren {
   DashActivityRoute: typeof DashActivityRoute
   DashAnalyticsRoute: typeof DashAnalyticsRoute
-  DashChartRoute: typeof DashChartRoute
   DashDashboardRoute: typeof DashDashboardRoute
   DashIpoRoute: typeof DashIpoRoute
   DashMarketRoute: typeof DashMarketRoute
@@ -356,7 +336,6 @@ interface DashRouteChildren {
 const DashRouteChildren: DashRouteChildren = {
   DashActivityRoute: DashActivityRoute,
   DashAnalyticsRoute: DashAnalyticsRoute,
-  DashChartRoute: DashChartRoute,
   DashDashboardRoute: DashDashboardRoute,
   DashIpoRoute: DashIpoRoute,
   DashMarketRoute: DashMarketRoute,
