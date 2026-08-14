@@ -24,7 +24,6 @@ import {
 } from "./feed.server";
 import { parseNptEpoch, type UnitSnapshot } from "./timeline";
 import type {
-  ChartRange,
   ChartSeries,
   DividendRow,
   ExchangeMessageRow,
@@ -275,7 +274,7 @@ export const getChartData = createServerFn({ method: "POST" })
         symbol: z.string().trim().min(1).max(24),
         range: z
           .enum(["1D", "1W", "1M", "3M", "6M", "1Y", "3Y", "5Y", "MAX"])
-          .default("1Y") as z.ZodType<ChartRange>,
+          .default("1Y"),
       })
       .parse(input),
   )
