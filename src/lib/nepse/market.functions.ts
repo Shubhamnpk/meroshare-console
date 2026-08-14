@@ -6,6 +6,7 @@ import type { TransactionItem } from "../meroshare/types";
 import { toNumber } from "../format";
 import {
   FEED_ATTRIBUTION,
+  getChartSeries as fetchChartSeries,
   getDividends,
   getExchangeMessages,
   getFaceValues as fetchFaceValues,
@@ -23,6 +24,8 @@ import {
 } from "./feed.server";
 import { parseNptEpoch, type UnitSnapshot } from "./timeline";
 import type {
+  ChartRange,
+  ChartSeries,
   DividendRow,
   ExchangeMessageRow,
   IpoArchiveRow,
@@ -264,3 +267,19 @@ function errorMessageOf(err: unknown): string {
       ? err
       : "Request failed";
 }
+
+export const getChartData = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        symbol: z.string().trim().min(1).max(24),
+        range: z
+          .enum(["1D", "1W", "1M", "3M", "6M", "1Y", "3Y", "5Y", "MAX"])
+          .default("1Y") as z.ZodType<ChartRange>,
+      })
+      .parse(input),
+  )
+  .handler(async ({ data }): Promise<ChartSeries> => {
+    await requireAuth();
+    return fetchChartSeries(data.symbol, data.range);
+  });
