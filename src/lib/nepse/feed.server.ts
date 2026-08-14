@@ -890,13 +890,16 @@ export async function getChartSeries(symbol: string, range: ChartRange): Promise
 
   const quote = live.prices.find((p) => p.symbol === upper);
 
+  // A 1D view is a tick chart; daily candles would collapse to a single bar.
+  const useIntraday = range === "1D" && intraday.length > 1;
+
   return {
     symbol: upper,
     name: quote?.name ?? null,
     range,
-    bars: sliced,
+    bars: useIntraday ? [] : sliced,
     intraday,
-    hasSynthetic: sliced.some((b) => b.synthetic),
+    hasSynthetic: !useIntraday && sliced.some((b) => b.synthetic),
     source: FEED_ATTRIBUTION,
     fetchedAt: new Date().toISOString(),
   };

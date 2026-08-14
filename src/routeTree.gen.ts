@@ -13,7 +13,6 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as DashRouteImport } from './routes/_dash'
 import { Route as DashActivityRouteImport } from './routes/_dash.activity'
 import { Route as DashAnalyticsRouteImport } from './routes/_dash.analytics'
-import { Route as DashChartRouteImport } from './routes/_dash.chart'
 import { Route as DashDashboardRouteImport } from './routes/_dash.dashboard'
 import { Route as DashIpoRouteImport } from './routes/_dash.ipo'
 import { Route as DashMarketRouteImport } from './routes/_dash.market'
@@ -21,6 +20,7 @@ import { Route as DashPortfolioRouteImport } from './routes/_dash.portfolio'
 import { Route as DashProfileRouteImport } from './routes/_dash.profile'
 import { Route as DashReportsRouteImport } from './routes/_dash.reports'
 import { Route as DashSettingsRouteImport } from './routes/_dash.settings'
+import { Route as DashTerminalRouteImport } from './routes/_dash.terminal'
 import { Route as DashTransactionsRouteImport } from './routes/_dash.transactions'
 import { Route as DashWaccRouteImport } from './routes/_dash.wacc'
 import { Route as DashWatchlistRouteImport } from './routes/_dash.watchlist'
@@ -42,11 +42,6 @@ const DashActivityRoute = DashActivityRouteImport.update({
 const DashAnalyticsRoute = DashAnalyticsRouteImport.update({
   id: '/analytics',
   path: '/analytics',
-  getParentRoute: () => DashRoute,
-} as any)
-const DashChartRoute = DashChartRouteImport.update({
-  id: '/chart',
-  path: '/chart',
   getParentRoute: () => DashRoute,
 } as any)
 const DashDashboardRoute = DashDashboardRouteImport.update({
@@ -84,6 +79,11 @@ const DashSettingsRoute = DashSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => DashRoute,
 } as any)
+const DashTerminalRoute = DashTerminalRouteImport.update({
+  id: '/terminal',
+  path: '/terminal',
+  getParentRoute: () => DashRoute,
+} as any)
 const DashTransactionsRoute = DashTransactionsRouteImport.update({
   id: '/transactions',
   path: '/transactions',
@@ -104,7 +104,6 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/activity': typeof DashActivityRoute
   '/analytics': typeof DashAnalyticsRoute
-  '/chart': typeof DashChartRoute
   '/dashboard': typeof DashDashboardRoute
   '/ipo': typeof DashIpoRoute
   '/market': typeof DashMarketRoute
@@ -112,6 +111,7 @@ export interface FileRoutesByFullPath {
   '/profile': typeof DashProfileRoute
   '/reports': typeof DashReportsRoute
   '/settings': typeof DashSettingsRoute
+  '/terminal': typeof DashTerminalRoute
   '/transactions': typeof DashTransactionsRoute
   '/wacc': typeof DashWaccRoute
   '/watchlist': typeof DashWatchlistRoute
@@ -120,7 +120,6 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/activity': typeof DashActivityRoute
   '/analytics': typeof DashAnalyticsRoute
-  '/chart': typeof DashChartRoute
   '/dashboard': typeof DashDashboardRoute
   '/ipo': typeof DashIpoRoute
   '/market': typeof DashMarketRoute
@@ -128,6 +127,7 @@ export interface FileRoutesByTo {
   '/profile': typeof DashProfileRoute
   '/reports': typeof DashReportsRoute
   '/settings': typeof DashSettingsRoute
+  '/terminal': typeof DashTerminalRoute
   '/transactions': typeof DashTransactionsRoute
   '/wacc': typeof DashWaccRoute
   '/watchlist': typeof DashWatchlistRoute
@@ -138,7 +138,6 @@ export interface FileRoutesById {
   '/_dash': typeof DashRouteWithChildren
   '/_dash/activity': typeof DashActivityRoute
   '/_dash/analytics': typeof DashAnalyticsRoute
-  '/_dash/chart': typeof DashChartRoute
   '/_dash/dashboard': typeof DashDashboardRoute
   '/_dash/ipo': typeof DashIpoRoute
   '/_dash/market': typeof DashMarketRoute
@@ -146,6 +145,7 @@ export interface FileRoutesById {
   '/_dash/profile': typeof DashProfileRoute
   '/_dash/reports': typeof DashReportsRoute
   '/_dash/settings': typeof DashSettingsRoute
+  '/_dash/terminal': typeof DashTerminalRoute
   '/_dash/transactions': typeof DashTransactionsRoute
   '/_dash/wacc': typeof DashWaccRoute
   '/_dash/watchlist': typeof DashWatchlistRoute
@@ -156,7 +156,6 @@ export interface FileRouteTypes {
     | '/'
     | '/activity'
     | '/analytics'
-    | '/chart'
     | '/dashboard'
     | '/ipo'
     | '/market'
@@ -164,6 +163,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/reports'
     | '/settings'
+    | '/terminal'
     | '/transactions'
     | '/wacc'
     | '/watchlist'
@@ -172,7 +172,6 @@ export interface FileRouteTypes {
     | '/'
     | '/activity'
     | '/analytics'
-    | '/chart'
     | '/dashboard'
     | '/ipo'
     | '/market'
@@ -180,6 +179,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/reports'
     | '/settings'
+    | '/terminal'
     | '/transactions'
     | '/wacc'
     | '/watchlist'
@@ -189,7 +189,6 @@ export interface FileRouteTypes {
     | '/_dash'
     | '/_dash/activity'
     | '/_dash/analytics'
-    | '/_dash/chart'
     | '/_dash/dashboard'
     | '/_dash/ipo'
     | '/_dash/market'
@@ -197,6 +196,7 @@ export interface FileRouteTypes {
     | '/_dash/profile'
     | '/_dash/reports'
     | '/_dash/settings'
+    | '/_dash/terminal'
     | '/_dash/transactions'
     | '/_dash/wacc'
     | '/_dash/watchlist'
@@ -235,13 +235,6 @@ declare module '@tanstack/react-router' {
       path: '/analytics'
       fullPath: '/analytics'
       preLoaderRoute: typeof DashAnalyticsRouteImport
-      parentRoute: typeof DashRoute
-    }
-    '/_dash/chart': {
-      id: '/_dash/chart'
-      path: '/chart'
-      fullPath: '/chart'
-      preLoaderRoute: typeof DashChartRouteImport
       parentRoute: typeof DashRoute
     }
     '/_dash/dashboard': {
@@ -293,6 +286,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashSettingsRouteImport
       parentRoute: typeof DashRoute
     }
+    '/_dash/terminal': {
+      id: '/_dash/terminal'
+      path: '/terminal'
+      fullPath: '/terminal'
+      preLoaderRoute: typeof DashTerminalRouteImport
+      parentRoute: typeof DashRoute
+    }
     '/_dash/transactions': {
       id: '/_dash/transactions'
       path: '/transactions'
@@ -320,7 +320,6 @@ declare module '@tanstack/react-router' {
 interface DashRouteChildren {
   DashActivityRoute: typeof DashActivityRoute
   DashAnalyticsRoute: typeof DashAnalyticsRoute
-  DashChartRoute: typeof DashChartRoute
   DashDashboardRoute: typeof DashDashboardRoute
   DashIpoRoute: typeof DashIpoRoute
   DashMarketRoute: typeof DashMarketRoute
@@ -328,6 +327,7 @@ interface DashRouteChildren {
   DashProfileRoute: typeof DashProfileRoute
   DashReportsRoute: typeof DashReportsRoute
   DashSettingsRoute: typeof DashSettingsRoute
+  DashTerminalRoute: typeof DashTerminalRoute
   DashTransactionsRoute: typeof DashTransactionsRoute
   DashWaccRoute: typeof DashWaccRoute
   DashWatchlistRoute: typeof DashWatchlistRoute
@@ -336,7 +336,6 @@ interface DashRouteChildren {
 const DashRouteChildren: DashRouteChildren = {
   DashActivityRoute: DashActivityRoute,
   DashAnalyticsRoute: DashAnalyticsRoute,
-  DashChartRoute: DashChartRoute,
   DashDashboardRoute: DashDashboardRoute,
   DashIpoRoute: DashIpoRoute,
   DashMarketRoute: DashMarketRoute,
@@ -344,6 +343,7 @@ const DashRouteChildren: DashRouteChildren = {
   DashProfileRoute: DashProfileRoute,
   DashReportsRoute: DashReportsRoute,
   DashSettingsRoute: DashSettingsRoute,
+  DashTerminalRoute: DashTerminalRoute,
   DashTransactionsRoute: DashTransactionsRoute,
   DashWaccRoute: DashWaccRoute,
   DashWatchlistRoute: DashWatchlistRoute,
