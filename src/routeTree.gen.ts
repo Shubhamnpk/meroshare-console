@@ -21,6 +21,7 @@ import { Route as DashPortfolioRouteImport } from './routes/_dash.portfolio'
 import { Route as DashProfileRouteImport } from './routes/_dash.profile'
 import { Route as DashReportsRouteImport } from './routes/_dash.reports'
 import { Route as DashSettingsRouteImport } from './routes/_dash.settings'
+import { Route as DashTerminalRouteImport } from './routes/_dash.terminal'
 import { Route as DashTransactionsRouteImport } from './routes/_dash.transactions'
 import { Route as DashWaccRouteImport } from './routes/_dash.wacc'
 import { Route as DashWatchlistRouteImport } from './routes/_dash.watchlist'
@@ -84,6 +85,11 @@ const DashSettingsRoute = DashSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => DashRoute,
 } as any)
+const DashTerminalRoute = DashTerminalRouteImport.update({
+  id: '/terminal',
+  path: '/terminal',
+  getParentRoute: () => DashRoute,
+} as any)
 const DashTransactionsRoute = DashTransactionsRouteImport.update({
   id: '/transactions',
   path: '/transactions',
@@ -112,6 +118,7 @@ export interface FileRoutesByFullPath {
   '/profile': typeof DashProfileRoute
   '/reports': typeof DashReportsRoute
   '/settings': typeof DashSettingsRoute
+  '/terminal': typeof DashTerminalRoute
   '/transactions': typeof DashTransactionsRoute
   '/wacc': typeof DashWaccRoute
   '/watchlist': typeof DashWatchlistRoute
@@ -128,6 +135,7 @@ export interface FileRoutesByTo {
   '/profile': typeof DashProfileRoute
   '/reports': typeof DashReportsRoute
   '/settings': typeof DashSettingsRoute
+  '/terminal': typeof DashTerminalRoute
   '/transactions': typeof DashTransactionsRoute
   '/wacc': typeof DashWaccRoute
   '/watchlist': typeof DashWatchlistRoute
@@ -146,6 +154,7 @@ export interface FileRoutesById {
   '/_dash/profile': typeof DashProfileRoute
   '/_dash/reports': typeof DashReportsRoute
   '/_dash/settings': typeof DashSettingsRoute
+  '/_dash/terminal': typeof DashTerminalRoute
   '/_dash/transactions': typeof DashTransactionsRoute
   '/_dash/wacc': typeof DashWaccRoute
   '/_dash/watchlist': typeof DashWatchlistRoute
@@ -164,6 +173,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/reports'
     | '/settings'
+    | '/terminal'
     | '/transactions'
     | '/wacc'
     | '/watchlist'
@@ -180,6 +190,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/reports'
     | '/settings'
+    | '/terminal'
     | '/transactions'
     | '/wacc'
     | '/watchlist'
@@ -197,6 +208,7 @@ export interface FileRouteTypes {
     | '/_dash/profile'
     | '/_dash/reports'
     | '/_dash/settings'
+    | '/_dash/terminal'
     | '/_dash/transactions'
     | '/_dash/wacc'
     | '/_dash/watchlist'
@@ -293,6 +305,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashSettingsRouteImport
       parentRoute: typeof DashRoute
     }
+    '/_dash/terminal': {
+      id: '/_dash/terminal'
+      path: '/terminal'
+      fullPath: '/terminal'
+      preLoaderRoute: typeof DashTerminalRouteImport
+      parentRoute: typeof DashRoute
+    }
     '/_dash/transactions': {
       id: '/_dash/transactions'
       path: '/transactions'
@@ -328,6 +347,7 @@ interface DashRouteChildren {
   DashProfileRoute: typeof DashProfileRoute
   DashReportsRoute: typeof DashReportsRoute
   DashSettingsRoute: typeof DashSettingsRoute
+  DashTerminalRoute: typeof DashTerminalRoute
   DashTransactionsRoute: typeof DashTransactionsRoute
   DashWaccRoute: typeof DashWaccRoute
   DashWatchlistRoute: typeof DashWatchlistRoute
@@ -344,6 +364,7 @@ const DashRouteChildren: DashRouteChildren = {
   DashProfileRoute: DashProfileRoute,
   DashReportsRoute: DashReportsRoute,
   DashSettingsRoute: DashSettingsRoute,
+  DashTerminalRoute: DashTerminalRoute,
   DashTransactionsRoute: DashTransactionsRoute,
   DashWaccRoute: DashWaccRoute,
   DashWatchlistRoute: DashWatchlistRoute,
