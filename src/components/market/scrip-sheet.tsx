@@ -1,15 +1,38 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Building2, ExternalLink, FileText, Info, Maximize2, Star, StarOff } from "lucide-react";
-import {Sheet,SheetContent,SheetDescription,SheetHeader,SheetTitle,} from "@/components/ui/sheet";
-import {Accordion,AccordionContent,AccordionItem,AccordionTrigger,} from "@/components/ui/accordion";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {Table,TableBody,TableCell,TableHead,TableHeader,TableRow,} from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { DeltaPill } from "@/components/stat-card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AreaChart } from "@/components/market/area-chart";
-import {ChartModal,buildScripRanges,chartDayLabel,chartTimeLabel,} from "@/components/market/chart-modal";
+import {
+  ChartModal,
+  buildScripRanges,
+  chartDayLabel,
+  chartTimeLabel,
+} from "@/components/market/chart-modal";
 import {
   dividendsQuery,
   enrichedPortfolioQuery,
@@ -64,6 +87,30 @@ function Delta({
       {diff > 0 ? "▲" : diff < 0 ? "▼" : "◆"} {formatNpr(Math.abs(diff), { compact })}
       <span className="whitespace-nowrap">({formatPercent(pct)})</span>
     </span>
+  );
+}
+
+function MetricDelta({ current, previous }: { current: number | null; previous: number | null }) {
+  if (current == null || previous == null || previous === 0) return null;
+  const diff = current - previous;
+  const pct = (diff / Math.abs(previous)) * 100;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className={cn(
+            "ml-1 inline-flex cursor-help font-semibold",
+            diff > 0 ? "text-gain" : diff < 0 ? "text-loss" : "text-muted-foreground",
+          )}
+          aria-label={`${formatPercent(pct)} vs previous report`}
+        >
+          {diff > 0 ? "▲" : diff < 0 ? "▼" : "◆"}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="text-xs">
+        <span className="num">{formatPercent(pct)} vs previous report</span>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -220,19 +267,24 @@ function ReportGroups({ reports }: { reports: FinancialReport[] }) {
       </dl>
 
       <Accordion type="multiple" className="mt-4 w-full">
-        {groups.map(([fy, list]) => {
+        {groups.map(([fy, list], i) => {
           const latest = list[0];
-          const diff =
-            list.length > 1 && list[0]?.eps != null && list[1]?.eps != null
-              ? list[0].eps - list[1].eps
+          const prevEps = groups[i + 1]?.[1]?.[0]?.eps ?? null;
+          const diff = latest?.eps != null && prevEps != null ? latest.eps - prevEps : null;
+          const diffPct = diff != null && prevEps != null ? (diff / Math.abs(prevEps)) * 100 : null;
+          const prevProfit = groups[i + 1]?.[1]?.[0]?.profit ?? null;
+          const profitDiff =
+            latest?.profit != null && prevProfit != null ? latest.profit - prevProfit : null;
+          const profitDiffPct =
+            profitDiff != null && prevProfit != null
+              ? (profitDiff / Math.abs(prevProfit)) * 100
               : null;
-          const diffPct = diff != null ? (diff / Math.abs(list[1]!.eps!)) * 100 : null;
           return (
             <AccordionItem key={fy} value={fy} className="rounded-xl border-border/60">
               <AccordionTrigger className="rounded-xl px-3 py-2.5 text-xs hover:no-underline [&[data-state=open]]:rounded-b-none">
                 <span className="flex w-full items-center justify-between gap-3 pr-1">
                   <span className="font-display text-sm font-semibold">{fy}</span>
-                  <span className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <span className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
                     {latest?.eps != null ? (
                       <span className="num">
                         EPS {formatNpr(latest.eps)}
@@ -249,6 +301,22 @@ function ReportGroups({ reports }: { reports: FinancialReport[] }) {
                         ) : null}
                       </span>
                     ) : null}
+                    {latest?.profit != null ? (
+                      <span className="num">
+                        Profit {formatNpr(latest.profit, { compact: true })}
+                        {profitDiff != null ? (
+                          <span
+                            className={cn(
+                              "ml-1 font-semibold",
+                              profitDiff > 0 ? "text-gain" : profitDiff < 0 ? "text-loss" : "",
+                            )}
+                          >
+                            ({profitDiff > 0 ? "▲" : profitDiff < 0 ? "▼" : "◆"}
+                            {formatPercent(profitDiffPct ?? 0)})
+                          </span>
+                        ) : null}
+                      </span>
+                    ) : null}
                     <span className="rounded-full bg-surface px-2 py-0.5 font-medium">
                       {list.length} {list.length === 1 ? "report" : "reports"}
                     </span>
@@ -256,43 +324,63 @@ function ReportGroups({ reports }: { reports: FinancialReport[] }) {
                 </span>
               </AccordionTrigger>
               <AccordionContent className="text-xs">
-                <ul className="space-y-1.5 px-1 pb-2">
-                  {list.map((r, i) => (
-                    <li
-                      key={`${r.type}-${r.quarter ?? r.fy ?? i}`}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-surface px-3 py-2 text-xs"
-                    >
-                      <div className="min-w-0">
-                        <p className="font-semibold">
-                          {r.type}
-                          {r.quarter ? (
-                            <span className="num ml-1.5 font-normal text-muted-foreground">
-                              {r.quarter}
-                            </span>
-                          ) : null}
-                        </p>
-                        <p className="num text-muted-foreground">
-                          {r.eps != null ? `EPS ${formatNpr(r.eps)}` : "EPS —"}
-                          {" · "}
-                          {r.pe != null ? `P/E ${formatNpr(r.pe)}` : "P/E —"}
-                          {r.netWorthPerShare != null
-                            ? ` · NWPS ${formatNpr(r.netWorthPerShare)}`
-                            : ""}
-                        </p>
-                      </div>
-                      {r.documentUrl ? (
-                        <a
-                          href={r.documentUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="shrink-0 rounded-lg border border-border/70 px-2 py-1 font-medium text-primary transition-colors hover:bg-primary/10"
+                <TooltipProvider delayDuration={150}>
+                  <ul className="space-y-1.5 px-1 pb-2">
+                    {list.map((r, ri) => {
+                      const prev = list[ri + 1] ?? groups[i + 1]?.[1]?.[0] ?? null;
+                      return (
+                        <li
+                          key={`${r.type}-${r.quarter ?? r.fy ?? ri}`}
+                          className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-surface px-3 py-2 text-xs"
                         >
-                          Report
-                        </a>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
+                          <div className="min-w-0">
+                            <p className="font-semibold">
+                              {r.type}
+                              {r.quarter ? (
+                                <span className="num ml-1.5 font-normal text-muted-foreground">
+                                  {r.quarter}
+                                </span>
+                              ) : null}
+                            </p>
+                            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground">
+                              <span className="num">
+                                EPS {r.eps != null ? formatNpr(r.eps) : "—"}
+                                <MetricDelta current={r.eps} previous={prev?.eps ?? null} />
+                              </span>
+                              <span className="num">
+                                P/E {r.pe != null ? formatNpr(r.pe) : "—"}
+                                <MetricDelta current={r.pe} previous={prev?.pe ?? null} />
+                              </span>
+                              <span className="num">
+                                NWPS{" "}
+                                {r.netWorthPerShare != null ? formatNpr(r.netWorthPerShare) : "—"}
+                                <MetricDelta
+                                  current={r.netWorthPerShare}
+                                  previous={prev?.netWorthPerShare ?? null}
+                                />
+                              </span>
+                              <span className="num">
+                                Profit{" "}
+                                {r.profit != null ? formatNpr(r.profit, { compact: true }) : "—"}
+                                <MetricDelta current={r.profit} previous={prev?.profit ?? null} />
+                              </span>
+                            </div>
+                          </div>
+                          {r.documentUrl ? (
+                            <a
+                              href={r.documentUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="shrink-0 rounded-lg border border-border/70 px-2 py-1 font-medium text-primary transition-colors hover:bg-primary/10"
+                            >
+                              Report
+                            </a>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </TooltipProvider>
               </AccordionContent>
             </AccordionItem>
           );
