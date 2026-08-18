@@ -1,71 +1,56 @@
-# More value, no database
+# Phase 1: cost book, real P/L, installable app, quality-of-life
 
-Everything below runs either in the browser (stored on the user's own device) or off free public feeds we already talk to. Nothing new is stored on a server, so credentials and holdings stay session-only as before.
+Nothing new is stored on a server. The cost book and preferences live in the browser's own storage on the user's device, with export/import so nothing is trapped there. Credentials stay session-only exactly as today.
 
-## 1. Cost basis & real profit/loss (device-stored)
+## 1. Local store
 
-Today the portfolio shows market value and day change, but not what you actually paid. Add a local "cost book": for each holding you enter (or import from the WACC page, which already returns purchase price) your buy price and date. Then the portfolio gets:
+A single versioned store in browser local storage holding: cost book entries, per-scrip notes/tags, and small UI preferences. It has a schema version and migration path so future changes don't wipe anyone's data, plus one place to export everything as a JSON file and import it back on another device. A "your data lives only on this device" note and a clear-all button in Settings.
 
-- Unrealised gain/loss per scrip and total, in rupees and percent
-- Break-even price after broker commission, SEBON fee, DP charge and capital-gains tax (5% / 7.5% bands by holding period)
-- "If I sell today" calculator showing net proceeds in hand
-- XIRR / absolute return since first purchase
+## 2. Cost book
 
-Stored in browser local storage, exportable and importable as a JSON/CSV file so the user can move it between devices or keep a backup. Clearly labelled as living only on this device.
+For each holding the user records what they actually paid:
 
-## 2. Price and event alerts (in-app, while open)
+- Add a buy lot: units, price per unit, date, optional broker number
+- Multiple lots per scrip, so averaging works properly
+- Prefill from the WACC page where MeroShare already knows the purchase price, and from transaction history where a credit entry exists — the user confirms before it's saved
+- Edit and delete lots; a scrip with no lots simply shows "cost not set"
 
-A watchlist rule builder: alert when a scrip crosses a price, moves more than X% in a day, or hits a 52-week high/low. While the app is open, checks run against the live feed and fire a browser notification (with permission) plus a toast. Rules stored on device. Also alert on IPO events already in the feed: an issue opens, closes tomorrow, or an allotment result is out for something you applied for.
+## 3. Real profit and loss on the portfolio
 
-## 3. Tax and dividend workbook
+With cost known, the portfolio and dashboard gain:
 
-- Capital-gains estimator for the year, built from the local cost book plus MeroShare transaction history
-- Dividend tracker: the feed already carries cash/bonus announcements — cross-match with your holdings to show expected dividend income, bonus units and the resulting adjusted cost, with a book-close calendar
-- One-click export of a year's transactions and gains as CSV for a tax filing
+- Weighted average cost per scrip and total invested
+- Unrealised gain/loss per scrip and overall, in rupees and percent, alongside the existing day change
+- Sell calculator per holding: enter units and price, see broker commission (NEPSE slab), SEBON fee, DP charge, capital-gains tax (5% long / 7.5% short by holding period), and the net amount in hand
+- Break-even price — the price at which a sale nets zero after all charges
+- A total-return line on the portfolio: invested vs current value vs realised charges
 
-## 4. IPO command centre
+Holdings without a recorded cost are shown honestly as "cost not set" rather than assumed, and the totals say how much of the portfolio is covered.
 
-- Applied-vs-result tracker with per-issue allotment history and your hit rate over time
-- Reminder chips for issues closing within 24 hours
-- Locked-capital view: how much of your money is currently sitting in ASBA blocks
-- Bulk result check across every applied issue in one pass
+## 4. Installable app (no offline)
 
-## 5. Portfolio intelligence (computed, no storage)
+Manifest plus icons so the app installs to the home screen on Android and iOS and launches standalone with the brand colour and splash. No service worker and no offline caching in this phase — it still needs a connection, it just looks and launches like an app.
 
-- Concentration and risk panel: top-holding weight, sector weight, a warning when one scrip is over a threshold you set
-- Correlation / beta of your portfolio against NEPSE using the chart history we already fetch
-- Drawdown chart and best/worst day
-- "What if" rebalancer: adjust unit sliders and see the resulting sector mix and value before you actually trade
+## 5. Quality-of-life extras
 
-## 6. Screener over the free feed
-
-Filter all listed scrips by price, percent change, volume, turnover, P/E, EPS, market cap, sector, distance from 52-week high, and dividend yield. Save filter presets on the device. Rows link straight into the terminal chart.
-
-## 7. Offline and speed
-
-Cache the last successful market snapshot, portfolio and profile in the browser so the app opens instantly and still shows the last known figures (with an "as of" timestamp) when the network or the upstream feed is down. Add a PWA manifest so it installs to the home screen on mobile.
-
-## 8. Small quality-of-life
-
-- Calculators: broker commission, WACC merge, right-share/bonus adjusted cost, SIP-style averaging
-- NEPSE market-open countdown and trading-holiday awareness
-- Keyboard shortcuts and expanded command palette (jump to scrip, toggle theme, run a screen)
-- Per-scrip notes and tags stored on device
-- Share a read-only snapshot image of your portfolio performance (rendered client-side, nothing uploaded)
+- Calculators page: broker commission, WACC merge of two lots, right-share and bonus adjusted cost, sell-net-proceeds — all usable without any holdings
+- Market-open countdown in the header: open/closed/pre-open state and time to the next session
+- Per-scrip notes and tags, shown on the scrip sheet and portfolio row
+- Expanded command palette: jump to any scrip, open a calculator, switch theme, run a page
+- Copy-to-clipboard and CSV export on the portfolio and transactions tables
 
 ## Technical notes
 
-- New `src/lib/local/` layer: a typed local-storage store with versioned schema, migration and export/import, used by cost book, alerts, notes, screener presets and settings.
-- Alerts run in a single interval hook driven by the existing market snapshot query; Notification API with graceful fallback to toasts.
-- Tax, XIRR, beta, drawdown and fee math live in pure functions in `src/lib/calc/` with unit tests.
-- Screener and intelligence panels reuse the existing NEPSE server functions; no new upstream sources needed beyond what the terminal already merges.
-- PWA via a manifest plus a cache-first service worker for the shell, network-first for data.
+- `src/lib/local/store.ts`: typed, versioned local-storage store with a React context and hook; `costbook.ts`, `notes.ts` as typed slices over it; export/import as one JSON envelope.
+- `src/lib/calc/fees.ts`: pure functions for NEPSE broker commission slabs, SEBON 0.015%, DP Rs 25, CGT bands, break-even and net proceeds — with unit tests.
+- Portfolio P/L is derived client-side by joining the enriched-portfolio server data with the local cost book; no server function changes.
+- PWA: `public/manifest.webmanifest`, generated maskable icons, head tags in `src/routes/__root.tsx`. Manifest-only per the PWA guidance — no service worker, no registration code.
+- New routes: `/_dash.calculators.tsx`; cost-book editing lives in a dialog on the portfolio page rather than its own page.
 
-## Suggested build order
+## Build order
 
-1. Local store + cost book + real P/L on portfolio
-2. Screener
-3. Alerts and IPO command centre
-4. Tax/dividend workbook
-5. Portfolio intelligence
-6. PWA/offline and quality-of-life extras
+1. Local store + export/import + Settings data section
+2. Cost book entry, prefill from WACC/transactions
+3. Fee/tax math + portfolio P/L columns, sell calculator, break-even
+4. Manifest and icons
+5. Calculators page, market countdown, notes, palette and export extras
