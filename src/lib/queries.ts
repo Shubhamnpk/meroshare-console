@@ -21,6 +21,7 @@ import {
   getMyDetail,
 } from "./meroshare/account.functions";
 import {
+  getChartData,
   getIndexGraph,
   getIpoArchiveList,
   getMarketMovers,
@@ -33,7 +34,7 @@ import {
   getScripFaceValues,
   getScripFinancials,
 } from "./nepse/market.functions";
-import type { PortfolioGranularity } from "./nepse/types";
+import type { ChartRange, PortfolioGranularity } from "./nepse/types";
 import { isoDate } from "./format";
 
 export const marketSnapshotQuery = () =>
@@ -240,3 +241,11 @@ export function defaultActivityRange() {
   const start = new Date(end.getTime() - 29 * 86_400_000);
   return { startDate: isoDate(start), endDate: isoDate(end) };
 }
+
+export const chartSeriesQuery = (symbol: string, range: ChartRange) =>
+  queryOptions({
+    queryKey: ["chart-series", symbol, range],
+    queryFn: () => getChartData({ data: { symbol, range } }),
+    enabled: Boolean(symbol),
+    staleTime: range === "1D" ? 60_000 : 10 * 60_000,
+  });

@@ -42,7 +42,7 @@ const PRIMARY_NAV: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/portfolio", label: "Portfolio", icon: Briefcase },
   { to: "/market", label: "Market", icon: LineChart },
-  { to: "/chart", label: "Trading Chart", icon: CandlestickChart },
+  { to: "/terminal", label: "Trading Terminal", icon: CandlestickChart },
   { to: "/watchlist", label: "Watchlist", icon: Star },
   { to: "/transactions", label: "Transactions", icon: Activity },
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
@@ -64,7 +64,7 @@ const MOBILE_NAV: NavItem[] = [
   { to: "/dashboard", label: "Home", icon: LayoutDashboard },
   { to: "/portfolio", label: "Portfolio", icon: Briefcase },
   { to: "/market", label: "Market", icon: LineChart },
-  { to: "/chart", label: "Chart", icon: CandlestickChart },
+  { to: "/terminal", label: "Chart", icon: CandlestickChart },
   { to: "/ipo", label: "IPO", icon: Rocket },
   { to: "/reports", label: "Reports", icon: ClipboardList },
 ];
