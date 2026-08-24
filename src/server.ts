@@ -44,9 +44,80 @@ function isH3SwallowedErrorBody(body: string): boolean {
   }
 }
 
+/** Crawlable routes; everything under /dashboard etc. requires login but is
+ * still listed so search engines can see the app's structure. */
+const SITEMAP_ROUTES: { path: string; priority: string; changefreq: string }[] = [
+  { path: "/", priority: "1.0", changefreq: "daily" },
+  { path: "/dashboard", priority: "0.9", changefreq: "hourly" },
+  { path: "/market", priority: "0.9", changefreq: "hourly" },
+  { path: "/terminal", priority: "0.8", changefreq: "daily" },
+  { path: "/portfolio", priority: "0.7", changefreq: "daily" },
+  { path: "/watchlist", priority: "0.6", changefreq: "daily" },
+  { path: "/ipo", priority: "0.7", changefreq: "daily" },
+  { path: "/reports", priority: "0.6", changefreq: "weekly" },
+  { path: "/transactions", priority: "0.5", changefreq: "weekly" },
+  { path: "/analytics", priority: "0.6", changefreq: "weekly" },
+  { path: "/wacc", priority: "0.4", changefreq: "weekly" },
+  { path: "/profile", priority: "0.3", changefreq: "monthly" },
+  { path: "/activity", priority: "0.3", changefreq: "weekly" },
+  { path: "/settings", priority: "0.2", changefreq: "monthly" },
+];
+
+function escapeXml(value: string): string {
+  return value.replace(/[<>&'"]/g, (c) =>
+    c === "<"
+      ? "&lt;"
+      : c === ">"
+        ? "&gt;"
+        : c === "&"
+          ? "&amp;"
+          : c === "'"
+            ? "&apos;"
+            : "&quot;",
+  );
+}
+
+function sitemapXml(origin: string): string {
+  const lastmod = new Date().toISOString().slice(0, 10);
+  const entries = SITEMAP_ROUTES.map(
+    (r) =>
+      `  <url><loc>${escapeXml(origin + r.path)}</loc><lastmod>${lastmod}</lastmod>` +
+      `<changefreq>${r.changefreq}</changefreq><priority>${r.priority}</priority></url>`,
+  ).join("\n");
+  return `<?xml version="1.0" encoding="UTF-8"?>\n` +
+    `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${entries}\n</urlset>\n`;
+}
+
+function robotsTxt(origin: string): string {
+  return [
+    "User-agent: *",
+    "Allow: /",
+    "Disallow: /api/",
+    `Sitemap: ${origin}/sitemap.xml`,
+    "",
+  ].join("\n");
+}
+
+function staticFileResponse(request: Request): Response | null {
+  const { pathname, origin } = new URL(request.url);
+  if (pathname === "/sitemap.xml") {
+    return new Response(sitemapXml(origin), {
+      headers: { "content-type": "application/xml; charset=utf-8" },
+    });
+  }
+  if (pathname === "/robots.txt") {
+    return new Response(robotsTxt(origin), {
+      headers: { "content-type": "text/plain; charset=utf-8" },
+    });
+  }
+  return null;
+}
+
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      const staticResponse = staticFileResponse(request);
+      if (staticResponse) return staticResponse;
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);
