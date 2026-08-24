@@ -189,6 +189,31 @@ export interface WaccSearchResponse {
   message?: string;
 }
 
+/** One scrip returned by myPurchase/share as having a pending WACC calculation. */
+export interface WaccPendingScrip {
+  demat?: string;
+  scrip?: string;
+  [key: string]: JsonValue;
+}
+
+/** One calculated WACC row from the account-wide waccReport. */
+export interface WaccReportItem {
+  id?: number;
+  scrip?: string;
+  totalQuantity?: number;
+  averageBuyRate?: number;
+  totalCost?: number;
+  lastModifiedDate?: string;
+  [key: string]: JsonValue;
+}
+
+export interface WaccReport {
+  isWaccPending?: boolean;
+  viewWaccSummaryReport?: boolean;
+  message?: string;
+  waccReportResponse?: WaccReportItem[];
+}
+
 export interface Paged<T> {
   object: T[];
   totalCount: number;

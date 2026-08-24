@@ -7,6 +7,8 @@ import {
   fetchTransactions,
   fetchWaccCalculated,
   fetchWaccPending,
+  fetchWaccPendingScrips,
+  fetchWaccReport,
   requireAuth,
   submitWacc,
 } from "./api.server";
@@ -19,8 +21,18 @@ import type {
   PurchaseSourceItem,
   TransactionItem,
   JsonRecord,
+  WaccReport,
   WaccSearchResponse,
 } from "./types";
+
+/** CDSC appends/prepends "Ordinary Share" to company names; drop it for display. */
+function cleanDescription(raw: string): string {
+  return raw
+    .replace(/\(?\s*ordinary\s+shares?\s*(bonus\s+rights?\s+shares?)?\s*\)?/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/[\s\-–—,]+$/g, "")
+    .trim();
+}
 
 function toNum(value: unknown): number {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
@@ -65,7 +77,7 @@ export const getEnrichedPortfolio = createServerFn({ method: "GET" }).handler(
       const previousValue = previousClose * units;
       return {
         scrip,
-        description: String(item["scriptDesc"] ?? ""),
+        description: cleanDescription(String(item["scriptDesc"] ?? "")),
         units,
         ltp,
         previousClose,
@@ -78,7 +90,7 @@ export const getEnrichedPortfolio = createServerFn({ method: "GET" }).handler(
         low: live?.low ?? 0,
         volume: live?.volume ?? 0,
         sector: live?.sector ?? null,
-        name: live?.name ?? String(item["scriptDesc"] ?? scrip),
+        name: live?.name ?? cleanDescription(String(item["scriptDesc"] ?? scrip)),
         live: Boolean(live),
       };
     });
@@ -199,8 +211,22 @@ export const getWaccCalculated = createServerFn({ method: "POST" })
     fetchWaccCalculated(await requireAuth(), data.scrip),
   );
 
+export const getWaccScrips = createServerFn({ method: "POST" }).handler(async () => {
+  const rows = await fetchWaccPendingScrips(await requireAuth());
+  return rows
+    .map((r) => String(r.scrip ?? "").toUpperCase())
+    .filter((s): s is string => Boolean(s));
+});
+
+export const getWaccReport = createServerFn({ method: "POST" }).handler(async (): Promise<WaccReport> =>
+  fetchWaccReport(await requireAuth()),
+);
+
 export const calculateWacc = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) =>
-    z.object({ rows: z.array(z.record(z.unknown())).min(1) }).parse(input),
+    z.object({ scrip: z.string().trim().min(1).max(24), rows: z.array(z.record(z.unknown())).min(1) }).parse(input),
   )
-  .handler(async ({ data }) => submitWacc(await requireAuth(), data.rows as PurchaseSourceItem[]));
+  .handler(async ({ data }) => {
+    const auth = await requireAuth();
+    return submitWacc(auth, data.rows as PurchaseSourceItem[]);
+  });

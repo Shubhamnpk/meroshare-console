@@ -12,7 +12,7 @@ interface WatchlistValue {
 
 const WatchlistContext = createContext<WatchlistValue | null>(null);
 
-/** Watchlist lives on the device only — no account, no server storage. */
+/** Watchlist lives on the device only: no account, no server storage. */
 export function WatchlistProvider({ children }: { children: ReactNode }) {
   const [symbols, setSymbols] = useState<string[]>([]);
   const [ready, setReady] = useState(false);
@@ -35,7 +35,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
     } catch {
-      // storage unavailable (private mode) — keep the in-memory list
+      // storage unavailable (private mode); keep the in-memory list
     }
   }, []);
 

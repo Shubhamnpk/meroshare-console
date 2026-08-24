@@ -1,7 +1,9 @@
 // Server-only NEPSE market data feed.
 // Sources:
 //  - BITNEPAL: live NEPSE API mirror (prices, indices, movers, summary, status).
-//  - YONEPSE: static JSON mirror (proposed dividends, IPO archive).
+//  - YONEPSE: static JSON mirror (proposed dividends, IPO archive) that also
+//    mirrors the whole live-market surface; used as the automatic fallback
+//    whenever BITNEPAL fails or answers empty.
 // Everything is fetched server-side and cached in-memory so the browser never
 // hits a third party and each provider can be swapped without touching the UI.
 import type {
@@ -33,7 +35,7 @@ const BITNEPAL_BASE = "https://nepse.bitnepal.net/api/v1";
 const YONEPSE_BASE = "https://shubhamnpk.github.io/yonepse";
 
 export const FEED_ATTRIBUTION =
-  "Live NEPSE mirror (bitnepal.net) + community YONEPSE feed — indicative, unofficial data.";
+  "Live NEPSE mirror (bitnepal.net) + community YONEPSE feed (indicative, unofficial data).";
 
 interface CacheEntry {
   value: unknown;
@@ -96,6 +98,37 @@ async function bitnepalJson<T>(
   return { data: data?.data ?? null, stale };
 }
 
+function isMissing<T>(data: T | null): boolean {
+  return data == null || (Array.isArray(data) && data.length === 0);
+}
+
+/**
+ * Try the primary source; when it comes back empty or unreachable (no cache to
+ * serve), fall back to YONEPSE so the market pages keep working during a
+ * BITNEPAL outage. A stale cached primary value still wins over a fresher fallback
+ * data never overrides it.
+ */
+async function withFallback<T>(
+  primary: Promise<{ data: T | null; stale: boolean }>,
+  makeFallback: () => Promise<{ data: T | null; stale: boolean }>,
+): Promise<{ data: T | null; stale: boolean }> {
+  const result = await primary;
+  if (!isMissing(result.data)) return result;
+  const fallback = await makeFallback();
+  if (isMissing(fallback.data)) return result;
+  return fallback;
+}
+
+/** One movers list out of the YONEPSE combined top-stocks file (cached per URL). */
+async function yonepseTopStocks(key: string): Promise<{ data: Rec[] | null; stale: boolean }> {
+  const { data, stale } = await feedJson<Rec>(
+    `${YONEPSE_BASE}/data/market/top_stocks.json`,
+    TTL.fast,
+  );
+  const rows = Array.isArray(data?.[key]) ? (data![key] as unknown as Rec[]) : null;
+  return { data: rows ?? null, stale };
+}
+
 const TTL = {
   fast: 60_000,
   medium: 5 * 60_000,
@@ -119,35 +152,41 @@ async function getSectorMap(): Promise<Map<string, string>> {
   // an empty payload must not lock in an empty sector map for hours.
   if (data && map.size > 0) sectorLookup = { map, expires: now + TTL.daily };
   if (map.size > 0) return map;
-  // bitnepal's sector endpoint is unavailable — fall back to the static
+  // bitnepal's sector endpoint is unavailable, fall back to the static
   // YONEPSE sector codes so portfolio sector allocation keeps working.
   return getYonepseSectorMap();
 }
 
 export async function getLivePrices(): Promise<{ prices: LivePrice[]; stale: boolean }> {
   const [{ data, stale }, sectors] = await Promise.all([
-    bitnepalJson<Rec[]>("/prices/today", TTL.fast),
+    withFallback(bitnepalJson<Rec[]>("/prices/today", TTL.fast), () =>
+      feedJson<Rec[]>(`${YONEPSE_BASE}/data/market/live.json`, TTL.fast),
+    ),
     getSectorMap(),
   ]);
+  // Accept both shapes: bitnepal (lastUpdatedPrice/…) and YONEPSE (ltp/…).
   const prices = (data ?? []).flatMap((row): LivePrice[] => {
     const symbol = str(row["symbol"]);
     if (!symbol) return [];
-    const ltp = num(row["lastUpdatedPrice"]) || num(row["closePrice"]);
-    const previousClose = num(row["previousDayClosePrice"]);
+    const ltp = num(row["lastUpdatedPrice"]) || num(row["closePrice"]) || num(row["ltp"]);
+    const previousClose = num(row["previousDayClosePrice"]) || num(row["previous_close"]);
     return [
       {
         symbol: symbol.toUpperCase(),
-        name: str(row["securityName"]) ?? symbol,
+        name: str(row["securityName"]) ?? str(row["name"]) ?? symbol,
         ltp,
         previousClose,
-        change: ltp - previousClose,
-        percentChange: previousClose > 0 ? ((ltp - previousClose) / previousClose) * 100 : 0,
-        high: num(row["highPrice"]),
-        low: num(row["lowPrice"]),
-        volume: num(row["totalTradedQuantity"]),
-        turnover: num(row["totalTradedValue"]),
-        trades: num(row["totalTrades"]),
-        lastUpdated: str(row["lastUpdatedTime"]),
+        change: num(row["change"]) || ltp - previousClose,
+        percentChange:
+          num(row["percentChange"]) ||
+          num(row["percent_change"]) ||
+          (previousClose > 0 ? ((ltp - previousClose) / previousClose) * 100 : 0),
+        high: num(row["highPrice"]) || num(row["high"]),
+        low: num(row["lowPrice"]) || num(row["low"]),
+        volume: num(row["totalTradedQuantity"]) || num(row["volume"]),
+        turnover: num(row["totalTradedValue"]) || num(row["turnover"]),
+        trades: num(row["totalTrades"]) || num(row["trades"]),
+        lastUpdated: str(row["lastUpdatedTime"]) ?? str(row["last_updated"]),
         sector: sectors.get(symbol.toUpperCase()) ?? null,
         fiftyTwoWeekHigh: row["fiftyTwoWeekHigh"] == null ? null : num(row["fiftyTwoWeekHigh"]),
         fiftyTwoWeekLow: row["fiftyTwoWeekLow"] == null ? null : num(row["fiftyTwoWeekLow"]),
@@ -165,15 +204,19 @@ export async function getPriceMap(): Promise<{ map: Map<string, LivePrice>; stal
 }
 
 export async function getMarketStatus(): Promise<MarketStatus> {
-  const { data } = await bitnepalJson<Rec>("/market/status", TTL.fast);
+  const { data } = await withFallback(bitnepalJson<Rec>("/market/status", TTL.fast), () =>
+    feedJson<Rec>(`${YONEPSE_BASE}/data/market/status.json`, TTL.fast),
+  );
   return {
-    isOpen: data?.["isOpen"] === "OPEN",
-    lastChecked: str(data?.["asOf"]),
+    isOpen: data?.["isOpen"] === "OPEN" || data?.["is_open"] === true,
+    lastChecked: str(data?.["asOf"]) ?? str(data?.["last_checked"]),
   };
 }
 
 export async function getIndices(): Promise<MarketIndex[]> {
-  const { data } = await bitnepalJson<Rec[]>("/indices/nepse", TTL.fast);
+  const { data } = await withFallback(bitnepalJson<Rec[]>("/indices/nepse", TTL.fast), () =>
+    feedJson<Rec[]>(`${YONEPSE_BASE}/data/market/indices.json`, TTL.fast),
+  );
   return (data ?? []).map((row) => ({
     name: str(row["index"]) ?? "Index",
     close: num(row["close"]),
@@ -204,7 +247,9 @@ export async function getSectorIndices(): Promise<SectorIndex[]> {
 }
 
 export async function getMarketSummary(): Promise<MarketSummaryRow[]> {
-  const { data } = await bitnepalJson<Rec[]>("/market/summary", TTL.fast);
+  const { data } = await withFallback(bitnepalJson<Rec[]>("/market/summary", TTL.fast), () =>
+    feedJson<Rec[]>(`${YONEPSE_BASE}/data/market/summary.json`, TTL.fast),
+  );
   return (data ?? []).map((row) => ({
     detail: str(row["detail"]) ?? "",
     value: num(row["value"]),
@@ -228,11 +273,21 @@ function movers(rows: Rec[] | undefined, valueKey: string, label: string): Mover
 
 export async function getTopStocks(): Promise<TopStocks> {
   const [gainers, losers, turnover, volume, transactions] = await Promise.all([
-    bitnepalJson<Rec[]>("/prices/top/gainers", TTL.fast),
-    bitnepalJson<Rec[]>("/prices/top/losers", TTL.fast),
-    bitnepalJson<Rec[]>("/prices/top/turnover", TTL.fast),
-    bitnepalJson<Rec[]>("/prices/top/trade", TTL.fast),
-    bitnepalJson<Rec[]>("/prices/top/transaction", TTL.fast),
+    withFallback(bitnepalJson<Rec[]>("/prices/top/gainers", TTL.fast), () =>
+      yonepseTopStocks("top_gainer"),
+    ),
+    withFallback(bitnepalJson<Rec[]>("/prices/top/losers", TTL.fast), () =>
+      yonepseTopStocks("top_loser"),
+    ),
+    withFallback(bitnepalJson<Rec[]>("/prices/top/turnover", TTL.fast), () =>
+      yonepseTopStocks("top_turnover"),
+    ),
+    withFallback(bitnepalJson<Rec[]>("/prices/top/trade", TTL.fast), () =>
+      yonepseTopStocks("top_trade"),
+    ),
+    withFallback(bitnepalJson<Rec[]>("/prices/top/transaction", TTL.fast), () =>
+      yonepseTopStocks("top_transaction"),
+    ),
   ]);
   return {
     gainers: movers(gainers.data ?? [], "percentageChange", "%").slice(0, 15),
@@ -290,13 +345,13 @@ export async function getExchangeMessages(): Promise<ExchangeMessageRow[]> {
  * Portfolio valuation history from the YONEPSE LTP archive. Each scrip's units
  * come from your demat movement history (carry-forward from the last
  * credited/debited balance), so a stock you bought in 2021 only appears from
- * 2021 onward — no back-projection.
+ * 2021 onward, no back-projection.
  *
  * `granularity` picks the resolution:
- *  - `day` — one point per trading day from the daily archive, with monthly
+ *  - `day`: one point per trading day from the daily archive, with monthly
  *    month-end points filling in the older months that predate the daily feed.
- *  - `month` — one point per month-end close.
- *  - `year` — one point per year (the last month-end close of each year).
+ *  - `month`: one point per month-end close.
+ *  - `year`: one point per year (the last month-end close of each year).
  *
  * `months` bounds the trailing window; 0 means "everything up to 120 points".
  */
@@ -331,7 +386,7 @@ export async function getPortfolioHistory(
     );
     const daily = await scoreDays(unitsBySymbol, dayWindow);
     if (daily.length === 0) {
-      // No daily archive at all yet — fall back to month-end points.
+      // No daily archive at all yet, fall back to month-end points.
       const monthWindow = availableMonths.filter((m) => m >= startKey && m >= tailMonthKey);
       return scoreMonths(unitsBySymbol, monthWindow);
     }
@@ -459,7 +514,7 @@ function ipoRows(rows: Rec[] | undefined): IpoArchiveRow[] {
 
 /**
  * Face (par) value per scrip, derived from its sector. Cash dividends in Nepal
- * are paid as a percentage of face value — equities are Rs 100, mutual fund
+ * are paid as a percentage of face value; equities are Rs 100, mutual fund
  * units Rs 10. Sector comes from the YONEPSE static `sector_codes.json`.
  */
 let sectorCodeLookup: { map: Map<string, string>; expires: number } | null = null;
@@ -478,7 +533,7 @@ async function getYonepseSectorMap(): Promise<Map<string, string>> {
       if (symbol) map.set(symbol.toUpperCase(), sector);
     }
   }
-  // Never cache an empty map — a failed fetch should be retried next time.
+  // Never cache an empty map; a failed fetch should be retried next time.
   if (data && map.size > 0) sectorCodeLookup = { map, expires: now + TTL.daily };
   return map;
 }
@@ -760,7 +815,7 @@ const RANGE_BARS: Record<ChartRange, number> = {
 /**
  * Daily closes for one scrip out of the YONEPSE monthly archive (2012 →
  * today). The monthly files are date-major and cover every scrip, so only the
- * extracted per-symbol slice is cached — the 300 KB source document is parsed
+ * extracted per-symbol slice is cached; the 300 KB source document is parsed
  * and dropped, keeping the worker's memory flat.
  */
 async function archiveMonthBars(symbol: string, month: string): Promise<DailyBar[]> {
@@ -826,9 +881,9 @@ async function getArchiveBars(symbol: string, months: number): Promise<DailyBar[
  * Everything the trading terminal draws for one symbol.
  *
  * Two free sources are merged:
- *  - bitnepal's NEPSE mirror — reported high/low/close and volume for roughly
+ *  - bitnepal's NEPSE mirror: reported high/low/close and volume for roughly
  *    the last year, plus today's tick series;
- *  - the YONEPSE monthly archive — daily closes back to 2012 for the long
+ *  - the YONEPSE monthly archive: daily closes back to 2012 for the long
  *    ranges, where high/low are unavailable and the candle body is derived
  *    from the previous close (flagged as `synthetic`).
  */

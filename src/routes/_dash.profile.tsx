@@ -3,23 +3,19 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
-  BadgeCheck,
   Building2,
   CalendarClock,
   Check,
   Copy,
-  Download,
   Eye,
   EyeOff,
-  IdCard,
   Landmark,
   LogOut,
-  Mail,
   ShieldCheck,
-  TriangleAlert,
   UserRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ExportButton, type ExportFormat } from "@/components/export-dialog";
 import { ErrorBlock, LoadingBlock } from "@/components/states";
 import { accountProfileQuery } from "@/lib/queries";
 import { useSettings } from "@/lib/settings";
@@ -150,137 +146,6 @@ function Section({
   );
 }
 
-function parseDate(value?: string): Date | null {
-  if (!value) return null;
-  const direct = new Date(value);
-  if (!Number.isNaN(direct.getTime())) return direct;
-  const m = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-  return null;
-}
-
-function daysUntil(value?: string): number | null {
-  const date = parseDate(value);
-  if (!date) return null;
-  return Math.round((date.getTime() - Date.now()) / 86_400_000);
-}
-
-function HealthPanel({
-  data,
-  onPassword,
-  onPin,
-}: {
-  data: AccountProfile;
-  onPassword: () => void;
-  onPin: () => void;
-}) {
-  const own = data.own as JsonRecord;
-  const items: { tone: "warn" | "bad" | "ok"; text: string; action?: () => void; cta?: string }[] =
-    [];
-
-  const passwordDays = daysUntil(text(own["passwordExpiryDateStr"]));
-  if (passwordDays !== null && passwordDays <= 15) {
-    items.push({
-      tone: passwordDays <= 0 ? "bad" : "warn",
-      text:
-        passwordDays <= 0
-          ? "Your MeroShare password has expired."
-          : `Your password expires in ${passwordDays} day${passwordDays === 1 ? "" : "s"}.`,
-      action: onPassword,
-      cta: "Change password",
-    });
-  }
-
-  const dematDays = daysUntil(text(own["dematExpiryDate"]));
-  if (dematDays !== null && dematDays <= 45) {
-    items.push({
-      tone: dematDays <= 0 ? "bad" : "warn",
-      text:
-        dematDays <= 0
-          ? "Your demat account has expired — renew it with your DP."
-          : `Demat account expires in ${dematDays} days — renew it with your DP.`,
-    });
-  }
-
-  const accountDays = daysUntil(text(own["expiredDate"]));
-  if (accountDays !== null && accountDays <= 45) {
-    items.push({
-      tone: accountDays <= 0 ? "bad" : "warn",
-      text:
-        accountDays <= 0
-          ? "Your MeroShare account has expired — renew it to keep applying for issues."
-          : `MeroShare account expires in ${accountDays} days.`,
-    });
-  }
-
-  for (const bank of data.banks) {
-    if (!bank.crnNumber) {
-      items.push({
-        tone: "warn",
-        text: `${bank.name} has no CRN on file — IPO applications through this bank will fail.`,
-      });
-    }
-    const kyc = bank.kycStatus?.toLowerCase();
-    if (kyc && !/approved|yes|true|complete/.test(kyc)) {
-      items.push({ tone: "warn", text: `${bank.name} KYC is ${bank.kycStatus}.` });
-    }
-  }
-
-  if (data.banks.length === 0) {
-    items.push({
-      tone: "warn",
-      text: "No ASBA bank is linked to this account — link one to apply for IPOs.",
-    });
-  }
-
-  if (items.length === 0) {
-    items.push({ tone: "ok", text: "Everything looks good. No action needed right now." });
-  }
-
-  const toneClass = {
-    ok: "border-emerald-500/30 bg-emerald-500/5 text-emerald-600",
-    warn: "border-amber-500/30 bg-amber-500/5 text-amber-600",
-    bad: "border-destructive/30 bg-destructive/5 text-destructive",
-  } as const;
-
-  return (
-    <section className="rounded-2xl border border-border/70 bg-card p-4">
-      <header className="mb-3 flex items-center gap-2">
-        <BadgeCheck className="size-4 text-muted-foreground" />
-        <h2 className="text-sm font-semibold">Account health</h2>
-      </header>
-      <ul className="space-y-2">
-        {items.map((item, index) => (
-          <li
-            key={`${item.text}-${index}`}
-            className={`flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 text-xs ${toneClass[item.tone]}`}
-          >
-            {item.tone === "ok" ? (
-              <Check className="size-3.5 shrink-0" />
-            ) : (
-              <TriangleAlert className="size-3.5 shrink-0" />
-            )}
-            <span className="flex-1 text-foreground/90">{item.text}</span>
-            {item.action ? (
-              <Button size="sm" variant="outline" className="h-7" onClick={item.action}>
-                {item.cta}
-              </Button>
-            ) : null}
-          </li>
-        ))}
-      </ul>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <Button size="sm" variant="outline" onClick={onPassword}>
-          Change password
-        </Button>
-        <Button size="sm" variant="outline" onClick={onPin}>
-          Change transaction PIN
-        </Button>
-      </div>
-    </section>
-  );
-}
-
 function BankCard({ bank, reveal }: { bank: AccountBank; reveal: boolean }) {
   const items = rows([
     ["Account number", bank.accountNumber, { sensitive: true, copy: true }],
@@ -317,16 +182,6 @@ function BankCard({ bank, reveal }: { bank: AccountBank; reveal: boolean }) {
       )}
     </div>
   );
-}
-
-function download(filename: string, content: string, type: string) {
-  const blob = new Blob([content], { type });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  URL.revokeObjectURL(url);
 }
 
 function toCsv(sections: { title: string; items: Row[] }[]): string {
@@ -382,9 +237,6 @@ function ProfilePage() {
       ["PAN", first(src, ["panNumber", "pan"]), { sensitive: true, copy: true }],
       ["Passport number", first(src, ["passportNumber"]), { sensitive: true }],
       ["Identity type", first(src, ["identityType", "identityTypeName"])],
-    ]);
-
-    const contact = rows([
       ["MeroShare email", first(src, ["meroShareEmail"]), { copy: true }],
       ["Registered email", first(src, ["email"]), { copy: true }],
       ["Mobile", first(src, ["contact", "mobileNumber", "mobile", "phone"]), { copy: true }],
@@ -416,6 +268,8 @@ function ProfilePage() {
       ["DP contact", first(src, ["dpContact", "participantContact"])],
     ]);
 
+    const banks = rows(data.banks.map((bank) => [bank.name, bank.code || undefined]));
+
     const account = rows([
       ["Username", first(src, ["username"]) ?? data.session.username],
       ["Dashboard", own["renderDashboard"] ? "Enabled" : "Disabled"],
@@ -429,11 +283,9 @@ function ProfilePage() {
     ]);
 
     return [
-      { id: "identity", title: "Identity", icon: UserRound, items: identity },
-      { id: "documents", title: "Citizenship & documents", icon: IdCard, items: documents },
-      { id: "contact", title: "Contact & address", icon: Mail, items: contact },
-      { id: "demat", title: "Demat / BOID", icon: Landmark, items: demat },
-      { id: "dp", title: "Depository participant", icon: Building2, items: dp },
+      { id: "identity", title: "Identity", icon: UserRound, items: [...identity, ...documents] },
+      { id: "demat", title: "Demat / BOID", icon: Landmark, items: [...demat, ...dp] },
+      { id: "banks", title: "ASBA banks", icon: Building2, items: banks },
       { id: "account", title: "MeroShare account", icon: ShieldCheck, items: account },
     ].filter((section) => section.items.length > 0);
   }, [data]);
@@ -445,35 +297,63 @@ function ProfilePage() {
   const name = text(own["name"]) ?? data.session.username;
   const avatarUrl = text(own["imagePath"]) ?? null;
 
-  const exportJson = () => {
-    download(
-      `meroshare-account-${data.session.demat || "profile"}.json`,
-      JSON.stringify({ own: data.own, detail: data.detail, banks: data.banks }, null, 2),
-      "application/json",
-    );
-    toast.success("Account data exported");
-  };
-
-  const exportCsv = () => {
-    download(
-      `meroshare-account-${data.session.demat || "profile"}.csv`,
-      toCsv([
-        ...sections.map((s) => ({ title: s.title, items: s.items })),
-        ...data.banks.map((bank) => ({
-          title: `Bank — ${bank.name}`,
-          items: rows([
-            ["Account number", bank.accountNumber],
-            ["Branch", bank.branchName],
-            ["CRN", bank.crnNumber],
-            ["Account status", bank.accountStatus],
-            ["KYC", bank.kycStatus],
+  const exportFormats: ExportFormat[] = [
+    {
+      title: "CSV",
+      description: "Spreadsheet-friendly rows of every field and value",
+      filename: `meroshare-account-${data.session.demat || "profile"}`,
+      extension: "csv",
+      build: () =>
+        toCsv([
+          ...sections.map((s) => ({ title: s.title, items: s.items })),
+          ...data.banks.map((bank) => ({
+            title: `Bank: ${bank.name}`,
+            items: rows([
+              ["Account number", bank.accountNumber],
+              ["Branch", bank.branchName],
+              ["CRN", bank.crnNumber],
+              ["Account status", bank.accountStatus],
+              ["KYC", bank.kycStatus],
+            ]),
+          })),
+        ]),
+    },
+    {
+      title: "JSON",
+      description: "Raw API response: banks and all detail records",
+      filename: `meroshare-account-${data.session.demat || "profile"}`,
+      extension: "json",
+      build: () =>
+        JSON.stringify({ own: data.own, detail: data.detail, banks: data.banks }, null, 2),
+    },
+    {
+      title: "PDF",
+      description: "Formatted record for printing or sharing",
+      filename: `meroshare-account-${data.session.demat || "profile"}`,
+      extension: "pdf",
+      build: () => "",
+      pdf: () => ({
+        title: "Account profile summary",
+        head: ["Section", "Field", "Value"],
+        body: [
+          ...sections.flatMap((s) =>
+            s.items.map((row) => [
+              s.title,
+              row.label,
+              row.sensitive && !reveal ? mask(row.value) : row.value,
+            ]),
+          ),
+          ...data.banks.flatMap((bank) => [
+            ["Bank", "Name", bank.name],
+            ["Bank", "Account number", bank.accountNumber ?? ""],
+            ["Bank", "Branch", bank.branchName ?? ""],
+            ["Bank", "CRN", bank.crnNumber ?? ""],
+            ["Bank", "KYC", bank.kycStatus ?? ""],
           ]),
-        })),
-      ]),
-      "text/csv",
-    );
-    toast.success("Account data exported");
-  };
+        ],
+      }),
+    },
+  ];
 
   const signOut = async () => {
     await queryClient.cancelQueries();
@@ -496,12 +376,7 @@ function ProfilePage() {
             {reveal ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
             {reveal ? "Hide sensitive" : "Reveal sensitive"}
           </Button>
-          <Button size="sm" variant="outline" onClick={exportJson}>
-            <Download className="size-4" /> JSON
-          </Button>
-          <Button size="sm" variant="outline" onClick={exportCsv}>
-            <Download className="size-4" /> CSV
-          </Button>
+          <ExportButton formats={exportFormats} />
           <Button size="sm" variant="ghost" onClick={() => void signOut()}>
             <LogOut className="size-4" /> Sign out
           </Button>
@@ -528,8 +403,6 @@ function ProfilePage() {
         </div>
       </div>
 
-      <HealthPanel data={data} onPassword={openPassword} onPin={openPin} />
-
       <nav className="flex flex-wrap gap-2">
         {sections.map((section) => (
           <a
@@ -555,8 +428,8 @@ function ProfilePage() {
         ))}
       </div>
 
-      <div id="banks" className="scroll-mt-24 space-y-3">
-        <h2 className="text-sm font-semibold">Linked ASBA banks</h2>
+      <div className="space-y-3">
+        <h2 className="text-sm font-semibold">Bank account details</h2>
         {data.banks.length === 0 ? (
           <p className="rounded-2xl border border-border/70 bg-card px-4 py-6 text-sm text-muted-foreground">
             No bank is linked to this MeroShare account.

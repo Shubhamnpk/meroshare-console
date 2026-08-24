@@ -141,7 +141,7 @@ export function PinDialog() {
           <SecretField id="pin-new" label="New 4-digit PIN" value={newPin} onChange={(v) => setNewPin(v.replace(/\D/g, "").slice(0, 4))} placeholder="••••" />
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <ShieldCheck className="size-3.5" />
-            Use a number you won't forget — there is no recovery without your DP.
+            Use a number you won't forget. There is no recovery without your DP.
           </div>
           <Button type="submit" disabled={mutation.isPending || oldPin.length < 4 || newPin.length !== 4} className="w-full">
             {mutation.isPending ? <><Loader2 className="size-4 animate-spin" /> Updating…</> : "Update PIN"}

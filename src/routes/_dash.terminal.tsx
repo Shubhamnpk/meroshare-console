@@ -239,7 +239,7 @@ function TerminalPage() {
         <div>
           <h1 className="font-display text-2xl font-semibold sm:text-3xl">Trading Terminal</h1>
           <p className="mt-1 hidden text-sm text-muted-foreground sm:block">
-            Candles, indicators and your own net worth on one chart — built on free NEPSE data.
+            Candles, indicators and your own net worth on one chart. Built on free NEPSE data.
           </p>
         </div>
         <div className="flex items-center gap-1 rounded-full border border-border/60 bg-surface p-1">
@@ -272,7 +272,7 @@ function TerminalPage() {
                   setQuery("");
                 }
               }}
-              placeholder="Search any listed scrip — NABIL, SHIVM, NRIC…"
+              placeholder="Search any listed scrip, e.g. NABIL, SHIVM, NRIC…"
               className="h-10 rounded-xl pl-9"
             />
             {results.length > 0 && (
@@ -533,11 +533,11 @@ function TerminalPage() {
 
       <p className="text-xs text-muted-foreground">
         {mode === "portfolio"
-          ? "Net worth is your current unit counts valued at each historical close — it does not reflect past buys and sells."
+          ? "Net worth is your current unit counts valued at each historical close; it does not reflect past buys and sells."
           : series.data?.hasSynthetic
             ? "Long ranges use archived daily closes where high/low were never published, so those candle bodies are derived from the previous close."
             : "Daily OHLC from public NEPSE mirrors."}{" "}
-        Indicative data only — not for order placement.
+        Indicative data only, not for order placement.
       </p>
     </div>
   );

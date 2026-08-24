@@ -1,5 +1,5 @@
 /**
- * NEPSE transaction cost math — pure functions, no I/O.
+ * NEPSE transaction cost math: pure functions, no I/O.
  * Rates follow the SEBON/NEPSE circular in force for equity (ordinary share) trades.
  */
 

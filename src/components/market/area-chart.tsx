@@ -10,7 +10,7 @@ function clamp(v: number, min: number, max: number): number {
 /**
  * Interactive SVG area chart with hover inspection: a guide line and a dot
  * follow the pointer, and a tooltip shows the nearest point's label + value.
- * Pure SVG — no chart library.
+ * Pure SVG, no chart library.
  */
 export function AreaChart({
   points,
@@ -152,7 +152,7 @@ export function AreaChart({
         ) : null}
       </svg>
 
-      {/* Dots are HTML overlays, not SVG circles — the viewBox is aspect-ratio
+      {/* Dots are HTML overlays, not SVG circles: the viewBox is aspect-ratio
           stretched, so SVG circles render as ellipses. */}
       {h ? (
         <div

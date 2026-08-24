@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AreaSeries,
   CandlestickSeries,
@@ -93,8 +93,39 @@ export function TerminalChart({
   const containerRef = useRef<HTMLDivElement>(null);
   const hoverRef = useRef(onHover);
   hoverRef.current = onHover;
+  const apiRef = useRef<IChartApi | null>(null);
+
+  /** Drag-to-measure: armed by double-tap/double-click, active while dragging. */
+  const [measure, setMeasure] = useState<{ from: Time; to: Time } | null>(null);
+  const anchorRef = useRef<Time | null>(null);
+  const pointerDownRef = useRef(false);
+  const draggingRef = useRef(false);
 
   const isIntraday = bars.length === 0 && intraday.length > 0;
+
+  const barByDate = useMemo(
+    () => new Map(bars.map((b) => [b.date, b] as const)),
+    [bars],
+  );
+
+  const endMeasure = () => {
+    // A plain double-click (no drag yet) keeps the anchor armed; releasing after
+    // an actual drag closes the selection automatically.
+    if (draggingRef.current) {
+      draggingRef.current = false;
+      anchorRef.current = null;
+      setMeasure(null);
+      apiRef.current?.applyOptions({
+        handleScroll: {
+          mouseWheel: true,
+          pressedMouseMove: true,
+          horzTouchDrag: true,
+          vertTouchDrag: true,
+        },
+      });
+    }
+    pointerDownRef.current = false;
+  };
 
   useEffect(() => {
     const container = containerRef.current;
@@ -123,6 +154,7 @@ export function TerminalChart({
       crosshair: { mode: CrosshairMode.Normal },
       localization: { locale: "en-NP" },
     });
+    apiRef.current = chart;
 
     let mainSeries: ISeriesApi<"Candlestick" | "Line" | "Area"> | null = null;
 
@@ -287,8 +319,29 @@ export function TerminalChart({
       pane += 1;
     }
 
+    // Double-tap/double-click arms the drag-to-measure anchor and freezes panning
+    // so the drag selects a range instead of scrolling the chart.
+    const onDblClick = (param: MouseEventParams) => {
+      if (!param.time) return;
+      anchorRef.current = param.time;
+      setMeasure(null);
+      chart.applyOptions({
+        handleScroll: {
+          mouseWheel: true,
+          pressedMouseMove: false,
+          horzTouchDrag: false,
+          vertTouchDrag: false,
+        },
+      });
+    };
+    chart.subscribeDblClick(onDblClick);
+
     const byDate = new Map(bars.map((b) => [b.date, b]));
     const handler = (param: MouseEventParams) => {
+      if (anchorRef.current && pointerDownRef.current && param.time) {
+        draggingRef.current = true;
+        setMeasure({ from: anchorRef.current, to: param.time });
+      }
       const emit = hoverRef.current;
       if (!emit) return;
       if (!param.time || !param.point) {
@@ -330,9 +383,66 @@ export function TerminalChart({
 
     return () => {
       chart.unsubscribeCrosshairMove(handler);
+      chart.unsubscribeDblClick(onDblClick);
       chart.remove();
+      apiRef.current = null;
     };
   }, [bars, intraday, style, indicators, compare, compareLabel, logScale, light, height, isIntraday]);
 
-  return <div ref={containerRef} className="w-full" style={{ height }} />;
+  // Highlight band between the anchor and the current drag point.
+  let measureOverlay: ReactNode = null;
+  if (measure) {
+    const ts = apiRef.current?.timeScale();
+    const fromX = ts?.timeToCoordinate(measure.from) ?? null;
+    const toX = ts?.timeToCoordinate(measure.to) ?? null;
+    if (fromX != null && toX != null) {
+      const left = Math.min(fromX, toX);
+      const width = Math.max(Math.abs(toX - fromX), 2);
+      const fromBar = barByDate.get(String(measure.from));
+      const toBar = barByDate.get(String(measure.to));
+      const gain = fromBar && toBar ? toBar.close >= fromBar.close : true;
+      const pct =
+        fromBar && toBar && fromBar.close
+          ? ((toBar.close - fromBar.close) / fromBar.close) * 100
+          : 0;
+      measureOverlay = (
+        <>
+          <div
+            className={`pointer-events-none absolute inset-y-0 rounded-sm border ${
+              gain ? "border-gain/50 bg-gain/15" : "border-loss/50 bg-loss/15"
+            }`}
+            style={{ left, width }}
+          />
+          <div
+            className={`num pointer-events-none absolute top-1 -translate-x-1/2 whitespace-nowrap rounded-full px-2 py-0.5 text-[0.68rem] font-semibold ${
+              gain ? "bg-gain text-white" : "bg-loss text-white"
+            }`}
+            style={{ left: left + width / 2 }}
+          >
+            {pct >= 0 ? "+" : ""}
+            {pct.toFixed(2)}%
+          </div>
+        </>
+      );
+    }
+  }
+
+  return (
+    <div
+      className="relative w-full select-none"
+      style={{ height }}
+      onPointerDown={() => {
+        pointerDownRef.current = true;
+      }}
+      onPointerUp={endMeasure}
+      onPointerCancel={endMeasure}
+      onPointerLeave={(e) => {
+        if (e.buttons === 0) endMeasure();
+        else pointerDownRef.current = false;
+      }}
+    >
+      <div ref={containerRef} className="h-full w-full" />
+      {measureOverlay}
+    </div>
+  );
 }

@@ -161,7 +161,7 @@ export function vwap(bars: Bar[]): LinePoint[] {
   return out;
 }
 
-/** Percent change of every point relative to the first — for comparing two series. */
+/** Percent change of every point relative to the first, for comparing two series. */
 export function normalise(points: LinePoint[]): LinePoint[] {
   const base = points.find((p) => p.value > 0)?.value;
   if (!base) return [];

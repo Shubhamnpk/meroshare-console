@@ -243,7 +243,7 @@ function MarketPage() {
         <>
           {snapshot.data?.stale ? (
             <p className="rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
-              Showing the last cached market data — the feed is temporarily unreachable.
+              Showing the last cached market data; the feed is temporarily unreachable.
             </p>
           ) : null}
 

@@ -68,7 +68,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ theme, compactNumbers, autoRefresh, refreshMinutes }));
     } catch {
-      // storage unavailable (private mode) — settings still apply for this session
+      // storage unavailable (private mode); settings still apply for this session
     }
   }, [settings]);
 

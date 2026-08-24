@@ -16,6 +16,8 @@ import type {
   PurchaseSourceItem,
   TransactionItem,
   JsonRecord,
+  WaccPendingScrip,
+  WaccReport,
   WaccSearchResponse,
 } from "./types";
 export async function fetchCapitals(): Promise<Capital[]> {
@@ -323,6 +325,33 @@ export async function fetchWaccPending(
   });
 }
 
+/** Scrips whose WACC calculation is still pending (myPurchase/share). */
+export async function fetchWaccPendingScrips(auth: AuthContext): Promise<WaccPendingScrip[]> {
+  const res = await cdscRequest<WaccPendingScrip[] | JsonRecord>(CDSC_URLS.waccScrips, {
+    method: "POST",
+    token: auth.token,
+    body: { isFilterByAllScript: false },
+  });
+  if (Array.isArray(res)) return res;
+  const obj = res as JsonRecord;
+  return Array.isArray(obj["object"]) ? (obj["object"] as WaccPendingScrip[]) : [];
+}
+
+/** Account-wide calculated WACC summary (myPurchase/waccReport). */
+export async function fetchWaccReport(auth: AuthContext): Promise<WaccReport> {
+  const res = await cdscRequest<WaccReport>(CDSC_URLS.waccReport, {
+    method: "POST",
+    token: auth.token,
+    body: { demat: auth.demat },
+  });
+  return {
+    isWaccPending: res.isWaccPending === true,
+    viewWaccSummaryReport: res.viewWaccSummaryReport === true,
+    ...(res.message !== undefined ? { message: res.message } : {}),
+    waccReportResponse: Array.isArray(res.waccReportResponse) ? res.waccReportResponse : [],
+  };
+}
+
 export async function fetchWaccCalculated(auth: AuthContext, scrip: string): Promise<JsonRecord> {
   return cdscRequest<JsonRecord>(CDSC_URLS.waccCalculated, {
     method: "POST",
@@ -335,11 +364,17 @@ export async function submitWacc(
   auth: AuthContext,
   rows: PurchaseSourceItem[],
 ): Promise<JsonRecord> {
+  // The portal echoes the search rows back with isEdit=true plus any user-set
+  // price/remarks; rows without a set price keep their original rate.
+  const payload = rows.map((row) => ({
+    ...row,
+    isEdit: true,
+  }));
   return cdscRequest<JsonRecord>(CDSC_URLS.waccSubmit, {
     method: "POST",
     retry: false,
     token: auth.token,
-    body: rows,
+    body: payload,
   });
 }
 

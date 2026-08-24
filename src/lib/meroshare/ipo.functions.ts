@@ -84,7 +84,7 @@ export const getApplicationDetails = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }): Promise<(JsonRecord | null)[]> => {
     const auth = await requireAuth();
-    // CDSC rate-limits aggressively — fetch in small chunks with a pause so a
+    // CDSC rate-limits aggressively; fetch in small chunks with a pause so a
     // burst of detail calls can't 429 the whole batch (and stall every row).
     const results: (JsonRecord | null)[] = [];
     const chunkSize = 6;

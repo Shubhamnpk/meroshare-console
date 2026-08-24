@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -7,14 +7,21 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { AreaChart } from "@/components/market/area-chart";
+import {
+  DEFAULT_INDICATORS,
+  TerminalChart,
+  type HoverInfo,
+  type IndicatorConfig,
+} from "@/components/market/terminal-chart";
 import { DeltaPill } from "@/components/stat-card";
 import { formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { PricePoint } from "@/lib/nepse/types";
+import { useSettings } from "@/lib/settings";
+import type { ChartBar, DailyBar, PricePoint } from "@/lib/nepse/types";
 
 const TZ = "Asia/Kathmandu";
 
-/** "14:32" in NPT — for intraday series. */
+/** "14:32" in NPT, for intraday series. */
 export function chartTimeLabel(time: number): string {
   return new Date(time * 1000).toLocaleTimeString("en-GB", {
     hour: "2-digit",
@@ -23,7 +30,7 @@ export function chartTimeLabel(time: number): string {
   });
 }
 
-/** "12 Aug" in NPT — for daily series. */
+/** "12 Aug" in NPT, for daily series. */
 export function chartDayLabel(time: number): string {
   return new Date(time * 1000).toLocaleDateString("en-GB", {
     day: "2-digit",
@@ -51,12 +58,102 @@ export function buildScripRanges(
   });
 }
 
+/** Close-only daily rows → OHLCV candles (open ≈ previous close). */
+function toChartBars(bars: DailyBar[]): ChartBar[] {
+  let prev = bars[0]?.close ?? 0;
+  return bars.map((b) => {
+    const bar: ChartBar = {
+      date: b.date,
+      open: prev,
+      high: b.high,
+      low: b.low,
+      close: b.close,
+      volume: b.volume,
+      synthetic: false,
+    };
+    prev = b.close;
+    return bar;
+  });
+}
+
+const INDICATOR_TOGGLES: { key: keyof IndicatorConfig; label: string }[] = [
+  { key: "volume", label: "Vol" },
+  { key: "sma20", label: "SMA 20" },
+  { key: "sma50", label: "SMA 50" },
+  { key: "ema20", label: "EMA 20" },
+  { key: "bollinger", label: "BB" },
+  { key: "vwap", label: "VWAP" },
+  { key: "rsi", label: "RSI" },
+  { key: "macd", label: "MACD" },
+];
+
+function useResolvedLight(): boolean {
+  const { theme } = useSettings();
+  const [light, setLight] = useState(false);
+  useEffect(() => {
+    const resolve = () =>
+      setLight(
+        theme === "light" ||
+          (theme === "system" && window.matchMedia("(prefers-color-scheme: light)").matches),
+      );
+    resolve();
+    const mq = window.matchMedia("(prefers-color-scheme: light)");
+    mq.addEventListener("change", resolve);
+    return () => mq.removeEventListener("change", resolve);
+  }, [theme]);
+  return light;
+}
+
+function HoverLegend({ info, origin }: { info: HoverInfo | null; origin: number }) {
+  if (!info) return null;
+  const up = info.close >= info.open;
+  const fromOrigin = origin ? ((info.close - origin) / origin) * 100 : 0;
+  const cells: { label: string; value: string }[] = [
+    { label: "O", value: info.open.toFixed(2) },
+    { label: "H", value: info.high.toFixed(2) },
+    { label: "L", value: info.low.toFixed(2) },
+    { label: "C", value: info.close.toFixed(2) },
+    { label: "Δ", value: `${info.changePercent >= 0 ? "+" : ""}${info.changePercent.toFixed(2)}%` },
+  ];
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+      <span className={cn("num font-semibold", up ? "text-gain" : "text-loss")}>
+        {info.date.slice(0, 10)}
+      </span>
+      {cells.map((c) => (
+        <span key={c.label} className="num flex items-center gap-1 text-muted-foreground">
+          <span className="text-[0.65rem] uppercase">{c.label}</span>
+          <span className={cn("font-medium", c.label === "Δ" && (up ? "text-gain" : "text-loss"))}>
+            {c.value}
+          </span>
+        </span>
+      ))}
+      <span
+        className={cn(
+          "num rounded-full px-2 py-0.5 text-[0.68rem] font-semibold",
+          fromOrigin >= 0 ? "bg-gain/15 text-gain" : "bg-loss/15 text-loss",
+        )}
+      >
+        {fromOrigin >= 0 ? "+" : ""}
+        {fromOrigin.toFixed(2)}% from start
+      </span>
+      {info.volume > 0 ? (
+        <span className="num flex items-center gap-1 text-muted-foreground">
+          <span className="text-[0.65rem] uppercase">Vol</span>
+          <span className="font-medium">{info.volume.toLocaleString()}</span>
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 export function ChartModal({
   open,
   onOpenChange,
   title,
   subtitle,
   ranges,
+  bars,
   formatValue,
   formatIntradayLabel,
   formatDailyLabel,
@@ -66,12 +163,31 @@ export function ChartModal({
   title: string;
   subtitle: string;
   ranges: { key: string; label: string; points: PricePoint[] }[];
+  /** Daily OHLC rows enabling candlestick mode for non-intraday ranges. */
+  bars?: DailyBar[] | undefined;
   formatValue: (v: number) => string;
   formatIntradayLabel: (time: number) => string;
   formatDailyLabel: (time: number) => string;
 }) {
   const [activeKey, setActiveKey] = useState<string | null>(null);
+  const [indicators, setIndicators] = useState<IndicatorConfig>({
+    ...DEFAULT_INDICATORS,
+    sma20: true,
+    volume: true,
+  });
+  const [hover, setHover] = useState<HoverInfo | null>(null);
+  const light = useResolvedLight();
+
   const active = ranges.find((r) => r.key === activeKey) ?? ranges[0];
+  const rangeDays = SCRIP_RANGES.find((r) => r.key === active?.key)?.days ?? null;
+
+  // Candle mode: daily OHLC available and the range is not the intraday session.
+  const candleBars = useMemo(() => {
+    if (!bars?.length || rangeDays === null || !active) return null;
+    const times = new Set(active.points.map((p) => p.time));
+    const sliced = bars.filter((b) => times.has(new Date(b.date).getTime() / 1000));
+    return sliced.length >= 2 ? toChartBars(sliced) : null;
+  }, [bars, rangeDays, active]);
 
   const stats = useMemo(() => {
     if (!active || active.points.length < 2) return null;
@@ -93,7 +209,7 @@ export function ChartModal({
 
         <div className="space-y-4">
           {ranges.length > 1 ? (
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               {ranges.map((range) => (
                 <button
                   key={range.key}
@@ -109,6 +225,27 @@ export function ChartModal({
                   {range.label}
                 </button>
               ))}
+              {candleBars ? (
+                <span className="ml-auto hidden items-center gap-1 sm:flex">
+                  {INDICATOR_TOGGLES.map((t) => (
+                    <button
+                      key={t.key}
+                      type="button"
+                      onClick={() =>
+                        setIndicators((prev) => ({ ...prev, [t.key]: !prev[t.key] }))
+                      }
+                      className={cn(
+                        "rounded-full border px-2 py-0.5 text-[0.68rem] font-medium transition-colors",
+                        indicators[t.key]
+                          ? "border-primary/50 bg-primary/15 text-primary"
+                          : "border-border/60 bg-surface text-muted-foreground hover:border-primary/30",
+                      )}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </span>
+              ) : null}
             </div>
           ) : null}
 
@@ -143,7 +280,21 @@ export function ChartModal({
             </div>
           ) : null}
 
-          {active && active.points.length >= 2 ? (
+          {candleBars ? (
+            <div className="space-y-2">
+              <HoverLegend info={hover} origin={stats?.start ?? 0} />
+              <TerminalChart
+                bars={candleBars}
+                intraday={[]}
+                style="candles"
+                indicators={indicators}
+                logScale={false}
+                light={light}
+                height={340}
+                onHover={setHover}
+              />
+            </div>
+          ) : active && active.points.length >= 2 ? (
             <AreaChart
               points={active.points}
               height={300}
@@ -151,6 +302,20 @@ export function ChartModal({
               formatLabel={(t) =>
                 active.key === "1D" ? formatIntradayLabel(t) : formatDailyLabel(t)
               }
+              tooltipExtra={(p) => {
+                const pct = stats && stats.start ? ((p.value - stats.start) / stats.start) * 100 : 0;
+                return (
+                  <p
+                    className={cn(
+                      "num text-right text-[0.65rem] font-semibold",
+                      pct >= 0 ? "text-gain" : "text-loss",
+                    )}
+                  >
+                    {pct >= 0 ? "+" : ""}
+                    {pct.toFixed(2)}% from start
+                  </p>
+                );
+              }}
             />
           ) : (
             <p className="rounded-xl border border-border/60 bg-surface px-3 py-6 text-center text-sm text-muted-foreground">
@@ -160,7 +325,7 @@ export function ChartModal({
 
           <p className="text-[0.68rem] leading-relaxed text-muted-foreground">
             Values are indicative figures from the public NEPSE mirror. Hover anywhere on the chart
-            to inspect individual points.
+            to inspect individual points; the crosshair shows the exact price on the vertical axis.
           </p>
         </div>
       </DialogContent>

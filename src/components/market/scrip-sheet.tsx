@@ -41,11 +41,68 @@ import {
   scripDetailQuery,
   scripFinancialsQuery,
   transactionsQuery,
+  waccReportQuery,
 } from "@/lib/queries";
-import { formatDate, formatNpr, formatPercent, formatQty } from "@/lib/format";
+import { formatDate, formatNpr, formatPercent, formatQty, toNumber } from "@/lib/format";
 import { useWatchlist } from "@/lib/watchlist";
 import { cn } from "@/lib/utils";
 import type { FinancialReport, PricePoint } from "@/lib/nepse/types";
+
+/** Unrealized P/L against the CDSC-calculated WACC cost basis. */
+function PositionCard({
+  units,
+  waccRate,
+  totalCost,
+  ltp,
+}: {
+  units: number;
+  waccRate: number;
+  totalCost: number;
+  ltp: number;
+}) {
+  const currentValue = units * ltp;
+  const pl = currentValue - (totalCost || units * waccRate);
+  const plPct = pl && totalCost ? (pl / totalCost) * 100 : 0;
+  const up = pl >= 0;
+  return (
+    <div className="rounded-2xl border border-border/70 bg-card p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="font-display text-sm font-semibold">Your position</h3>
+        <span className="rounded-full bg-muted px-2 py-0.5 text-[0.68rem] font-medium text-muted-foreground">
+          vs CDSC WACC
+        </span>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
+        <div>
+          <p className="text-[0.65rem] uppercase tracking-wide text-muted-foreground">Units</p>
+          <p className="num text-sm font-medium">{formatQty(units)}</p>
+        </div>
+        <div>
+          <p className="text-[0.65rem] uppercase tracking-wide text-muted-foreground">WACC</p>
+          <p className="num text-sm font-medium">{formatNpr(waccRate)}</p>
+        </div>
+        <div>
+          <p className="text-[0.65rem] uppercase tracking-wide text-muted-foreground">Cost</p>
+          <p className="num text-sm font-medium">{formatNpr(totalCost)}</p>
+        </div>
+        <div>
+          <p className="text-[0.65rem] uppercase tracking-wide text-muted-foreground">Value</p>
+          <p className="num text-sm font-medium">{formatNpr(currentValue)}</p>
+        </div>
+      </div>
+      <div className="mt-3 flex items-baseline justify-between gap-2 border-t border-border/60 pt-3">
+        <span className="text-xs text-muted-foreground">
+          Unrealized P/L, in cash if sold at LTP
+        </span>
+        <span className={cn("num text-right font-semibold", up ? "text-gain" : "text-loss")}>
+          {up ? "+" : ""}
+          {formatNpr(pl)}{" "}
+          <span className="text-xs">({formatPercent(plPct / 100)})</span>
+        </span>
+      </div>
+    </div>
+  );
+}
 
 function TermInfo({ text }: { text: string }) {
   return (
@@ -420,9 +477,12 @@ export function ScripSheet({
     ...transactionsQuery(upper),
     enabled: Boolean(symbol) && Boolean(holding),
   });
+  const waccReport = useQuery(waccReportQuery());
 
   const overview = detail.data?.overview ?? null;
   const dividend = detail.data?.dividend ?? null;
+  const waccEntry =
+    (waccReport.data?.waccReportResponse ?? []).find((h) => h.scrip === upper) ?? null;
 
   const yearlyDividends = useMemo(
     () =>
@@ -582,6 +642,14 @@ export function ScripSheet({
             </TabsList>
 
             <TabsContent value="overview" className="space-y-4">
+              {waccEntry && toNumber(waccEntry.averageBuyRate) > 0 && price?.ltp ? (
+                <PositionCard
+                  units={toNumber(waccEntry.totalQuantity)}
+                  waccRate={toNumber(waccEntry.averageBuyRate)}
+                  totalCost={toNumber(waccEntry.totalCost)}
+                  ltp={price.ltp}
+                />
+              ) : null}
               <div className="rounded-2xl border border-border/70 bg-card p-4">
                 <div className="flex items-center justify-between gap-3">
                   <h3 className="font-display text-sm font-semibold">Price history</h3>
@@ -975,10 +1043,11 @@ export function ScripSheet({
           activeRange
             ? activeRange.key === "1D"
               ? "Today's intraday session"
-              : `Daily closing prices, last ${activeRange.label}`
+              : `Daily candles, last ${activeRange.label}`
             : "Price history"
         }
         ranges={ranges}
+        bars={detail.data?.history}
         formatValue={(v) => formatNpr(v)}
         formatIntradayLabel={chartTimeLabel}
         formatDailyLabel={chartDayLabel}

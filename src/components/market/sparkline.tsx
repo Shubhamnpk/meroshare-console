@@ -7,7 +7,7 @@ interface Point {
 }
 
 /**
- * Lightweight SVG area/line chart. No chart library — just a path built from
+ * Lightweight SVG area/line chart. No chart library, just a path built from
  * values with a gradient fill, colored by whether the series rose or fell.
  */
 export function Sparkline({

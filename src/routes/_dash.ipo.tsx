@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ErrorBlock, LoadingBlock, EmptyBlock } from "@/components/states";
+import { EmptyBlock, ErrorBlock, SkeletonCards, SkeletonLines } from "@/components/states";
 import {
   applicableIssuesQuery,
   banksQuery,
@@ -102,7 +102,7 @@ function CalendarView() {
   return (
     <div className="space-y-5">
       {issues.isLoading ? (
-        <LoadingBlock label="Loading issue calendar" />
+        <SkeletonCards count={4} />
       ) : issues.isError ? (
         <ErrorBlock error={issues.error} retry={() => void issues.refetch()} />
       ) : list.length === 0 ? (
@@ -217,7 +217,7 @@ function ArchiveView() {
   return (
     <div className="space-y-5">
       {archive.isLoading ? (
-        <LoadingBlock label="Loading IPO archive" />
+        <SkeletonCards count={4} />
       ) : archive.isError ? (
         <ErrorBlock error={archive.error} retry={() => void archive.refetch()} />
       ) : (
@@ -359,7 +359,7 @@ function IpoPage() {
 
         <TabsContent value="apply" className="mt-4">
           {issues.isLoading ? (
-            <LoadingBlock label="Loading open issues" />
+            <SkeletonCards count={4} />
           ) : issues.isError ? (
             <ErrorBlock error={issues.error} retry={() => void issues.refetch()} />
           ) : list.length === 0 ? (
@@ -450,7 +450,9 @@ function IpoPage() {
                   ))}
                 </SelectContent>
               </Select>
-              {bankDetail.data ? (
+              {bankDetail.isLoading ? (
+                <SkeletonLines rows={2} className="pt-1" />
+              ) : bankDetail.data ? (
                 <p className="num text-xs text-muted-foreground">
                   A/C {String(bankDetail.data.accountNumber ?? "")} · CRN{" "}
                   {String(bankDetail.data.crnNumber ?? "")}

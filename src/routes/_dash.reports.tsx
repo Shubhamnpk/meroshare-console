@@ -8,13 +8,13 @@ import {
   ArrowUpDown,
   CheckCircle2,
   Clock,
-  FileDown,
   Lock,
   Search,
   XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ExportButton, csvRow } from "@/components/export-dialog";
 import {
   Select,
   SelectContent,
@@ -34,7 +34,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { formatDateTime, formatQty, isoDate, toNumber } from "@/lib/format";
+import { formatDateTime, formatQty, toNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { ApplicationReportItem, JsonRecord, JsonValue } from "@/lib/meroshare/types";
 
@@ -342,10 +342,10 @@ function SortBar({
         aria-label="Cycle sort direction"
         title={
           cycle === "asc"
-            ? "Ascending — tap to sort descending"
+            ? "Ascending: tap to sort descending"
             : cycle === "desc"
-              ? "Descending — tap to reset to default order"
-              : "Default order — tap to sort ascending"
+              ? "Descending: tap to reset to default order"
+              : "Default order: tap to sort ascending"
         }
       >
         {cycle === "asc" ? (
@@ -360,12 +360,11 @@ function SortBar({
   );
 }
 
-function exportCsv(items: ApplicationReportItem[], details: (JsonRecord | null)[]) {
-  const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
+function reportCsv(items: ApplicationReportItem[], details: (JsonRecord | null)[]) {
   const rows = items.map((item, idx) => {
     const d = details[idx] ?? null;
-    return [
-      String(idx + 1),
+    return csvRow([
+      idx + 1,
       String(item.companyName ?? ""),
       String(item.scrip ?? ""),
       d ? String(toNumber(d["appliedKitta"])) : "",
@@ -374,23 +373,22 @@ function exportCsv(items: ApplicationReportItem[], details: (JsonRecord | null)[
       d ? String(d["statusName"] ?? "") : String(item.statusName ?? ""),
       d ? String(d["stageName"] ?? "") : "",
       d ? String(d["meroshareRemark"] ?? "") : "",
-    ]
-      .map(esc)
-      .join(",");
+    ]);
   });
-  const csv = [
-    ["SN", "Company", "Scrip", "Applied", "Allotted", "Amount", "Status", "Stage", "Remark"]
-      .map(esc)
-      .join(","),
+  return [
+    csvRow([
+      "SN",
+      "Company",
+      "Scrip",
+      "Applied",
+      "Allotted",
+      "Amount",
+      "Status",
+      "Stage",
+      "Remark",
+    ]),
     ...rows,
   ].join("\n");
-  const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `application-report-${isoDate(new Date())}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
 }
 
 function ReportList({
@@ -533,14 +531,56 @@ function ReportsPage() {
         </div>
         <div className="flex items-center gap-2">
           <SortBar sortKey={sortKey} cycle={sortCycle} onKey={setSortKey} onCycle={cycleSort} />
-          <Button
-            variant="outline"
-            size="sm"
+          <ExportButton
             disabled={currentItems.length === 0}
-            onClick={() => exportCsv(currentItems, currentDetails.data ?? [])}
-          >
-            <FileDown /> Export
-          </Button>
+            formats={[
+              {
+                title: "CSV",
+                description: "Applied, allotted, amount and status per application",
+                filename: "application-report",
+                extension: "csv",
+                build: () => reportCsv(currentItems, currentDetails.data ?? []),
+              },
+              {
+                title: "JSON",
+                description: "Raw application and detail records",
+                filename: "application-report",
+                extension: "json",
+                build: () =>
+                  JSON.stringify(
+                    (currentItems ?? []).map((item, idx) => ({
+                      application: item,
+                      detail: currentDetails.data?.[idx] ?? null,
+                    })),
+                    null,
+                    2,
+                  ),
+              },
+              {
+                title: "PDF",
+                description: "Formatted report for printing or sharing",
+                filename: "application-report",
+                extension: "pdf",
+                build: () => "",
+                pdf: () => ({
+                  title: "IPO application history",
+                  head: ["SN", "Company", "Scrip", "Applied", "Allotted", "Amount", "Status"],
+                  body: currentItems.map((item, idx) => {
+                    const d = currentDetails.data?.[idx] ?? null;
+                    return [
+                      idx + 1,
+                      String(item.companyName ?? ""),
+                      String(item.scrip ?? ""),
+                      d ? toNumber(d["appliedKitta"]) : "",
+                      d ? toNumber(d["receivedKitta"]) : "",
+                      d ? toNumber(d["amount"]) : "",
+                      d ? String(d["statusName"] ?? "") : String(item.statusName ?? ""),
+                    ];
+                  }),
+                }),
+              },
+            ]}
+          />
         </div>
       </div>
       <Tabs defaultValue="current" onValueChange={() => setSearch("")}>

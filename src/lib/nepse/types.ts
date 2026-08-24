@@ -191,10 +191,10 @@ export interface ExchangeMessageRow {
 
 /**
  * Resolution of one portfolio history point.
- * - `day` — a point per trading day (best-available: months without daily
+ * - `day`: a point per trading day (best-available: months without daily
  *   coverage contribute one month-end point each).
- * - `month` — a point per month-end close.
- * - `year` — a point per year (year-end close).
+ * - `month`: a point per month-end close.
+ * - `year`: a point per year (year-end close).
  */
 export type PortfolioGranularity = "day" | "month" | "year";
 

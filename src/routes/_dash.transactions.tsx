@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { ErrorBlock, LoadingBlock, EmptyBlock } from "@/components/states";
 import { useMemo, useState } from "react";
-import { ArrowDownRight, ArrowUpRight, FileDown, Search } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Search } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -11,7 +11,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -20,8 +19,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ExportButton, csvRow } from "@/components/export-dialog";
 import { holdingSymbolsQuery, transactionsQuery } from "@/lib/queries";
-import { formatDate, formatQty, isoDate, toNumber } from "@/lib/format";
+import { formatDate, formatQty, toNumber } from "@/lib/format";
 import type { TransactionItem } from "@/lib/meroshare/types";
 
 export const Route = createFileRoute("/_dash/transactions")({
@@ -42,32 +42,22 @@ export const Route = createFileRoute("/_dash/transactions")({
   component: TransactionsPage,
 });
 
-function exportCsv(items: TransactionItem[], symbol: string | null) {
-  const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
+function transactionsCsv(items: TransactionItem[]) {
   const rows = items.map((t, i) =>
-    [
-      String(i + 1),
+    csvRow([
+      i + 1,
       formatDate(t.transactionDate),
       t.script ?? "",
       t.historyDescription ?? "",
       toNumber(t.creditQuantity) > 0 ? String(toNumber(t.creditQuantity)) : "",
       toNumber(t.debitQuantity) > 0 ? String(toNumber(t.debitQuantity)) : "",
       String(toNumber(t.balanceAfterTransaction)),
-    ]
-      .map(esc)
-      .join(","),
+    ]),
   );
-  const csv = [
-    ["SN", "Date", "Script", "Description", "Credit", "Debit", "Balance"].map(esc).join(","),
+  return [
+    csvRow(["SN", "Date", "Script", "Description", "Credit", "Debit", "Balance"]),
     ...rows,
   ].join("\n");
-  const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `transactions-${symbol ?? "all"}-${isoDate(new Date())}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
 }
 
 function StatChip({
@@ -135,14 +125,45 @@ function TransactionsPage() {
               ))}
             </SelectContent>
           </Select>
-          <Button
-            variant="outline"
-            size="sm"
+          <ExportButton
             disabled={filtered.length === 0}
-            onClick={() => exportCsv(filtered, symbol === "all" ? null : symbol)}
-          >
-            <FileDown /> Export
-          </Button>
+            formats={[
+              {
+                title: "CSV",
+                description: "Every credit, debit and running balance",
+                filename: `transactions-${symbol === "all" ? "all" : symbol}`,
+                extension: "csv",
+                build: () => transactionsCsv(filtered),
+              },
+              {
+                title: "JSON",
+                description: "Raw demat movement records",
+                filename: `transactions-${symbol === "all" ? "all" : symbol}`,
+                extension: "json",
+                build: () => JSON.stringify(filtered, null, 2),
+              },
+              {
+                title: "PDF",
+                description: "Formatted statement for printing or sharing",
+                filename: `transactions-${symbol === "all" ? "all" : symbol}`,
+                extension: "pdf",
+                build: () => "",
+                pdf: () => ({
+                  title: "Demat transaction history",
+                  head: ["SN", "Date", "Script", "Description", "Credit", "Debit", "Balance"],
+                  body: filtered.map((t, i) => [
+                    i + 1,
+                    formatDate(t.transactionDate),
+                    t.script ?? "",
+                    t.historyDescription ?? "",
+                    toNumber(t.creditQuantity) > 0 ? `+${formatQty(t.creditQuantity)}` : "",
+                    toNumber(t.debitQuantity) > 0 ? `\u2212${formatQty(t.debitQuantity)}` : "",
+                    formatQty(toNumber(t.balanceAfterTransaction)),
+                  ]),
+                }),
+              },
+            ]}
+          />
         </div>
       </div>
 

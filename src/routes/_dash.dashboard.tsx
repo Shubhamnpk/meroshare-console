@@ -13,7 +13,12 @@ import {
 } from "lucide-react";
 import { StatCard, DeltaPill } from "@/components/stat-card";
 import { SwipeableCards } from "@/components/swipeable-cards";
-import { ErrorBlock, LoadingBlock, EmptyBlock } from "@/components/states";
+import {
+  ErrorBlock,
+  LoadingBlock,
+  EmptyBlock,
+  SkeletonCards,
+} from "@/components/states";
 import { ScripSheet } from "@/components/market/scrip-sheet";
 import { ChartModal, chartTimeLabel } from "@/components/market/chart-modal";
 import { Sparkline } from "@/components/market/sparkline";
@@ -319,7 +324,7 @@ function DashboardPage() {
           </Link>
         </div>
         {issues.isLoading ? (
-          <LoadingBlock label="Loading issues" rows={2} />
+          <SkeletonCards count={2} />
         ) : issues.isError ? (
           <ErrorBlock error={issues.error} retry={() => void issues.refetch()} />
         ) : openIssues.length === 0 ? (

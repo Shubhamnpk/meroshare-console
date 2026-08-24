@@ -178,7 +178,7 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
     try {
       if (localStorage.getItem(SIDEBAR_KEY) === "1") setCollapsed(true);
     } catch {
-      // storage unavailable — keep expanded
+      // storage unavailable, keep expanded
     }
   }, []);
 

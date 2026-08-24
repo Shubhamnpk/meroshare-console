@@ -6,6 +6,9 @@ import {
   getOwnDetail,
   getPortfolio,
   getTransactions,
+  getWaccPending,
+  getWaccReport,
+  getWaccScrips,
 } from "./meroshare/portfolio.functions";
 import {
   getApplicableIssues,
@@ -170,6 +173,28 @@ export const holdingSymbolsQuery = () =>
     queryKey: ["holding-symbols"],
     queryFn: () => getHoldingSymbols(),
     staleTime: 5 * 60_000,
+  });
+
+export const waccScripsQuery = () =>
+  queryOptions({
+    queryKey: ["wacc-scrips"],
+    queryFn: () => getWaccScrips(),
+    staleTime: 30_000,
+  });
+
+export const waccSearchQuery = (scrip: string | null) =>
+  queryOptions({
+    queryKey: ["wacc-search", scrip],
+    queryFn: () => getWaccPending({ data: { scrip: scrip ?? "" } }),
+    enabled: Boolean(scrip),
+    staleTime: 15_000,
+  });
+
+export const waccReportQuery = () =>
+  queryOptions({
+    queryKey: ["wacc-report"],
+    queryFn: () => getWaccReport(),
+    staleTime: 30_000,
   });
 
 export const transactionsQuery = (symbol: string | null) =>

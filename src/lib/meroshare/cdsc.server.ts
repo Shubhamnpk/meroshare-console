@@ -36,9 +36,11 @@ export const CDSC_URLS = {
   myShares: `${CDSC_BASE}/api/meroShareView/myShare/`,
   myPortfolio: `${CDSC_BASE}/api/meroShareView/myPortfolio/`,
   transactions: `${CDSC_BASE}/api/meroShareView/myTransaction/`,
+  waccScrips: `${CDSC_BASE}/api/myPurchase/share/`,
   waccPending: `${CDSC_BASE}/api/myPurchase/search/wacc/`,
   waccCalculated: `${CDSC_BASE}/api/myPurchase/view/`,
   waccSubmit: `${CDSC_BASE}/api/myPurchase/upload/`,
+  waccReport: `${CDSC_BASE}/api/myPurchase/waccReport/`,
 } as const;
 
 const BASE_HEADERS: Record<string, string> = {

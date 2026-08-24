@@ -2,8 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { ErrorBlock, EmptyBlock, LoadingBlock } from "@/components/states";
 import { useMemo, useState } from "react";
-import { FileDown, Globe, History, MonitorSmartphone, Search } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Globe, History, MonitorSmartphone, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -13,8 +12,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ExportButton, csvRow } from "@/components/export-dialog";
 import { activityLogQuery, defaultActivityRange } from "@/lib/queries";
-import { formatDateTime, formatNumber, isoDate } from "@/lib/format";
+import { formatDateTime, formatNumber } from "@/lib/format";
 import type { ActivityLogItem } from "@/lib/meroshare/types";
 
 export const Route = createFileRoute("/_dash/activity")({
@@ -35,34 +35,22 @@ export const Route = createFileRoute("/_dash/activity")({
   component: ActivityPage,
 });
 
-function exportCsv(items: ActivityLogItem[]) {
-  const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
+function activityCsv(items: ActivityLogItem[]) {
   const rows = items.map((item, i) =>
-    [
-      String(i + 1),
+    csvRow([
+      i + 1,
       String(item.description ?? item.activityType ?? ""),
       String(item.browserName ?? ""),
       String(item.broswerVersion ?? ""),
       String(item.osName ?? ""),
       String(item.ipAddress ?? ""),
       String(item.recordedDate ?? ""),
-    ]
-      .map(esc)
-      .join(","),
+    ]),
   );
-  const csv = [
-    ["SN", "Activity", "Browser", "Browser version", "OS", "IP address", "Recorded on"]
-      .map(esc)
-      .join(","),
+  return [
+    csvRow(["SN", "Activity", "Browser", "Browser version", "OS", "IP address", "Recorded on"]),
     ...rows,
   ].join("\n");
-  const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `activity-log-${isoDate(new Date())}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
 }
 
 function StatChip({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
@@ -118,14 +106,44 @@ function ActivityPage() {
             Last 30 days of account activity.
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
+        <ExportButton
           disabled={items.length === 0}
-          onClick={() => exportCsv(items)}
-        >
-          <FileDown /> Export
-        </Button>
+          formats={[
+            {
+              title: "CSV",
+              description: "Activity, browser, OS and IP per row",
+              filename: "activity-log",
+              extension: "csv",
+              build: () => activityCsv(items),
+            },
+            {
+              title: "JSON",
+              description: "Raw sign-in and account activity records",
+              filename: "activity-log",
+              extension: "json",
+              build: () => JSON.stringify(items, null, 2),
+            },
+            {
+              title: "PDF",
+              description: "Formatted activity log for printing or sharing",
+              filename: "activity-log",
+              extension: "pdf",
+              build: () => "",
+              pdf: () => ({
+                title: "Account activity log",
+                head: ["SN", "Activity", "Browser", "OS", "IP address", "Recorded on"],
+                body: items.map((item, i) => [
+                  i + 1,
+                  String(item.description ?? item.activityType ?? ""),
+                  `${String(item.browserName ?? "")} ${String(item.broswerVersion ?? "")}`.trim(),
+                  String(item.osName ?? ""),
+                  String(item.ipAddress ?? ""),
+                  String(item.recordedDate ?? ""),
+                ]),
+              }),
+            },
+          ]}
+        />
       </div>
 
       <div className="relative">

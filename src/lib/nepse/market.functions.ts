@@ -43,7 +43,7 @@ export interface PortfolioTimeline {
   snapshots: Record<string, UnitSnapshot[]>;
   /**
    * Scrips whose demat history could not be fetched from CDSC. These are
-   * missing from the chart/list even though you hold them — surfaced here so
+   * missing from the chart/list even though you hold them; surfaced here so
    * the UI can show it instead of silently producing an incomplete picture.
    */
   failed: { symbol: string; message: string }[];
