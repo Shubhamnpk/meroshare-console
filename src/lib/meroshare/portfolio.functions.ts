@@ -125,7 +125,6 @@ export const getEnrichedPortfolio = createServerFn({ method: "GET" }).handler(
   },
 );
 
-
 export const getMyShares = createServerFn({ method: "GET" }).handler(
   async (): Promise<MyShareItem[]> => {
     const auth = await requireAuth();
@@ -218,13 +217,18 @@ export const getWaccScrips = createServerFn({ method: "POST" }).handler(async ()
     .filter((s): s is string => Boolean(s));
 });
 
-export const getWaccReport = createServerFn({ method: "POST" }).handler(async (): Promise<WaccReport> =>
-  fetchWaccReport(await requireAuth()),
+export const getWaccReport = createServerFn({ method: "POST" }).handler(
+  async (): Promise<WaccReport> => fetchWaccReport(await requireAuth()),
 );
 
 export const calculateWacc = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) =>
-    z.object({ scrip: z.string().trim().min(1).max(24), rows: z.array(z.record(z.unknown())).min(1) }).parse(input),
+    z
+      .object({
+        scrip: z.string().trim().min(1).max(24),
+        rows: z.array(z.record(z.unknown())).min(1),
+      })
+      .parse(input),
   )
   .handler(async ({ data }) => {
     const auth = await requireAuth();

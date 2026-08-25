@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: MeroShare / CDSC account issues
+    url: https://meroshare.cdsc.com.np
+    about: Login problems, KYC or DP issues — contact CDSC or your depository participant, not this repo.

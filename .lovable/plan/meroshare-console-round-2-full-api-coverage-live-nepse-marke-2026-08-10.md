@@ -23,12 +23,14 @@ All of it is fetched server-side and cached, so nothing extra hits the user's br
 ## 3. New features this unlocks
 
 **Market**
+
 - Market overview page: NEPSE index with sector indices, market summary bar, top gainers/losers/turnover/volume tables
 - Scrip detail sheet: LTP, day range, 52-week range, volume, turnover, and the user's own holding + P/L in the same view
 - Live search across all listed scrips (command palette, `Ctrl+K`)
 - Watchlist for scrips the user doesn't own yet (saved locally to the device, no account needed)
 
 **Portfolio, now with real prices**
+
 - True market valuation of every holding against live LTP, not just MeroShare's cached price
 - Day change per scrip and for the whole portfolio, in rupees and percent
 - Unrealised P/L per scrip using WACC from purchase source, with total cost vs market value
@@ -36,12 +38,14 @@ All of it is fetched server-side and cached, so nothing extra hits the user's br
 - Best/worst performers, and a portfolio-vs-NEPSE comparison
 
 **IPO**
+
 - IPO calendar: open now, upcoming, and recently closed, with countdown timers
 - Auto-filled CRN and bank branch on the apply form
 - IPO archive with historical issues and past results
 - Result checking for every applied issue in one pass instead of one at a time
 
 **Extras**
+
 - Proposed and announced dividends for scrips the user holds, with estimated cash and bonus value
 - Open-ended mutual fund NAV tracker
 - Broker directory

@@ -129,7 +129,6 @@ export interface ChartSeries {
   fetchedAt: string;
 }
 
-
 export interface ScripDetail {
   overview: ScripOverview | null;
   history: DailyBar[];

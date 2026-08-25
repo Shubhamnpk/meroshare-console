@@ -5,6 +5,7 @@ import {
   dismissInstallBanner,
   hasNativeInstallPrompt,
   initInstallCapture,
+  isAppInstalled,
   isInstallBannerDismissed,
   isIosDevice,
   isStandalone,
@@ -13,9 +14,9 @@ import {
 } from "@/lib/install";
 
 /**
- * Top install banner. Shows on any device while the app is not installed
- * (standalone display mode). Dismissing hides it permanently; Settings keeps a
- * manual install option either way.
+ * Top install banner. Shows while the app is not installed (standalone display
+ * mode) and has never been installed on this browser. Dismissing or installing
+ * hides it permanently; Settings keeps a manual install option either way.
  */
 export function InstallBanner() {
   const [visible, setVisible] = useState(false);
@@ -24,7 +25,7 @@ export function InstallBanner() {
   useEffect(() => {
     initInstallCapture();
     const sync = () => {
-      setVisible(!isStandalone() && !isInstallBannerDismissed());
+      setVisible(!isStandalone() && !isAppInstalled() && !isInstallBannerDismissed());
       setPromptReady(hasNativeInstallPrompt());
     };
     sync();

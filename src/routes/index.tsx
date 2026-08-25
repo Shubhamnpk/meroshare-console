@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
-import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { APP_VERSION } from "@/lib/version";
 import {
   Check,
   ChevronsUpDown,
@@ -299,9 +300,16 @@ function LoginPage() {
           </ul>
         </div>
 
-        <p className="relative text-xs text-muted-foreground">
-          An independent client for MeroShare. Not affiliated with CDSC.
-        </p>
+        <div className="relative flex items-center justify-between text-xs text-muted-foreground">
+          <p>An independent client for MeroShare. Not affiliated with CDSC.</p>
+          <Link
+            to="/releases"
+            className="inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-card/70 px-2.5 py-0.5 text-[0.7rem] font-medium backdrop-blur-sm transition-colors hover:border-primary/50 hover:bg-accent hover:text-foreground"
+          >
+            <span className="size-1.5 rounded-full bg-emerald-500" />
+            <span>{APP_VERSION}</span>
+          </Link>
+        </div>
       </section>
 
       <section className="flex flex-col justify-center px-5 py-10 sm:px-10">

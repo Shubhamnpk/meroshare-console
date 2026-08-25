@@ -1,0 +1,47 @@
+name: Feature request
+description: Suggest an idea or improvement for the console
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion! Describe the problem you are trying to solve,
+        not just the solution you have in mind.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What are you trying to do that the console currently does not support?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would you like to happen?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which area does this relate to?
+      options:
+        - Portfolio
+        - Dividends
+        - Analytics / Charts
+        - Transactions
+        - IPO / Applications
+        - WACC / Purchase Source
+        - Settings / Appearance
+        - Install / PWA
+        - Export (CSV/JSON/PDF)
+        - Other
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I have searched existing issues and discussions for similar ideas
+          required: true

@@ -55,7 +55,12 @@ export function NeoCandlestickChart({
         textColor: theme === "light" ? "#1f2329" : "#d4d7de",
       },
       rightPriceScale: { borderVisible: false },
-      timeScale: { borderVisible: false, borderColor: NEUTRAL, timeVisible: true, secondsVisible: false },
+      timeScale: {
+        borderVisible: false,
+        borderColor: NEUTRAL,
+        timeVisible: true,
+        secondsVisible: false,
+      },
       grid: {
         vertLines: { color: "hsl(210 8% 55% / 0.08)", style: 1 },
         horzLines: { color: "hsl(210 8% 55% / 0.08)", style: 1 },

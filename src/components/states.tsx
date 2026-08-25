@@ -19,13 +19,7 @@ export function LoadingBlock({ label = "Loading", rows = 4 }: { label?: string; 
 }
 
 /** Stacked text-line placeholders, last line shorter like real copy. */
-export function SkeletonLines({
-  rows = 2,
-  className,
-}: {
-  rows?: number;
-  className?: string;
-}) {
+export function SkeletonLines({ rows = 2, className }: { rows?: number; className?: string }) {
   return (
     <div className={cn("space-y-2", className)} role="status" aria-live="polite">
       {Array.from({ length: rows }).map((_, i) => (
@@ -55,13 +49,7 @@ export function SkeletonCard({ className }: { className?: string }) {
 }
 
 /** Grid of card placeholders sized to match the two-column issue grids. */
-export function SkeletonCards({
-  count = 4,
-  className,
-}: {
-  count?: number;
-  className?: string;
-}) {
+export function SkeletonCards({ count = 4, className }: { count?: number; className?: string }) {
   return (
     <ul className={cn("grid gap-3 md:grid-cols-2", className)} role="status" aria-live="polite">
       {Array.from({ length: count }).map((_, i) => (
@@ -120,9 +108,7 @@ export function EmptyBlock({
     >
       <div className="text-muted-foreground">{icon ?? <Inbox className="size-6" />}</div>
       <p className="font-medium text-foreground">{title}</p>
-      {description ? (
-        <p className="max-w-sm text-sm text-muted-foreground">{description}</p>
-      ) : null}
+      {description ? <p className="max-w-sm text-sm text-muted-foreground">{description}</p> : null}
       {children}
     </div>
   );

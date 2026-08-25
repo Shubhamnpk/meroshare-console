@@ -55,7 +55,6 @@ export const getBankRequest = createServerFn({ method: "POST" })
     }
   });
 
-
 export const getActivityLog = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) =>
     z
@@ -81,16 +80,17 @@ export const updatePassword = createServerFn({ method: "POST" })
       })
       .parse(input),
   )
-  .handler(async ({ data }): Promise<JsonRecord> =>
-    changePassword(await requireAuth(), data),
-  );
+  .handler(async ({ data }): Promise<JsonRecord> => changePassword(await requireAuth(), data));
 
 export const updatePin = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) =>
     z
       .object({
         oldPin: z.string().trim().min(4).max(8),
-        newPin: z.string().trim().regex(/^\d{4}$/),
+        newPin: z
+          .string()
+          .trim()
+          .regex(/^\d{4}$/),
       })
       .parse(input),
   )

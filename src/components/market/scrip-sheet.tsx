@@ -96,8 +96,7 @@ function PositionCard({
         </span>
         <span className={cn("num text-right font-semibold", up ? "text-gain" : "text-loss")}>
           {up ? "+" : ""}
-          {formatNpr(pl)}{" "}
-          <span className="text-xs">({formatPercent(plPct / 100)})</span>
+          {formatNpr(pl)} <span className="text-xs">({formatPercent(plPct / 100)})</span>
         </span>
       </div>
     </div>

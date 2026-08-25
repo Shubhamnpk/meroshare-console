@@ -50,7 +50,11 @@ export function DeltaPill({ value, children }: { value: number; children: ReactN
     <span
       className={cn(
         "num inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold",
-        value > 0 ? "bg-gain/15 text-gain" : value < 0 ? "bg-loss/15 text-loss" : "bg-muted text-muted-foreground",
+        value > 0
+          ? "bg-gain/15 text-gain"
+          : value < 0
+            ? "bg-loss/15 text-loss"
+            : "bg-muted text-muted-foreground",
       )}
     >
       {children}

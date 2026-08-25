@@ -1,0 +1,56 @@
+{
+  "date": "2026-08-25T04:15:00.000Z",
+  "runs": 3,
+  "node": "v22.13.1",
+  "bun": "1.4.0",
+  "install": {
+    "node": {
+      "cold": 16590,
+      "warmMedian": 1420
+    },
+    "bun": {
+      "cold": 40490,
+      "warmMedian": 45160
+    }
+  },
+  "dev": {
+    "node": {
+      "coldStartMedian": 6190
+    },
+    "bun": {
+      "coldStartMedian": 3980
+    }
+  },
+  "hmr": {
+    "node": {
+      "updateMedian": 1129
+    },
+    "bun": {
+      "updateMedian": 1076
+    }
+  },
+  "build": {
+    "node": {
+      "median": 8960
+    },
+    "bun": {
+      "median": 6800
+    }
+  },
+  "runtime": {
+    "node": {
+      "cpuMs": 1497,
+      "rps": 1643,
+      "p50": 13.7,
+      "p95": 24.4,
+      "peakRssMb": 49
+    },
+    "bun": {
+      "cpuMs": 650,
+      "rps": 1692,
+      "p50": 11.7,
+      "p95": 37.4,
+      "peakRssMb": 47
+    }
+  }
+}

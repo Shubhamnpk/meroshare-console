@@ -348,8 +348,8 @@ export async function getExchangeMessages(): Promise<ExchangeMessageRow[]> {
  * 2021 onward, no back-projection.
  *
  * `granularity` picks the resolution:
- *  - `day`: one point per trading day from the daily archive, with monthly
- *    month-end points filling in the older months that predate the daily feed.
+ *  - `day`: one point per trading day, from the daily archive for recent days
+ *    and from the intra-month rows of the monthly archive for older months.
  *  - `month`: one point per month-end close.
  *  - `year`: one point per year (the last month-end close of each year).
  *
@@ -396,7 +396,9 @@ export async function getPortfolioHistory(
     const monthWindow = availableMonths.filter(
       (m) => m >= startKey && m >= tailMonthKey && m < coverageStart,
     );
-    return [...(await scoreMonths(unitsBySymbol, monthWindow)), ...daily].sort(
+    // Monthly files carry every trading day of the month, so the pre-daily-
+    // feed window still gets one point per trading day, not just month ends.
+    return [...(await scoreMonthDays(unitsBySymbol, monthWindow)), ...daily].sort(
       (a, b) => a.time - b.time,
     );
   }
@@ -416,6 +418,82 @@ function dateKeyFromEpoch(epoch: number): string {
   const mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
   const dd = String(dt.getUTCDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
+}
+
+/**
+ * One point per trading day out of the monthly LTP files (oldest first, capped
+ * to 120 months). Monthly documents are date-major — `dates` lists every
+ * trading day and each symbol row is `[dateIndex, ltp, volume]` — so this walks
+ * the dates once, advancing a per-symbol pointer to carry closes forward for
+ * scrips that didn't trade on a given day.
+ */
+async function scoreMonthDays(
+  unitsBySymbol: Map<string, UnitSnapshot[]>,
+  months: string[],
+): Promise<PortfolioHistoryPoint[]> {
+  if (months.length === 0) return [];
+  const capped = months.length > 120 ? months.slice(-120) : months;
+  const files = await Promise.all(
+    capped.map(async (month) => {
+      const { data } = await feedJson<Rec>(
+        `${YONEPSE_BASE}/data/ltp/monthly/${month}.json`,
+        TTL.daily,
+      );
+      return {
+        month,
+        dates: (data?.["dates"] ?? []) as string[],
+        series: (data?.["series"] ?? {}) as Record<string, unknown[]>,
+      };
+    }),
+  );
+
+  // Per-symbol ascending [dateIndex, close] rows, plus a cursor that only ever
+  // moves forward while walking the month's dates in order.
+  type Rows = { idx: number[]; close: number[] };
+  const lastClose = new Map<string, number>();
+  const points: PortfolioHistoryPoint[] = [];
+
+  for (const { dates, series } of files) {
+    const rowsBySymbol = new Map<string, Rows>();
+    for (const symbol of unitsBySymbol.keys()) {
+      const rows = Array.isArray(series[symbol]) ? (series[symbol] as unknown[][]) : [];
+      const parsed: Rows = { idx: [], close: [] };
+      for (const row of rows) {
+        const index = num(row?.[0]);
+        const close = num(row?.[1]);
+        if (Number.isInteger(index) && close > 0) {
+          parsed.idx.push(index);
+          parsed.close.push(close);
+        }
+      }
+      if (parsed.idx.length > 0) rowsBySymbol.set(symbol, parsed);
+    }
+
+    const cursor = new Map<string, number>();
+    for (let j = 0; j < dates.length; j++) {
+      const cutoff = Date.parse(`${dates[j]}T23:59:59+05:45`) / 1000;
+      if (!Number.isFinite(cutoff)) continue;
+      const breakdown: PortfolioHistoryPoint["breakdown"] = [];
+      for (const [symbol, rows] of rowsBySymbol) {
+        let at = cursor.get(symbol) ?? -1;
+        while (at + 1 < rows.idx.length && rows.idx[at + 1]! <= j) at++;
+        cursor.set(symbol, at);
+        const carried = lastClose.get(symbol) ?? 0;
+        const close = at >= 0 ? rows.close[at]! : carried;
+        if (close <= 0) continue;
+        lastClose.set(symbol, close);
+        const units = unitsHeldAt(unitsBySymbol.get(symbol) ?? [], cutoff);
+        if (units > 0) breakdown.push({ symbol, units, close, value: units * close });
+      }
+      if (breakdown.length === 0) continue;
+      points.push({
+        time: cutoff,
+        value: breakdown.reduce((sum, b) => sum + b.value, 0),
+        breakdown,
+      });
+    }
+  }
+  return points;
 }
 
 /** Score a list of month-end files (oldest first, capped to 120). */
@@ -846,7 +924,11 @@ async function archiveMonthBars(symbol: string, month: string): Promise<DailyBar
   }
   // Finished months never change; the running month refreshes hourly.
   const finished = month < monthKeyFromEpoch(Math.floor(now / 1000));
-  cache.set(key, { value: bars, expires: now + (finished ? 30 * TTL.daily : 60 * 60_000), fetchedAt: now });
+  cache.set(key, {
+    value: bars,
+    expires: now + (finished ? 30 * TTL.daily : 60 * 60_000),
+    fetchedAt: now,
+  });
   return bars;
 }
 

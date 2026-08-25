@@ -298,26 +298,11 @@ function PriceHistoryTab({
         tooltipExtra={(pt) => {
           const point = timelinePoints.find((p) => p.time === pt.time);
           if (!point) return null;
+          const count = point.breakdown.length;
           return (
-            <ul className="space-y-0.5">
-              {point.breakdown.slice(0, 8).map((b) => (
-                <li key={b.symbol}>
-                  <button
-                    type="button"
-                    onClick={() => onPickScrip(b.symbol)}
-                    className="flex w-full items-center justify-between gap-3 text-left text-xs transition-colors hover:text-primary"
-                  >
-                    <span className="font-medium">{b.symbol}</span>
-                    <span className="num">{formatNpr(b.value, { compact: true })}</span>
-                  </button>
-                </li>
-              ))}
-              {point.breakdown.length > 8 ? (
-                <li className="text-[0.6rem] text-muted-foreground">
-                  +{point.breakdown.length - 8} more scrips
-                </li>
-              ) : null}
-            </ul>
+            <p className="text-[0.65rem] text-muted-foreground">
+              {count} {count === 1 ? "scrip" : "scrips"}
+            </p>
           );
         }}
       />

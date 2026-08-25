@@ -231,9 +231,7 @@ export function ChartModal({
                     <button
                       key={t.key}
                       type="button"
-                      onClick={() =>
-                        setIndicators((prev) => ({ ...prev, [t.key]: !prev[t.key] }))
-                      }
+                      onClick={() => setIndicators((prev) => ({ ...prev, [t.key]: !prev[t.key] }))}
                       className={cn(
                         "rounded-full border px-2 py-0.5 text-[0.68rem] font-medium transition-colors",
                         indicators[t.key]
@@ -303,7 +301,8 @@ export function ChartModal({
                 active.key === "1D" ? formatIntradayLabel(t) : formatDailyLabel(t)
               }
               tooltipExtra={(p) => {
-                const pct = stats && stats.start ? ((p.value - stats.start) / stats.start) * 100 : 0;
+                const pct =
+                  stats && stats.start ? ((p.value - stats.start) / stats.start) * 100 : 0;
                 return (
                   <p
                     className={cn(

@@ -6,11 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DeltaPill } from "@/components/stat-card";
 import {
   DEFAULT_INDICATORS,

@@ -13,12 +13,7 @@ import {
 } from "lucide-react";
 import { StatCard, DeltaPill } from "@/components/stat-card";
 import { SwipeableCards } from "@/components/swipeable-cards";
-import {
-  ErrorBlock,
-  LoadingBlock,
-  EmptyBlock,
-  SkeletonCards,
-} from "@/components/states";
+import { ErrorBlock, LoadingBlock, EmptyBlock, SkeletonCards } from "@/components/states";
 import { ScripSheet } from "@/components/market/scrip-sheet";
 import { ChartModal, chartTimeLabel } from "@/components/market/chart-modal";
 import { Sparkline } from "@/components/market/sparkline";

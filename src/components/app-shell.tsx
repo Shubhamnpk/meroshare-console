@@ -18,9 +18,11 @@ import {
   Rocket,
   Search,
   Settings,
+  Sparkles,
   Star,
   UserRound,
 } from "lucide-react";
+import { APP_VERSION } from "@/lib/version";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -217,6 +219,12 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
     }
   };
 
+  const handleSidebarClick = (e: React.MouseEvent) => {
+    const tag = (e.target as HTMLElement).tagName;
+    if (tag === "A" || tag === "BUTTON" || (e.target as HTMLElement).closest("a, button")) return;
+    toggleCollapsed();
+  };
+
   const navBody = (collapsedNav = false) => (
     <nav className="flex-1 overflow-y-auto px-2 pb-4">
       <NavGroup title="Overview" items={PRIMARY_NAV} pathname={pathname} collapsed={collapsedNav} />
@@ -228,14 +236,19 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
   return (
     <div className="min-h-screen w-full bg-background">
       <aside
+        onClick={handleSidebarClick}
         className={cn(
-          "fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-sidebar-border bg-sidebar lg:flex",
-          "transition-[width] duration-300 ease-in-out",
+          "group/sidebar fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-sidebar-border bg-sidebar lg:flex",
+          "cursor-pointer select-none transition-[width] duration-300 ease-in-out",
           collapsed ? "w-[4.75rem]" : "w-64",
         )}
       >
         <Brand collapsed={collapsed} onToggle={toggleCollapsed} />
         {navBody(collapsed)}
+        {/* Hover grip indicator on the right edge */}
+        <div className="pointer-events-none absolute inset-y-0 right-0 flex w-1 items-center justify-center opacity-0 transition-opacity group-hover/sidebar:opacity-100">
+          <div className="h-8 w-0.5 rounded-full bg-muted-foreground/40" />
+        </div>
       </aside>
 
       <div
@@ -320,6 +333,10 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
                 <Settings className="size-4" aria-hidden />
                 Settings
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate({ to: "/releases" })}>
+                <Sparkles className="size-4" aria-hidden />
+                Release Notes ({APP_VERSION})
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={handleSignOut}
@@ -335,6 +352,22 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
 
         <main className="mx-auto w-full max-w-7xl px-4 pb-28 pt-6 sm:px-6 lg:pb-12">
           {children}
+          <footer className="mt-12 flex flex-col items-center justify-center gap-1.5 border-t border-border/50 pt-6 text-center text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <span className="font-medium text-foreground/80">MeroShare Console</span>
+              <span className="text-muted-foreground/40">•</span>
+              <Link
+                to="/releases"
+                className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-secondary/70 px-2.5 py-0.5 text-[0.725rem] font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:bg-accent hover:text-foreground"
+              >
+                <span className="size-1.5 rounded-full bg-emerald-500" />
+                <span>{APP_VERSION} Release Notes</span>
+              </Link>
+            </div>
+            <p className="text-[0.68rem] text-muted-foreground/60">
+              An independent client for CDSC MeroShare. Not affiliated with CDSC.
+            </p>
+          </footer>
         </main>
       </div>
 

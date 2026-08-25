@@ -18,20 +18,24 @@ The user's password and PIN are never stored in a database and never sent to the
 ## Features (full parity)
 
 **Auth**
+
 - Login with capital/DP picker (loaded live from the capital list), username, password
 - Session expiry handling, auto sign-out, real logout
 
 **Dashboard**
+
 - Account summary: name, BOID, demat, status, bank
 - Portfolio value, today's change, top movers, sector split
 - Open IPOs with a countdown and one-tap apply
 
 **Portfolio & holdings**
+
 - My Portfolio with live valuation, WACC vs LTP, profit/loss per scrip
 - My Shares (holdings list), current holding symbols
 - Share transaction history with filters, search, and date range
 
 **IPO / ASBA**
+
 - Applicable issues list with issue-manager details
 - Eligibility check per BOID, apply with bank, quantity, CRN and PIN
 - Edit and delete a pending application
@@ -39,15 +43,18 @@ The user's password and PIN are never stored in a database and never sent to the
 - IPO result check against the CDSC result service
 
 **Purchase source / WACC**
+
 - Pending (WACC not calculated) and calculated lists
 - Submit WACC calculation for a scrip
 
 **Account**
+
 - My details, bank details, bank list and detail views
 - Activity log with pagination and filters
 - Change password, change transaction PIN
 
 **Analytics**
+
 - Portfolio performance, allocation and P/L charts built from the user's own real holdings and transactions
 - Auto-refresh of portfolio data on an interval, with manual pull-to-refresh
 

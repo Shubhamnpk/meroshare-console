@@ -2,7 +2,13 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Eye, EyeOff, Loader2, ShieldCheck } from "lucide-react";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -67,7 +73,9 @@ export function PasswordDialog() {
   const mutation = useMutation({
     mutationFn: updatePassword,
     onSuccess: () => {
-      toast.success("Password updated.", { description: "Use your new password next time you sign in." });
+      toast.success("Password updated.", {
+        description: "Use your new password next time you sign in.",
+      });
       setOldPassword("");
       setNewPassword("");
       setConfirmPassword("");
@@ -92,12 +100,39 @@ export function PasswordDialog() {
             mutation.mutate({ data: { oldPassword, newPassword } });
           }}
         >
-          <SecretField id="pw-old" label="Current password" value={oldPassword} onChange={setOldPassword} autoComplete="current-password" />
-          <SecretField id="pw-new" label="New password" value={newPassword} onChange={setNewPassword} maxLength={128} autoComplete="new-password" />
-          <SecretField id="pw-confirm" label="Confirm new password" value={confirmPassword} onChange={setConfirmPassword} autoComplete="new-password" />
-          {confirmPassword.length > 0 && !match && <p className="text-xs text-red-600">Passwords do not match.</p>}
+          <SecretField
+            id="pw-old"
+            label="Current password"
+            value={oldPassword}
+            onChange={setOldPassword}
+            autoComplete="current-password"
+          />
+          <SecretField
+            id="pw-new"
+            label="New password"
+            value={newPassword}
+            onChange={setNewPassword}
+            maxLength={128}
+            autoComplete="new-password"
+          />
+          <SecretField
+            id="pw-confirm"
+            label="Confirm new password"
+            value={confirmPassword}
+            onChange={setConfirmPassword}
+            autoComplete="new-password"
+          />
+          {confirmPassword.length > 0 && !match && (
+            <p className="text-xs text-red-600">Passwords do not match.</p>
+          )}
           <Button type="submit" disabled={mutation.isPending || !valid} className="w-full">
-            {mutation.isPending ? <><Loader2 className="size-4 animate-spin" /> Updating…</> : "Update password"}
+            {mutation.isPending ? (
+              <>
+                <Loader2 className="size-4 animate-spin" /> Updating…
+              </>
+            ) : (
+              "Update password"
+            )}
           </Button>
         </form>
       </DialogContent>
@@ -113,7 +148,9 @@ export function PinDialog() {
   const mutation = useMutation({
     mutationFn: updatePin,
     onSuccess: () => {
-      toast.success("Transaction PIN updated.", { description: "Your new PIN applies to your next transaction." });
+      toast.success("Transaction PIN updated.", {
+        description: "Your new PIN applies to your next transaction.",
+      });
       setOldPin("");
       setNewPin("");
       closePin();
@@ -127,7 +164,8 @@ export function PinDialog() {
         <DialogHeader>
           <DialogTitle>Change transaction PIN</DialogTitle>
           <DialogDescription>
-            Required to approve share applications and payments. Exactly 4 digits, applied directly on MeroShare.
+            Required to approve share applications and payments. Exactly 4 digits, applied directly
+            on MeroShare.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -137,14 +175,36 @@ export function PinDialog() {
             mutation.mutate({ data: { oldPin, newPin } });
           }}
         >
-          <SecretField id="pin-old" label="Current PIN" value={oldPin} onChange={setOldPin} placeholder="4 to 8 digits" />
-          <SecretField id="pin-new" label="New 4-digit PIN" value={newPin} onChange={(v) => setNewPin(v.replace(/\D/g, "").slice(0, 4))} placeholder="••••" />
+          <SecretField
+            id="pin-old"
+            label="Current PIN"
+            value={oldPin}
+            onChange={setOldPin}
+            placeholder="4 to 8 digits"
+          />
+          <SecretField
+            id="pin-new"
+            label="New 4-digit PIN"
+            value={newPin}
+            onChange={(v) => setNewPin(v.replace(/\D/g, "").slice(0, 4))}
+            placeholder="••••"
+          />
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <ShieldCheck className="size-3.5" />
             Use a number you won't forget. There is no recovery without your DP.
           </div>
-          <Button type="submit" disabled={mutation.isPending || oldPin.length < 4 || newPin.length !== 4} className="w-full">
-            {mutation.isPending ? <><Loader2 className="size-4 animate-spin" /> Updating…</> : "Update PIN"}
+          <Button
+            type="submit"
+            disabled={mutation.isPending || oldPin.length < 4 || newPin.length !== 4}
+            className="w-full"
+          >
+            {mutation.isPending ? (
+              <>
+                <Loader2 className="size-4 animate-spin" /> Updating…
+              </>
+            ) : (
+              "Update PIN"
+            )}
           </Button>
         </form>
       </DialogContent>

@@ -1,6 +1,7 @@
 // Client-safe shared types for the MeroShare (CDSC) integration.
 
-export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+export type JsonValue =
+  string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 export type JsonRecord = { [key: string]: JsonValue };
 
 export interface Capital {

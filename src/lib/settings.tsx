@@ -2,9 +2,20 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 export type ThemePref = "light" | "dark" | "system";
+export type ColorTheme = "teal" | "blue" | "purple" | "green" | "orange" | "pink";
+
+export const COLOR_OPTIONS: { value: ColorTheme; label: string; swatch: string }[] = [
+  { value: "teal", label: "Teal", swatch: "oklch(0.76 0.145 168)" },
+  { value: "blue", label: "Blue", swatch: "oklch(0.76 0.145 235)" },
+  { value: "purple", label: "Purple", swatch: "oklch(0.76 0.145 280)" },
+  { value: "green", label: "Green", swatch: "oklch(0.76 0.145 150)" },
+  { value: "orange", label: "Orange", swatch: "oklch(0.76 0.145 30)" },
+  { value: "pink", label: "Pink", swatch: "oklch(0.76 0.145 340)" },
+];
 
 export interface Settings {
   theme: ThemePref;
+  colorTheme: ColorTheme;
   compactNumbers: boolean;
   autoRefresh: boolean;
   refreshMinutes: number;
@@ -14,6 +25,7 @@ export interface SettingsApi extends Settings {
   passwordOpen: boolean;
   pinOpen: boolean;
   setTheme: (theme: ThemePref) => void;
+  setColorTheme: (color: ColorTheme) => void;
   setCompactNumbers: (value: boolean) => void;
   setAutoRefresh: (value: boolean) => void;
   setRefreshMinutes: (minutes: number) => void;
@@ -28,6 +40,7 @@ const LEGACY_THEME_KEY = "ms-theme";
 
 export const DEFAULT_SETTINGS: Settings = {
   theme: "system",
+  colorTheme: "teal",
   compactNumbers: false,
   autoRefresh: true,
   refreshMinutes: 5,
@@ -51,8 +64,14 @@ function loadSettings(): Settings {
 export function applyTheme(theme: ThemePref) {
   if (typeof document === "undefined") return;
   const light =
-    theme === "light" || (theme === "system" && window.matchMedia("(prefers-color-scheme: light)").matches);
+    theme === "light" ||
+    (theme === "system" && window.matchMedia("(prefers-color-scheme: light)").matches);
   document.documentElement.classList.toggle("light", light);
+}
+
+export function applyColorTheme(color: ColorTheme) {
+  if (typeof document === "undefined") return;
+  document.documentElement.setAttribute("data-color", color);
 }
 
 const SettingsContext = createContext<SettingsApi | null>(null);
@@ -64,9 +83,13 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     applyTheme(settings.theme);
-    const { theme, compactNumbers, autoRefresh, refreshMinutes } = settings;
+    applyColorTheme(settings.colorTheme);
+    const { theme, colorTheme, compactNumbers, autoRefresh, refreshMinutes } = settings;
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ theme, compactNumbers, autoRefresh, refreshMinutes }));
+      window.localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ theme, colorTheme, compactNumbers, autoRefresh, refreshMinutes }),
+      );
     } catch {
       // storage unavailable (private mode); settings still apply for this session
     }
@@ -84,7 +107,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     () => ({
       ...settings,
       setTheme: (theme: ThemePref) => setSettings((s) => ({ ...s, theme })),
-      setCompactNumbers: (compactNumbers: boolean) => setSettings((s) => ({ ...s, compactNumbers })),
+      setColorTheme: (colorTheme: ColorTheme) => setSettings((s) => ({ ...s, colorTheme })),
+      setCompactNumbers: (compactNumbers: boolean) =>
+        setSettings((s) => ({ ...s, compactNumbers })),
       setAutoRefresh: (autoRefresh: boolean) => setSettings((s) => ({ ...s, autoRefresh })),
       setRefreshMinutes: (refreshMinutes: number) => setSettings((s) => ({ ...s, refreshMinutes })),
       openPassword: () => setPasswordOpen(true),

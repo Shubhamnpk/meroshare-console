@@ -17,7 +17,16 @@ import {
   type UTCTimestamp,
 } from "lightweight-charts";
 import type { ChartBar, PricePoint } from "@/lib/nepse/types";
-import { bollinger, ema, macd, rsi, sma, vwap, type Bar, type LinePoint } from "@/lib/nepse/indicators";
+import {
+  bollinger,
+  ema,
+  macd,
+  rsi,
+  sma,
+  vwap,
+  type Bar,
+  type LinePoint,
+} from "@/lib/nepse/indicators";
 
 export type ChartStyle = "candles" | "line" | "area";
 
@@ -65,7 +74,8 @@ function palette(light: boolean) {
   };
 }
 
-const toLine = (points: LinePoint[]) => points.map((p) => ({ time: p.date as Time, value: p.value }));
+const toLine = (points: LinePoint[]) =>
+  points.map((p) => ({ time: p.date as Time, value: p.value }));
 
 export function TerminalChart({
   bars,
@@ -103,10 +113,7 @@ export function TerminalChart({
 
   const isIntraday = bars.length === 0 && intraday.length > 0;
 
-  const barByDate = useMemo(
-    () => new Map(bars.map((b) => [b.date, b] as const)),
-    [bars],
-  );
+  const barByDate = useMemo(() => new Map(bars.map((b) => [b.date, b] as const)), [bars]);
 
   const endMeasure = () => {
     // A plain double-click (no drag yet) keeps the anchor armed; releasing after
@@ -218,22 +225,42 @@ export function TerminalChart({
     if (!isIntraday) {
       if (indicators.sma20) {
         chart
-          .addSeries(LineSeries, { color: "#f59e0b", lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
+          .addSeries(LineSeries, {
+            color: "#f59e0b",
+            lineWidth: 1,
+            priceLineVisible: false,
+            lastValueVisible: false,
+          })
           .setData(toLine(sma(indicatorBars, 20)));
       }
       if (indicators.sma50) {
         chart
-          .addSeries(LineSeries, { color: "#8b5cf6", lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
+          .addSeries(LineSeries, {
+            color: "#8b5cf6",
+            lineWidth: 1,
+            priceLineVisible: false,
+            lastValueVisible: false,
+          })
           .setData(toLine(sma(indicatorBars, 50)));
       }
       if (indicators.ema20) {
         chart
-          .addSeries(LineSeries, { color: "#06b6d4", lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
+          .addSeries(LineSeries, {
+            color: "#06b6d4",
+            lineWidth: 1,
+            priceLineVisible: false,
+            lastValueVisible: false,
+          })
           .setData(toLine(ema(indicatorBars, 20)));
       }
       if (indicators.vwap) {
         chart
-          .addSeries(LineSeries, { color: "#ec4899", lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
+          .addSeries(LineSeries, {
+            color: "#ec4899",
+            lineWidth: 1,
+            priceLineVisible: false,
+            lastValueVisible: false,
+          })
           .setData(toLine(vwap(indicatorBars)));
       }
       if (indicators.bollinger) {
@@ -293,8 +320,22 @@ export function TerminalChart({
         pane,
       );
       series.setData(toLine(rsi(indicatorBars, 14)));
-      series.createPriceLine({ price: 70, color: DOWN, lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: "" });
-      series.createPriceLine({ price: 30, color: UP, lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: "" });
+      series.createPriceLine({
+        price: 70,
+        color: DOWN,
+        lineWidth: 1,
+        lineStyle: LineStyle.Dotted,
+        axisLabelVisible: false,
+        title: "",
+      });
+      series.createPriceLine({
+        price: 30,
+        color: UP,
+        lineWidth: 1,
+        lineStyle: LineStyle.Dotted,
+        axisLabelVisible: false,
+        title: "",
+      });
       chart.panes()[pane]?.setHeight(Math.round(height * 0.18));
       pane += 1;
     }
@@ -387,7 +428,18 @@ export function TerminalChart({
       chart.remove();
       apiRef.current = null;
     };
-  }, [bars, intraday, style, indicators, compare, compareLabel, logScale, light, height, isIntraday]);
+  }, [
+    bars,
+    intraday,
+    style,
+    indicators,
+    compare,
+    compareLabel,
+    logScale,
+    light,
+    height,
+    isIntraday,
+  ]);
 
   // Highlight band between the anchor and the current drag point.
   let measureOverlay: ReactNode = null;

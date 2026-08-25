@@ -272,9 +272,7 @@ export const getChartData = createServerFn({ method: "POST" })
     z
       .object({
         symbol: z.string().trim().min(1).max(24),
-        range: z
-          .enum(["1D", "1W", "1M", "3M", "6M", "1Y", "3Y", "5Y", "MAX"])
-          .default("1Y"),
+        range: z.enum(["1D", "1W", "1M", "3M", "6M", "1Y", "3Y", "5Y", "MAX"]).default("1Y"),
       })
       .parse(input),
   )

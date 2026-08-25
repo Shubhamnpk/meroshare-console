@@ -1,0 +1,60 @@
+name: Bug report
+description: Report something broken or behaving unexpectedly
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please fill in the details
+        below so it can be reproduced and fixed quickly.
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, including what you expected to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Go to '...'
+        2. Click on '...'
+        3. See error
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which area is affected?
+      options:
+        - Portfolio
+        - Dividends
+        - Analytics / Charts
+        - Transactions
+        - IPO / Applications
+        - WACC / Purchase Source
+        - Settings / Appearance
+        - Login / Session
+        - Install / PWA
+        - Export (CSV/JSON/PDF)
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser & OS
+      placeholder: e.g. Chrome 131 on Windows 11 / Safari on iPhone 15
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I have searched existing issues for duplicates
+          required: true
+        - label: This happens with my real MeroShare account (not a demo/mock)
+          required: false

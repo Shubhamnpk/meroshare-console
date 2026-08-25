@@ -216,9 +216,7 @@ function PendingTable({ scrip, rows }: { scrip: string; rows: PurchaseSourceItem
   }
 
   const updateDraft = (idx: number, patch: Partial<DraftRow>) =>
-    setDrafts((prev) =>
-      prev.map((d, i) => (i === idx ? ({ ...d, ...patch } as DraftRow) : d)),
-    );
+    setDrafts((prev) => prev.map((d, i) => (i === idx ? ({ ...d, ...patch } as DraftRow) : d)));
 
   const selected = drafts.filter((d) => d.checked && toNumber(d.priceText) > 0);
   const allChecked = drafts.length > 0 && drafts.every((d) => d.checked);
@@ -484,10 +482,9 @@ function reportCsv(holdings: WaccReportItem[]) {
       String(h.lastModifiedDate ?? ""),
     ]),
   );
-  return [
-    csvRow(["Scrip", "Quantity", "WACC rate", "Total cost", "Last modified"]),
-    ...lines,
-  ].join("\n");
+  return [csvRow(["Scrip", "Quantity", "WACC rate", "Total cost", "Last modified"]), ...lines].join(
+    "\n",
+  );
 }
 
 function WaccReportPanel() {
@@ -580,8 +577,12 @@ function WaccReportPanel() {
             {sorted.map((h) => (
               <tr key={String(h.scrip)} className="hover:bg-accent/30">
                 <td className="px-4 py-2.5 font-semibold">{h.scrip}</td>
-                <td className="num px-4 py-2.5 text-right">{formatQty(toNumber(h.totalQuantity))}</td>
-                <td className="num px-4 py-2.5 text-right">{formatNpr(toNumber(h.averageBuyRate))}</td>
+                <td className="num px-4 py-2.5 text-right">
+                  {formatQty(toNumber(h.totalQuantity))}
+                </td>
+                <td className="num px-4 py-2.5 text-right">
+                  {formatNpr(toNumber(h.averageBuyRate))}
+                </td>
                 <td className="num px-4 py-2.5 text-right">{formatNpr(toNumber(h.totalCost))}</td>
                 <td className="hidden px-4 py-2.5 text-muted-foreground md:table-cell">
                   {h.lastModifiedDate ?? ""}
@@ -680,7 +681,9 @@ function WaccPage() {
             </SelectContent>
           </Select>
           {pendingScrips.isLoading ? (
-            <span className="animate-pulse text-xs text-muted-foreground">Checking pending scrips…</span>
+            <span className="animate-pulse text-xs text-muted-foreground">
+              Checking pending scrips…
+            </span>
           ) : null}
         </div>
         {pendingList.length > 1 ? (
@@ -725,9 +728,7 @@ function WaccPage() {
           ) : null}
           {(search.data?.waccSummaryResponse ?? []).length > 0 ? (
             <section className="space-y-3">
-              <h2 className="font-display text-base font-semibold">
-                Calculated for {scrip}
-              </h2>
+              <h2 className="font-display text-base font-semibold">Calculated for {scrip}</h2>
               <SummaryTable scrip={scrip} rows={search.data!.waccSummaryResponse!} />
             </section>
           ) : null}

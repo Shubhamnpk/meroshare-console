@@ -1,5 +1,28 @@
 {
-  "name": "tanstack_start_ts",
+  "name": "meroshare-console",
+  "version": "0.2.0",
+  "description": "A modern, high-performance web client for Nepal Stock (NEPSE) and CDSC MeroShare investors.",
+  "license": "MIT",
+  "author": "Shubham",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Shubhamnpk/meroshare-next.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Shubhamnpk/meroshare-next/issues"
+  },
+  "homepage": "https://github.com/Shubhamnpk/meroshare-next",
+  "keywords": [
+    "meroshare",
+    "nepse",
+    "cdsc",
+    "nepal-stock",
+    "portfolio-tracker",
+    "tanstack-start",
+    "tanstack-router",
+    "react19",
+    "tailwind"
+  ],
   "private": true,
   "sideEffects": false,
   "type": "module",

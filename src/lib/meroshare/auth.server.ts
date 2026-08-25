@@ -6,7 +6,11 @@ import type { OwnDetail, SessionUser } from "./types";
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 2;
 
-export function toSessionUser(detail: OwnDetail, capitalId: number, expiresAt: number): SessionUser {
+export function toSessionUser(
+  detail: OwnDetail,
+  capitalId: number,
+  expiresAt: number,
+): SessionUser {
   return {
     name: String(detail.name ?? ""),
     username: String(detail.username ?? ""),
@@ -31,17 +35,14 @@ export async function performLogin(input: {
     throw new CdscError("Please pick your depository participant from the list.", 400);
   }
 
-  const { data, headers } = await cdscRequestWithHeaders<Record<string, unknown>>(
-    CDSC_URLS.login,
-    {
-      method: "POST",
-      body: {
-        clientId: input.capitalId,
-        username: input.username,
-        password: input.password,
-      },
+  const { data, headers } = await cdscRequestWithHeaders<Record<string, unknown>>(CDSC_URLS.login, {
+    method: "POST",
+    body: {
+      clientId: input.capitalId,
+      username: input.username,
+      password: input.password,
     },
-  );
+  });
 
   const token = headers.get("Authorization") ?? headers.get("authorization");
   if (!token) {

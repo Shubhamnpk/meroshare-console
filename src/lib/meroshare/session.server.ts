@@ -38,6 +38,7 @@ function sessionConfig() {
 }
 
 export async function getMeroShareSession() {
+  // eslint-disable-next-line react-hooks/rules-of-hooks
   return useSession<MeroShareSessionData>(sessionConfig());
 }
 

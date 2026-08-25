@@ -21,6 +21,7 @@ Combining both gives real candles for the last year and a continuous close/volum
 Replaces the current thin `/chart` page (its route stays and redirects, so old links keep working).
 
 **Chart**
+
 - Candlesticks with a volume histogram pane underneath.
 - Timeframes: 1D (intraday line), 1W, 1M, 3M, 6M, 1Y (true candles), 5Y and Max (close line from the 2012 archive).
 - Chart type switch: candles / line / area.
@@ -28,19 +29,23 @@ Replaces the current thin `/chart` page (its route stays and redirects, so old l
 - Log scale toggle, fullscreen toggle, and a PNG snapshot button.
 
 **Indicators** (computed in the browser from the same bars, nothing extra fetched)
+
 - Overlays: SMA, EMA (configurable periods), Bollinger Bands, VWAP.
 - Panes: RSI 14, MACD, volume.
 - A small indicator menu with on/off toggles that persists per user in local storage.
 
 **Symbol switching**
+
 - Search across all listed scrips, recent-symbols row, and your holdings + watchlist listed as one-tap chips so you jump straight to what you own.
 - Indices are chartable too (NEPSE, Sensitive, sector indices).
 
 **Compare / net worth**
+
 - A "Compare" selector to overlay a second symbol or the NEPSE index, normalised to percent so the two are readable together.
 - A **Portfolio** tab that charts your own net worth over time from the existing portfolio history series, with NEPSE overlaid — so you can see whether you're beating the market. Day/月 granularity switch and total return figures beside it.
 
 **Below the chart**
+
 - Live quote strip: LTP, change, day range, 52-week range, volume, turnover, previous close.
 - Your position in that scrip if you hold it: units, WACC, market value, unrealised P/L.
 - Key fundamentals already in our feed: EPS, P/E, paid-up capital, net worth, last dividend.

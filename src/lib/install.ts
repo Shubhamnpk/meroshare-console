@@ -13,6 +13,7 @@ declare global {
 }
 
 const DISMISS_KEY = "ms-install-banner-dismissed";
+const INSTALLED_KEY = "ms-app-installed";
 
 let deferred: BeforeInstallPromptEvent | null = null;
 const listeners = new Set<() => void>();
@@ -30,8 +31,7 @@ export function isStandalone(): boolean {
 export function isIosDevice(): boolean {
   if (typeof navigator === "undefined") return false;
   const ua = navigator.userAgent;
-  const iPadOs =
-    /Macintosh/.test(ua) && "ontouchend" in document && navigator.maxTouchPoints > 1;
+  const iPadOs = /Macintosh/.test(ua) && "ontouchend" in document && navigator.maxTouchPoints > 1;
   return /iPad|iPhone|iPod/.test(ua) || iPadOs;
 }
 
@@ -58,6 +58,7 @@ export function initInstallCapture(): void {
   });
   window.addEventListener("appinstalled", () => {
     deferred = null;
+    markInstalled();
     listeners.forEach((fn) => fn());
   });
   // Adopt an event that fired before React hydrated.
@@ -71,12 +72,36 @@ export function initInstallCapture(): void {
 export async function promptInstall(): Promise<InstallPromptOutcome> {
   if (!deferred) return "unavailable";
   await deferred.prompt();
-  const choice = await deferred.userChoice.catch(() =>
-    ({ outcome: "dismissed" }) as { outcome: "accepted" | "dismissed" },
+  const choice = await deferred.userChoice.catch(
+    () => ({ outcome: "dismissed" }) as { outcome: "accepted" | "dismissed" },
   );
-  if (choice.outcome === "accepted") deferred = null;
+  if (choice.outcome === "accepted") {
+    deferred = null;
+    markInstalled();
+  }
   listeners.forEach((fn) => fn());
   return choice.outcome;
+}
+
+/**
+ * Remember that the app was installed on this browser so the banner stays
+ * hidden even when the site is later opened in a regular browser tab, where
+ * `display-mode: standalone` does not match.
+ */
+function markInstalled(): void {
+  try {
+    localStorage.setItem(INSTALLED_KEY, String(Date.now()));
+  } catch {
+    // private mode; standalone check still covers the installed window
+  }
+}
+
+export function isAppInstalled(): boolean {
+  try {
+    return localStorage.getItem(INSTALLED_KEY) != null;
+  } catch {
+    return false;
+  }
 }
 
 /** Banner dismissal is permanent; Settings always offers install manually. */

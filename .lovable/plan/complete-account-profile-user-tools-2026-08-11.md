@@ -3,6 +3,7 @@
 Dropping the dividends / mutual-fund / broker pages from the earlier list. Focus: surface every field the MeroShare API returns about the user, and add tools that are genuinely useful on top of it.
 
 ## What's there now
+
 The profile page reads only `ownDetail` — name, demat, a few expiry badges. The account API already exposes `myDetail`, `bankList`, `bankDetail` and `bankRequest`, but none of that extra detail reaches the UI.
 
 ## 1. Full profile coverage
@@ -27,9 +28,11 @@ Fields the API omits for a given user are hidden rather than shown blank. Anythi
 - **Session info** — when the session started, when it expires, and last login device from the activity log.
 
 ## 3. Design
+
 Same dark-first financial style. Two-column definition grids on desktop, stacked cards on mobile, sticky section nav on the left for long profiles, masked values in tabular numerals.
 
 ## Technical notes
+
 - New server function `getAccountProfile` in `account.functions.ts` that fans out `ownDetail`, `myDetail`, `bankList` (+ per-bank `bankDetail` / `bankRequest`) in one server round-trip and returns one normalised, serialization-safe DTO — so the client makes a single request.
 - Typed `AccountProfile` shape in `meroshare/types.ts`; unknown/extra CDSC keys kept in a raw section so nothing the API returns is lost.
 - `/profile` rewritten to use it via a new `accountProfileQuery`; masking and export are client-side only.

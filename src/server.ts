@@ -65,15 +65,7 @@ const SITEMAP_ROUTES: { path: string; priority: string; changefreq: string }[] =
 
 function escapeXml(value: string): string {
   return value.replace(/[<>&'"]/g, (c) =>
-    c === "<"
-      ? "&lt;"
-      : c === ">"
-        ? "&gt;"
-        : c === "&"
-          ? "&amp;"
-          : c === "'"
-            ? "&apos;"
-            : "&quot;",
+    c === "<" ? "&lt;" : c === ">" ? "&gt;" : c === "&" ? "&amp;" : c === "'" ? "&apos;" : "&quot;",
   );
 }
 
@@ -84,8 +76,10 @@ function sitemapXml(origin: string): string {
       `  <url><loc>${escapeXml(origin + r.path)}</loc><lastmod>${lastmod}</lastmod>` +
       `<changefreq>${r.changefreq}</changefreq><priority>${r.priority}</priority></url>`,
   ).join("\n");
-  return `<?xml version="1.0" encoding="UTF-8"?>\n` +
-    `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${entries}\n</urlset>\n`;
+  return (
+    `<?xml version="1.0" encoding="UTF-8"?>\n` +
+    `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${entries}\n</urlset>\n`
+  );
 }
 
 function robotsTxt(origin: string): string {

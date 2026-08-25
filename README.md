@@ -1,114 +1,224 @@
-# MeroShare Next
+# MeroShare Console
 
-A modern, real MeroShare client for Nepali investors. Sign in with your own DP,
-username and password and get your **live CDSC data** — portfolio valuation,
-holdings, share transactions, IPO applications, WACC and account details — in a
-polished, dark-first interface built for both desktop and mobile.
+A modern, high-performance web client for Nepal Stock (NEPSE) and CDSC MeroShare investors.
 
-No demo data anywhere: every screen is powered by the real CDSC backend through
-a secure server-side proxy.
+Sign in with your own DP, username and password and get your **live CDSC data** in a polished,
+responsive interface — installable as a PWA on mobile and desktop.
 
-## Highlights
+No demo data: every screen is powered by the real CDSC backend through a secure server-side proxy.
 
-- **Real data, real sessions** — users log in with their own MeroShare
-  credentials; everything is fetched live from CDSC (`webbackend.cdsc.com.np`).
-- **Full MeroShare parity** — Portfolio, My Shares, Transactions, IPO apply +
-  reports + results, Purchase Source / WACC, Activity Log, My Profile, bank
-  details, change password / transaction PIN.
-- **Modern UI/UX** — dark-first design system (oklch tokens, no hardcoded
-  colours), desktop sidebar + mobile bottom tabs, hover popovers, tabular
-  numbers with NPR formatting, per-page search and CSV export.
-- **Secure by design** — the browser never talks to CDSC directly. Credentials
-  live only in an encrypted, httpOnly session cookie; the password and PIN are
-  never stored or logged; the PIN is re-entered for every transaction.
-- **Resilient** — session-expiry detection with auto sign-out, WAF-block
-  detection (CDSC's filter rejects some endpoints with HTML), graceful
-  error states and Zod validation on every server function.
+## Top services
+
+| Service | What you get |
+| ------- | ------------ |
+| **Portfolio** | Live NEPSE price feed with auto-refresh, sector allocation breakdown, per-scrip detail (LTP, previous close, day change, holding value), portfolio value over time (daily/monthly/yearly), sector-weighted history chart |
+| **Dividends** | Cash dividend, bonus share, merger and right credits, estimated cash payout per scrip, year-by-year breakdown with stat cards, filter and expand per-scrip tables |
+| **Analytics** | Sector and scrip allocation donut charts, biggest movers today, top-5 concentration, gainers/losers count, interactive hover tooltips |
+| **Transactions** | Full demat movement history (credits, debits, running balance), per-scrip filter and text search |
+| **IPO & Applications** | All IPOs, apply screen, bank selection, application status reports, allotment results |
+| **Purchase Source / WACC** | WACC calculation with per-scrip purchase history |
+| **Activity & Account** | Last 30 days of sign-in and account activity, full MeroShare profile, account health indicators (password expiry, demat expiry, KYC status) |
+| **Export** | Every page supports CSV, JSON, and PDF export via a format-picker modal |
 
 ## Tech stack
 
-- **TanStack Start** (React + Vite, server-rendered, file-based routing)
-- **TanStack Query** — caching, background auto-refresh, mutation invalidation
-- **Tailwind CSS** + shadcn-style UI components (Radix primitives)
-- **Zod** — input validation on every server function
-- **Lucide** icons, `sonner` toasts
+- [TanStack Start](https://tanstack.com/start) (React 19 + Vite 8 + Nitro, server-rendered, file-based routing)
+- [TanStack Query](https://tanstack.com/query) — caching, background auto-refresh, mutation invalidation
+- [Tailwind CSS](https://tailwindcss.com) v4 + [shadcn/ui](https://ui.shadcn.com) components (Radix primitives)
+- [Recharts](https://recharts.org) for pie/donut charts, [Lightweight Charts](https://tradingview.github.io/lightweight-charts/) for candlestick/area charts
+- [jsPDF](https://github.com/parallax/jsPDF) + jspdf-autotable for PDF export
+- [Zod](https://zod.dev) — input validation on every server function
+- [Lucide](https://lucide.dev) icons, [sonner](https://sonner.emilkowal.ski/) toasts
 
 ## How it works
 
-The CDSC backend cannot be called from a browser (CORS + credential exposure),
-so every request is proxied through the app's own server layer:
+Because the CDSC backend enforces CORS restrictions and requires secure credential
+encapsulation, this application proxies all requests through a fast server function
+layer powered by Nitro and TanStack Start:
 
-```text
-Browser  ->  app server functions  ->  webbackend.cdsc.com.np
-          (encrypted session cookie holds the CDSC auth token)
+```
++-------------------------------+
+     Client (Browser / PWA)
++-------------------------------+
+               |  HTTPS / Server Functions
++-------------------------------+
+    TanStack Start / Nitro      <--- Validates Zod schemas & decrypts
+      Server Middleware              session token
++-------------------------------+
+               |  Encrypted TLS / Headers / Auth Token
++-------------------------------+
+   CDSC Backend (meroshare)     <--- Official CDSC Web Services
++-------------------------------+
 ```
 
-`createServerFn` handlers in `src/lib/meroshare/*.functions.ts` wrap each CDSC
-endpoint; `cdsc.server.ts` attaches the auth token and shared headers, and maps
-errors (including CDSC's 401/403 session expiry and WAF-blocked HTML responses).
+`createServerFn` handlers in `src/lib/meroshare/*.functions.ts` wrap each CDSC endpoint;
+`cdsc.server.ts` attaches the auth token and shared headers, and maps errors (including
+CDSC's 401/403 session expiry and WAF-blocked HTML responses).
 
-## Getting started
+---
 
-Requires Node.js 20+ and npm.
+## Getting Started
+
+### Prerequisites
+
+- [Bun](https://bun.sh) 1.1+ (recommended) or Node.js 20+
+
+### 1. Clone the repository
 
 ```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm install
+git clone https://github.com/Shubhamnpk/meroshare-next.git
+cd meroshare-next
 ```
 
-Copy the environment template and set a strong session secret:
+### 2. Install dependencies
+
+```sh
+bun install
+```
+
+### 3. Set up environment variables
+
+Create a `.env.local` file from the example:
 
 ```sh
 cp .env.example .env.local
 ```
 
-| Variable         | Required | Purpose                                   |
-| ---------------- | -------- | ----------------------------------------- |
-| `SESSION_SECRET` | yes      | Encrypts the httpOnly session cookie.     |
-
-Then start the dev server:
+Generate a secure random string for the session secret:
 
 ```sh
-npm run dev
+node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"
 ```
 
-Open the printed URL (default `http://localhost:3000`) and sign in with your
+Add it to `.env.local`:
+
+```
+SESSION_SECRET=your_generated_random_secret_here
+```
+
+| Variable         | Required | Purpose                               |
+| ---------------- | -------- | ------------------------------------- |
+| `SESSION_SECRET` | yes      | Encrypts the httpOnly session cookie. |
+
+### 4. Run the development server
+
+```sh
+bun run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) in your browser and sign in with your
 MeroShare DP, username and password.
-
-## Scripts
-
-```sh
-npm run dev       # start the dev server
-npm run build     # production build
-npm run start     # serve the production build
-npm run lint      # eslint
-npm run typecheck # tsc --noEmit
-```
-
-## Project layout
-
-```text
-src/
-├── components/        # UI kit (ui/), app shell, settings, states
-├── lib/
-│   ├── meroshare/     # CDSC integration: api.server.ts (fetchers),
-│   │                  # cdsc.server.ts (HTTP client + URLs), session.server.ts
-│   │                  # *.functions.ts (createServerFn wrappers), types.ts
-│   ├── queries.ts     # TanStack Query options per feature
-│   ├── format.ts      # NPR formatting, dates, error/session helpers
-│   └── settings.tsx   # local settings store (theme, auto-refresh, …)
-└── routes/            # TanStack Router file routes (_dash.* = signed-in pages)
-```
-
-## Security notes
-
-- Password and transaction PIN are sent straight to CDSC and never persisted.
-- The session token is stored server-side in an encrypted, httpOnly cookie.
-- Every server function validates its input with Zod before touching CDSC.
-- Sessions are cleared on logout and on expiry (auto sign-out to the login screen).
 
 ---
 
-Built with [Lovable](https://lovable.dev) — an independent client for MeroShare,
-not affiliated with CDSC. All data belongs to CDSC/MeroShare and your DP.
+## Scripts
+
+| Command          | Action                                       |
+| :--------------- | :------------------------------------------- |
+| `bun run dev`     | Start development server with HMR            |
+| `bun run build`   | Build optimized production bundle with Nitro |
+| `bun run preview` | Preview production build locally             |
+| `bun run lint`    | Run ESLint and Prettier checks               |
+| `bun run format`  | Auto-format source code with Prettier        |
+
+---
+
+## Project Structure
+
+```
+meroshare-next/
+├── public/                  # Static assets, logos, icons, PWA manifest
+├── src/
+│   ├── components/
+│   │   ├── market/          # Scrip sheets, technical charts
+│   │   ├── portfolio/       # Valuation, history panels, dividends
+│   │   ├── ui/              # Shadcn-inspired accessible primitives
+│   │   ├── app-shell.tsx    # Dashboard layout, sidebar, command palette
+│   │   └── export-dialog.tsx # PDF / CSV / JSON export engine
+│   ├── hooks/               # Custom React hooks
+│   ├── lib/
+│   │   ├── meroshare/       # CDSC server functions, session, auth client
+│   │   ├── nepse/           # Live market feeds, price calculations
+│   │   ├── calc/            # Financial fees calculator
+│   │   ├── format.ts        # NPR currency & date formatters
+│   │   ├── version.ts       # App versioning and release notes
+│   │   └── watchlist.tsx    # Watchlist state management
+│   └── routes/              # TanStack Start file-based routing
+│       ├── __root.tsx       # Root application shell & session handler
+│       ├── index.tsx        # Sign-in portal with DP combobox
+│       └── _dash.*.tsx      # Authenticated dashboard pages
+├── package.json
+└── vite.config.ts
+```
+
+---
+
+## Deployment
+
+MeroShare Console is built with **TanStack Start** and **Nitro**, configured for
+Cloudflare Workers (`cloudflare-module` preset) out of the box.
+
+First, build the production bundle:
+
+```sh
+bun run build
+```
+
+### Deploy to Cloudflare Workers
+
+The build generates `.output/server/wrangler.json`, so deployment is a one-liner:
+
+```sh
+npx wrangler --cwd .output/server deploy
+```
+
+Or preview locally before shipping:
+
+```sh
+npx wrangler --cwd .output/server dev
+```
+
+Make sure `SESSION_SECRET` is set as a Worker secret:
+
+```sh
+npx wrangler secret put SESSION_SECRET
+```
+
+### Other platforms
+
+Nitro ships presets for every major host — switch with `NITRO_PRESET`, rebuild, deploy:
+
+| Platform | Build command | Run / deploy |
+| :------- | :------------ | :----------- |
+| Any Node server | `NITRO_PRESET=node-server bun run build` | `node .output/server/index.mjs` |
+| Vercel | `NITRO_PRESET=vercel bun run build` | `vercel deploy --prebuilt` (or connect repo) |
+| Netlify | `NITRO_PRESET=netlify bun run build` | `netlify deploy --prod` |
+| Deno / Bun servers | `NITRO_PRESET=deno-server` / `bun-server` | run the emitted entry |
+
+Wherever you host it, set `SESSION_SECRET` in that platform's environment variables
+(`wrangler secret put SESSION_SECRET` on Workers, project settings on Vercel/Netlify,
+`.env` or export on your own server).
+
+---
+
+## Contributing
+
+Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a
+pull request. Bug reports and feature requests go through the issue templates.
+
+---
+
+## Disclaimer
+
+**MeroShare Console** is an independent third-party open-source client. It is **not
+affiliated with, endorsed by, or sponsored by CDS and Clearing Limited (CDSC) or Nepal
+Stock Exchange (NEPSE)**.
+
+All financial data, depository records, and trademarked names belong to their respective
+owners and depository participants. Use at your own risk.
+
+---
+
+## License
+
+Distributed under the **MIT License**. See [LICENSE](LICENSE) for more information.

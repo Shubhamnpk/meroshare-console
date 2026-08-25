@@ -1,9 +1,29 @@
-import { useEffect, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
-import { Check, Database, Download, KeyRound, Lock, Monitor, Moon, Palette, Sun } from "lucide-react";
+﻿import { useEffect, useState } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import {
+  Check,
+  Clock,
+  Database,
+  Download,
+  ExternalLink,
+  Github,
+  Hash,
+  Info,
+  KeyRound,
+  Lock,
+  Monitor,
+  Moon,
+  Palette,
+  RefreshCw,
+  Shield,
+  Sparkles,
+  Sun,
+} from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
-import { useSettings, type ThemePref } from "@/lib/settings";
+import { Badge } from "@/components/ui/badge";
+import { useSettings, COLOR_OPTIONS, type ThemePref } from "@/lib/settings";
+import { APP_VERSION, GITHUB_REPO_URL } from "@/lib/version";
 import {
   hasNativeInstallPrompt,
   initInstallCapture,
@@ -17,15 +37,15 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/_dash/settings")({
   head: () => ({
     meta: [
-      { title: "Settings | MeroShare Investor Console" },
+      { title: "Settings & Preferences | MeroShare Console" },
       {
         name: "description",
-        content: "Theme, data preferences and security for your MeroShare console.",
+        content: "Appearance, data synchronization, security controls, and release preferences.",
       },
-      { property: "og:title", content: "Settings | MeroShare Investor Console" },
+      { property: "og:title", content: "Settings | MeroShare Console" },
       {
         property: "og:description",
-        content: "Theme, data preferences and security for your MeroShare console.",
+        content: "Appearance, data synchronization, security controls, and release preferences.",
       },
     ],
   }),
@@ -33,58 +53,38 @@ export const Route = createFileRoute("/_dash/settings")({
 });
 
 const THEME_OPTIONS: { value: ThemePref; label: string; hint: string; icon: typeof Sun }[] = [
-  { value: "light", label: "Light", hint: "Bright, paper feel", icon: Sun },
-  { value: "dark", label: "Dark", hint: "Easy on the eyes", icon: Moon },
-  { value: "system", label: "System", hint: "Follows your device", icon: Monitor },
+  { value: "light", label: "Light Mode", hint: "Bright & crisp interface", icon: Sun },
+  { value: "dark", label: "Dark Mode", hint: "Easy on the eyes in low light", icon: Moon },
+  { value: "system", label: "System Default", hint: "Sync with device settings", icon: Monitor },
 ];
 
-function Card({
+function SectionHeader({
   icon: Icon,
   title,
   subtitle,
-  children,
+  badge,
 }: {
   icon: typeof Palette;
   title: string;
   subtitle: string;
-  children: React.ReactNode;
+  badge?: string;
 }) {
   return (
-    <section className="space-y-4 rounded-2xl border border-border/70 bg-card p-5">
-      <header className="flex items-center gap-3">
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
+    <div className="flex items-start justify-between gap-4 border-b border-border/60 pb-4">
+      <div className="flex items-center gap-3">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary">
           <Icon className="size-5" />
         </div>
         <div>
-          <h2 className="font-display text-base font-semibold">{title}</h2>
+          <h2 className="font-display text-base font-semibold tracking-tight">{title}</h2>
           <p className="text-xs text-muted-foreground">{subtitle}</p>
         </div>
-      </header>
-      {children}
-    </section>
-  );
-}
-
-function ToggleRow({
-  title,
-  hint,
-  checked,
-  onCheckedChange,
-  labelId,
-}: {
-  title: string;
-  hint: string;
-  checked: boolean;
-  onCheckedChange: (value: boolean) => void;
-  labelId: string;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4 rounded-xl border border-border/70 bg-background p-3.5">
-      <div>
-        <p className="text-sm font-medium">{title}</p>
-        <p className="text-xs text-muted-foreground">{hint}</p>
       </div>
-      <Switch checked={checked} onCheckedChange={onCheckedChange} aria-label={labelId} />
+      {badge && (
+        <Badge variant="outline" className="bg-secondary/60 text-xs font-medium">
+          {badge}
+        </Badge>
+      )}
     </div>
   );
 }
@@ -106,37 +106,44 @@ function InstallCard() {
   const ios = isIosDevice();
 
   return (
-    <Card icon={Download} title="App install" subtitle="Run this console like a native app.">
+    <section className="space-y-4 rounded-2xl border border-border/70 bg-card p-6 shadow-sm">
+      <SectionHeader
+        icon={Download}
+        title="App Installation"
+        subtitle="Install MeroShare Console as a native PWA on your home screen."
+        badge={installed ? "Installed" : "PWA Ready"}
+      />
+
       {installed ? (
-        <div className="flex items-center gap-2 rounded-xl border border-border/70 bg-background p-3.5">
-          <Check className="size-4 text-gain" />
-          <p className="text-sm font-medium">Installed</p>
+        <div className="flex items-center gap-3 rounded-xl border border-gain/30 bg-gain/10 p-4 text-xs font-medium text-gain">
+          <Check className="size-4 shrink-0" />
+          <span>App is currently installed and running in standalone mode.</span>
         </div>
       ) : promptReady ? (
-        <div className="flex items-center justify-between gap-4 rounded-xl border border-border/70 bg-background p-3.5">
-          <div>
-            <p className="text-sm font-medium">Install on this device</p>
+        <div className="flex flex-col gap-3 rounded-xl border border-border/60 bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-0.5">
+            <p className="text-sm font-semibold">Install on this device</p>
             <p className="text-xs text-muted-foreground">
-              Launches full-screen from your home screen or app list.
+              Launches full-screen directly from your app launcher or home screen.
             </p>
           </div>
-          <Button size="sm" onClick={() => void promptInstall()}>
-            <Download className="size-4" /> Install
+          <Button size="sm" onClick={() => void promptInstall()} className="gap-2 shrink-0">
+            <Download className="size-4" /> Install App
           </Button>
         </div>
       ) : (
-        <div className="rounded-xl border border-border/70 bg-background p-3.5">
-          <p className="text-sm font-medium">
-            {ios ? "Add to Home Screen" : "Install from the browser menu"}
+        <div className="rounded-xl border border-border/60 bg-background p-4 space-y-1">
+          <p className="text-sm font-semibold">
+            {ios ? "Add to Home Screen (iOS Safari)" : "Install via Browser Menu"}
           </p>
-          <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+          <p className="text-xs leading-relaxed text-muted-foreground">
             {ios
-              ? "In Safari, tap Share, then choose Add to Home Screen."
-              : "Open your browser's menu and choose Install app / Add to Home screen, then come back here."}
+              ? "In Safari, tap the Share button at the bottom and select 'Add to Home Screen'."
+              : "Open your browser menu (⋮) and choose 'Install App' or 'Add to Home Screen'."}
           </p>
         </div>
       )}
-    </Card>
+    </section>
   );
 }
 
@@ -144,6 +151,8 @@ function SettingsPage() {
   const {
     theme,
     setTheme,
+    colorTheme,
+    setColorTheme,
     compactNumbers,
     setCompactNumbers,
     autoRefresh,
@@ -157,68 +166,159 @@ function SettingsPage() {
   const intervalOptions = [1, 5, 10, 30];
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="font-display text-2xl font-semibold sm:text-3xl">Settings</h1>
-        <p className="mt-1 hidden text-sm text-muted-foreground sm:block">
-          Appearance and data preferences are saved on this device. Security changes apply directly
-          on MeroShare.
-        </p>
+    <div className="mx-auto max-w-5xl space-y-8 pb-8">
+      {/* Top Page Header */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">Settings</h1>
+            <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">
+              {APP_VERSION}
+            </Badge>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
+            Manage console appearance, automated data refresh rates, security actions, and release
+            info.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" asChild className="gap-1.5 text-xs">
+            <Link to="/releases">
+              <Sparkles className="size-3.5 text-primary" />
+              <span>Release Notes</span>
+            </Link>
+          </Button>
+        </div>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-2">
-        <Card icon={Palette} title="Appearance" subtitle="How this console looks on your device.">
-          <div className="grid grid-cols-3 gap-2">
-            {THEME_OPTIONS.map(({ value, label, hint, icon: Icon }) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setTheme(value)}
-                className={cn(
-                  "flex flex-col items-center gap-1.5 rounded-xl border p-3 text-sm transition-colors",
-                  theme === value
-                    ? "border-primary bg-primary/10 text-foreground"
-                    : "border-border/70 bg-background text-muted-foreground hover:bg-accent/40",
-                )}
-              >
-                <Icon className={cn("size-5", theme === value && "text-primary")} />
-                <span className="font-medium">{label}</span>
-                <span className="text-[0.65rem]">{hint}</span>
-                {theme === value && <Check className="size-3.5 text-primary" />}
-              </button>
-            ))}
-          </div>
-        </Card>
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Appearance & Themes */}
+        <section className="space-y-5 rounded-2xl border border-border/70 bg-card p-6 shadow-sm">
+          <SectionHeader
+            icon={Palette}
+            title="Appearance & Theme"
+            subtitle="Choose how MeroShare Console looks on your screen."
+          />
 
-        <Card
-          icon={Database}
-          title="Data & refresh"
-          subtitle="How often data loads and how numbers are shown."
-        >
-          <div className="space-y-3">
-            <ToggleRow
-              title="Auto-refresh portfolio"
-              hint="Re-fetch holdings and valuation in the background."
-              checked={autoRefresh}
-              onCheckedChange={setAutoRefresh}
-              labelId="auto-refresh"
-            />
-            {autoRefresh && (
-              <div className="flex items-center justify-between gap-4 rounded-xl border border-border/70 bg-background p-3.5">
-                <div>
-                  <p className="text-sm font-medium">Refresh interval</p>
-                  <p className="text-xs text-muted-foreground">
-                    How often your data is re-fetched.
-                  </p>
+          <div className="grid grid-cols-3 gap-3">
+            {THEME_OPTIONS.map(({ value, label, hint, icon: Icon }) => {
+              const active = theme === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setTheme(value)}
+                  className={cn(
+                    "group relative flex flex-col items-center justify-between gap-2.5 rounded-xl border p-4 text-center transition-all duration-200",
+                    active
+                      ? "border-primary bg-primary/10 text-foreground shadow-sm ring-1 ring-primary/30"
+                      : "border-border/60 bg-background text-muted-foreground hover:border-border hover:bg-accent/30 hover:text-foreground",
+                  )}
+                >
+                  <div
+                    className={cn(
+                      "flex size-9 items-center justify-center rounded-lg transition-colors",
+                      active
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground group-hover:text-foreground",
+                    )}
+                  >
+                    <Icon className="size-4" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold">{label}</p>
+                    <p className="mt-0.5 text-[0.65rem] text-muted-foreground/80 leading-tight">
+                      {hint}
+                    </p>
+                  </div>
+                  {active && (
+                    <span className="absolute top-2 right-2 flex size-4 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                      <Check className="size-2.5" />
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Color Theme Picker */}
+          <div className="space-y-3 pt-2">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              Accent Color
+            </p>
+            <div className="flex items-center gap-2.5">
+              {COLOR_OPTIONS.map(({ value, label, swatch }) => {
+                const active = colorTheme === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setColorTheme(value)}
+                    aria-label={label}
+                    className={cn(
+                      "relative flex size-8 items-center justify-center rounded-full border-2 transition-all duration-200",
+                      active
+                        ? "border-foreground scale-110 ring-2 ring-foreground/20"
+                        : "border-transparent hover:scale-105",
+                    )}
+                    style={{ background: swatch }}
+                  >
+                    {active && (
+                      <Check className="size-3.5 text-white drop-shadow-sm" strokeWidth={3} />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
+        {/* Data Sync & Preferences */}
+        <section className="space-y-5 rounded-2xl border border-border/70 bg-card p-6 shadow-sm">
+          <SectionHeader
+            icon={Database}
+            title="Data Sync & Presentation"
+            subtitle="Control background data refresh and number formatting."
+          />
+
+          <div className="space-y-4">
+            {/* Auto Refresh Toggle */}
+            <div className="flex items-center justify-between gap-4 rounded-xl border border-border/60 bg-background p-4">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <RefreshCw className="size-4 text-primary" />
+                  <p className="text-sm font-semibold">Auto-refresh Portfolio</p>
                 </div>
-                <div className="flex gap-1 rounded-lg bg-secondary p-1">
+                <p className="text-xs text-muted-foreground">
+                  Automatically update stock prices and valuation in background.
+                </p>
+              </div>
+              <Switch
+                checked={autoRefresh}
+                onCheckedChange={setAutoRefresh}
+                aria-label="auto-refresh"
+              />
+            </div>
+
+            {/* Interval Selector */}
+            {autoRefresh && (
+              <div className="flex items-center justify-between gap-4 rounded-xl border border-border/60 bg-background p-4 animate-in fade-in slide-in-from-top-1 duration-200">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <Clock className="size-4 text-muted-foreground" />
+                    <p className="text-sm font-semibold">Refresh Frequency</p>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Background refetch interval.</p>
+                </div>
+                <div className="flex items-center gap-1 rounded-lg border border-border/60 bg-secondary/60 p-1">
                   {intervalOptions.map((m) => (
                     <button
                       key={m}
                       type="button"
                       onClick={() => setRefreshMinutes(m)}
                       className={cn(
-                        "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                        "rounded-md px-3 py-1 text-xs font-semibold transition-all",
                         refreshMinutes === m
                           ? "bg-card text-foreground shadow-sm"
                           : "text-muted-foreground hover:text-foreground",
@@ -230,33 +330,109 @@ function SettingsPage() {
                 </div>
               </div>
             )}
-            <ToggleRow
-              title="Compact numbers"
-              hint="Show large values as 12.5 L / 1.2 Cr instead of full figures."
-              checked={compactNumbers}
-              onCheckedChange={setCompactNumbers}
-              labelId="compact-numbers"
-            />
-          </div>
-        </Card>
 
+            {/* Compact Numbers Toggle */}
+            <div className="flex items-center justify-between gap-4 rounded-xl border border-border/60 bg-background p-4">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <Hash className="size-4 text-primary" />
+                  <p className="text-sm font-semibold">Compact Number Format</p>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Show values as Lakhs (L) and Crores (Cr), e.g. NPR 12.5 L.
+                </p>
+              </div>
+              <Switch
+                checked={compactNumbers}
+                onCheckedChange={setCompactNumbers}
+                aria-label="compact-numbers"
+              />
+            </div>
+          </div>
+        </section>
+
+        {/* Security & Credentials */}
+        <section className="space-y-5 rounded-2xl border border-border/70 bg-card p-6 shadow-sm">
+          <SectionHeader
+            icon={Lock}
+            title="Account & Security"
+            subtitle="Manage your MeroShare credentials and security keys."
+          />
+
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 rounded-xl border border-border/60 bg-muted/30 p-3.5 text-xs text-muted-foreground">
+              <Shield className="size-4 shrink-0 text-gain" />
+              <span>
+                Password and PIN changes are submitted directly to CDSC and never stored locally.
+              </span>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Button
+                variant="outline"
+                className="h-11 justify-start gap-2.5 rounded-xl border-border/70 font-medium"
+                onClick={openPassword}
+              >
+                <KeyRound className="size-4 text-primary" />
+                <span>Change Password</span>
+              </Button>
+              <Button
+                variant="outline"
+                className="h-11 justify-start gap-2.5 rounded-xl border-border/70 font-medium"
+                onClick={openPin}
+              >
+                <KeyRound className="size-4 text-primary" />
+                <span>Change Transaction PIN</span>
+              </Button>
+            </div>
+          </div>
+        </section>
+
+        {/* App Install Card */}
         <InstallCard />
       </div>
 
-      <Card
-        icon={Lock}
-        title="Security"
-        subtitle="Password and transaction PIN are changed on MeroShare."
-      >
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Button variant="outline" className="justify-start gap-2" onClick={openPassword}>
-            <KeyRound className="size-4" /> Change password
-          </Button>
-          <Button variant="outline" className="justify-start gap-2" onClick={openPin}>
-            <KeyRound className="size-4" /> Change transaction PIN
-          </Button>
+      {/* About & System Info */}
+      <section className="space-y-5 rounded-2xl border border-border/70 bg-card p-6 shadow-sm">
+        <SectionHeader
+          icon={Info}
+          title="About MeroShare Console"
+          subtitle="Open-source project details, version tags, and documentation."
+        />
+
+        <div className="flex flex-col gap-4 rounded-xl border border-border/60 bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <p className="font-display text-sm font-bold">MeroShare Investor Console</p>
+              <Badge
+                variant="secondary"
+                className="bg-primary/10 text-primary border-primary/20 text-[0.7rem]"
+              >
+                {APP_VERSION}
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              An independent client built with TanStack Start, React 19, Vite, and Tailwind CSS.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            <Button variant="outline" size="sm" asChild className="gap-1.5 text-xs">
+              <Link to="/releases">
+                <Sparkles className="size-3.5 text-primary" />
+                <span>What's New</span>
+              </Link>
+            </Button>
+            <Button variant="secondary" size="sm" asChild className="gap-1.5 text-xs">
+              <a href={GITHUB_REPO_URL} target="_blank" rel="noreferrer">
+                <Github className="size-3.5" />
+                <span>GitHub Repo</span>
+                <ExternalLink className="size-3 opacity-60" />
+              </a>
+            </Button>
+          </div>
         </div>
-      </Card>
+      </section>
     </div>
   );
 }

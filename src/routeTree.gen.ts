@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DashRouteImport } from './routes/_dash'
+import { Route as ReleasesRouteImport } from './routes/releases'
 import { Route as DashActivityRouteImport } from './routes/_dash.activity'
 import { Route as DashAnalyticsRouteImport } from './routes/_dash.analytics'
 import { Route as DashDashboardRouteImport } from './routes/_dash.dashboard'
@@ -32,6 +33,11 @@ const IndexRoute = IndexRouteImport.update({
 } as any)
 const DashRoute = DashRouteImport.update({
   id: '/_dash',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReleasesRoute = ReleasesRouteImport.update({
+  id: '/releases',
+  path: '/releases',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DashActivityRoute = DashActivityRouteImport.update({
@@ -102,6 +108,7 @@ const DashWatchlistRoute = DashWatchlistRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/releases': typeof ReleasesRoute
   '/activity': typeof DashActivityRoute
   '/analytics': typeof DashAnalyticsRoute
   '/dashboard': typeof DashDashboardRoute
@@ -118,6 +125,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/releases': typeof ReleasesRoute
   '/activity': typeof DashActivityRoute
   '/analytics': typeof DashAnalyticsRoute
   '/dashboard': typeof DashDashboardRoute
@@ -136,6 +144,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_dash': typeof DashRouteWithChildren
+  '/releases': typeof ReleasesRoute
   '/_dash/activity': typeof DashActivityRoute
   '/_dash/analytics': typeof DashAnalyticsRoute
   '/_dash/dashboard': typeof DashDashboardRoute
@@ -154,6 +163,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/releases'
     | '/activity'
     | '/analytics'
     | '/dashboard'
@@ -170,6 +180,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/releases'
     | '/activity'
     | '/analytics'
     | '/dashboard'
@@ -187,6 +198,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/_dash'
+    | '/releases'
     | '/_dash/activity'
     | '/_dash/analytics'
     | '/_dash/dashboard'
@@ -205,6 +217,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DashRoute: typeof DashRouteWithChildren
+  ReleasesRoute: typeof ReleasesRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -221,6 +234,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof DashRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/releases': {
+      id: '/releases'
+      path: '/releases'
+      fullPath: '/releases'
+      preLoaderRoute: typeof ReleasesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_dash/activity': {
@@ -354,6 +374,7 @@ const DashRouteWithChildren = DashRoute._addFileChildren(DashRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DashRoute: DashRouteWithChildren,
+  ReleasesRoute: ReleasesRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
