@@ -37,3 +37,11 @@ dist-ssr
 graphify-out/
 .lovable/
 
+# Local dev artifacts
+benchmarks/
+docs/
+
+# OS junk
+Thumbs.db
+desktop.ini
+
