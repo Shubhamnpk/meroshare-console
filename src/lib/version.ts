@@ -1,8 +1,8 @@
 export const APP_VERSION = "v0.2.0";
 export const APP_RELEASE_DATE = "August 2026";
-export const GITHUB_REPO_URL = "https://github.com/Shubhamnpk/meroshare-next";
+export const GITHUB_REPO_URL = "https://github.com/Shubhamnpk/meroshare-console";
 export const GITHUB_API_RELEASES_URL =
-  "https://api.github.com/repos/Shubhamnpk/meroshare-next/releases";
+  "https://api.github.com/repos/Shubhamnpk/meroshare-console/releases";
 
 export interface GitHubRelease {
   id: number;

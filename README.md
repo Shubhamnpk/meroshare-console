@@ -66,8 +66,8 @@ CDSC's 401/403 session expiry and WAF-blocked HTML responses).
 ### 1. Clone the repository
 
 ```sh
-git clone https://github.com/Shubhamnpk/meroshare-next.git
-cd meroshare-next
+git clone https://github.com/Shubhamnpk/meroshare-console.git
+cd meroshare-console
 ```
 
 ### 2. Install dependencies
@@ -126,7 +126,7 @@ MeroShare DP, username and password.
 ## Project Structure
 
 ```
-meroshare-next/
+meroshare-console/
 ├── public/                  # Static assets, logos, icons, PWA manifest
 ├── src/
 │   ├── components/

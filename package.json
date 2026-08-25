@@ -6,12 +6,12 @@
   "author": "Shubham",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Shubhamnpk/meroshare-next.git"
+    "url": "https://github.com/Shubhamnpk/meroshare-console.git"
   },
   "bugs": {
-    "url": "https://github.com/Shubhamnpk/meroshare-next/issues"
+    "url": "https://github.com/Shubhamnpk/meroshare-console/issues"
   },
-  "homepage": "https://github.com/Shubhamnpk/meroshare-next",
+  "homepage": "https://github.com/Shubhamnpk/meroshare-console",
   "keywords": [
     "meroshare",
     "nepse",
