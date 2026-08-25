@@ -203,7 +203,7 @@ Wherever you host it, set `SESSION_SECRET` in that platform's environment variab
 
 ## Contributing
 
-Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a
+Contributions are welcome! Please read [CONTRIBUTING.md](docs/CONTRIBUTING.md) before opening a
 pull request. Bug reports and feature requests go through the issue templates.
 
 ---

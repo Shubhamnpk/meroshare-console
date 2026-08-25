@@ -39,7 +39,7 @@ graphify-out/
 
 # Local dev artifacts
 benchmarks/
-docs/
+docs/meroshare-api.html
 
 # OS junk
 Thumbs.db
