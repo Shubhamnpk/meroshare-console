@@ -1,8 +1,17 @@
+import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Check, Database, KeyRound, Lock, Monitor, Moon, Palette, Sun } from "lucide-react";
+import { Check, Database, Download, KeyRound, Lock, Monitor, Moon, Palette, Sun } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { useSettings, type ThemePref } from "@/lib/settings";
+import {
+  hasNativeInstallPrompt,
+  initInstallCapture,
+  isIosDevice,
+  isStandalone,
+  promptInstall,
+  subscribeInstall,
+} from "@/lib/install";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_dash/settings")({
@@ -77,6 +86,57 @@ function ToggleRow({
       </div>
       <Switch checked={checked} onCheckedChange={onCheckedChange} aria-label={labelId} />
     </div>
+  );
+}
+
+function InstallCard() {
+  const [installed, setInstalled] = useState(isStandalone());
+  const [promptReady, setPromptReady] = useState(hasNativeInstallPrompt());
+
+  useEffect(() => {
+    initInstallCapture();
+    const sync = () => {
+      setInstalled(isStandalone());
+      setPromptReady(hasNativeInstallPrompt());
+    };
+    sync();
+    return subscribeInstall(sync);
+  }, []);
+
+  const ios = isIosDevice();
+
+  return (
+    <Card icon={Download} title="App install" subtitle="Run this console like a native app.">
+      {installed ? (
+        <div className="flex items-center gap-2 rounded-xl border border-border/70 bg-background p-3.5">
+          <Check className="size-4 text-gain" />
+          <p className="text-sm font-medium">Installed</p>
+        </div>
+      ) : promptReady ? (
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-border/70 bg-background p-3.5">
+          <div>
+            <p className="text-sm font-medium">Install on this device</p>
+            <p className="text-xs text-muted-foreground">
+              Launches full-screen from your home screen or app list.
+            </p>
+          </div>
+          <Button size="sm" onClick={() => void promptInstall()}>
+            <Download className="size-4" /> Install
+          </Button>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-border/70 bg-background p-3.5">
+          <p className="text-sm font-medium">
+            {ios ? "Add to Home Screen" : "Install from the browser menu"}
+          </p>
+          <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+            {ios
+              ? "In Safari, tap Share, then choose Add to Home Screen."
+              : "Open your browser's menu and choose Install app / Add to Home screen, then come back here."}
+          </p>
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -179,6 +239,8 @@ function SettingsPage() {
             />
           </div>
         </Card>
+
+        <InstallCard />
       </div>
 
       <Card

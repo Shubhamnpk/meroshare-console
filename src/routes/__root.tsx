@@ -16,9 +16,11 @@ import { reportLovableError } from "../lib/lovable-error-reporting";
 import { logout } from "@/lib/meroshare/auth.functions";
 import { isSessionError } from "@/lib/format";
 import { SettingsProvider } from "@/lib/settings";
+import { initInstallCapture } from "@/lib/install";
 import { WatchlistProvider } from "@/lib/watchlist";
 
 import { SecurityDialogs } from "@/components/security-dialog";
+import { InstallBanner } from "@/components/install-banner";
 
 function NotFoundComponent() {
   return (
@@ -100,6 +102,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "theme-color", content: "#2563eb" },
+      { name: "mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
+      { name: "apple-mobile-web-app-title", content: "MeroShare" },
     ],
     links: [
       {
@@ -109,6 +116,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
       { rel: "icon", href: "/favicon.ico", sizes: "any" },
       { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
+      { rel: "manifest", href: "/manifest.webmanifest" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
@@ -131,6 +139,13 @@ function RootShell({ children }: { children: ReactNode }) {
         <script
           dangerouslySetInnerHTML={{
             __html: `try{var s=JSON.parse(localStorage.getItem("ms-settings")||"{}");var t=s.theme||localStorage.getItem("ms-theme")||"system";var l=t==="light"||(t==="system"&&matchMedia("(prefers-color-scheme: light)").matches);document.documentElement.classList.toggle("light",l)}catch(e){}`,
+          }}
+        />
+        <script
+          dangerouslySetInnerHTML={{
+            // The install prompt often fires before React mounts; park it on
+            // window so lib/install.ts can adopt it during startup.
+            __html: `window.__msInstallPrompt=null;window.addEventListener("beforeinstallprompt",function(e){e.preventDefault();window.__msInstallPrompt=e;});`,
           }}
         />
       </head>
@@ -176,18 +191,30 @@ function SessionExpiryHandler() {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
-  return (
-    <SettingsProvider>
-      <QueryClientProvider client={queryClient}>
-        <WatchlistProvider>
-          {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-          <Outlet />
-          <SessionExpiryHandler />
-          <SecurityDialogs />
-          <Toaster position="top-center" richColors />
-        </WatchlistProvider>
-      </QueryClientProvider>
-    </SettingsProvider>
+  useEffect(() => {
+    // Register the installability service worker (network-only, no offline cache).
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {
+        // SW is optional; the app works fine without it.
+      });
+    }
+    initInstallCapture();
+  }, []);
 
+  return (
+    <>
+      <InstallBanner />
+      <SettingsProvider>
+        <QueryClientProvider client={queryClient}>
+          <WatchlistProvider>
+            {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+            <Outlet />
+            <SessionExpiryHandler />
+            <SecurityDialogs />
+            <Toaster position="top-center" richColors />
+          </WatchlistProvider>
+        </QueryClientProvider>
+      </SettingsProvider>
+    </>
   );
 }
