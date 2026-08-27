@@ -199,12 +199,22 @@ function TerminalPage() {
 
   const compareLine: LinePoint[] | undefined = useMemo(() => {
     const bars = compare.data?.bars ?? [];
-    if (!bars.length) return undefined;
-    return normalise(bars.map((b) => ({ date: b.date, value: b.close })));
-  }, [compare.data?.bars]);
+    const compareIntraday = compare.data?.intraday ?? [];
+    // Use intraday for 1D range, daily bars for longer ranges
+    if (bars.length > 0) {
+      const source = bars.map((b) => ({ date: b.date, value: b.close }));
+      return source.length >= 2 ? normalise(source) : undefined;
+    }
+    if (compareIntraday.length > 1) {
+      const source = compareIntraday.map((p) => ({ date: p.time, value: p.value }));
+      return normalise(source);
+    }
+    return undefined;
+  }, [compare.data?.bars, compare.data?.intraday]);
 
   const activeBars = mode === "portfolio" ? netWorthBars : (series.data?.bars ?? []);
   const intraday = mode === "portfolio" ? [] : (series.data?.intraday ?? []);
+  const isIntraday = activeBars.length === 0 && intraday.length > 0;
   const loading = mode === "portfolio" ? netWorth.isPending : series.isPending;
   const chartHeight = expanded ? 720 : 480;
 
@@ -215,7 +225,11 @@ function TerminalPage() {
 
   const first = activeBars[0]?.close ?? 0;
   const last = activeBars[activeBars.length - 1]?.close ?? 0;
-  const rangeReturn = first > 0 ? ((last - first) / first) * 100 : 0;
+  const intradayFirst = intraday[0]?.value ?? 0;
+  const intradayLast = intraday[intraday.length - 1]?.value ?? 0;
+  const rangeReturn = isIntraday
+    ? (intradayFirst > 0 ? ((intradayLast - intradayFirst) / intradayFirst) * 100 : 0)
+    : (first > 0 ? ((last - first) / first) * 100 : 0);
 
   const setIndicator = (key: keyof IndicatorConfig, value: boolean) =>
     setState((prev) => ({ ...prev, indicators: { ...prev.indicators, [key]: value } }));

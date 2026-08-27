@@ -9,6 +9,7 @@ import {
   HistogramSeries,
   LineSeries,
   LineStyle,
+  TickMarkType,
   createChart,
   type IChartApi,
   type ISeriesApi,
@@ -157,9 +158,42 @@ export function TerminalChart({
         timeVisible: isIntraday,
         secondsVisible: false,
         rightOffset: 4,
+        ...(isIntraday
+          ? {
+              tickMarkFormatter: (time: Time, tickMarkType: TickMarkType) => {
+                const timestamp = Number(time);
+                if (!Number.isFinite(timestamp)) return String(time);
+                // Convert UTC timestamp to Nepal time (UTC+5:45)
+                const nepalMs = timestamp * 1000 + 345 * 60 * 1000;
+                const d = new Date(nepalMs);
+                const h = d.getUTCHours();
+                const m = d.getUTCMinutes();
+                const ampm = h >= 12 ? "PM" : "AM";
+                const h12 = h % 12 || 12;
+                return `${h12}:${m.toString().padStart(2, "0")} ${ampm}`;
+              },
+            }
+          : {}),
       },
       crosshair: { mode: CrosshairMode.Normal },
-      localization: { locale: "en-NP" },
+      localization: {
+        locale: "en-NP",
+        ...(isIntraday
+          ? {
+              timeFormatter: (time: Time) => {
+                const timestamp = Number(time);
+                if (!Number.isFinite(timestamp)) return String(time);
+                const nepalMs = timestamp * 1000 + 345 * 60 * 1000;
+                const d = new Date(nepalMs);
+                const h = d.getUTCHours();
+                const m = d.getUTCMinutes();
+                const ampm = h >= 12 ? "PM" : "AM";
+                const h12 = h % 12 || 12;
+                return `${h12}:${m.toString().padStart(2, "0")} ${ampm}`;
+              },
+            }
+          : {}),
+      },
     });
     apiRef.current = chart;
 
@@ -277,21 +311,21 @@ export function TerminalChart({
           .addSeries(LineSeries, { ...opts, lineStyle: LineStyle.Dotted })
           .setData(toLine(bands.middle));
       }
+    }
 
-      if (compare && compare.length > 1) {
-        const series = chart.addSeries(LineSeries, {
-          color: "#94a3b8",
-          lineWidth: 1,
-          priceScaleId: "compare",
-          priceLineVisible: false,
-          title: compareLabel ?? "Compare",
-        });
-        series.setData(toLine(compare));
-        chart.priceScale("compare").applyOptions({
-          scaleMargins: { top: 0.1, bottom: 0.3 },
-          visible: false,
-        });
-      }
+    if (compare && compare.length > 1) {
+      const series = chart.addSeries(LineSeries, {
+        color: "#94a3b8",
+        lineWidth: 1,
+        priceScaleId: "compare",
+        priceLineVisible: false,
+        title: compareLabel ?? "Compare",
+      });
+      series.setData(toLine(compare));
+      chart.priceScale("compare").applyOptions({
+        scaleMargins: { top: 0.1, bottom: 0.3 },
+        visible: false,
+      });
     }
 
     let pane = 1;
@@ -301,14 +335,26 @@ export function TerminalChart({
         { priceFormat: { type: "volume" }, priceScaleId: "" },
         pane,
       );
-      const source = isIntraday ? [] : bars;
-      volumeSeries.setData(
-        source.map((b) => ({
-          time: b.date as Time,
-          value: b.volume,
-          color: b.close >= b.open ? `${UP}66` : `${DOWN}66`,
-        })),
-      );
+      if (isIntraday) {
+        const hasVolume = intraday.some((p) => (p.volume ?? 0) > 0);
+        if (hasVolume) {
+          volumeSeries.setData(
+            intraday.map((p) => ({
+              time: p.time as UTCTimestamp,
+              value: p.volume ?? 0,
+              color: p.value >= (intraday[0]?.value ?? 0) ? `${UP}66` : `${DOWN}66`,
+            })),
+          );
+        }
+      } else {
+        volumeSeries.setData(
+          bars.map((b) => ({
+            time: b.date as Time,
+            value: b.volume,
+            color: b.close >= b.open ? `${UP}66` : `${DOWN}66`,
+          })),
+        );
+      }
       chart.panes()[pane]?.setHeight(Math.round(height * 0.16));
       pane += 1;
     }
@@ -393,8 +439,17 @@ export function TerminalChart({
         const value = mainSeries ? param.seriesData.get(mainSeries) : undefined;
         const price = value && "value" in value ? Number(value.value) : 0;
         const first = intraday[0]?.value ?? price;
+        // Convert UTC timestamp to Nepal time (UTC+5:45)
+        const nepalMs = Number(param.time) * 1000 + 345 * 60 * 1000;
+        const nepalDate = new Date(nepalMs);
+        const yyyy = nepalDate.getUTCFullYear();
+        const mm = (nepalDate.getUTCMonth() + 1).toString().padStart(2, "0");
+        const dd = nepalDate.getUTCDate().toString().padStart(2, "0");
+        const hh = nepalDate.getUTCHours().toString().padStart(2, "0");
+        const mi = nepalDate.getUTCMinutes().toString().padStart(2, "0");
+        const ss = nepalDate.getUTCSeconds().toString().padStart(2, "0");
         emit({
-          date: new Date(Number(param.time) * 1000).toISOString(),
+          date: `${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}`,
           open: first,
           high: price,
           low: price,

@@ -10,6 +10,7 @@ import {
   Rocket,
   TrendingDown,
   TrendingUp,
+  Wallet,
 } from "lucide-react";
 import { StatCard, DeltaPill } from "@/components/stat-card";
 import { SwipeableCards } from "@/components/swipeable-cards";
@@ -22,6 +23,7 @@ import {
   enrichedPortfolioQuery,
   indexGraphQuery,
   marketSnapshotQuery,
+  waccReportQuery,
 } from "@/lib/queries";
 import { formatDate, formatNpr, formatPercent, formatQty } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -103,6 +105,7 @@ function DashboardPage() {
   const issues = useQuery(applicableIssuesQuery());
   const market = useQuery(marketSnapshotQuery());
   const nepseGraph = useQuery(indexGraphQuery("NEPSE"));
+  const waccReport = useQuery(waccReportQuery());
   const [picked, setPicked] = useState<string | null>(null);
   const [chartOpen, setChartOpen] = useState(false);
 
@@ -110,6 +113,11 @@ function DashboardPage() {
   const holdings = data?.holdings ?? [];
   const change = data?.dayChange ?? 0;
   const changePct = data?.dayChangePercent ?? 0;
+
+  const totalInvestment = (waccReport.data?.waccReportResponse ?? []).reduce(
+    (sum, h) => sum + Math.max(0, h.totalCost ?? 0),
+    0,
+  );
 
   const sortedByChange = [...holdings].sort((a, b) => b.percentChange - a.percentChange);
   const topGainer = sortedByChange[0] ?? null;
@@ -121,7 +129,11 @@ function DashboardPage() {
   const nepsePoints = nepseGraph.data ?? [];
 
   const isRefreshing =
-    portfolio.isFetching || issues.isFetching || market.isFetching || nepseGraph.isFetching;
+    portfolio.isFetching ||
+    issues.isFetching ||
+    market.isFetching ||
+    nepseGraph.isFetching ||
+    waccReport.isFetching;
 
   const statCards = [
     <StatCard
@@ -169,6 +181,13 @@ function DashboardPage() {
       value={holdings.length}
       sub={`${formatQty(data?.totalUnits ?? 0)} total units`}
     />,
+    <StatCard
+      key="investment"
+      label="Total investment"
+      value={formatNpr(totalInvestment)}
+      icon={<Wallet className="size-4" />}
+      sub={totalInvestment > 0 ? "Based on WACC data" : "No WACC data yet"}
+    />,
   ];
 
   const refreshAll = () => {
@@ -176,6 +195,7 @@ function DashboardPage() {
     void issues.refetch();
     void market.refetch();
     void nepseGraph.refetch();
+    void waccReport.refetch();
   };
 
   return (
@@ -207,7 +227,7 @@ function DashboardPage() {
         <ErrorBlock error={portfolio.error} retry={() => void portfolio.refetch()} />
       ) : (
         <>
-          <div className="hidden gap-3 sm:grid sm:grid-cols-2 xl:grid-cols-4">{statCards}</div>
+          <div className="hidden gap-3 sm:grid sm:grid-cols-2 xl:grid-cols-5">{statCards}</div>
           <div className="sm:hidden">
             <SwipeableCards cards={statCards} />
           </div>

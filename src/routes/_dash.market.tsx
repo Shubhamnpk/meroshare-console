@@ -430,7 +430,7 @@ function MarketPage() {
           </section>
 
           <p className="text-xs text-muted-foreground">
-            Market data comes from the live NEPSE mirror (bitnepal.net) plus a community YONEPSE
+            Market data comes from the live NEPSE mirror plus a community YONEPSE
             feed and is indicative only.
           </p>
         </>

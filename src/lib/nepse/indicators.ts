@@ -13,7 +13,7 @@ export interface Bar {
 }
 
 export interface LinePoint {
-  date: string;
+  date: string | number;
   value: number;
 }
 

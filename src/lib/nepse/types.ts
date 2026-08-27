@@ -69,6 +69,7 @@ export interface MarketStatus {
 export interface PricePoint {
   time: number;
   value: number;
+  volume?: number | undefined;
 }
 
 export interface ScripOverview {

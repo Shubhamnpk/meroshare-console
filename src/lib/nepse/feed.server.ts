@@ -35,7 +35,7 @@ const BITNEPAL_BASE = "https://nepse.bitnepal.net/api/v1";
 const YONEPSE_BASE = "https://shubhamnpk.github.io/yonepse";
 
 export const FEED_ATTRIBUTION =
-  "Live NEPSE mirror (bitnepal.net) + community YONEPSE feed (indicative, unofficial data).";
+  "Live NEPSE mirror + community YONEPSE feed (indicative, unofficial data).";
 
 interface CacheEntry {
   value: unknown;
@@ -798,7 +798,9 @@ export async function getScripDetail(symbol: string): Promise<ScripDetail> {
     const time = num(row["time"]);
     const value = num(row["contractRate"]);
     if (!time || !value) return [];
-    return [{ time, value }];
+    const volume =
+      num(row["totalTradedQuantity"]) || num(row["volume"]) || num(row["shareTraded"]) || undefined;
+    return [{ time, value, volume }];
   });
 
   const latest = [...dividends]
@@ -1022,7 +1024,9 @@ export async function getChartSeries(symbol: string, range: ChartRange): Promise
     const time = num(row["time"]);
     const value = num(row["contractRate"]);
     if (!time || !value) return [];
-    return [{ time, value }];
+    const volume =
+      num(row["totalTradedQuantity"]) || num(row["volume"]) || num(row["shareTraded"]) || undefined;
+    return [{ time, value, volume }];
   });
 
   const quote = live.prices.find((p) => p.symbol === upper);

@@ -53,10 +53,20 @@ function formatDate(iso: string) {
   });
 }
 
+/** Escape HTML entities to prevent XSS before applying markdown transforms. */
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 /** Very light markdown → HTML for GitHub release bodies (bold, italic, headings, bullets, code, links) */
 function renderMarkdown(md: string): string {
   return (
-    md
+    escapeHtml(md)
       // Headings
       .replace(/^### (.+)$/gm, "<h3>$1</h3>")
       .replace(/^## (.+)$/gm, "<h2>$1</h2>")
@@ -67,7 +77,7 @@ function renderMarkdown(md: string): string {
       .replace(/\*(.+?)\*/g, "<em>$1</em>")
       // Inline code
       .replace(/`([^`]+)`/g, "<code>$1</code>")
-      // Links
+      // Links (URLs already escaped by escapeHtml, but &amp; in href needs fixing)
       .replace(
         /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g,
         '<a href="$2" target="_blank" rel="noreferrer">$1</a>',

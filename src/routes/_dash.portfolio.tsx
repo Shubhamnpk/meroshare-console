@@ -10,6 +10,7 @@ import {
   ArrowUpDown,
   ArrowUpRight,
   Coins,
+  PiggyBank,
   Search,
   TrendingDown,
   TrendingUp,
@@ -28,7 +29,7 @@ import {
 } from "@/components/ui/table";
 import { ScripSheet } from "@/components/market/scrip-sheet";
 import { HistoryPanel } from "@/components/portfolio/history-panel";
-import { enrichedPortfolioQuery } from "@/lib/queries";
+import { enrichedPortfolioQuery, waccReportQuery } from "@/lib/queries";
 import { useSettings } from "@/lib/settings";
 import { formatNpr, formatQty } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -162,6 +163,7 @@ function PortfolioPage() {
     ...enrichedPortfolioQuery(),
     refetchInterval: autoRefresh ? refreshMinutes * 60_000 : false,
   });
+  const waccReport = useQuery(waccReportQuery());
   const [search, setSearch] = useState("");
   const [picked, setPicked] = useState<string | null>(null);
   const [sort, setSort] = useState<SortState>({ key: "value", dir: "desc" });
@@ -174,6 +176,12 @@ function PortfolioPage() {
     dayChange: q.data?.dayChange ?? 0,
     dayPct: q.data?.dayChangePercent ?? 0,
   };
+
+  const totalInvestment = (waccReport.data?.waccReportResponse ?? []).reduce(
+    (sum, h) => sum + Math.max(0, h.totalCost ?? 0),
+    0,
+  );
+  const unrealizedPL = totals.value - totalInvestment;
 
   const items = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -333,6 +341,25 @@ function PortfolioPage() {
           value={`${totals.dayChange > 0 ? "+" : totals.dayChange < 0 ? "-" : ""}${formatNpr(Math.abs(totals.dayChange))} (${totals.dayPct.toFixed(2)}%)`}
           valueClass={totals.dayChange > 0 ? "text-gain" : totals.dayChange < 0 ? "text-loss" : ""}
         />
+        <StatChip
+          icon={<PiggyBank className="size-4" />}
+          label="Total investment"
+          value={formatNpr(totalInvestment, { compact: compactNumbers })}
+        />
+        {totalInvestment > 0 ? (
+          <StatChip
+            icon={
+              unrealizedPL >= 0 ? (
+                <TrendingUp className="size-4 text-gain" />
+              ) : (
+                <TrendingDown className="size-4 text-loss" />
+              )
+            }
+            label="Unrealized P/L"
+            value={`${unrealizedPL >= 0 ? "+" : ""}${formatNpr(unrealizedPL, { compact: compactNumbers })}`}
+            valueClass={unrealizedPL >= 0 ? "text-gain" : "text-loss"}
+          />
+        ) : null}
       </div>
 
       {q.isLoading ? (

@@ -33,6 +33,7 @@ import {
   chartDayLabel,
   chartTimeLabel,
 } from "@/components/market/chart-modal";
+import { DocumentViewer } from "@/components/market/document-viewer";
 import {
   dividendsQuery,
   enrichedPortfolioQuery,
@@ -285,7 +286,13 @@ function FinancialSummary({
   );
 }
 
-function ReportGroups({ reports }: { reports: FinancialReport[] }) {
+function ReportGroups({
+  reports,
+  onViewDocument,
+}: {
+  reports: FinancialReport[];
+  onViewDocument: (url: string, title: string) => void;
+}) {
   const groups = useMemo(() => {
     const byFy = new Map<string, FinancialReport[]>();
     for (const r of reports) {
@@ -423,14 +430,18 @@ function ReportGroups({ reports }: { reports: FinancialReport[] }) {
                             </div>
                           </div>
                           {r.documentUrl ? (
-                            <a
-                              href={r.documentUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onViewDocument(
+                                  r.documentUrl!,
+                                  `${r.type}${r.quarter ? ` ${r.quarter}` : ""} ${r.fy ?? ""}`.trim(),
+                                )
+                              }
                               className="shrink-0 rounded-lg border border-border/70 px-2 py-1 font-medium text-primary transition-colors hover:bg-primary/10"
                             >
                               Report
-                            </a>
+                            </button>
                           ) : null}
                         </li>
                       );
@@ -463,6 +474,7 @@ export function ScripSheet({
   const [tab, setTab] = useState("overview");
   const [rangeKey, setRangeKey] = useState<string>("1D");
   const [chartOpen, setChartOpen] = useState(false);
+  const [docViewer, setDocViewer] = useState<{ url: string; title: string } | null>(null);
 
   useEffect(() => {
     setRangeKey("1D");
@@ -807,7 +819,10 @@ export function ScripSheet({
               {financials.data && financials.data.reports.length > 1 ? (
                 <section className="rounded-2xl border border-border/70 bg-card p-4">
                   <h3 className="font-display text-sm font-semibold">Report history</h3>
-                  <ReportGroups reports={financials.data.reports} />
+                  <ReportGroups
+                    reports={financials.data.reports}
+                    onViewDocument={(url, title) => setDocViewer({ url, title })}
+                  />
                   <p className="mt-3 text-[0.68rem] text-muted-foreground">
                     Figures are indicative from the YONEPSE community feed and follow NEPSE-reported
                     annual / quarterly results.
@@ -997,15 +1012,14 @@ export function ScripSheet({
                     <div className="flex items-start justify-between gap-3">
                       <p className="text-sm font-semibold leading-snug">{item.title}</p>
                       {item.fileUrl ? (
-                        <a
-                          href={item.fileUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                        <button
+                          type="button"
+                          onClick={() => setDocViewer({ url: item.fileUrl!, title: item.title })}
                           className="shrink-0 text-muted-foreground transition-colors hover:text-primary"
-                          aria-label="Open the NEPSE notice"
+                          aria-label="View attached document"
                         >
-                          <ExternalLink className="size-3.5" />
-                        </a>
+                          <FileText className="size-3.5" />
+                        </button>
                       ) : null}
                     </div>
                     {item.body ? (
@@ -1051,6 +1065,16 @@ export function ScripSheet({
         formatIntradayLabel={chartTimeLabel}
         formatDailyLabel={chartDayLabel}
       />
+      {docViewer ? (
+        <DocumentViewer
+          url={docViewer.url}
+          title={docViewer.title}
+          open={!!docViewer}
+          onOpenChange={(open) => {
+            if (!open) setDocViewer(null);
+          }}
+        />
+      ) : null}
     </Sheet>
   );
 }
