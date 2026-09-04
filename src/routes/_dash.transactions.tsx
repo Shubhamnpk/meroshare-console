@@ -22,6 +22,7 @@ import {
 import { ExportButton, csvRow } from "@/components/export-dialog";
 import { holdingSymbolsQuery, transactionsQuery } from "@/lib/queries";
 import { formatDate, formatQty, toNumber } from "@/lib/format";
+import { ogImage, canonicalLink } from "@/lib/seo";
 import type { TransactionItem } from "@/lib/meroshare/types";
 
 export const Route = createFileRoute("/_dash/transactions")({
@@ -37,6 +38,10 @@ export const Route = createFileRoute("/_dash/transactions")({
         property: "og:description",
         content: "Credit and debit history for every scrip in your demat account.",
       },
+      ogImage(),
+    ],
+    links: [
+      canonicalLink("/transactions"),
     ],
   }),
   component: TransactionsPage,
@@ -237,13 +242,13 @@ function TransactionsPage() {
                     className="hidden max-w-72 truncate text-xs text-muted-foreground md:table-cell"
                     title={t.historyDescription}
                   >
-                    {t.historyDescription ?? "—"}
+                    {t.historyDescription ?? "-"}
                   </TableCell>
                   <TableCell className="num text-right font-semibold text-gain">
-                    {toNumber(t.creditQuantity) > 0 ? `+${formatQty(t.creditQuantity)}` : "—"}
+                    {toNumber(t.creditQuantity) > 0 ? `+${formatQty(t.creditQuantity)}` : "-"}
                   </TableCell>
                   <TableCell className="num text-right font-semibold text-loss">
-                    {toNumber(t.debitQuantity) > 0 ? `−${formatQty(t.debitQuantity)}` : "—"}
+                    {toNumber(t.debitQuantity) > 0 ? `−${formatQty(t.debitQuantity)}` : "-"}
                   </TableCell>
                   <TableCell className="num pr-4 text-right text-muted-foreground">
                     {formatQty(t.balanceAfterTransaction)}

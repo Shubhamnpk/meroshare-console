@@ -13,11 +13,14 @@ import {
   requireAuth,
   submitIpoApplication,
 } from "./api.server";
+import { DEMO_APPLICATIONS } from "./demo-data";
 import type { ApplicableIssue, ApplicationReportItem, JsonRecord } from "./types";
 
 export const getApplicableIssues = createServerFn({ method: "GET" }).handler(
   async (): Promise<ApplicableIssue[]> => {
-    const res = await fetchApplicableIssues(await requireAuth());
+    const auth = await requireAuth();
+    if (auth.demo) return [];
+    const res = await fetchApplicableIssues(auth);
     return res.object ?? [];
   },
 );
@@ -25,6 +28,7 @@ export const getApplicableIssues = createServerFn({ method: "GET" }).handler(
 export const getCurrentIssues = createServerFn({ method: "GET" }).handler(
   async (): Promise<ApplicableIssue[]> => {
     const auth = await requireAuth();
+    if (auth.demo) return [];
     try {
       const res = await fetchCurrentIssues(auth);
       if (res.object?.length) return res.object;
@@ -38,20 +42,24 @@ export const getCurrentIssues = createServerFn({ method: "GET" }).handler(
 
 export const getApplicationReports = createServerFn({ method: "GET" }).handler(
   async (): Promise<ApplicationReportItem[]> => {
-    const res = await fetchApplicationReports(await requireAuth());
+    const auth = await requireAuth();
+    if (auth.demo) return DEMO_APPLICATIONS;
+    const res = await fetchApplicationReports(auth);
     return res.object ?? [];
   },
 );
 
 export const getOldApplicationReports = createServerFn({ method: "GET" }).handler(
   async (): Promise<ApplicationReportItem[]> => {
-    const res = await fetchOldApplicationReports(await requireAuth());
+    const auth = await requireAuth();
+    if (auth.demo) return [];
+    const res = await fetchOldApplicationReports(auth);
     return res.object ?? [];
   },
 );
 
 export const getIssueDetail = createServerFn({ method: "POST" })
-  .inputValidator((input: unknown) =>
+  .validator((input: unknown) =>
     z.object({ companyShareId: z.number().int().positive() }).parse(input),
   )
   .handler(async ({ data }): Promise<JsonRecord> =>
@@ -59,7 +67,7 @@ export const getIssueDetail = createServerFn({ method: "POST" })
   );
 
 export const getAppliedDetail = createServerFn({ method: "POST" })
-  .inputValidator((input: unknown) =>
+  .validator((input: unknown) =>
     z
       .object({
         formId: z.number().int().positive(),
@@ -72,7 +80,7 @@ export const getAppliedDetail = createServerFn({ method: "POST" })
   );
 
 export const getApplicationDetails = createServerFn({ method: "POST" })
-  .inputValidator((input: unknown) =>
+  .validator((input: unknown) =>
     z
       .object({
         items: z
@@ -100,7 +108,7 @@ export const getApplicationDetails = createServerFn({ method: "POST" })
   });
 
 export const canApplyToIssue = createServerFn({ method: "POST" })
-  .inputValidator((input: unknown) =>
+  .validator((input: unknown) =>
     z.object({ companyShareId: z.number().int().positive() }).parse(input),
   )
   .handler(async ({ data }): Promise<JsonRecord> =>
@@ -119,19 +127,19 @@ const applySchema = z.object({
 });
 
 export const applyForIpo = createServerFn({ method: "POST" })
-  .inputValidator((input: unknown) => applySchema.parse(input))
+  .validator((input: unknown) => applySchema.parse(input))
   .handler(async ({ data }): Promise<JsonRecord> =>
     submitIpoApplication(await requireAuth(), data),
   );
 
 export const editIpoApply = createServerFn({ method: "POST" })
-  .inputValidator((input: unknown) =>
+  .validator((input: unknown) =>
     applySchema.extend({ applicantFormId: z.number().int().positive() }).parse(input),
   )
   .handler(async ({ data }): Promise<JsonRecord> => editIpoApplication(await requireAuth(), data));
 
 export const deleteIpoApply = createServerFn({ method: "POST" })
-  .inputValidator((input: unknown) =>
+  .validator((input: unknown) =>
     z
       .object({
         applicantFormId: z.number().int().positive(),

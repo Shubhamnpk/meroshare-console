@@ -6,6 +6,7 @@ import type { TransactionItem } from "../meroshare/types";
 import { toNumber } from "../format";
 import {
   FEED_ATTRIBUTION,
+  getAllFinancials,
   getChartSeries as fetchChartSeries,
   getDividends,
   getExchangeMessages,
@@ -19,14 +20,18 @@ import {
   getPortfolioHistory,
   getScripDetail as fetchScripDetail,
   getScripFinancials as fetchScripFinancials,
+  getScripFullHistory as fetchScripFullHistory,
+  getYonepseHistory,
   getSectorIndices,
   getTopStocks,
 } from "./feed.server";
 import { parseNptEpoch, type UnitSnapshot } from "./timeline";
 import type {
   ChartSeries,
+  DailyBar,
   DividendRow,
   ExchangeMessageRow,
+  FinancialReport,
   IpoArchiveRow,
   LivePrice,
   MarketSnapshot,
@@ -41,11 +46,6 @@ import type {
 export interface PortfolioTimeline {
   points: PortfolioHistoryPoint[];
   snapshots: Record<string, UnitSnapshot[]>;
-  /**
-   * Scrips whose demat history could not be fetched from CDSC. These are
-   * missing from the chart/list even though you hold them; surfaced here so
-   * the UI can show it instead of silently producing an incomplete picture.
-   */
   failed: { symbol: string; message: string }[];
 }
 
@@ -86,7 +86,7 @@ export const getMarketSectors = createServerFn({ method: "GET" }).handler(
 );
 
 export const getScrip = createServerFn({ method: "POST" })
-  .inputValidator((input: unknown) =>
+  .validator((input: unknown) =>
     z.object({ symbol: z.string().trim().min(1).max(24) }).parse(input),
   )
   .handler(async ({ data }): Promise<LivePrice | null> => {
@@ -111,7 +111,7 @@ export const getIpoArchiveList = createServerFn({ method: "GET" }).handler(
 );
 
 export const getIndexGraph = createServerFn({ method: "POST" })
-  .inputValidator((input: unknown) =>
+  .validator((input: unknown) =>
     z.object({ indexName: z.string().trim().min(1).max(48) }).parse(input),
   )
   .handler(async ({ data }): Promise<PricePoint[]> => {
@@ -120,7 +120,7 @@ export const getIndexGraph = createServerFn({ method: "POST" })
   });
 
 export const getScripDetail = createServerFn({ method: "POST" })
-  .inputValidator((input: unknown) =>
+  .validator((input: unknown) =>
     z.object({ symbol: z.string().trim().min(1).max(24) }).parse(input),
   )
   .handler(async ({ data }): Promise<ScripDetail | null> => {
@@ -129,7 +129,7 @@ export const getScripDetail = createServerFn({ method: "POST" })
   });
 
 export const getScripFinancials = createServerFn({ method: "POST" })
-  .inputValidator((input: unknown) =>
+  .validator((input: unknown) =>
     z.object({ symbol: z.string().trim().min(1).max(24) }).parse(input),
   )
   .handler(async ({ data }): Promise<ScripFinancials | null> => {
@@ -137,8 +137,17 @@ export const getScripFinancials = createServerFn({ method: "POST" })
     return fetchScripFinancials(data.symbol);
   });
 
+export const getScripFullHistory = createServerFn({ method: "POST" })
+  .validator((input: unknown) =>
+    z.object({ symbol: z.string().trim().min(1).max(24) }).parse(input),
+  )
+  .handler(async ({ data }): Promise<DailyBar[]> => {
+    await requireAuth();
+    return fetchScripFullHistory(data.symbol);
+  });
+
 export const getScripFaceValues = createServerFn({ method: "POST" })
-  .inputValidator((input: unknown) =>
+  .validator((input: unknown) =>
     z.object({ symbols: z.array(z.string().trim().min(1).max(24)).max(200) }).parse(input),
   )
   .handler(async ({ data }): Promise<Record<string, number>> => {
@@ -153,8 +162,93 @@ export const getNews = createServerFn({ method: "GET" }).handler(
   },
 );
 
+// ---------------------------------------------------------------------------
+// Screener data – batch fetch everything needed for the Best Shares page
+// ---------------------------------------------------------------------------
+
+export interface ScreenerData {
+  prices: LivePrice[];
+  dividends: Record<string, DividendRow[]>;
+  faceValues: Record<string, number>;
+  financials: Record<string, FinancialReport[]>;
+}
+
+export const getScreenerData = createServerFn({ method: "GET" }).handler(
+  async (): Promise<ScreenerData> => {
+    await requireAuth();
+    const [live, allDividends, allFinancials] = await Promise.all([
+      getLivePrices(),
+      getDividends(),
+      getAllFinancials(),
+    ]);
+
+    // Fetch face values for all symbols (batched, max 200 per call)
+    const symbols = live.prices.map((p) => p.symbol);
+    const faceValues: Record<string, number> = {};
+    for (let i = 0; i < symbols.length; i += 200) {
+      const batch = symbols.slice(i, i + 200);
+      const batchFv = await fetchFaceValues(batch);
+      Object.assign(faceValues, batchFv);
+    }
+
+    // Group dividends by symbol (sorted by announcement date, newest first)
+    const dividendsBySymbol: Record<string, DividendRow[]> = {};
+    for (const d of allDividends) {
+      const key = d.symbol.toUpperCase();
+      if (!dividendsBySymbol[key]) dividendsBySymbol[key] = [];
+      dividendsBySymbol[key].push(d);
+    }
+    for (const key of Object.keys(dividendsBySymbol)) {
+      dividendsBySymbol[key].sort((a, b) =>
+        (b.announcementDate ?? "").localeCompare(a.announcementDate ?? ""),
+      );
+    }
+
+    // Convert financials Map to plain object
+    const financials: Record<string, FinancialReport[]> = {};
+    for (const [sym, reports] of allFinancials) {
+      financials[sym] = reports;
+    }
+
+    return {
+      prices: live.prices,
+      dividends: dividendsBySymbol,
+      faceValues,
+      financials,
+    };
+  },
+);
+
+/**
+ * Fetch daily bars for a list of symbols (for RSI calculation).
+ * Returns a map of symbol → DailyBar[].
+ */
+export const getScripBarsBatch = createServerFn({ method: "POST" })
+  .validator((input: unknown) =>
+    z
+      .object({
+        symbols: z.array(z.string().trim().min(1).max(24)).max(50),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data }): Promise<Record<string, DailyBar[]>> => {
+    await requireAuth();
+    const result: Record<string, DailyBar[]> = {};
+    await Promise.all(
+      data.symbols.map(async (symbol) => {
+        try {
+          const bars = await getYonepseHistory(symbol, 30);
+          if (bars.length > 0) result[symbol.toUpperCase()] = bars;
+        } catch {
+          // skip failed fetches
+        }
+      }),
+    );
+    return result;
+  });
+
 export const getPortfolioHistorySeries = createServerFn({ method: "POST" })
-  .inputValidator((input: unknown) =>
+  .validator((input: unknown) =>
     z
       .object({
         holdings: z
@@ -169,8 +263,6 @@ export const getPortfolioHistorySeries = createServerFn({ method: "POST" })
     const auth = await requireAuth();
     const wanted = new Set(data.holdings.map((h) => h.scrip.toUpperCase()));
 
-    // One paged dump of the whole demat movement history (CDSC is rate-limit
-    // sensitive, so a single stream beats one call per scrip). Retry once.
     let all: TransactionItem[] = [];
     let truncated = false;
     let fetchError: unknown = null;
@@ -195,7 +287,6 @@ export const getPortfolioHistorySeries = createServerFn({ method: "POST" })
       };
     }
 
-    // Slice the dump into ascending carry-forward timelines per held scrip.
     const snapshotsBySymbol = new Map<string, UnitSnapshot[]>();
     for (const t of all) {
       const key = String(t.script ?? "").toUpperCase();
@@ -236,7 +327,6 @@ export const getPortfolioHistorySeries = createServerFn({ method: "POST" })
 const TRANSACTION_PAGE_SIZE = 500;
 const MAX_TRANSACTION_PAGES = 12;
 
-/** Page through the full demat movement history (newest-first), bounded. */
 async function fetchAllTransactions(auth: AuthContext): Promise<{
   rows: TransactionItem[];
   truncated: boolean;
@@ -263,12 +353,12 @@ function errorMessageOf(err: unknown): string {
   return err instanceof Error && err.message
     ? err.message
     : typeof err === "string" && err.trim()
-      ? err
+      ? err.trim()
       : "Request failed";
 }
 
 export const getChartData = createServerFn({ method: "POST" })
-  .inputValidator((input: unknown) =>
+  .validator((input: unknown) =>
     z
       .object({
         symbol: z.string().trim().min(1).max(24),

@@ -8,11 +8,14 @@ import {
   ChartLine,
   RefreshCw,
   Rocket,
+  Star,
   TrendingDown,
   TrendingUp,
   Wallet,
 } from "lucide-react";
 import { StatCard, DeltaPill } from "@/components/stat-card";
+import { WatchlistPanel } from "@/components/market/watchlist-panel";
+import { useWatchlist } from "@/lib/watchlist";
 import { SwipeableCards } from "@/components/swipeable-cards";
 import { ErrorBlock, LoadingBlock, EmptyBlock, SkeletonCards } from "@/components/states";
 import { ScripSheet } from "@/components/market/scrip-sheet";
@@ -20,12 +23,16 @@ import { ChartModal, chartTimeLabel } from "@/components/market/chart-modal";
 import { Sparkline } from "@/components/market/sparkline";
 import {
   applicableIssuesQuery,
+  currentIssuesQuery,
   enrichedPortfolioQuery,
   indexGraphQuery,
+  investmentSummaryQuery,
+  ipoArchiveQuery,
   marketSnapshotQuery,
-  waccReportQuery,
 } from "@/lib/queries";
+import { sameCompany } from "@/lib/notifications";
 import { formatDate, formatNpr, formatPercent, formatQty } from "@/lib/format";
+import { ogImage, canonicalLink } from "@/lib/seo";
 import { cn } from "@/lib/utils";
 import type { EnrichedHolding } from "@/lib/nepse/types";
 
@@ -43,7 +50,9 @@ export const Route = createFileRoute("/_dash/dashboard")({
         property: "og:description",
         content: "Live snapshot of your portfolio value, day movers and open issues.",
       },
+      ogImage(),
     ],
+    links: [canonicalLink("/dashboard")],
   }),
   component: DashboardPage,
 });
@@ -94,7 +103,7 @@ function MoverCard({
           </p>
         </button>
       ) : (
-        <p className="mt-1 text-sm text-muted-foreground">—</p>
+        <p className="mt-1 text-sm text-muted-foreground">-</p>
       )}
     </div>
   );
@@ -103,10 +112,14 @@ function MoverCard({
 function DashboardPage() {
   const portfolio = useQuery(enrichedPortfolioQuery());
   const issues = useQuery(applicableIssuesQuery());
+  const calendar = useQuery(currentIssuesQuery());
+  const archive = useQuery(ipoArchiveQuery());
   const market = useQuery(marketSnapshotQuery());
   const nepseGraph = useQuery(indexGraphQuery("NEPSE"));
-  const waccReport = useQuery(waccReportQuery());
+  const investment = useQuery(investmentSummaryQuery());
   const [picked, setPicked] = useState<string | null>(null);
+  const [watchlistOpen, setWatchlistOpen] = useState(false);
+  const watchlist = useWatchlist();
   const [chartOpen, setChartOpen] = useState(false);
 
   const data = portfolio.data;
@@ -114,16 +127,40 @@ function DashboardPage() {
   const change = data?.dayChange ?? 0;
   const changePct = data?.dayChangePercent ?? 0;
 
-  const totalInvestment = (waccReport.data?.waccReportResponse ?? []).reduce(
-    (sum, h) => sum + Math.max(0, h.totalCost ?? 0),
-    0,
-  );
+  const totalInvestment = investment.data?.totalInvestment ?? 0;
+  const pendingCount = investment.data?.pendingCount ?? 0;
 
   const sortedByChange = [...holdings].sort((a, b) => b.percentChange - a.percentChange);
   const topGainer = sortedByChange[0] ?? null;
   const topLoser = sortedByChange[sortedByChange.length - 1] ?? null;
 
   const openIssues = (issues.data ?? []).slice(0, 4);
+
+  // Upcoming below open: CDSC-announced plus archive announcements, deduped.
+  const upcomingIssues = (() => {
+    const openNames = openIssues.map((i) => i.companyName || i.scrip || "");
+    const cdscUpcoming = (calendar.data ?? []).filter((i) =>
+      /upcoming|announced|coming/i.test(String(i.statusName ?? "")),
+    );
+    const names = [...openNames, ...cdscUpcoming.map((i) => i.companyName || i.scrip || "")];
+    const archived = (archive.data?.upcoming ?? []).filter(
+      (row) => !names.some((name) => sameCompany(name, row.company)),
+    );
+    return [
+      ...cdscUpcoming.map((i) => ({
+        key: `cdsc-${i.companyShareId}`,
+        title: i.companyName || i.scrip || "",
+        sub: `${i.scrip ?? ""} · opens ${formatDate(i.issueOpenDate)}`.trim(),
+      })),
+      ...archived.map((row, n) => ({
+        key: `arch-${row.company}-${n}`,
+        title: row.company,
+        sub: [row.units ? `${row.units} units` : null, row.dateRange ?? null]
+          .filter(Boolean)
+          .join(" · "),
+      })),
+    ].slice(0, 3);
+  })();
 
   const nepse = market.data?.indices.find((i) => /nepse/i.test(i.name)) ?? market.data?.indices[0];
   const nepsePoints = nepseGraph.data ?? [];
@@ -133,7 +170,7 @@ function DashboardPage() {
     issues.isFetching ||
     market.isFetching ||
     nepseGraph.isFetching ||
-    waccReport.isFetching;
+    investment.isFetching;
 
   const statCards = [
     <StatCard
@@ -186,7 +223,15 @@ function DashboardPage() {
       label="Total investment"
       value={formatNpr(totalInvestment)}
       icon={<Wallet className="size-4" />}
-      sub={totalInvestment > 0 ? "Based on WACC data" : "No WACC data yet"}
+      sub={
+        investment.isLoading
+          ? "Loading purchase source…"
+          : totalInvestment > 0
+            ? pendingCount > 0
+              ? `Purchase source · ${pendingCount} pending WACC`
+              : "Purchase source · all calculated"
+            : "No purchase source data yet"
+      }
     />,
   ];
 
@@ -195,7 +240,7 @@ function DashboardPage() {
     void issues.refetch();
     void market.refetch();
     void nepseGraph.refetch();
-    void waccReport.refetch();
+    void investment.refetch();
   };
 
   return (
@@ -245,7 +290,7 @@ function DashboardPage() {
                 </p>
                 {nepse ? (
                   <p className="num mt-2 text-3xl font-semibold">
-                    {nepse.close != null ? nepse.close.toLocaleString("en-IN") : "—"}
+                    {nepse.close != null ? nepse.close.toLocaleString("en-IN") : "-"}
                   </p>
                 ) : (
                   <p className="mt-2 text-sm text-muted-foreground">Loading…</p>
@@ -273,6 +318,52 @@ function DashboardPage() {
               Click for the full chart <ArrowUpRight className="size-3" />
             </p>
           </button>
+
+          <section className="rounded-2xl border border-border/70 bg-card p-4 sm:p-5">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 className="flex items-center gap-2 font-display text-base font-semibold">
+                <Star className="size-4 fill-warning text-warning" /> Watchlist
+              </h2>
+              {watchlist.symbols.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setWatchlistOpen(true)}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                >
+                  View all ({watchlist.symbols.length}) <ArrowUpRight className="size-3" />
+                </button>
+              ) : null}
+            </div>
+            {watchlist.symbols.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Star any scrip on the Market page and it will wait for you here.
+              </p>
+            ) : (
+              <div className="flex snap-x gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {watchlist.symbols.map((symbol) => {
+                  const price = market.data?.prices.find((p) => p.symbol === symbol);
+                  return (
+                    <button
+                      key={symbol}
+                      type="button"
+                      onClick={() => setPicked(symbol)}
+                      className="w-36 shrink-0 snap-start rounded-xl border border-border/60 bg-surface px-3 py-2.5 text-left transition-colors hover:border-primary/40"
+                    >
+                      <p className="truncate text-[13px] font-semibold">{symbol}</p>
+                      <p className="num mt-0.5 text-sm font-semibold">
+                        {price ? formatNpr(price.ltp) : "-"}
+                      </p>
+                      {price ? (
+                        <DeltaPill value={price.percentChange}>
+                          {formatPercent(price.percentChange)}
+                        </DeltaPill>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </section>
 
           <section className="rounded-2xl border border-border/70 bg-card p-4 sm:p-5">
             <div className="mb-3 flex items-center justify-between gap-3">
@@ -330,7 +421,7 @@ function DashboardPage() {
 
       <section className="rounded-2xl border border-border/70 bg-card p-4 sm:p-5">
         <div className="mb-4 flex items-center justify-between gap-3">
-          <h2 className="font-display text-base font-semibold">Open issues</h2>
+          <h2 className="font-display text-base font-semibold">Issues</h2>
           <Link
             to="/ipo"
             className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
@@ -342,7 +433,7 @@ function DashboardPage() {
           <SkeletonCards count={2} />
         ) : issues.isError ? (
           <ErrorBlock error={issues.error} retry={() => void issues.refetch()} />
-        ) : openIssues.length === 0 ? (
+        ) : openIssues.length === 0 && upcomingIssues.length === 0 ? (
           <EmptyBlock
             title="No open issues"
             description="New IPO, FPO and right share offerings you can apply for will show up here."
@@ -371,6 +462,22 @@ function DashboardPage() {
                 </p>
               </li>
             ))}
+            {upcomingIssues.map((item) => (
+              <li
+                key={item.key}
+                className="rounded-xl border border-dashed border-border/60 bg-surface/60 p-3"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold">{item.title}</p>
+                    <p className="num mt-0.5 text-xs text-muted-foreground">{item.sub}</p>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[0.68rem] font-semibold text-muted-foreground">
+                    Upcoming
+                  </span>
+                </div>
+              </li>
+            ))}
           </ul>
         )}
       </section>
@@ -379,6 +486,15 @@ function DashboardPage() {
         symbol={picked}
         onOpenChange={(open) => {
           if (!open) setPicked(null);
+        }}
+      />
+
+      <WatchlistPanel
+        open={watchlistOpen}
+        onOpenChange={setWatchlistOpen}
+        onPick={(symbol) => {
+          setWatchlistOpen(false);
+          setPicked(symbol);
         }}
       />
 

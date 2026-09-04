@@ -422,8 +422,8 @@ function dateKeyFromEpoch(epoch: number): string {
 
 /**
  * One point per trading day out of the monthly LTP files (oldest first, capped
- * to 120 months). Monthly documents are date-major — `dates` lists every
- * trading day and each symbol row is `[dateIndex, ltp, volume]` — so this walks
+ * to 120 months). Monthly documents are date-major - `dates` lists every
+ * trading day and each symbol row is `[dateIndex, ltp, volume]` - so this walks
  * the dates once, advancing a per-symbol pointer to carry closes forward for
  * scrips that didn't trade on a given day.
  */
@@ -846,6 +846,10 @@ export async function getScripFinancials(symbol: string): Promise<ScripFinancial
           paidUpCapital: num(rec["paid_up_capital"]) || null,
           profit: num(rec["profit"]) || null,
           netWorthPerShare: num(rec["net_worth_per_share"]) || null,
+          roe: null,
+          npl: null,
+          car: null,
+          operatingMargin: null,
           submittedDate: str(doc?.["submitted_date"]),
           documentUrl: path && baseUrl ? `${baseUrl}${encodeURIComponent(path)}` : null,
         },
@@ -860,6 +864,61 @@ export async function getScripFinancials(symbol: string): Promise<ScripFinancial
     reports,
     updatedAt: str(metadata.data?.["last_updated"]),
   };
+}
+
+/**
+ * Fetch financials for ALL symbols at once from the cached financials.json.
+ * Returns a map of symbol → FinancialReport[] (sorted by submitted date, newest first).
+ * Much more efficient than calling getScripFinancials() per symbol.
+ */
+export async function getAllFinancials(): Promise<Map<string, FinancialReport[]>> {
+  const [financials, metadata] = await Promise.all([
+    feedJson<Rec[]>(`${YONEPSE_BASE}/data/company/financials.json`, TTL.slow),
+    feedJson<Rec>(`${YONEPSE_BASE}/data/company/metadata.json`, TTL.slow),
+  ]);
+
+  const baseUrl = str(metadata.data?.["document_base_url"]);
+  const result = new Map<string, FinancialReport[]>();
+
+  for (const row of financials.data ?? []) {
+    const symbol = str(row["symbol"]);
+    if (!symbol) continue;
+    const upper = symbol.toUpperCase();
+    const rawReports = Array.isArray(row?.["reports"]) ? (row["reports"] as unknown[]) : [];
+
+    const reports: FinancialReport[] = rawReports
+      .flatMap((raw): FinancialReport[] => {
+        const rec = raw as Rec;
+        const doc = Array.isArray(rec["documents"])
+          ? ((rec["documents"] as unknown[])[0] as Rec)
+          : null;
+        const path = str(doc?.["path"]);
+        return [
+          {
+            type: str(rec["type"]) ?? "Report",
+            fy: str(rec["fy"]),
+            fyNepali: str(rec["fy_nepali"]),
+            quarter: str(rec["quarter"]),
+            pe: num(rec["pe"]) || null,
+            eps: num(rec["eps"]) || null,
+            paidUpCapital: num(rec["paid_up_capital"]) || null,
+            profit: num(rec["profit"]) || null,
+            netWorthPerShare: num(rec["net_worth_per_share"]) || null,
+            roe: null,
+            npl: null,
+            car: null,
+            operatingMargin: null,
+            submittedDate: str(doc?.["submitted_date"]),
+            documentUrl: path && baseUrl ? `${baseUrl}${encodeURIComponent(path)}` : null,
+          },
+        ];
+      })
+      .sort((a, b) => (b.submittedDate ?? "").localeCompare(a.submittedDate ?? ""));
+
+    if (reports.length > 0) result.set(upper, reports);
+  }
+
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -959,6 +1018,16 @@ async function getArchiveBars(symbol: string, months: number): Promise<DailyBar[
   const wanted = available.slice(Math.max(0, available.length - months));
   const chunks = await mapLimit(wanted, 8, (month) => archiveMonthBars(symbol, month));
   return chunks.flat();
+}
+
+/**
+ * Whole LTP history for one scrip from the YONEPSE monthly archive (2012 →
+ * today), oldest → newest. Finished months are cached server-side, so repeat
+ * views are cheap; the first load fans out over the archive.
+ */
+export async function getScripFullHistory(symbol: string): Promise<DailyBar[]> {
+  const bars = await getArchiveBars(symbol.toUpperCase(), 1200);
+  return bars.sort((a, b) => a.date.localeCompare(b.date));
 }
 
 /**

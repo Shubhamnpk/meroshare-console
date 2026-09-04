@@ -1,6 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Building2, ExternalLink, FileText, Info, Maximize2, Star, StarOff } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
+import {
+  Building2,
+  ChartCandlestick,
+  ExternalLink,
+  FileText,
+  Info,
+  Maximize2,
+  Star,
+  StarOff,
+} from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -33,14 +43,16 @@ import {
   chartDayLabel,
   chartTimeLabel,
 } from "@/components/market/chart-modal";
-import { DocumentViewer } from "@/components/market/document-viewer";
+import { useDocViewer } from "@/components/ui/use-doc-viewer";
 import {
   dividendsQuery,
   enrichedPortfolioQuery,
   exchangeMessagesQuery,
+  investmentSummaryQuery,
   marketSnapshotQuery,
   scripDetailQuery,
   scripFinancialsQuery,
+  scripFullHistoryQuery,
   transactionsQuery,
   waccReportQuery,
 } from "@/lib/queries";
@@ -49,17 +61,31 @@ import { useWatchlist } from "@/lib/watchlist";
 import { cn } from "@/lib/utils";
 import type { FinancialReport, PricePoint } from "@/lib/nepse/types";
 
-/** Unrealized P/L against the CDSC-calculated WACC cost basis. */
+/**
+ * Resolve face value with priority: API-reported value → YONEPSE sector heuristic → Rs 100.
+ * Mutual fund units have a face value of Rs 10; equities Rs 100.
+ */
+function resolveFaceValue(
+  apiFaceValue: number | null | undefined,
+  sector: string | null | undefined,
+): number {
+  if (apiFaceValue != null && apiFaceValue > 0) return apiFaceValue;
+  return /mutual fund/i.test(sector ?? "") ? 10 : 100;
+}
+
+/** Unrealized P/L against a cost basis (CDSC WACC, or purchase-source estimate). */
 function PositionCard({
   units,
   waccRate,
   totalCost,
   ltp,
+  basisLabel = "vs CDSC WACC",
 }: {
   units: number;
   waccRate: number;
   totalCost: number;
   ltp: number;
+  basisLabel?: string;
 }) {
   const currentValue = units * ltp;
   const pl = currentValue - (totalCost || units * waccRate);
@@ -70,7 +96,7 @@ function PositionCard({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="font-display text-sm font-semibold">Your position</h3>
         <span className="rounded-full bg-muted px-2 py-0.5 text-[0.68rem] font-medium text-muted-foreground">
-          vs CDSC WACC
+          {basisLabel}
         </span>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
@@ -188,14 +214,14 @@ function FinancialSummary({
           <dt className="text-xs text-muted-foreground">Period</dt>
           <dd className="num font-medium">
             {report.quarter ? `${report.quarter} · ` : ""}
-            {report.fy ?? "—"}
+            {report.fy ?? "-"}
             {report.fyNepali ? (
               <span className="ml-1 font-normal text-muted-foreground">({report.fyNepali})</span>
             ) : null}
             {previous ? (
               <span className="ml-2 font-normal text-muted-foreground">
                 vs {previous.quarter ? `${previous.quarter} · ` : ""}
-                {previous.fy ?? "—"}
+                {previous.fy ?? "-"}
               </span>
             ) : null}
           </dd>
@@ -210,7 +236,7 @@ function FinancialSummary({
             <TermInfo text="Earnings per share (EPS) = net profit ÷ total outstanding shares. It shows how much profit the company earned for each share in the reporting period." />
           </dt>
           <dd className="num font-medium">
-            {report.eps != null ? formatNpr(report.eps) : "—"}
+            {report.eps != null ? formatNpr(report.eps) : "-"}
             <Delta current={report.eps} previous={previous?.eps ?? null} />
           </dd>
         </div>
@@ -220,7 +246,7 @@ function FinancialSummary({
             <TermInfo text="Price-to-earnings ratio = market price ÷ earnings per share. A lower P/E often means the stock is cheaper relative to its earnings, but compare it with industry peers." />
           </dt>
           <dd className="num font-medium">
-            {report.pe != null ? formatNpr(report.pe) : "—"}
+            {report.pe != null ? formatNpr(report.pe) : "-"}
             <Delta current={report.pe} previous={previous?.pe ?? null} />
           </dd>
         </div>
@@ -233,7 +259,7 @@ function FinancialSummary({
             className="num font-medium"
             title={report.profit != null ? formatNpr(report.profit) : undefined}
           >
-            {report.profit != null ? formatNpr(report.profit, { compact: true }) : "—"}
+            {report.profit != null ? formatNpr(report.profit, { compact: true }) : "-"}
             {report.profit != null && previous?.profit != null ? (
               <Delta current={report.profit} previous={previous.profit} compact />
             ) : null}
@@ -245,7 +271,7 @@ function FinancialSummary({
             <TermInfo text="Net worth per share = total shareholder equity ÷ total outstanding shares. It is also called book value and indicates the company's net asset value per share." />
           </dt>
           <dd className="num font-medium">
-            {report.netWorthPerShare != null ? formatNpr(report.netWorthPerShare) : "—"}
+            {report.netWorthPerShare != null ? formatNpr(report.netWorthPerShare) : "-"}
             <Delta
               current={report.netWorthPerShare}
               previous={previous?.netWorthPerShare ?? null}
@@ -263,13 +289,13 @@ function FinancialSummary({
           >
             {report.paidUpCapital != null
               ? formatNpr(report.paidUpCapital, { compact: true })
-              : "—"}
+              : "-"}
           </dd>
         </div>
         <div>
           <dt className="text-xs text-muted-foreground">Submitted</dt>
           <dd className="num font-medium">
-            {report.submittedDate ? formatDate(report.submittedDate) : "—"}
+            {report.submittedDate ? formatDate(report.submittedDate) : "-"}
           </dd>
         </div>
         {estProfit != null ? (
@@ -318,13 +344,13 @@ function ReportGroups({
         <div>
           <dt className="text-xs text-muted-foreground">Latest EPS</dt>
           <dd className="num font-medium">
-            {reports[0]?.eps != null ? formatNpr(reports[0].eps) : "—"}
+            {reports[0]?.eps != null ? formatNpr(reports[0].eps) : "-"}
           </dd>
         </div>
         <div>
           <dt className="text-xs text-muted-foreground">Latest P/E</dt>
           <dd className="num font-medium">
-            {reports[0]?.pe != null ? formatNpr(reports[0].pe) : "—"}
+            {reports[0]?.pe != null ? formatNpr(reports[0].pe) : "-"}
           </dd>
         </div>
       </dl>
@@ -407,16 +433,16 @@ function ReportGroups({
                             </p>
                             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground">
                               <span className="num">
-                                EPS {r.eps != null ? formatNpr(r.eps) : "—"}
+                                EPS {r.eps != null ? formatNpr(r.eps) : "-"}
                                 <MetricDelta current={r.eps} previous={prev?.eps ?? null} />
                               </span>
                               <span className="num">
-                                P/E {r.pe != null ? formatNpr(r.pe) : "—"}
+                                P/E {r.pe != null ? formatNpr(r.pe) : "-"}
                                 <MetricDelta current={r.pe} previous={prev?.pe ?? null} />
                               </span>
                               <span className="num">
                                 NWPS{" "}
-                                {r.netWorthPerShare != null ? formatNpr(r.netWorthPerShare) : "—"}
+                                {r.netWorthPerShare != null ? formatNpr(r.netWorthPerShare) : "-"}
                                 <MetricDelta
                                   current={r.netWorthPerShare}
                                   previous={prev?.netWorthPerShare ?? null}
@@ -424,7 +450,7 @@ function ReportGroups({
                               </span>
                               <span className="num">
                                 Profit{" "}
-                                {r.profit != null ? formatNpr(r.profit, { compact: true }) : "—"}
+                                {r.profit != null ? formatNpr(r.profit, { compact: true }) : "-"}
                                 <MetricDelta current={r.profit} previous={prev?.profit ?? null} />
                               </span>
                             </div>
@@ -471,10 +497,11 @@ export function ScripSheet({
   const dividends = useQuery({ ...dividendsQuery(), enabled: Boolean(symbol) });
   const news = useQuery(exchangeMessagesQuery(Boolean(symbol)));
   const watchlist = useWatchlist();
+  const navigate = useNavigate();
   const [tab, setTab] = useState("overview");
   const [rangeKey, setRangeKey] = useState<string>("1D");
   const [chartOpen, setChartOpen] = useState(false);
-  const [docViewer, setDocViewer] = useState<{ url: string; title: string } | null>(null);
+  const { openPreview, modal: docModal } = useDocViewer();
 
   useEffect(() => {
     setRangeKey("1D");
@@ -489,11 +516,16 @@ export function ScripSheet({
     enabled: Boolean(symbol) && Boolean(holding),
   });
   const waccReport = useQuery(waccReportQuery());
+  const investment = useQuery(investmentSummaryQuery());
 
   const overview = detail.data?.overview ?? null;
   const dividend = detail.data?.dividend ?? null;
   const waccEntry =
     (waccReport.data?.waccReportResponse ?? []).find((h) => h.scrip === upper) ?? null;
+  // Fallback for scrips missing from the WACC report (pending/missing WACC):
+  // cost basis estimated from the per-scrip purchase source.
+  const invEntry = (investment.data?.scrips ?? []).find((s) => s.scrip === upper) ?? null;
+  const hasInvBasis = Boolean(invEntry && invEntry.cost > 0 && invEntry.units > 0);
 
   const yearlyDividends = useMemo(
     () =>
@@ -523,19 +555,38 @@ export function ScripSheet({
         .sort((a, b) => a.time - b.time),
     [detail.data],
   );
+  // Whole-archive history is heavy, so it loads lazily only when "All" is picked.
+  const fullHistory = useQuery({
+    ...scripFullHistoryQuery(upper || null),
+    enabled: Boolean(symbol) && rangeKey === "All",
+  });
+  const fullPoints: PricePoint[] = useMemo(
+    () =>
+      (fullHistory.data ?? [])
+        .map((b) => ({
+          time: new Date(b.date).getTime() / 1000,
+          value: b.close,
+        }))
+        .sort((a, b) => a.time - b.time),
+    [fullHistory.data],
+  );
+  const dailyPoints = rangeKey === "All" && fullPoints.length >= 2 ? fullPoints : historyPoints;
   const intradayPoints: PricePoint[] = useMemo(() => detail.data?.intraday ?? [], [detail.data]);
 
-  const ranges = useMemo(
-    () => buildScripRanges(intradayPoints, historyPoints),
-    [intradayPoints, historyPoints],
-  );
+  const ranges = useMemo(() => {
+    const built = buildScripRanges(intradayPoints, dailyPoints);
+    // Keep "All" tappable even before the archive loads; selecting it starts the fetch.
+    if (!built.some((r) => r.key === "All")) built.push({ key: "All", label: "All", points: [] });
+    return built;
+  }, [intradayPoints, dailyPoints]);
   const activeRange = ranges.find((r) => r.key === rangeKey) ?? ranges[0];
+  const fullSince = fullPoints.length > 0 ? new Date(fullPoints[0]!.time * 1000) : null;
 
   const stats: { label: string; value: string }[] = price
     ? [
         { label: "Previous close", value: formatNpr(price.previousClose) },
-        { label: "Day high", value: price.high ? formatNpr(price.high) : "—" },
-        { label: "Day low", value: price.low ? formatNpr(price.low) : "—" },
+        { label: "Day high", value: price.high ? formatNpr(price.high) : "-" },
+        { label: "Day low", value: price.low ? formatNpr(price.low) : "-" },
         { label: "Volume", value: formatQty(price.volume) },
         { label: "Turnover", value: formatNpr(price.turnover, { compact: true }) },
         { label: "Trades", value: formatQty(price.trades) },
@@ -544,7 +595,7 @@ export function ScripSheet({
               { label: "52-week high", value: formatNpr(price.fiftyTwoWeekHigh) },
               {
                 label: "52-week low",
-                value: price.fiftyTwoWeekLow ? formatNpr(price.fiftyTwoWeekLow) : "—",
+                value: price.fiftyTwoWeekLow ? formatNpr(price.fiftyTwoWeekLow) : "-",
               },
             ]
           : []),
@@ -553,48 +604,48 @@ export function ScripSheet({
 
   const companyRows: { label: string; value: string }[] = overview
     ? [
-        { label: "Sector", value: overview.sector ?? "—" },
-        { label: "Instrument", value: overview.instrumentType ?? "—" },
-        { label: "ISIN", value: overview.isin ?? "—" },
+        { label: "Sector", value: overview.sector ?? "-" },
+        { label: "Instrument", value: overview.instrumentType ?? "-" },
+        { label: "ISIN", value: overview.isin ?? "-" },
         {
           label: "Face value",
-          value: overview.faceValue != null ? formatNpr(overview.faceValue) : "—",
+          value: overview.faceValue != null ? formatNpr(overview.faceValue) : "-",
         },
         {
           label: "Listed since",
-          value: overview.listingDate ? formatDate(overview.listingDate) : "—",
+          value: overview.listingDate ? formatDate(overview.listingDate) : "-",
         },
         {
           label: "Paid-up capital",
           value:
             overview.paidUpCapital != null
               ? formatNpr(overview.paidUpCapital, { compact: true })
-              : "—",
+              : "-",
         },
         {
           label: "Market cap",
           value:
             overview.marketCapitalization != null
               ? formatNpr(overview.marketCapitalization, { compact: true })
-              : "—",
+              : "-",
         },
         {
           label: "Public",
           value:
-            overview.publicPercentage != null ? `${overview.publicPercentage.toFixed(2)}%` : "—",
+            overview.publicPercentage != null ? `${overview.publicPercentage.toFixed(2)}%` : "-",
         },
         {
           label: "Promoter",
           value:
             overview.promoterPercentage != null
               ? `${overview.promoterPercentage.toFixed(2)}%`
-              : "—",
+              : "-",
         },
         {
           label: "Listed shares",
-          value: overview.totalShares != null ? formatQty(overview.totalShares) : "—",
+          value: overview.totalShares != null ? formatQty(overview.totalShares) : "-",
         },
-        { label: "Contact", value: overview.contactPerson ?? "—" },
+        { label: "Contact", value: overview.contactPerson ?? "-" },
       ]
     : [];
 
@@ -660,18 +711,42 @@ export function ScripSheet({
                   totalCost={toNumber(waccEntry.totalCost)}
                   ltp={price.ltp}
                 />
+              ) : hasInvBasis && invEntry && price?.ltp ? (
+                <PositionCard
+                  units={invEntry.units}
+                  waccRate={invEntry.waccRate}
+                  totalCost={invEntry.cost}
+                  ltp={price.ltp}
+                  basisLabel={
+                    invEntry.status === "pending"
+                      ? "vs purchase source · pending WACC"
+                      : "vs purchase source"
+                  }
+                />
               ) : null}
               <div className="rounded-2xl border border-border/70 bg-card p-4">
                 <div className="flex items-center justify-between gap-3">
                   <h3 className="font-display text-sm font-semibold">Price history</h3>
                   {ranges.length > 0 ? (
-                    <button
-                      type="button"
-                      onClick={() => setChartOpen(true)}
-                      className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-                    >
-                      <Maximize2 className="size-3.5" /> Enlarge
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onOpenChange(false);
+                          void navigate({ to: "/terminal", search: { symbol: upper } });
+                        }}
+                        className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                      >
+                        <ChartCandlestick className="size-3.5" /> Terminal
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setChartOpen(true)}
+                        className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                      >
+                        <Maximize2 className="size-3.5" /> Enlarge
+                      </button>
+                    </div>
                   ) : null}
                 </div>
 
@@ -695,19 +770,38 @@ export function ScripSheet({
                       ))}
                     </div>
                     <div className="mt-3">
-                      <AreaChart
-                        points={activeRange?.points ?? []}
-                        height={200}
-                        formatValue={(v) => formatNpr(v)}
-                        formatLabel={(t) =>
-                          activeRange?.key === "1D" ? chartTimeLabel(t) : chartDayLabel(t)
-                        }
-                      />
+                      {rangeKey === "All" && fullHistory.isLoading ? (
+                        <p className="rounded-xl border border-border/60 bg-surface px-3 py-8 text-center text-sm text-muted-foreground">
+                          Loading the whole archive back to 2012…
+                        </p>
+                      ) : rangeKey === "All" && fullHistory.isError ? (
+                        <p className="rounded-xl border border-border/60 bg-surface px-3 py-8 text-center text-sm text-muted-foreground">
+                          Couldn&apos;t load the full archive.{" "}
+                          <button
+                            type="button"
+                            onClick={() => void fullHistory.refetch()}
+                            className="font-medium text-primary hover:underline"
+                          >
+                            Try again
+                          </button>
+                        </p>
+                      ) : (
+                        <AreaChart
+                          points={activeRange?.points ?? []}
+                          height={200}
+                          formatValue={(v) => formatNpr(v)}
+                          formatLabel={(t) =>
+                            activeRange?.key === "1D" ? chartTimeLabel(t) : chartDayLabel(t)
+                          }
+                        />
+                      )}
                     </div>
                     <p className="mt-2 text-[0.68rem] text-muted-foreground">
                       {activeRange?.key === "1D"
                         ? `Today's intraday session (${intradayPoints.length} ticks). `
-                        : `Daily closes from the YONEPSE LTP archive, ${activeRange?.label ?? ""}. `}
+                        : activeRange?.key === "All"
+                          ? `Whole LTP history from the YONEPSE archive${fullSince ? ` since ${fullSince.toLocaleDateString("en-GB", { month: "short", year: "numeric" })}` : ""} (${formatQty(fullPoints.length)} closes). `
+                          : `Daily closes from the YONEPSE LTP archive, ${activeRange?.label ?? ""}. `}
                       Hover over the chart to inspect each point.
                     </p>
                   </>
@@ -821,7 +915,7 @@ export function ScripSheet({
                   <h3 className="font-display text-sm font-semibold">Report history</h3>
                   <ReportGroups
                     reports={financials.data.reports}
-                    onViewDocument={(url, title) => setDocViewer({ url, title })}
+                    onViewDocument={(url, title) => openPreview(title, url)}
                   />
                   <p className="mt-3 text-[0.68rem] text-muted-foreground">
                     Figures are indicative from the YONEPSE community feed and follow NEPSE-reported
@@ -851,13 +945,25 @@ export function ScripSheet({
                       <dd className="num font-medium">
                         {dividend && dividend.totalDividend > 0
                           ? `${dividend.totalDividend}%`
-                          : "—"}
+                          : "-"}
                       </dd>
                     </div>
                     <div>
                       <dt className="text-xs text-muted-foreground">Latest FY</dt>
-                      <dd className="num font-medium">{dividend?.fiscalYear ?? "—"}</dd>
+                      <dd className="num font-medium">{dividend?.fiscalYear ?? "-"}</dd>
                     </div>
+                    {price?.ltp && dividend?.cashDividend ? (
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Yield (cash)</dt>
+                        <dd className="num font-medium">
+                          {formatPercent(
+                            ((dividend.cashDividend / 100) *
+                              resolveFaceValue(overview?.faceValue, overview?.sector)) /
+                              price.ltp,
+                          )}
+                        </dd>
+                      </div>
+                    ) : null}
                   </dl>
                   <ul className="mt-3 space-y-1.5">
                     {yearlyDividends.slice(0, 12).map((d, i) => (
@@ -867,7 +973,7 @@ export function ScripSheet({
                       >
                         <div className="min-w-0">
                           <p className="font-semibold">
-                            {d.fiscalYear ?? "—"}
+                            {d.fiscalYear ?? "-"}
                             {d.announcementDate ? (
                               <span className="num ml-1.5 font-normal text-muted-foreground">
                                 · {formatDate(d.announcementDate)}
@@ -875,9 +981,9 @@ export function ScripSheet({
                             ) : null}
                           </p>
                           <p className="text-muted-foreground">
-                            {d.cashDividend > 0 ? `${d.cashDividend}% cash` : "cash —"}
+                            {d.cashDividend > 0 ? `${d.cashDividend}% cash` : "cash -"}
                             {d.cashDividend > 0 && d.bonusShare > 0 ? " + " : " · "}
-                            {d.bonusShare > 0 ? `${d.bonusShare}% bonus` : "bonus —"}
+                            {d.bonusShare > 0 ? `${d.bonusShare}% bonus` : "bonus -"}
                           </p>
                         </div>
                         {holding ? (
@@ -887,12 +993,12 @@ export function ScripSheet({
                                 est.{" "}
                                 {formatNpr(
                                   (d.cashDividend / 100) *
-                                    (overview?.faceValue ?? 100) *
+                                    resolveFaceValue(overview?.faceValue, overview?.sector) *
                                     holding.units,
                                 )}
                               </>
                             ) : (
-                              "—"
+                              "-"
                             )}
                             {d.bonusShare > 0 ? (
                               <span className="block text-[0.65rem] font-normal text-muted-foreground">
@@ -902,7 +1008,7 @@ export function ScripSheet({
                           </span>
                         ) : (
                           <span className="num shrink-0 text-right font-semibold">
-                            {d.totalDividend > 0 ? `${d.totalDividend}%` : "—"}
+                            {d.totalDividend > 0 ? `${d.totalDividend}%` : "-"}
                           </span>
                         )}
                       </li>
@@ -917,7 +1023,9 @@ export function ScripSheet({
                           yearlyDividends.reduce(
                             (s, d) =>
                               s +
-                              (d.cashDividend / 100) * (overview?.faceValue ?? 100) * holding.units,
+                              (d.cashDividend / 100) *
+                                resolveFaceValue(overview?.faceValue, overview?.sector) *
+                                holding.units,
                             0,
                           ),
                         )}
@@ -978,13 +1086,13 @@ export function ScripSheet({
                               className="max-w-44 truncate text-xs text-muted-foreground"
                               title={t.historyDescription}
                             >
-                              {t.historyDescription ?? "—"}
+                              {t.historyDescription ?? "-"}
                             </TableCell>
                             <TableCell className="num text-right text-xs text-gain">
-                              {t.creditQuantity ? `+${formatQty(t.creditQuantity)}` : "—"}
+                              {t.creditQuantity ? `+${formatQty(t.creditQuantity)}` : "-"}
                             </TableCell>
                             <TableCell className="num text-right text-xs text-loss">
-                              {t.debitQuantity ? `-${formatQty(t.debitQuantity)}` : "—"}
+                              {t.debitQuantity ? `-${formatQty(t.debitQuantity)}` : "-"}
                             </TableCell>
                             <TableCell className="num pr-3 text-right text-xs">
                               {formatQty(t.balanceAfterTransaction)}
@@ -1014,7 +1122,7 @@ export function ScripSheet({
                       {item.fileUrl ? (
                         <button
                           type="button"
-                          onClick={() => setDocViewer({ url: item.fileUrl!, title: item.title })}
+                          onClick={() => openPreview(item.title, item.fileUrl!)}
                           className="shrink-0 text-muted-foreground transition-colors hover:text-primary"
                           aria-label="View attached document"
                         >
@@ -1056,25 +1164,22 @@ export function ScripSheet({
           activeRange
             ? activeRange.key === "1D"
               ? "Today's intraday session"
-              : `Daily candles, last ${activeRange.label}`
+              : activeRange.key === "All"
+                ? "Daily candles, full archive"
+                : `Daily candles, last ${activeRange.label}`
             : "Price history"
         }
         ranges={ranges}
-        bars={detail.data?.history}
+        bars={
+          rangeKey === "All" && (fullHistory.data ?? []).length > 0
+            ? fullHistory.data
+            : detail.data?.history
+        }
         formatValue={(v) => formatNpr(v)}
         formatIntradayLabel={chartTimeLabel}
         formatDailyLabel={chartDayLabel}
       />
-      {docViewer ? (
-        <DocumentViewer
-          url={docViewer.url}
-          title={docViewer.title}
-          open={!!docViewer}
-          onOpenChange={(open) => {
-            if (!open) setDocViewer(null);
-          }}
-        />
-      ) : null}
+      {docModal}
     </Sheet>
   );
 }

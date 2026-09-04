@@ -200,7 +200,7 @@ export function aggregateManager(
     aum += size;
     if (p) {
       const { nav } = referenceNav(p);
-      // Only close-end funds trade at market price — open-end always = NAV
+      // Only close-end funds trade at market price - open-end always = NAV
       if (s.fundType === "close_end") {
         const d = discountPct(livePrices.get(s.symbol)?.ltp ?? p.ltp, nav);
         if (d != null) {

@@ -337,7 +337,7 @@ export function MarketView({
                   )}
                 >
                   <span className="text-sm leading-none">
-                    {d.couponPct != null ? d.couponPct.toFixed(2) : "—"}
+                    {d.couponPct != null ? d.couponPct.toFixed(2) : "-"}
                   </span>
                   <span className="text-[0.6rem] font-medium">%</span>
                 </span>

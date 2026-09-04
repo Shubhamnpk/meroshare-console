@@ -122,7 +122,7 @@ function NavGauge({ ltp, nav }: { ltp: number | null; nav: number | null }) {
 }
 
 function PercentText({ value, suffix = "" }: { value: number | null; suffix?: string }) {
-  if (value == null) return <span className="text-muted-foreground">—</span>;
+  if (value == null) return <span className="text-muted-foreground">-</span>;
   return (
     <span className={cn("font-semibold", value > 0 ? "text-gain" : value < 0 ? "text-loss" : "")}>
       {formatPercent(value)}
@@ -306,7 +306,7 @@ export function FundDetail({
     ].filter((g) => g.docs.length > 0);
   }, [schemeDocs]);
 
-  /** Freshest filing across groups (NAV reports first) — featured, no expanding needed. */
+  /** Freshest filing across groups (NAV reports first) - featured, no expanding needed. */
   const featuredDoc = useMemo(() => {
     const order = ["nav", "prospectus", "other"];
     for (const key of order) {
@@ -401,11 +401,11 @@ export function FundDetail({
                   NAV <span className="normal-case">({navLabel})</span>
                 </p>
                 <p className="num text-2xl font-bold sm:text-3xl">
-                  {refNav != null ? formatNpr(refNav) : "—"}
+                  {refNav != null ? formatNpr(refNav) : "-"}
                 </p>
                 {closeEnd ? (
                   <p className="num mt-0.5 text-sm text-muted-foreground">
-                    Market {ltp != null ? formatNpr(ltp) : "—"}{" "}
+                    Market {ltp != null ? formatNpr(ltp) : "-"}{" "}
                     {live ? (
                       <DeltaPill value={live.percentChange}>
                         {formatPercent(live.percentChange)}
@@ -428,7 +428,7 @@ export function FundDetail({
               value={
                 (perf?.totalPaidUp ?? scheme?.paidUp) != null
                   ? formatNpr(perf?.totalPaidUp ?? scheme?.paidUp ?? 0, { compact: true })
-                  : "—"
+                  : "-"
               }
             />
             {holdings.length > 0 ? (
@@ -447,20 +447,20 @@ export function FundDetail({
             ) : (
               <HeroStat
                 label="Stocks held"
-                value={perf?.holdingsCount != null ? formatQty(perf.holdingsCount) : "—"}
+                value={perf?.holdingsCount != null ? formatQty(perf.holdingsCount) : "-"}
               />
             )}
             <HeroStat
               label="Expected payout"
               value={
-                perf?.expectedDividendPct != null ? formatPercent(perf.expectedDividendPct) : "—"
+                perf?.expectedDividendPct != null ? formatPercent(perf.expectedDividendPct) : "-"
               }
             />
-            <HeroStat label="Matures" value={countdown ?? "—"} />
+            <HeroStat label="Matures" value={countdown ?? "-"} />
           </div>
         </section>
 
-        {/* Market snapshot — close-end only (open-end trades at NAV, no market price) */}
+          {/* Market snapshot - close-end only (open-end trades at NAV, no market price) */}
         {closeEnd ? (
           <Section
             icon={Wallet}
@@ -470,7 +470,7 @@ export function FundDetail({
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               <SnapshotStat
                 label="Weekly NAV"
-                value={perf?.weeklyNav != null ? formatNpr(perf.weeklyNav) : "—"}
+                value={perf?.weeklyNav != null ? formatNpr(perf.weeklyNav) : "-"}
                 hint={
                   perf?.weeklyNav != null && perf?.monthlyNav != null
                     ? `${formatNpr(perf.monthlyNav)} monthly`
@@ -479,7 +479,7 @@ export function FundDetail({
               />
               <SnapshotStat
                 label="Monthly NAV"
-                value={perf?.monthlyNav != null ? formatNpr(perf.monthlyNav) : "—"}
+                value={perf?.monthlyNav != null ? formatNpr(perf.monthlyNav) : "-"}
                 hint={
                   perf?.weeklyNav != null && perf?.monthlyNav != null
                     ? `${formatNpr(perf.weeklyNav)} weekly`
@@ -488,13 +488,13 @@ export function FundDetail({
               />
               <SnapshotStat
                 label="LTP"
-                value={ltp != null ? formatNpr(ltp) : "—"}
+                value={ltp != null ? formatNpr(ltp) : "-"}
                 hint="NEPSE traded"
                 tone={ltp != null && refNav != null && ltp >= refNav ? "text-gain" : "text-loss"}
               />
               <SnapshotStat
                 label="LTP vs NAV"
-                value={disc != null ? formatPercent(disc) : "—"}
+                value={disc != null ? formatPercent(disc) : "-"}
                 hint={
                   disc != null
                     ? disc >= 0
@@ -593,7 +593,7 @@ export function FundDetail({
                           r.value != null && (r.value >= 0 ? "text-gain" : "text-loss"),
                         )}
                       >
-                        {r.value == null ? "—" : formatPercent(r.value)}
+                        {r.value == null ? "-" : formatPercent(r.value)}
                       </span>
                     </div>
                   );
@@ -621,7 +621,7 @@ export function FundDetail({
                   Yearly swing
                 </p>
                 <p className="num text-lg font-bold">
-                  {risk.volatilityPct != null ? `±${risk.volatilityPct.toFixed(1)}%` : "—"}
+                  {risk.volatilityPct != null ? `±${risk.volatilityPct.toFixed(1)}%` : "-"}
                 </p>
               </div>
               <div className="rounded-xl border border-border/60 bg-surface px-3 py-2.5">
@@ -629,7 +629,7 @@ export function FundDetail({
                   Worst dip
                 </p>
                 <p className="num text-lg font-bold text-loss">
-                  {risk.maxDrawdownPct != null ? `${risk.maxDrawdownPct.toFixed(1)}%` : "—"}
+                  {risk.maxDrawdownPct != null ? `${risk.maxDrawdownPct.toFixed(1)}%` : "-"}
                 </p>
               </div>
             </div>
@@ -700,7 +700,7 @@ export function FundDetail({
                           {weight.toFixed(1)}% ·{" "}
                           {h.marketValue != null
                             ? formatNpr(h.marketValue, { compact: true })
-                            : "—"}
+                            : "-"}
                         </span>
                       </div>
                       <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
@@ -878,7 +878,7 @@ export function FundDetail({
                     </span>
                     <span className="num shrink-0 text-right text-xs">
                       <span className="block font-semibold">
-                        {p.nav != null ? formatNpr(p.nav) : "—"}
+                        {p.nav != null ? formatNpr(p.nav) : "-"}
                       </span>
                       <PercentText value={p.discount} />
                     </span>
@@ -1019,22 +1019,22 @@ export function FundDetail({
         {/* Facts */}
         <Section icon={CalendarClock} title="Fund facts" id="mf-facts">
           <dl className="grid grid-cols-2 gap-3 text-sm">
-            <Fact label="Manager" value={manager || "—"} />
+            <Fact label="Manager" value={manager || "-"} />
             <Fact
               label="Fund size"
               value={
                 (perf?.totalPaidUp ?? scheme?.paidUp) != null
                   ? formatNpr(perf?.totalPaidUp ?? scheme?.paidUp ?? 0, { compact: true })
-                  : "—"
+                  : "-"
               }
             />
-            <Fact label="Units" value={scheme?.units != null ? formatQty(scheme.units) : "—"} />
+            <Fact label="Units" value={scheme?.units != null ? formatQty(scheme.units) : "-"} />
             <Fact
               label="Face value"
-              value={scheme?.faceValue != null ? formatNpr(scheme.faceValue) : "—"}
+              value={scheme?.faceValue != null ? formatNpr(scheme.faceValue) : "-"}
             />
-            <Fact label="Allotted" value={scheme?.allotmentDate ?? "—"} />
-            <Fact label="Matures" value={scheme?.maturityDate ?? perf?.maturityDate ?? "—"} />
+            <Fact label="Allotted" value={scheme?.allotmentDate ?? "-"} />
+            <Fact label="Matures" value={scheme?.maturityDate ?? perf?.maturityDate ?? "-"} />
           </dl>
           {lifeProgress != null ? (
             <div className="mt-3">

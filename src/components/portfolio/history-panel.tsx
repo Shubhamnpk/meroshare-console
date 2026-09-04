@@ -313,7 +313,7 @@ function PriceHistoryTab({
 
       <p className="text-[0.68rem] text-muted-foreground">
         {granularity === "day"
-          ? "Daily closing values from the YONEPSE LTP archive (older months fall back to month-end closes). Hover for the per-scrip breakdown. Click a point to pin it below."
+          ? "Daily closing values from the YONEPSE LTP archive. Hover for the per-scrip breakdown. Click a point to pin it below."
           : granularity === "year"
             ? "Year-end closing values from the YONEPSE LTP archive. Hover for the per-scrip breakdown. Click a point to pin it below."
             : "Month-end closing values from the YONEPSE LTP archive. Hover for the per-scrip breakdown. Click a point to pin it below."}
@@ -323,7 +323,7 @@ function PriceHistoryTab({
 }
 
 /** Pinned point: every scrip's price and the units held at that moment, with a value total. */
-function PointBreakdown({
+export function PointBreakdown({
   point,
   formatLabel,
   onPickScrip,
@@ -393,7 +393,7 @@ const RIGHT_RE = /RIGHT/i;
 
 function yearOf(value: unknown): string {
   const m = /^(\d{4})/.exec(String(value ?? ""));
-  return (m && m[1]) || "—";
+  return (m && m[1]) || "-";
 }
 
 interface DivEntry {
@@ -465,11 +465,11 @@ function DividendHistoryTab({ onPickScrip }: { onPickScrip: (scrip: string) => v
     const set = new Set<string>();
     for (const r of creditRows) {
       const y = yearOf(r.transactionDate);
-      if (y !== "—") set.add(y);
+      if (y !== "-") set.add(y);
     }
     for (const d of dividends.data ?? []) {
       const y = yearOf(d.announcementDate);
-      if (y === "—") continue;
+      if (y === "-") continue;
       const key = String(d.symbol ?? "").toUpperCase();
       if (!key) continue;
       const epoch = parseNptEpoch(d.announcementDate) ?? parseNptEpoch(d.bookCloseDate);
@@ -483,7 +483,7 @@ function DividendHistoryTab({ onPickScrip }: { onPickScrip: (scrip: string) => v
     const map = new Map<string, DivEntry>();
 
     for (const t of creditRows) {
-      const key = String(t.script ?? "—").toUpperCase();
+      const key = String(t.script ?? "-").toUpperCase();
       const y = yearOf(t.transactionDate);
       if (year !== "all" && y !== year) continue;
       const entry = map.get(key) ?? emptyDivEntry();
@@ -543,7 +543,7 @@ function DividendHistoryTab({ onPickScrip }: { onPickScrip: (scrip: string) => v
     const map = new Map<string, { year: string; cash: number; bonus: number; credited: number }>();
     for (const r of creditRows) {
       const y = yearOf(r.transactionDate);
-      if (y === "—") continue;
+      if (y === "-") continue;
       const e = map.get(y) ?? { year: y, cash: 0, bonus: 0, credited: 0 };
       const qty = toNumber(r.creditQuantity);
       e.credited += qty;
@@ -552,7 +552,7 @@ function DividendHistoryTab({ onPickScrip }: { onPickScrip: (scrip: string) => v
     }
     for (const d of dividends.data ?? []) {
       const y = yearOf(d.announcementDate);
-      if (y === "—") continue;
+      if (y === "-") continue;
       const key = String(d.symbol ?? "").toUpperCase();
       if (!key) continue;
       const epoch = parseNptEpoch(d.announcementDate) ?? parseNptEpoch(d.bookCloseDate);
@@ -725,25 +725,25 @@ function DividendHistoryTab({ onPickScrip }: { onPickScrip: (scrip: string) => v
                           {entry.divRows.map((r, i) => (
                             <TableRow key={`${entry.scrip}-div-${r.fiscalYear ?? i}`}>
                               <TableCell className="num pl-3 font-medium">
-                                {r.fiscalYear ?? "—"}
+                                {r.fiscalYear ?? "-"}
                               </TableCell>
                               <TableCell className="num text-right text-muted-foreground">
-                                {r.cashDividend > 0 ? `${r.cashDividend}%` : "—"}
+                                {r.cashDividend > 0 ? `${r.cashDividend}%` : "-"}
                               </TableCell>
                               <TableCell className="num text-right text-muted-foreground">
-                                {r.bonusShare > 0 ? `${r.bonusShare}%` : "—"}
+                                {r.bonusShare > 0 ? `${r.bonusShare}%` : "-"}
                               </TableCell>
                               <TableCell className="num text-right font-semibold">
-                                {r.totalDividend > 0 ? `${r.totalDividend}%` : "—"}
+                                {r.totalDividend > 0 ? `${r.totalDividend}%` : "-"}
                               </TableCell>
                               <TableCell className="num hidden text-left text-muted-foreground sm:table-cell">
-                                {r.announcementDate ? formatDate(r.announcementDate) : "—"}
+                                {r.announcementDate ? formatDate(r.announcementDate) : "-"}
                               </TableCell>
                               <TableCell className="num text-right font-medium">
-                                {r.cashValue > 0 ? formatNpr(r.cashValue) : "—"}
+                                {r.cashValue > 0 ? formatNpr(r.cashValue) : "-"}
                               </TableCell>
                               <TableCell className="num pr-3 text-right font-medium text-primary">
-                                {r.bonusUnits > 0 ? `+${formatQty(r.bonusUnits)}` : "—"}
+                                {r.bonusUnits > 0 ? `+${formatQty(r.bonusUnits)}` : "-"}
                               </TableCell>
                             </TableRow>
                           ))}
@@ -774,7 +774,7 @@ function DividendHistoryTab({ onPickScrip }: { onPickScrip: (scrip: string) => v
                                 className="max-w-64 truncate text-xs text-muted-foreground"
                                 title={r.historyDescription}
                               >
-                                {r.historyDescription ?? "—"}
+                                {r.historyDescription ?? "-"}
                               </TableCell>
                               <TableCell className="num pr-3 text-right font-semibold text-gain">
                                 +{formatQty(r.creditQuantity)}

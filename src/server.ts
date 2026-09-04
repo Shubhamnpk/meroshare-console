@@ -52,15 +52,18 @@ const SITEMAP_ROUTES: { path: string; priority: string; changefreq: string }[] =
   { path: "/market", priority: "0.9", changefreq: "hourly" },
   { path: "/terminal", priority: "0.8", changefreq: "daily" },
   { path: "/portfolio", priority: "0.7", changefreq: "daily" },
-  { path: "/watchlist", priority: "0.6", changefreq: "daily" },
   { path: "/ipo", priority: "0.7", changefreq: "daily" },
   { path: "/reports", priority: "0.6", changefreq: "weekly" },
   { path: "/transactions", priority: "0.5", changefreq: "weekly" },
   { path: "/analytics", priority: "0.6", changefreq: "weekly" },
+  { path: "/best-shares", priority: "0.7", changefreq: "daily" },
+  { path: "/mutual-funds", priority: "0.8", changefreq: "daily" },
+  { path: "/tools", priority: "0.5", changefreq: "weekly" },
   { path: "/wacc", priority: "0.4", changefreq: "weekly" },
   { path: "/profile", priority: "0.3", changefreq: "monthly" },
   { path: "/activity", priority: "0.3", changefreq: "weekly" },
   { path: "/settings", priority: "0.2", changefreq: "monthly" },
+  { path: "/releases", priority: "0.4", changefreq: "monthly" },
 ];
 
 function escapeXml(value: string): string {

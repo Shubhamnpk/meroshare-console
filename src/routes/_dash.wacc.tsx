@@ -25,6 +25,7 @@ import {
 import { calculateWacc } from "@/lib/meroshare/portfolio.functions";
 import { errorMessage, formatDate, formatNpr, formatQty, toNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { ogImage, canonicalLink } from "@/lib/seo";
 import type { PurchaseSourceItem, WaccReportItem } from "@/lib/meroshare/types";
 
 export const Route = createFileRoute("/_dash/wacc")({
@@ -41,6 +42,10 @@ export const Route = createFileRoute("/_dash/wacc")({
         property: "og:description",
         content: "Review pending purchase source entries and your completed WACC calculation.",
       },
+      ogImage(),
+    ],
+    links: [
+      canonicalLink("/wacc"),
     ],
   }),
   component: WaccPage,
@@ -621,7 +626,8 @@ function WaccPage() {
   const [scrip, setScrip] = useState("");
   const search = useQuery(waccSearchQuery(scrip || null));
 
-  const pendingList = pendingScrips.data ?? [];
+  const pendingList = pendingScrips.data?.scrips ?? [];
+  const pendingFailed = pendingScrips.data?.failed === true;
   const manualSymbols = useMemo(
     () => (symbols.data ?? []).filter((s) => !pendingList.includes(s)),
     [symbols.data, pendingList],
@@ -636,6 +642,17 @@ function WaccPage() {
             <span className="rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs font-semibold text-amber-600">
               {pendingList.length} pending
             </span>
+          ) : pendingFailed ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
+              Pending check blocked: pick from holdings below
+              <button
+                type="button"
+                onClick={() => void pendingScrips.refetch()}
+                className="font-semibold text-primary hover:underline"
+              >
+                Retry
+              </button>
+            </span>
           ) : (
             <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-600">
               <ShieldCheck className="size-3" /> all calculated
@@ -646,6 +663,10 @@ function WaccPage() {
       <p className="-mt-3 hidden text-sm text-muted-foreground sm:block">
         Set the price you paid for each transaction and submit it so CDSC calculates your WACC.
       </p>
+
+      {symbols.isError ? (
+        <ErrorBlock error={symbols.error} retry={() => void symbols.refetch()} />
+      ) : null}
 
       <div className="space-y-3 rounded-2xl border border-border/70 bg-card p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -680,7 +701,7 @@ function WaccPage() {
               ) : null}
             </SelectContent>
           </Select>
-          {pendingScrips.isLoading ? (
+          {pendingScrips.isLoading || symbols.isLoading ? (
             <span className="animate-pulse text-xs text-muted-foreground">
               Checking pending scrips…
             </span>

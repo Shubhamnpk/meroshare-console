@@ -27,11 +27,23 @@ import {
   banksQuery,
   currentIssuesQuery,
   ipoArchiveQuery,
+  mfPipelineByTypeQuery,
 } from "@/lib/queries";
 import { applyForIpo } from "@/lib/meroshare/ipo.functions";
 import { getBankDetail } from "@/lib/meroshare/account.functions";
-import { daysUntil, errorMessage, formatDate, formatNumber, toNumber } from "@/lib/format";
+import {
+  daysUntil,
+  errorMessage,
+  formatDate,
+  formatNpr,
+  formatNumber,
+  toNumber,
+} from "@/lib/format";
 import type { ApplicableIssue } from "@/lib/meroshare/types";
+import type { MfPipelineType } from "@/lib/mutual-funds/types";
+import { sameCompany } from "@/lib/notifications";
+import { cn } from "@/lib/utils";
+import { ogImage, canonicalLink } from "@/lib/seo";
 
 export const Route = createFileRoute("/_dash/ipo")({
   head: () => ({
@@ -46,6 +58,10 @@ export const Route = createFileRoute("/_dash/ipo")({
         property: "og:description",
         content: "Browse open IPO, FPO and right share issues and submit your ASBA application.",
       },
+      ogImage(),
+    ],
+    links: [
+      canonicalLink("/ipo"),
     ],
   }),
   component: IpoPage,
@@ -91,6 +107,7 @@ function CountdownChip({ target }: { target: string | undefined }) {
 
 function CalendarView() {
   const issues = useQuery(currentIssuesQuery());
+  const archive = useQuery(ipoArchiveQuery());
   const list = issues.data ?? [];
 
   const groups = {
@@ -99,13 +116,25 @@ function CalendarView() {
     closed: list.filter((i) => statusGroup(i) === "closed").slice(0, 10),
   };
 
+  // CDSC rarely lists anything as upcoming and only carries open issues -
+  // fill both gaps with archive announcements it doesn't carry yet.
+  const listedNames = list.map((i) => i.companyName || i.scrip || "");
+  const archiveUpcoming = (archive.data?.upcoming ?? []).filter(
+    (row) => !listedNames.some((name) => sameCompany(name, row.company)),
+  );
+  const archivePast = (archive.data?.past ?? [])
+    .filter((row) => !listedNames.some((name) => sameCompany(name, row.company)))
+    .slice(0, 10);
+
+  const hasArchive = archiveUpcoming.length > 0 || archivePast.length > 0;
+
   return (
     <div className="space-y-5">
       {issues.isLoading ? (
         <SkeletonCards count={4} />
       ) : issues.isError ? (
         <ErrorBlock error={issues.error} retry={() => void issues.refetch()} />
-      ) : list.length === 0 ? (
+      ) : list.length === 0 && !hasArchive && !archive.isLoading ? (
         <EmptyBlock
           title="No issues found"
           description="Nothing open, upcoming or recently closed right now."
@@ -151,7 +180,7 @@ function CalendarView() {
 
           <section className="space-y-2">
             <h2 className="font-display text-base font-semibold">Upcoming</h2>
-            {groups.upcoming.length === 0 ? (
+            {groups.upcoming.length === 0 && archiveUpcoming.length === 0 && !archive.isLoading ? (
               <p className="rounded-xl border border-border/60 bg-surface px-3 py-2.5 text-sm text-muted-foreground">
                 No announced issues yet.
               </p>
@@ -177,62 +206,9 @@ function CalendarView() {
                     </p>
                   </li>
                 ))}
-              </ul>
-            )}
-          </section>
-
-          <section className="space-y-2">
-            <h2 className="font-display text-base font-semibold">Recently closed</h2>
-            {groups.closed.length === 0 ? (
-              <p className="rounded-xl border border-border/60 bg-surface px-3 py-2.5 text-sm text-muted-foreground">
-                Nothing closed recently.
-              </p>
-            ) : (
-              <ul className="grid gap-2 md:grid-cols-2">
-                {groups.closed.map((issue) => (
+                {archiveUpcoming.map((row, i) => (
                   <li
-                    key={issue.companyShareId}
-                    className="rounded-xl border border-border/60 bg-surface p-3 opacity-80"
-                  >
-                    <p className="truncate text-sm font-semibold">{issue.companyName}</p>
-                    <p className="num mt-1 text-xs text-muted-foreground">
-                      {issue.scrip} · closed {formatDate(issue.issueCloseDate)} · Rs{" "}
-                      {formatNumber(issue.sharePerUnit)}/unit
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        </>
-      )}
-    </div>
-  );
-}
-
-function ArchiveView() {
-  const archive = useQuery(ipoArchiveQuery());
-  const data = archive.data;
-
-  return (
-    <div className="space-y-5">
-      {archive.isLoading ? (
-        <SkeletonCards count={4} />
-      ) : archive.isError ? (
-        <ErrorBlock error={archive.error} retry={() => void archive.refetch()} />
-      ) : (
-        <>
-          <section className="space-y-2">
-            <h2 className="font-display text-base font-semibold">Upcoming issues</h2>
-            {!data?.upcoming.length ? (
-              <p className="rounded-xl border border-border/60 bg-surface px-3 py-2.5 text-sm text-muted-foreground">
-                No upcoming issues announced in the archive feed.
-              </p>
-            ) : (
-              <ul className="grid gap-2 md:grid-cols-2">
-                {data.upcoming.map((row, i) => (
-                  <li
-                    key={`${row.company}-${i}`}
+                    key={`arch-${row.company}-${i}`}
                     className="rounded-xl border border-border/60 bg-surface p-3"
                   >
                     <p className="text-sm font-semibold">{row.company}</p>
@@ -256,6 +232,122 @@ function ArchiveView() {
             )}
           </section>
 
+          <section className="space-y-2">
+            <h2 className="font-display text-base font-semibold">Recently closed</h2>
+            {groups.closed.length === 0 && archivePast.length === 0 && !archive.isLoading ? (
+              <p className="rounded-xl border border-border/60 bg-surface px-3 py-2.5 text-sm text-muted-foreground">
+                Nothing closed recently.
+              </p>
+            ) : (
+              <ul className="grid gap-2 md:grid-cols-2">
+                {groups.closed.map((issue) => (
+                  <li
+                    key={issue.companyShareId}
+                    className="rounded-xl border border-border/60 bg-surface p-3 opacity-80"
+                  >
+                    <p className="truncate text-sm font-semibold">{issue.companyName}</p>
+                    <p className="num mt-1 text-xs text-muted-foreground">
+                      {issue.scrip} · closed {formatDate(issue.issueCloseDate)} · Rs{" "}
+                      {formatNumber(issue.sharePerUnit)}/unit
+                    </p>
+                  </li>
+                ))}
+                {archivePast.map((row, i) => (
+                  <li
+                    key={`arch-past-${row.company}-${i}`}
+                    className="rounded-xl border border-border/60 bg-surface p-3 opacity-80"
+                  >
+                    <p className="truncate text-sm font-semibold">{row.company}</p>
+                    <p className="num mt-1 text-xs text-muted-foreground">
+                      {row.units ? `${row.units} units` : ""}
+                      {row.dateRange ? ` · ${row.dateRange}` : ""}
+                      {row.announcementDate ? ` · ${row.announcementDate}` : ""}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ArchiveView() {
+  const archive = useQuery(ipoArchiveQuery());
+  const data = archive.data;
+  const [pipeType, setPipeType] = useState<MfPipelineType>("ipo");
+  const pipelineQ = useQuery(mfPipelineByTypeQuery(pipeType));
+  const pipeline = pipelineQ.data ?? null;
+
+  return (
+    <div className="space-y-5">
+      <section className="space-y-2">
+        <h2 className="font-display text-base font-semibold">SEBON pipeline</h2>
+        <div className="flex flex-wrap items-center gap-1">
+          {(["ipo", "right", "fpo", "debenture"] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setPipeType(t)}
+              className={cn(
+                "rounded-full px-3 py-1 text-xs font-medium capitalize transition-colors",
+                pipeType === t
+                  ? "bg-primary/15 text-primary"
+                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+              )}
+            >
+              {t === "ipo" ? "IPO" : t === "fpo" ? "FPO" : t === "right" ? "Right" : "Debenture"}
+            </button>
+          ))}
+        </div>
+        {pipelineQ.isLoading ? (
+          <SkeletonLines rows={3} />
+        ) : pipelineQ.isError || !pipeline || pipeline.items.length === 0 ? (
+          <p className="rounded-xl border border-border/60 bg-surface px-3 py-2.5 text-sm text-muted-foreground">
+            No {pipeType.toUpperCase()} applications pending with SEBON right now.
+          </p>
+        ) : (
+          <>
+            <p className="num text-xs text-muted-foreground">
+              {pipeline.count} pending ·{" "}
+              {pipeline.totalAmount != null
+                ? formatNpr(pipeline.totalAmount, { compact: true })
+                : ""}
+              {pipeline.asOfBs ? ` · as of ${pipeline.asOfBs}` : ""}
+            </p>
+            <ul className="grid gap-2 md:grid-cols-2">
+              {pipeline.items.slice(0, 8).map((item) => (
+                <li
+                  key={`${item.company}-${item.units ?? ""}-${item.appliedDate ?? ""}`}
+                  className="rounded-xl border border-border/60 bg-surface p-3"
+                  title={item.remarks ?? undefined}
+                >
+                  <p className="truncate text-sm font-semibold">{item.company}</p>
+                  <p className="num mt-1 text-xs text-muted-foreground">
+                    {item.units ? `${formatNumber(item.units)} units` : ""}
+                    {item.sector ? ` · ${item.sector}` : ""}
+                    {item.appliedDate ? ` · applied ${item.appliedDate}` : ""}
+                  </p>
+                </li>
+              ))}
+            </ul>
+            {pipeline.items.length > 8 ? (
+              <p className="num text-xs text-muted-foreground">
+                +{pipeline.items.length - 8} more in the pipeline
+              </p>
+            ) : null}
+          </>
+        )}
+      </section>
+
+      {archive.isLoading ? (
+        <SkeletonCards count={4} />
+      ) : archive.isError ? (
+        <ErrorBlock error={archive.error} retry={() => void archive.refetch()} />
+      ) : (
+        <>
           <section className="space-y-2">
             <h2 className="font-display text-base font-semibold">Past issues</h2>
             {!data?.past.length ? (

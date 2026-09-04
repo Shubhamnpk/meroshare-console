@@ -3,6 +3,7 @@ import { getCurrentUser } from "./meroshare/auth.functions";
 import {
   getEnrichedPortfolio,
   getHoldingSymbols,
+  getInvestmentSummary,
   getOwnDetail,
   getPortfolio,
   getTransactions,
@@ -33,11 +34,34 @@ import {
   getNews,
   getPortfolioHistorySeries,
   getProposedDividends,
+  getScripBarsBatch,
   getScripDetail,
   getScripFaceValues,
   getScripFinancials,
+  getScripFullHistory,
+  getScreenerData,
 } from "./nepse/market.functions";
 import type { ChartRange, PortfolioGranularity } from "./nepse/types";
+import type { MfPipelineType } from "./mutual-funds/types";
+import {
+  getMfApprovalList,
+  getMfDebentureData,
+  getMfDebentureListData,
+  getMfFeedHealthData,
+  getMfManagerDetailData,
+  getMfManagerFactSheet,
+  getMfManagerHoldingsMap,
+  getMfManagerList,
+  getMfManagerProductData,
+  getMfMarketHoldingsMap,
+  getMfPerformanceData,
+  getMfPipelineByType,
+  getMfPipelineData,
+  getMfPipelineOverviewData,
+  getMfProductCatalog,
+  getMfSchemeDetail,
+  getMfSchemeList,
+} from "./mutual-funds/funds.functions";
 import { isoDate } from "./format";
 
 export const marketSnapshotQuery = () =>
@@ -96,6 +120,15 @@ export const scripFinancialsQuery = (symbol: string | null) =>
     queryFn: () => getScripFinancials({ data: { symbol: symbol ?? "" } }),
     enabled: Boolean(symbol),
     staleTime: 30 * 60_000,
+  });
+
+export const scripFullHistoryQuery = (symbol: string | null) =>
+  queryOptions({
+    queryKey: ["scrip-full-history", symbol],
+    queryFn: () => getScripFullHistory({ data: { symbol: symbol ?? "" } }),
+    enabled: Boolean(symbol),
+    staleTime: 30 * 60_000,
+    gcTime: 60 * 60_000,
   });
 
 export const faceValuesQuery = (symbols: string[]) =>
@@ -197,6 +230,13 @@ export const waccReportQuery = () =>
     staleTime: 30_000,
   });
 
+export const investmentSummaryQuery = () =>
+  queryOptions({
+    queryKey: ["investment-summary"],
+    queryFn: () => getInvestmentSummary(),
+    staleTime: 60_000,
+  });
+
 export const transactionsQuery = (symbol: string | null) =>
   queryOptions({
     queryKey: ["transactions", symbol],
@@ -273,4 +313,152 @@ export const chartSeriesQuery = (symbol: string, range: ChartRange) =>
     queryFn: () => getChartData({ data: { symbol, range } }),
     enabled: Boolean(symbol),
     staleTime: range === "1D" ? 60_000 : 10 * 60_000,
+  });
+
+// ---------------------------------------------------------------------------
+// Screener queries
+// ---------------------------------------------------------------------------
+
+export const screenerDataQuery = () =>
+  queryOptions({
+    queryKey: ["screener-data"],
+    queryFn: () => getScreenerData(),
+    staleTime: 5 * 60_000,
+  });
+
+export const scripBarsQuery = (symbols: string[]) =>
+  queryOptions({
+    queryKey: ["screener-bars", JSON.stringify([...symbols].sort())],
+    queryFn: () => getScripBarsBatch({ data: { symbols } }),
+    enabled: symbols.length > 0,
+    staleTime: 5 * 60_000,
+  });
+
+// ---------------------------------------------------------------------------
+// Mutual fund queries (community nepsetrading.com feed)
+// ---------------------------------------------------------------------------
+
+export const mfManagersQuery = () =>
+  queryOptions({
+    queryKey: ["mf-managers"],
+    queryFn: () => getMfManagerList(),
+    staleTime: 30 * 60_000,
+  });
+
+export const mfSchemesQuery = () =>
+  queryOptions({
+    queryKey: ["mf-schemes"],
+    queryFn: () => getMfSchemeList(),
+    staleTime: 30 * 60_000,
+  });
+
+export const mfPerformanceQuery = (symbols?: string[]) =>
+  queryOptions({
+    queryKey: ["mf-performance", symbols ? JSON.stringify([...symbols].sort()) : "all"],
+    queryFn: () => getMfPerformanceData({ data: { symbols } }),
+    staleTime: 30 * 60_000,
+  });
+
+export const mfSchemeQuery = (symbol: string | null) =>
+  queryOptions({
+    queryKey: ["mf-scheme", symbol],
+    queryFn: () => getMfSchemeDetail({ data: { symbol: symbol ?? "" } }),
+    enabled: Boolean(symbol),
+    staleTime: 30 * 60_000,
+  });
+
+export const mfPipelineQuery = () =>
+  queryOptions({
+    queryKey: ["mf-pipeline"],
+    queryFn: () => getMfPipelineData(),
+    staleTime: 30 * 60_000,
+  });
+
+export const mfPipelineByTypeQuery = (type: MfPipelineType) =>
+  queryOptions({
+    queryKey: ["mf-pipeline", type],
+    queryFn: () => getMfPipelineByType({ data: { type } }),
+    staleTime: 30 * 60_000,
+  });
+
+export const mfPipelineOverviewQuery = () =>
+  queryOptions({
+    queryKey: ["mf-pipeline-overview"],
+    queryFn: () => getMfPipelineOverviewData(),
+    staleTime: 30 * 60_000,
+  });
+
+export const mfFeedHealthQuery = () =>
+  queryOptions({
+    queryKey: ["mf-feed-health"],
+    queryFn: () => getMfFeedHealthData(),
+    staleTime: 30 * 60_000,
+  });
+
+export const mfApprovalsQuery = () =>
+  queryOptions({
+    queryKey: ["mf-approvals"],
+    queryFn: () => getMfApprovalList(),
+    staleTime: 30 * 60_000,
+  });
+
+export const mfDebenturesQuery = () =>
+  queryOptions({
+    queryKey: ["mf-debentures"],
+    queryFn: () => getMfDebentureData(),
+    staleTime: 30 * 60_000,
+  });
+
+export const mfDebentureListQuery = () =>
+  queryOptions({
+    queryKey: ["mf-debenture-list"],
+    queryFn: () => getMfDebentureListData(),
+    staleTime: 30 * 60_000,
+  });
+
+export const mfProductsQuery = () =>
+  queryOptions({
+    queryKey: ["mf-products"],
+    queryFn: () => getMfProductCatalog(),
+    staleTime: 30 * 60_000,
+  });
+
+export const mfManagerFactsQuery = (slug: string | null) =>
+  queryOptions({
+    queryKey: ["mf-manager-facts", slug],
+    queryFn: () => getMfManagerFactSheet({ data: { slug: slug ?? "" } }),
+    enabled: Boolean(slug),
+    staleTime: 30 * 60_000,
+  });
+
+export const mfManagerDetailQuery = (slug: string | null) =>
+  queryOptions({
+    queryKey: ["mf-manager-detail", slug],
+    queryFn: () => getMfManagerDetailData({ data: { slug: slug ?? "" } }),
+    enabled: Boolean(slug),
+    staleTime: 30 * 60_000,
+  });
+
+export const mfManagerProductQuery = (slug: string | null) =>
+  queryOptions({
+    queryKey: ["mf-manager-product", slug],
+    queryFn: () => getMfManagerProductData({ data: { slug: slug ?? "" } }),
+    enabled: Boolean(slug),
+    staleTime: 30 * 60_000,
+  });
+
+export const mfManagerHoldingsQuery = (slug: string | null) =>
+  queryOptions({
+    queryKey: ["mf-manager-holdings", slug],
+    queryFn: () => getMfManagerHoldingsMap({ data: { slug: slug ?? "" } }),
+    enabled: Boolean(slug),
+    staleTime: 30 * 60_000,
+  });
+
+export const mfMarketHoldingsQuery = (enabled = true) =>
+  queryOptions({
+    queryKey: ["mf-market-holdings"],
+    queryFn: () => getMfMarketHoldingsMap(),
+    enabled,
+    staleTime: 30 * 60_000,
   });

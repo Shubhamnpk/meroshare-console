@@ -197,6 +197,16 @@ export interface WaccPendingScrip {
   [key: string]: JsonValue;
 }
 
+/**
+ * Pending-WACC scrip list. `failed` is true when CDSC blocked or rejected the
+ * myPurchase/share/ call (e.g. HTML security-filter page) - the caller should
+ * fall back to the normal holdings list instead of treating it as fatal.
+ */
+export interface WaccScripsResult {
+  scrips: string[];
+  failed: boolean;
+}
+
 /** One calculated WACC row from the account-wide waccReport. */
 export interface WaccReportItem {
   id?: number;
@@ -213,6 +223,28 @@ export interface WaccReport {
   viewWaccSummaryReport?: boolean;
   message?: string;
   waccReportResponse?: WaccReportItem[];
+}
+
+/** Per-scrip cost basis aggregated from the Purchase Source search endpoint. */
+export interface InvestmentScripSummary {
+  scrip: string;
+  units: number;
+  cost: number;
+  /** Locally computed WACC: cost / units (0 when units is 0). */
+  waccRate: number;
+  status: "calculated" | "pending" | "missing";
+}
+
+/** Account-wide investment summary built from every holding's purchase source. */
+export interface InvestmentSummary {
+  totalInvestment: number;
+  totalUnits: number;
+  /** Locally computed average WACC: totalInvestment / totalUnits. */
+  avgWacc: number;
+  calculatedCount: number;
+  pendingCount: number;
+  missingCount: number;
+  scrips: InvestmentScripSummary[];
 }
 
 export interface Paged<T> {

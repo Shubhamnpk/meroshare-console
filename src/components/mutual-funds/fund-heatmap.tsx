@@ -406,19 +406,19 @@ function HeatMapContent({
                   <div className="flex justify-between gap-6">
                     <span>Units:</span>
                     <span className="font-bold text-foreground">
-                      {item.units != null ? formatQty(item.units) : "—"}
+                      {item.units != null ? formatQty(item.units) : "-"}
                     </span>
                   </div>
                   <div className="flex justify-between gap-6">
                     <span>NAV:</span>
                     <span className="font-bold text-foreground">
-                      {item.nav != null ? formatNpr(item.nav) : "—"}
+                      {item.nav != null ? formatNpr(item.nav) : "-"}
                     </span>
                   </div>
                   <div className="flex justify-between gap-6 border-t border-border/20 pt-1">
                     <span>LTP:</span>
                     <span className="font-bold text-foreground">
-                      {item.ltp != null ? formatNpr(item.ltp) : "—"}
+                      {item.ltp != null ? formatNpr(item.ltp) : "-"}
                     </span>
                   </div>
                   <div className="flex justify-between gap-6">
@@ -433,7 +433,7 @@ function HeatMapContent({
                             : "text-loss",
                       )}
                     >
-                      {item.discount != null ? formatPercent(item.discount) : "—"}
+                      {item.discount != null ? formatPercent(item.discount) : "-"}
                     </span>
                   </div>
                   <div className="flex justify-between gap-6">
@@ -448,7 +448,7 @@ function HeatMapContent({
                             : "text-loss",
                       )}
                     >
-                      {item.dayChange != null ? formatPercent(item.dayChange) : "—"}
+                      {item.dayChange != null ? formatPercent(item.dayChange) : "-"}
                     </span>
                   </div>
                 </div>
@@ -753,7 +753,7 @@ export function FundHeatmap({
                         Units
                       </span>
                       <span className="text-xs font-black text-foreground">
-                        {selectedItem.units != null ? formatQty(selectedItem.units) : "—"}
+                        {selectedItem.units != null ? formatQty(selectedItem.units) : "-"}
                       </span>
                     </div>
                     <div className="flex flex-col">
@@ -761,9 +761,9 @@ export function FundHeatmap({
                         NAV / LTP
                       </span>
                       <span className="text-xs font-black text-foreground">
-                        {selectedItem.nav != null ? formatNpr(selectedItem.nav) : "—"}
+                        {selectedItem.nav != null ? formatNpr(selectedItem.nav) : "-"}
                         {" / "}
-                        {selectedItem.ltp != null ? formatNpr(selectedItem.ltp) : "—"}
+                        {selectedItem.ltp != null ? formatNpr(selectedItem.ltp) : "-"}
                       </span>
                     </div>
                     <div className="flex flex-col">
@@ -780,7 +780,7 @@ export function FundHeatmap({
                               : "text-loss",
                         )}
                       >
-                        {selectedItem.discount != null ? formatPercent(selectedItem.discount) : "—"}
+                        {selectedItem.discount != null ? formatPercent(selectedItem.discount) : "-"}
                       </span>
                     </div>
                   </div>

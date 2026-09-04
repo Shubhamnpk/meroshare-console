@@ -1,27 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  Activity,
-  BarChart3,
-  Briefcase,
-  CalendarClock,
-  CandlestickChart,
-  ChevronDown,
-  ChevronsLeft,
-  ChevronsRight,
-  ClipboardList,
-  Coins,
-  LayoutDashboard,
-  LineChart,
-  LogOut,
-  Rocket,
-  Search,
-  Settings,
-  Sparkles,
-  Star,
-  UserRound,
-} from "lucide-react";
+import { ChevronDown, LogOut, Search, Settings, UserRound } from "lucide-react";
 import { APP_VERSION } from "@/lib/version";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -34,42 +14,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { logout } from "@/lib/meroshare/auth.functions";
+import { clearSessionUnlock } from "@/lib/biometric";
 import type { SessionUser } from "@/lib/meroshare/types";
 import { CommandPalette } from "@/components/command-palette";
+import { NotificationBell } from "@/components/notification-bell";
 import { ScripSheet } from "@/components/market/scrip-sheet";
-
-type NavItem = { to: string; label: string; icon: typeof LayoutDashboard };
-
-const PRIMARY_NAV: NavItem[] = [
-  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/portfolio", label: "Portfolio", icon: Briefcase },
-  { to: "/market", label: "Market", icon: LineChart },
-  { to: "/terminal", label: "Trading Terminal", icon: CandlestickChart },
-  { to: "/watchlist", label: "Watchlist", icon: Star },
-  { to: "/transactions", label: "Transactions", icon: Activity },
-  { to: "/analytics", label: "Analytics", icon: BarChart3 },
-];
-
-const IPO_NAV: NavItem[] = [
-  { to: "/ipo", label: "Apply for Issue", icon: Rocket },
-  { to: "/reports", label: "Application Report", icon: ClipboardList },
-  { to: "/wacc", label: "Purchase Source", icon: Coins },
-];
-
-const ACCOUNT_NAV: NavItem[] = [
-  { to: "/profile", label: "My Profile", icon: UserRound },
-  { to: "/activity", label: "Activity Log", icon: CalendarClock },
-  { to: "/settings", label: "Settings", icon: Settings },
-];
-
-const MOBILE_NAV: NavItem[] = [
-  { to: "/dashboard", label: "Home", icon: LayoutDashboard },
-  { to: "/portfolio", label: "Portfolio", icon: Briefcase },
-  { to: "/market", label: "Market", icon: LineChart },
-  { to: "/terminal", label: "Chart", icon: CandlestickChart },
-  { to: "/ipo", label: "IPO", icon: Rocket },
-  { to: "/reports", label: "Reports", icon: ClipboardList },
-];
+import { AppSidebar, MobileNav } from "@/components/app-sidebar";
+import { usePrefs } from "@/lib/prefs";
 
 function initials(name: string) {
   return (
@@ -82,119 +33,15 @@ function initials(name: string) {
   );
 }
 
-const SIDEBAR_KEY = "meroshare.sidebar-collapsed.v1";
-
-function NavGroup({
-  title,
-  items,
-  pathname,
-  collapsed = false,
-}: {
-  title: string;
-  items: NavItem[];
-  pathname: string;
-  collapsed?: boolean;
-}) {
-  return (
-    <div className="space-y-1">
-      {collapsed ? (
-        <div className="px-3 pb-1 pt-4">
-          <div className="h-px bg-sidebar-border/70" aria-hidden />
-        </div>
-      ) : (
-        <p className="px-3 pb-1 pt-4 text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground/80">
-          {title}
-        </p>
-      )}
-      {items.map((item) => {
-        const active = pathname === item.to;
-        return (
-          <Link
-            key={item.to}
-            to={item.to}
-            title={collapsed ? item.label : undefined}
-            className={cn(
-              "flex items-center rounded-xl text-sm font-medium transition-colors",
-              collapsed ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2.5",
-              active
-                ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground",
-            )}
-          >
-            <item.icon className={cn("size-4 shrink-0", active && "text-primary")} aria-hidden />
-            {!collapsed && item.label}
-          </Link>
-        );
-      })}
-    </div>
-  );
-}
-
-function Brand({ collapsed, onToggle }: { collapsed: boolean; onToggle?: () => void }) {
-  return (
-    <div
-      className={cn(
-        "flex items-center py-4",
-        collapsed ? "flex-col justify-center gap-2" : "justify-between gap-2 px-3",
-      )}
-    >
-      <div className={cn("flex items-center", collapsed ? "flex-col gap-2" : "gap-2.5")}>
-        <img
-          src="/logo-512.png"
-          alt="MeroShare Next logo"
-          className="size-9 rounded-xl"
-          aria-hidden
-        />
-        {!collapsed && (
-          <div className="leading-tight">
-            <p className="font-display text-sm font-semibold">MeroShare</p>
-            <p className="text-[0.7rem] text-muted-foreground">CDSC Investor Console</p>
-          </div>
-        )}
-      </div>
-      {onToggle ? (
-        <button
-          type="button"
-          onClick={onToggle}
-          className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        >
-          {collapsed ? <ChevronsRight className="size-4" /> : <ChevronsLeft className="size-4" />}
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
 export function AppShell({ user, children }: { user: SessionUser; children: ReactNode }) {
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { sidebarCollapsed, setSidebarCollapsed } = usePrefs();
   const [signingOut, setSigningOut] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [pickedScrip, setPickedScrip] = useState<string | null>(null);
-  const [collapsed, setCollapsed] = useState(false);
 
-  useEffect(() => {
-    try {
-      if (localStorage.getItem(SIDEBAR_KEY) === "1") setCollapsed(true);
-    } catch {
-      // storage unavailable, keep expanded
-    }
-  }, []);
-
-  const toggleCollapsed = () => {
-    setCollapsed((c) => {
-      const next = !c;
-      try {
-        localStorage.setItem(SIDEBAR_KEY, next ? "1" : "0");
-      } catch {
-        // ignore
-      }
-      return next;
-    });
-  };
+  const toggleCollapsed = () => setSidebarCollapsed(!sidebarCollapsed);
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -213,48 +60,28 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
       await queryClient.cancelQueries();
       queryClient.clear();
       await logout();
+      clearSessionUnlock();
+      // Clear notification + cache state on logout (prefs persist intentionally)
+      try {
+        localStorage.removeItem("ms-notif.v1");
+        localStorage.removeItem("ms-cache.v1");
+      } catch {
+        // ignore
+      }
     } finally {
       setSigningOut(false);
       navigate({ to: "/", replace: true });
     }
   };
 
-  const handleSidebarClick = (e: React.MouseEvent) => {
-    const tag = (e.target as HTMLElement).tagName;
-    if (tag === "A" || tag === "BUTTON" || (e.target as HTMLElement).closest("a, button")) return;
-    toggleCollapsed();
-  };
-
-  const navBody = (collapsedNav = false) => (
-    <nav className="flex-1 overflow-y-auto px-2 pb-4">
-      <NavGroup title="Overview" items={PRIMARY_NAV} pathname={pathname} collapsed={collapsedNav} />
-      <NavGroup title="Issues" items={IPO_NAV} pathname={pathname} collapsed={collapsedNav} />
-      <NavGroup title="Account" items={ACCOUNT_NAV} pathname={pathname} collapsed={collapsedNav} />
-    </nav>
-  );
-
   return (
-    <div className="min-h-screen w-full bg-background">
-      <aside
-        onClick={handleSidebarClick}
-        className={cn(
-          "group/sidebar fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-sidebar-border bg-sidebar lg:flex",
-          "cursor-pointer select-none transition-[width] duration-300 ease-in-out",
-          collapsed ? "w-[4.75rem]" : "w-64",
-        )}
-      >
-        <Brand collapsed={collapsed} onToggle={toggleCollapsed} />
-        {navBody(collapsed)}
-        {/* Hover grip indicator on the right edge */}
-        <div className="pointer-events-none absolute inset-y-0 right-0 flex w-1 items-center justify-center opacity-0 transition-opacity group-hover/sidebar:opacity-100">
-          <div className="h-8 w-0.5 rounded-full bg-muted-foreground/40" />
-        </div>
-      </aside>
+    <div className="min-h-screen w-full bg-background flex flex-col">
+      <AppSidebar collapsed={sidebarCollapsed} onToggleCollapsed={toggleCollapsed} />
 
       <div
         className={cn(
-          "transition-[padding] duration-300 ease-in-out",
-          collapsed ? "lg:pl-[4.75rem]" : "lg:pl-64",
+          "flex-1 flex flex-col transition-[padding] duration-300 ease-in-out",
+          sidebarCollapsed ? "lg:pl-[4.75rem]" : "lg:pl-64",
         )}
       >
         <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border/70 bg-background/85 px-4 backdrop-blur-xl sm:px-6">
@@ -286,17 +113,7 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
           >
             <Search className="size-4" />
           </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="hidden md:inline-flex"
-            asChild
-            aria-label="Open settings"
-          >
-            <Link to="/settings">
-              <Settings className="size-4" />
-            </Link>
-          </Button>
+          <NotificationBell />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -333,10 +150,6 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
                 <Settings className="size-4" aria-hidden />
                 Settings
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate({ to: "/releases" })}>
-                <Sparkles className="size-4" aria-hidden />
-                Release Notes ({APP_VERSION})
-              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={handleSignOut}
@@ -350,7 +163,7 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
           </DropdownMenu>
         </header>
 
-        <main className="mx-auto w-full max-w-7xl px-4 pb-28 pt-6 sm:px-6 lg:pb-12">
+        <main className="mx-auto w-full max-w-7xl flex-1 px-4 pb-28 pt-6 sm:px-6 lg:pb-12">
           {children}
           <footer className="mt-12 flex flex-col items-center justify-center gap-1.5 border-t border-border/50 pt-6 text-center text-xs text-muted-foreground">
             <div className="flex flex-wrap items-center justify-center gap-2">
@@ -371,26 +184,7 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
         </main>
       </div>
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border/70 bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
-        <div className="grid grid-cols-6">
-          {MOBILE_NAV.map((item) => {
-            const active = pathname === item.to;
-            return (
-              <Link
-                key={item.to}
-                to={item.to}
-                className={cn(
-                  "flex flex-col items-center gap-1 py-2.5 text-[0.68rem] font-medium transition-colors",
-                  active ? "text-primary" : "text-muted-foreground",
-                )}
-              >
-                <item.icon className="size-5" aria-hidden />
-                {item.label}
-              </Link>
-            );
-          })}
-        </div>
-      </nav>
+      <MobileNav />
 
       <CommandPalette
         open={paletteOpen}

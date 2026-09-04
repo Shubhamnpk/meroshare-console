@@ -5,6 +5,7 @@ import {
   MF_ATTRIBUTION,
   getMfApprovals,
   getMfDebentureHighlights,
+  getMfDebentureList,
   getMfFeedHealth,
   getMfManagerDetail,
   getMfManagerFacts,
@@ -21,6 +22,7 @@ import {
 } from "./funds.server";
 import type {
   MfApproval,
+  MfDebentureList,
   MfDebentureSummary,
   MfFeedHealth,
   MfHoldingsMap,
@@ -116,6 +118,13 @@ export const getMfDebentureData = createServerFn({ method: "GET" }).handler(
   async (): Promise<MfDebentureSummary> => {
     await requireAuth();
     return getMfDebentureHighlights();
+  },
+);
+
+export const getMfDebentureListData = createServerFn({ method: "GET" }).handler(
+  async (): Promise<MfDebentureList> => {
+    await requireAuth();
+    return getMfDebentureList();
   },
 );
 

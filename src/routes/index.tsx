@@ -1,12 +1,14 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { APP_VERSION } from "@/lib/version";
 import {
   Check,
   ChevronsUpDown,
+  Clock,
   Eye,
   EyeOff,
+  Fingerprint,
   Loader2,
   Lock,
   ShieldCheck,
@@ -14,6 +16,7 @@ import {
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -36,10 +39,18 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 import { errorMessage } from "@/lib/format";
-import { getCapitals, getCurrentUser, login } from "@/lib/meroshare/auth.functions";
+import { clearRemembered, loadRemembered, saveRemembered } from "@/lib/remember-me";
+import { isBiometricEnrolled } from "@/lib/biometric";
+import { clearVault, getVaultOwner, hasVault, readVault, writeVault } from "@/lib/secure-vault";
+import { toast } from "sonner";
+import { ogImage, canonicalLink } from "@/lib/seo";
+import { getCapitals, getCurrentUser, login, loginDemo } from "@/lib/meroshare/auth.functions";
 import type { Capital } from "@/lib/meroshare/types";
 
 export const Route = createFileRoute("/")({
+  validateSearch: (search: Record<string, unknown>): { expired?: boolean | undefined } => ({
+    expired: search["expired"] === true || search["expired"] === "true" ? true : undefined,
+  }),
   beforeLoad: async () => {
     const user = await getCurrentUser();
     if (user) throw redirect({ to: "/dashboard" });
@@ -58,6 +69,10 @@ export const Route = createFileRoute("/")({
         content:
           "A modern MeroShare client for Nepali investors: live portfolio value, IPO applications, transactions and analytics.",
       },
+      ogImage(),
+    ],
+    links: [
+      canonicalLink("/"),
     ],
   }),
   component: LoginPage,
@@ -76,8 +91,8 @@ const HIGHLIGHTS = [
   },
   {
     icon: ShieldCheck,
-    title: "Credentials never stored",
-    text: "Your login lives only in an encrypted session cookie for this visit.",
+    title: "Private by design",
+    text: "Nothing is saved unless you ask, fingerprint sign-ins stay encrypted on your device.",
   },
 ];
 
@@ -123,11 +138,18 @@ function CapitalItem({
 
 function LoginPage() {
   const navigate = useNavigate();
+  const { expired } = Route.useSearch();
   const [capitalOpen, setCapitalOpen] = useState(false);
   const [capitalSearch, setCapitalSearch] = useState("");
-  const [capitalId, setCapitalId] = useState<number | null>(null);
-  const [username, setUsername] = useState("");
+  const [remembered] = useState(() => loadRemembered());
+  const [capitalId, setCapitalId] = useState<number | null>(remembered?.capitalId ?? null);
+  const [username, setUsername] = useState(remembered?.username ?? "");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(() => remembered !== null);
+  const [bioEnrolled] = useState(() => isBiometricEnrolled());
+  const [saveBio, setSaveBio] = useState(() => isBiometricEnrolled());
+  const [bioBusy, setBioBusy] = useState(false);
+  const bioAttempt = useRef(false);
   const [showPassword, setShowPassword] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -145,9 +167,103 @@ function LoginPage() {
   const mutation = useMutation({
     mutationFn: (vars: { capitalId: number; username: string; password: string }) =>
       login({ data: vars }),
-    onSuccess: () => navigate({ to: "/dashboard", replace: true }),
-    onError: (error) => setFormError(errorMessage(error, "Unable to sign in. Check your details.")),
+    onSuccess: async (_data, vars) => {
+      if (rememberMe) saveRemembered(vars.username, vars.capitalId);
+      else clearRemembered();
+      // Save for fingerprint sign-in only when needed: a fresh vault, or the
+      // vault belongs to a different user. Re-saving identical credentials
+      // would demand a pointless extra fingerprint prompt on every login.
+      if (bioEnrolled && saveBio && getVaultOwner() !== vars.username) {
+        try {
+          await writeVault({
+            capitalId: vars.capitalId,
+            username: vars.username,
+            password: vars.password,
+          });
+          toast.success("Fingerprint sign-in saved for this device.");
+        } catch (err) {
+          toast.error(
+            err instanceof Error ? err.message : "Fingerprint sign-in could not be saved.",
+          );
+        }
+      }
+      navigate({ to: "/dashboard", replace: true });
+    },
+    onError: (error) => {
+      if (bioAttempt.current) {
+        bioAttempt.current = false;
+        clearVault();
+        setFormError(
+          "The saved fingerprint sign-in no longer works, your password may have changed. Sign in manually.",
+        );
+        return;
+      }
+      setFormError(errorMessage(error, "Unable to sign in. Check your details."));
+    },
   });
+
+  const bioLogin = async (source: "auto" | "manual" = "manual") => {
+    setBioBusy(true);
+    setFormError(null);
+    try {
+      if (!hasVault()) {
+        setFormError(
+          "No fingerprint sign-in saved yet. Sign in with your password once and keep “Save for fingerprint sign-in” checked.",
+        );
+        return;
+      }
+      const creds = await readVault();
+      bioAttempt.current = true;
+      setCapitalId(creds.capitalId);
+      setUsername(creds.username);
+      mutation.mutate({
+        capitalId: creds.capitalId,
+        username: creds.username,
+        password: creds.password,
+      });
+    } catch (err) {
+      bioAttempt.current = false;
+      const message = err instanceof Error ? err.message : "Fingerprint sign-in failed.";
+      // An automatic attempt failing (no gesture, device asleep) is not the
+      // user's fault - point at the button instead of the error.
+      setFormError(
+        source === "auto" && /cancelled|did not complete/i.test(message)
+          ? "Your session expired. Tap “Sign in with fingerprint” to jump back in."
+          : message,
+      );
+    } finally {
+      setBioBusy(false);
+    }
+  };
+
+  // Expired mid-use with a vault on this device? Try to glide back in once;
+  // any failure just leaves the normal sign-in form (and button) in place.
+  const autoTried = useRef(false);
+  useEffect(() => {
+    if (expired && !autoTried.current && bioEnrolled && hasVault()) {
+      autoTried.current = true;
+      void bioLogin("auto");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expired, bioEnrolled]);
+
+  const demoMutation = useMutation({
+    mutationFn: () => loginDemo(),
+    onSuccess: () => navigate({ to: "/dashboard", replace: true }),
+    onError: (error) => setFormError(errorMessage(error, "Unable to start demo mode.")),
+  });
+
+  // Hidden shortcut: Ctrl+Shift+D enters demo mode
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.ctrlKey && e.shiftKey && e.key === "D") {
+        e.preventDefault();
+        if (!mutation.isPending && !demoMutation.isPending) demoMutation.mutate();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [mutation.isPending, demoMutation.isPending, demoMutation]);
 
   const isMobile = useIsMobile();
 
@@ -336,6 +452,56 @@ function LoginPage() {
           </p>
 
           <form onSubmit={onSubmit} className="mt-7 space-y-4">
+            {expired ? (
+              <p className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-muted-foreground">
+                <Clock className="mt-0.5 size-3.5 shrink-0 text-amber-500" />
+                Your MeroShare session expired.
+                {bioEnrolled
+                  ? " Trying your fingerprint to sign you straight back in."
+                  : " Sign back in to continue."}
+              </p>
+            ) : null}
+            {bioEnrolled ? (
+              <>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => void bioLogin()}
+                  disabled={bioBusy || mutation.isPending}
+                  className="h-11 w-full"
+                >
+                  {bioBusy ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" /> Checking fingerprint…
+                    </>
+                  ) : (
+                    <>
+                      <Fingerprint className="size-4" /> Sign in with fingerprint
+                    </>
+                  )}
+                </Button>
+                {!hasVault() ? (
+                  <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
+                    <p className="flex items-center gap-1.5 font-medium text-foreground">
+                      <Fingerprint className="size-3.5 text-primary" />
+                      Set up one-tap sign-in
+                    </p>
+                    <p className="mt-1 leading-relaxed">
+                      1. Sign in with your password below.
+                      <br />
+                      2. Keep “Save for fingerprint sign-in” checked.
+                      <br />
+                      Next visit, the button above signs you straight in.
+                    </p>
+                  </div>
+                ) : null}
+                <div className="flex items-center gap-3 text-[0.7rem] text-muted-foreground">
+                  <span className="h-px flex-1 bg-border" aria-hidden />
+                  or continue with password
+                  <span className="h-px flex-1 bg-border" aria-hidden />
+                </div>
+              </>
+            ) : null}
             <div className="space-y-2">
               <Label htmlFor="dp">Depository Participant (DP)</Label>
               {capitalPicker}
@@ -390,6 +556,42 @@ function LoginPage() {
               </p>
             ) : null}
 
+            <div className="flex items-start gap-2.5">
+              <Checkbox
+                id="remember-me"
+                checked={rememberMe}
+                onCheckedChange={(checked) => setRememberMe(checked === true)}
+                className="mt-0.5"
+              />
+              <div className="leading-snug">
+                <Label htmlFor="remember-me" className="cursor-pointer text-sm font-medium">
+                  Remember me on this device
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Prefills your username next time. Your password is never saved.
+                </p>
+              </div>
+            </div>
+
+            {bioEnrolled ? (
+              <div className="flex items-start gap-2.5">
+                <Checkbox
+                  id="save-bio"
+                  checked={saveBio}
+                  onCheckedChange={(checked) => setSaveBio(checked === true)}
+                  className="mt-0.5"
+                />
+                <div className="leading-snug">
+                  <Label htmlFor="save-bio" className="cursor-pointer text-sm font-medium">
+                    Save for fingerprint sign-in
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Encrypts this sign-in on your device so your fingerprint signs you in next time.
+                  </p>
+                </div>
+              </div>
+            ) : null}
+
             <Button type="submit" className="h-11 w-full" disabled={mutation.isPending}>
               {mutation.isPending ? (
                 <>
@@ -401,7 +603,7 @@ function LoginPage() {
             </Button>
 
             <p className="flex items-start gap-2 text-xs text-muted-foreground">
-              <Lock className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              <Lock className="mt-0.5 size-3.5 shrink-0" />
               Your credentials are sent straight to CDSC over our server and are never saved to any
               database. The session ends when you sign out or after 2 hours.
             </p>

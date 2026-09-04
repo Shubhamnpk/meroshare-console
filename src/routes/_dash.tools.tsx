@@ -3,10 +3,12 @@ import {
   ArrowRight,
   BarChart3,
   CandlestickChart,
+  Landmark,
   PiggyBank,
   TrendingUp,
   Wrench,
 } from "lucide-react";
+import { ogImage, canonicalLink } from "@/lib/seo";
 
 export const Route = createFileRoute("/_dash/tools")({
   head: () => ({
@@ -18,6 +20,14 @@ export const Route = createFileRoute("/_dash/tools")({
           "Investor tools: trading terminal, portfolio analytics, top-ranked NEPSE shares and listed mutual fund schemes.",
       },
       { property: "og:title", content: "Tools | MeroShare Investor Console" },
+      {
+        property: "og:description",
+        content: "Investor tools: trading terminal, portfolio analytics, mutual fund screener and IPO application helper.",
+      },
+      ogImage(),
+    ],
+    links: [
+      canonicalLink("/tools"),
     ],
   }),
   component: ToolsPage,
@@ -55,6 +65,14 @@ const TOOLS = [
     description:
       "Every mutual fund scheme listed on NEPSE with live price, distributions and yield in one table.",
     tag: "Fund explorer",
+  },
+  {
+    to: "/debentures",
+    icon: Landmark,
+    title: "Debentures",
+    description:
+      "Compare fixed-income issues by coupon, issuer and size — with a yearly income estimator.",
+    tag: "Fixed income",
   },
 ] as const;
 

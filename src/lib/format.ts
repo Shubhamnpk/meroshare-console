@@ -40,7 +40,7 @@ export function formatSignedNpr(value: number): string {
 }
 
 export function formatDate(value: unknown): string {
-  if (!value) return "—";
+  if (!value) return "-";
   const raw = String(value);
   const date = new Date(raw.includes("T") ? raw : raw.replace(" ", "T"));
   if (Number.isNaN(date.getTime())) return raw;
@@ -52,7 +52,7 @@ export function formatDate(value: unknown): string {
 }
 
 export function formatDateTime(value: unknown): string {
-  if (!value) return "—";
+  if (!value) return "-";
   const raw = String(value);
   const date = new Date(raw.includes("T") ? raw : raw.replace(" ", "T"));
   if (Number.isNaN(date.getTime())) return raw;

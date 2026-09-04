@@ -148,6 +148,14 @@ export interface FinancialReport {
   paidUpCapital: number | null;
   profit: number | null;
   netWorthPerShare: number | null;
+  /** Return on Equity - calculated as EPS / netWorthPerShare. */
+  roe: number | null;
+  /** Non-Performing Loan ratio (%). Banking-specific, from NRB reports. */
+  npl: number | null;
+  /** Capital Adequacy Ratio (%). Banking-specific, from NRB reports. */
+  car: number | null;
+  /** Operating Margin (%). Non-banking companies. */
+  operatingMargin: number | null;
   submittedDate: string | null;
   /** URL of the source PDF (NEPSE annual/quarterly report). */
   documentUrl: string | null;

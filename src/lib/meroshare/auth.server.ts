@@ -6,6 +6,20 @@ import type { OwnDetail, SessionUser } from "./types";
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 2;
 
+/**
+ * CDSC pads the username with leading zeros in profile responses (e.g.
+ * "00612609") but sign-in uses the unpadded form ("612609"). Normalize so the
+ * session always holds the real login username.
+ */
+export function normalizeUsername(value: unknown): string {
+  const raw = String(value ?? "").trim();
+  if (/^\d+$/.test(raw)) {
+    const stripped = raw.replace(/^0+/, "");
+    if (stripped) return stripped;
+  }
+  return raw;
+}
+
 export function toSessionUser(
   detail: OwnDetail,
   capitalId: number,
@@ -13,7 +27,7 @@ export function toSessionUser(
 ): SessionUser {
   return {
     name: String(detail.name ?? ""),
-    username: String(detail.username ?? ""),
+    username: normalizeUsername(detail.username),
     demat: String(detail.demat ?? ""),
     boid: String(detail.boid ?? ""),
     clientCode: String(detail.clientCode ?? ""),

@@ -3,7 +3,7 @@
  *
  * This is a convenience app-lock for this device: after enrollment, opening the
  * app with a valid session asks for a biometric check before showing anything.
- * It does NOT replace the MeroShare password — the CDSC session still expires
+ * It does NOT replace the MeroShare password - the CDSC session still expires
  * normally and sign-in still needs the password. No biometric data ever leaves
  * the device; we only keep the credential id to challenge against.
  */
@@ -78,7 +78,7 @@ export interface EnrollResult {
   /**
    * Encrypted-storage (PRF) support learned during enrollment:
    * true = confirmed, false = confirmed NOT supported,
-   * null = unknown (older client) — saving will be attempted anyway.
+   * null = unknown (older client) - saving will be attempted anyway.
    */
   prfEnabled: boolean | null;
 }
@@ -157,7 +157,7 @@ export async function enrollBiometricDetailed(username: string): Promise<EnrollR
       if (error instanceof Error && /not supported|not allowed/i.test(error.message)) throw error;
       throw new Error("Could not set up biometrics on this device.");
     }
-    // Older client choked on the PRF probe — retry clean. Support stays
+    // Older client choked on the PRF probe - retry clean. Support stays
     // unknown and saving will be attempted at the next step.
     try {
       const credential = await createCredential(username, false);

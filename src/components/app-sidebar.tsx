@@ -3,6 +3,7 @@ import {
   BarChart3,
   Briefcase,
   CalendarClock,
+  ChartCandlestick,
   ChevronsLeft,
   ChevronsRight,
   ClipboardList,
@@ -12,7 +13,6 @@ import {
   LineChart,
   Rocket,
   Settings,
-  Star,
   UserRound,
   Wrench,
 } from "lucide-react";
@@ -24,8 +24,8 @@ export const PRIMARY_NAV: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/portfolio", label: "Portfolio", icon: Briefcase },
   { to: "/market", label: "Market", icon: LineChart },
+  { to: "/terminal", label: "Terminal", icon: ChartCandlestick },
   { to: "/tools", label: "Tools", icon: Wrench },
-  { to: "/watchlist", label: "Watchlist", icon: Star },
   { to: "/transactions", label: "Transactions", icon: History },
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
 ];

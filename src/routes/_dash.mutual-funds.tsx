@@ -32,6 +32,7 @@ import { formatNumber, formatPercent } from "@/lib/format";
 import type { MfPerformance, MfPipelineType } from "@/lib/mutual-funds/types";
 import type { LivePrice } from "@/lib/nepse/types";
 import { cn } from "@/lib/utils";
+import { ogImage, canonicalLink } from "@/lib/seo";
 
 export const Route = createFileRoute("/_dash/mutual-funds")({
   head: () => ({
@@ -43,6 +44,14 @@ export const Route = createFileRoute("/_dash/mutual-funds")({
           "Nepali mutual fund schemes with NAV tracking, discounts to NAV, returns, holdings and growth simulators.",
       },
       { property: "og:title", content: "Mutual Funds | MeroShare Investor Console" },
+      {
+        property: "og:description",
+        content: "Nepali mutual fund schemes with NAV tracking, discount analytics and manager views.",
+      },
+      ogImage(),
+    ],
+    links: [
+      canonicalLink("/mutual-funds"),
     ],
   }),
   component: MutualFundsPage,
@@ -105,7 +114,7 @@ function MutualFundsPage() {
     if (schemes.length === 0) return null;
     const discounts: number[] = [];
     for (const p of performances.values()) {
-      // Only close-end funds trade at market price — open-end always = NAV
+      // Only close-end funds trade at market price - open-end always = NAV
       if (p.fundType !== "close_end") continue;
       const { nav } = referenceNav(p);
       const d = discountPct(p.ltp, nav);

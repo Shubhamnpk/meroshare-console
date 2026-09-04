@@ -1,5 +1,6 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
+import { BiometricGate } from "@/components/biometric-lock";
 import { getCurrentUser } from "@/lib/meroshare/auth.functions";
 
 export const Route = createFileRoute("/_dash")({
@@ -15,7 +16,9 @@ function DashLayout() {
   const { user } = Route.useRouteContext();
   return (
     <AppShell user={user}>
-      <Outlet />
+      <BiometricGate>
+        <Outlet />
+      </BiometricGate>
     </AppShell>
   );
 }

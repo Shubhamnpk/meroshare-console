@@ -162,8 +162,14 @@ export interface MfDebenture {
   issuer: string;
   instrument: string;
   couponPct: number | null;
+  tenorYears: number | null;
+  maturityBs: string | null;
+  sector: string | null;
   units: number | null;
   faceValue: number | null;
+  amountRegistered: number | null;
+  publicIssueAmount: number | null;
+  privatePlacementAmount: number | null;
   issueManager: string | null;
   dateBs: string | null;
   fiscalYear: string | null;
@@ -175,6 +181,12 @@ export interface MfDebentureSummary {
   couponMin: number | null;
   couponMax: number | null;
   top: MfDebenture[];
+}
+
+/** Full debenture universe for the explorer tool. */
+export interface MfDebentureList {
+  debentures: MfDebenture[];
+  summary: Omit<MfDebentureSummary, "top">;
 }
 
 export interface MfProduct {

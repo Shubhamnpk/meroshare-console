@@ -62,7 +62,7 @@ function getOrCreateSalt(): Uint8Array<ArrayBuffer> {
   try {
     localStorage.setItem(SALT_KEY, bufferToBase64(buffer));
   } catch {
-    // storage unavailable — encryption still works for this session
+    // storage unavailable - encryption still works for this session
   }
   return new Uint8Array(buffer);
 }
@@ -125,7 +125,7 @@ export function clearVault(): void {
   }
 }
 
-/** Username the vault was saved for (plaintext — same as Remember Me). */
+/** Username the vault was saved for (plaintext - same as Remember Me). */
 export function getVaultOwner(): string | null {
   try {
     return localStorage.getItem(VAULT_USER_KEY);
@@ -182,7 +182,7 @@ export async function writeVault(creds: VaultCredentials): Promise<void> {
   } catch {
     // non-fatal
   }
-  // A passed ceremony counts as this session's unlock — no second prompt.
+  // A passed ceremony counts as this session's unlock - no second prompt.
   markUnlockedThisSession();
 }
 
@@ -212,12 +212,12 @@ export async function readVault(): Promise<VaultCredentials> {
       base64ToBuffer(stored.data),
     );
     const creds = validateCredentials(JSON.parse(new TextDecoder().decode(plaintext)));
-    // A passed ceremony counts as this session's unlock — no second prompt.
+    // A passed ceremony counts as this session's unlock - no second prompt.
     markUnlockedThisSession();
     return creds;
   } catch {
     throw new Error(
-      "Could not unlock the saved sign-in — it may belong to a different sign-in or device. Use your password.",
+      "Could not unlock the saved sign-in: it may belong to a different sign-in or device. Use your password.",
     );
   }
 }

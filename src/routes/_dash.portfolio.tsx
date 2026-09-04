@@ -29,10 +29,11 @@ import {
 } from "@/components/ui/table";
 import { ScripSheet } from "@/components/market/scrip-sheet";
 import { HistoryPanel } from "@/components/portfolio/history-panel";
-import { enrichedPortfolioQuery, waccReportQuery } from "@/lib/queries";
+import { enrichedPortfolioQuery, investmentSummaryQuery } from "@/lib/queries";
 import { useSettings } from "@/lib/settings";
 import { formatNpr, formatQty } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { ogImage, canonicalLink } from "@/lib/seo";
 import type { EnrichedHolding } from "@/lib/nepse/types";
 
 export const Route = createFileRoute("/_dash/portfolio")({
@@ -50,14 +51,25 @@ export const Route = createFileRoute("/_dash/portfolio")({
         content:
           "Every scrip in your demat account valued at live NEPSE prices, its price history and dividend record.",
       },
+      ogImage(),
+    ],
+    links: [
+      canonicalLink("/portfolio"),
     ],
   }),
   component: PortfolioPage,
 });
 
-function portfolioCsv(holdings: EnrichedHolding[], totals: { value: number; valuePrev: number }) {
-  const rows = holdings.map((h, i) =>
-    csvRow([
+function portfolioCsv(
+  holdings: EnrichedHolding[],
+  totals: { value: number; valuePrev: number },
+  costOf: (scrip: string) => { cost: number; waccRate: number } | undefined,
+) {
+  const rows = holdings.map((h, i) => {
+    const c = costOf(h.scrip);
+    const cost = c?.cost ?? 0;
+    const pl = cost > 0 ? h.value - cost : 0;
+    return csvRow([
       i + 1,
       h.scrip,
       h.description,
@@ -66,11 +78,15 @@ function portfolioCsv(holdings: EnrichedHolding[], totals: { value: number; valu
       h.previousClose,
       h.value,
       h.previousValue,
+      cost > 0 ? (c?.waccRate ?? 0) : "",
+      cost > 0 ? cost : "",
+      cost > 0 ? pl : "",
+      cost > 0 ? `${((pl / cost) * 100).toFixed(2)}%` : "",
       `${h.percentChange.toFixed(2)}%`,
       totals.value > 0 ? `${((h.value / totals.value) * 100).toFixed(2)}%` : "0.00%",
       h.sector ?? "",
-    ]),
-  );
+    ]);
+  });
   return [
     csvRow([
       "SN",
@@ -81,6 +97,10 @@ function portfolioCsv(holdings: EnrichedHolding[], totals: { value: number; valu
       "Prev close",
       "Value (LTP)",
       "Value (prev close)",
+      "Avg buy",
+      "Cost",
+      "Unrealized P/L",
+      "P/L %",
       "Day change",
       "Weight",
       "Sector",
@@ -111,7 +131,16 @@ function StatChip({
   );
 }
 
-type SortKey = "scrip" | "units" | "ltp" | "previousClose" | "value" | "percentChange" | "weight";
+type SortKey =
+  | "scrip"
+  | "units"
+  | "ltp"
+  | "previousClose"
+  | "value"
+  | "avgBuy"
+  | "unrealized"
+  | "percentChange"
+  | "weight";
 type SortDir = "asc" | "desc";
 type SortState = { key: SortKey; dir: SortDir };
 
@@ -163,7 +192,7 @@ function PortfolioPage() {
     ...enrichedPortfolioQuery(),
     refetchInterval: autoRefresh ? refreshMinutes * 60_000 : false,
   });
-  const waccReport = useQuery(waccReportQuery());
+  const investment = useQuery(investmentSummaryQuery());
   const [search, setSearch] = useState("");
   const [picked, setPicked] = useState<string | null>(null);
   const [sort, setSort] = useState<SortState>({ key: "value", dir: "desc" });
@@ -177,11 +206,19 @@ function PortfolioPage() {
     dayPct: q.data?.dayChangePercent ?? 0,
   };
 
-  const totalInvestment = (waccReport.data?.waccReportResponse ?? []).reduce(
-    (sum, h) => sum + Math.max(0, h.totalCost ?? 0),
-    0,
-  );
+  const totalInvestment = investment.data?.totalInvestment ?? 0;
+  const pendingCount = investment.data?.pendingCount ?? 0;
   const unrealizedPL = totals.value - totalInvestment;
+
+  const costMap = useMemo(
+    () => new Map((investment.data?.scrips ?? []).map((s) => [s.scrip, s] as const)),
+    [investment.data],
+  );
+  const costOf = (scrip: string) => costMap.get(scrip);
+  const plOf = (h: EnrichedHolding) => {
+    const c = costMap.get(h.scrip);
+    return c && c.cost > 0 ? h.value - c.cost : 0;
+  };
 
   const items = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -204,13 +241,17 @@ function PortfolioPage() {
           return (a.previousClose - b.previousClose) * mul;
         case "value":
           return (a.value - b.value) * mul;
+        case "avgBuy":
+          return ((costMap.get(a.scrip)?.waccRate ?? 0) - (costMap.get(b.scrip)?.waccRate ?? 0)) * mul;
+        case "unrealized":
+          return (plOf(a) - plOf(b)) * mul;
         case "percentChange":
           return (a.percentChange - b.percentChange) * mul;
         case "weight":
           return (weightOf(a) - weightOf(b)) * mul;
       }
     });
-  }, [holdings, search, sort, totals.value]);
+  }, [holdings, search, sort, totals.value, costMap]);
 
   const onSort = (key: SortKey) => {
     setSort((s) =>
@@ -238,7 +279,7 @@ function PortfolioPage() {
               description: "Spreadsheet-friendly rows of every holding",
               filename: "portfolio",
               extension: "csv",
-              build: () => portfolioCsv(items, totals),
+              build: () => portfolioCsv(items, totals, costOf),
             },
             {
               title: "JSON",
@@ -255,16 +296,22 @@ function PortfolioPage() {
               build: () => "",
               pdf: () => ({
                 title: "Portfolio holdings at live prices",
-                head: ["SN", "Scrip", "Description", "Units", "LTP", "Value", "Day %"],
-                body: items.map((h, i) => [
-                  i + 1,
-                  h.scrip,
-                  h.description,
-                  formatQty(h.units),
-                  h.ltp.toFixed(2),
-                  h.value.toFixed(2),
-                  `${h.percentChange >= 0 ? "+" : ""}${h.percentChange.toFixed(2)}%`,
-                ]),
+                head: ["SN", "Scrip", "Description", "Units", "LTP", "Value", "Avg buy", "P/L", "Day %"],
+                body: items.map((h, i) => {
+                  const c = costOf(h.scrip);
+                  const pl = c && c.cost > 0 ? h.value - c.cost : null;
+                  return [
+                    i + 1,
+                    h.scrip,
+                    h.description,
+                    formatQty(h.units),
+                    h.ltp.toFixed(2),
+                    h.value.toFixed(2),
+                    c && c.waccRate > 0 ? c.waccRate.toFixed(2) : "-",
+                    pl == null ? "-" : `${pl >= 0 ? "+" : ""}${pl.toFixed(2)}`,
+                    `${h.percentChange >= 0 ? "+" : ""}${h.percentChange.toFixed(2)}%`,
+                  ];
+                }),
                 foot: [
                   "",
                   "Total",
@@ -272,6 +319,12 @@ function PortfolioPage() {
                   formatQty(totals.units),
                   "",
                   totals.value.toFixed(2),
+                  investment.data && investment.data.avgWacc > 0
+                    ? investment.data.avgWacc.toFixed(2)
+                    : "-",
+                  totalInvestment > 0
+                    ? `${unrealizedPL >= 0 ? "+" : ""}${unrealizedPL.toFixed(2)}`
+                    : "-",
                   `${totals.dayPct >= 0 ? "+" : ""}${totals.dayPct.toFixed(2)}%`,
                 ],
               }),
@@ -343,8 +396,10 @@ function PortfolioPage() {
         />
         <StatChip
           icon={<PiggyBank className="size-4" />}
-          label="Total investment"
-          value={formatNpr(totalInvestment, { compact: compactNumbers })}
+          label={pendingCount > 0 ? `Investment (${pendingCount} pending)` : "Total investment"}
+          value={
+            investment.isLoading ? "…" : formatNpr(totalInvestment, { compact: compactNumbers })
+          }
         />
         {totalInvestment > 0 ? (
           <StatChip
@@ -398,6 +453,8 @@ function PortfolioPage() {
                   onSort={onSort}
                 />
                 <SortableHead label="Value" sortKey="value" sort={sort} onSort={onSort} />
+                <SortableHead label="Avg buy" sortKey="avgBuy" sort={sort} onSort={onSort} />
+                <SortableHead label="P/L" sortKey="unrealized" sort={sort} onSort={onSort} />
                 <SortableHead label="Day" sortKey="percentChange" sort={sort} onSort={onSort} />
                 <SortableHead
                   label="Weight"
@@ -411,6 +468,10 @@ function PortfolioPage() {
             <TableBody>
               {items.map((h, idx) => {
                 const weight = totals.value > 0 ? (h.value / totals.value) * 100 : 0;
+                const basis = costOf(h.scrip);
+                const hasBasis = Boolean(basis && basis.cost > 0);
+                const pl = hasBasis ? h.value - (basis?.cost ?? 0) : 0;
+                const plPct = hasBasis && (basis?.cost ?? 0) > 0 ? (pl / (basis?.cost ?? 1)) * 100 : 0;
                 return (
                   <TableRow
                     key={`${h.scrip}-${idx}`}
@@ -441,10 +502,45 @@ function PortfolioPage() {
                       </span>
                     </TableCell>
                     <TableCell className="num text-right text-muted-foreground">
-                      {h.previousClose > 0 ? formatNpr(h.previousClose) : "—"}
+                      {h.previousClose > 0 ? formatNpr(h.previousClose) : "-"}
                     </TableCell>
                     <TableCell className="num text-right font-medium">
                       {formatNpr(h.value)}
+                    </TableCell>
+                    <TableCell
+                      className="num text-right text-muted-foreground"
+                      title={
+                        hasBasis
+                          ? basis?.status === "pending"
+                            ? "Estimated from purchase price (WACC not confirmed yet)"
+                            : "CDSC-calculated WACC"
+                          : "No cost data (blocked or not available)"
+                      }
+                    >
+                      {hasBasis && (basis?.waccRate ?? 0) > 0 ? (
+                        <>
+                          {basis?.status === "pending" ? "~" : ""}
+                          {formatNpr(basis?.waccRate ?? 0)}
+                        </>
+                      ) : (
+                        "-"
+                      )}
+                    </TableCell>
+                    <TableCell
+                      className="text-right"
+                      title={
+                        hasBasis && basis?.status === "pending"
+                          ? "Estimated P/L (WACC not confirmed yet)"
+                          : undefined
+                      }
+                    >
+                      {hasBasis ? (
+                        <DeltaPill value={pl}>
+                          {`${pl >= 0 ? "+" : "-"}${formatNpr(Math.abs(pl))} (${plPct.toFixed(1)}%)`}
+                        </DeltaPill>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">-</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-right">
                       <DeltaPill value={h.percentChange}>
@@ -481,6 +577,20 @@ function PortfolioPage() {
                   <TableCell className="num text-right font-semibold">
                     {formatNpr(totals.value, { compact: compactNumbers })}
                   </TableCell>
+                  <TableCell className="num text-right font-semibold text-muted-foreground">
+                    {investment.data && investment.data.avgWacc > 0
+                      ? formatNpr(investment.data.avgWacc)
+                      : "-"}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {totalInvestment > 0 ? (
+                      <DeltaPill value={unrealizedPL}>
+                        {`${unrealizedPL >= 0 ? "+" : "-"}${formatNpr(Math.abs(unrealizedPL))}`}
+                      </DeltaPill>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
                   <TableCell className="text-right">
                     <DeltaPill value={totals.dayChange}>
                       {`${totals.dayChange >= 0 ? "+" : "-"}${formatNpr(Math.abs(totals.dayChange))} (${totals.dayPct.toFixed(2)}%)`}

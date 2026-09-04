@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Activity, Maximize2, RefreshCw, Search, Star } from "lucide-react";
+import { Activity, ChartCandlestick, Maximize2, RefreshCw, Search, Star } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -16,6 +16,7 @@ import {
 import { ErrorBlock, LoadingBlock, EmptyBlock } from "@/components/states";
 import { DeltaPill } from "@/components/stat-card";
 import { ScripSheet } from "@/components/market/scrip-sheet";
+import { WatchlistPanel } from "@/components/market/watchlist-panel";
 import { ChartModal, chartTimeLabel } from "@/components/market/chart-modal";
 import {
   marketMoversQuery,
@@ -27,6 +28,7 @@ import { formatDateTime, formatNpr, formatNumber, formatPercent, formatQty } fro
 import { useWatchlist } from "@/lib/watchlist";
 import { useSettings } from "@/lib/settings";
 import { cn } from "@/lib/utils";
+import { ogImage, canonicalLink } from "@/lib/seo";
 import { Sparkline } from "@/components/market/sparkline";
 import type { MarketIndex, MoverRow, PricePoint } from "@/lib/nepse/types";
 
@@ -46,6 +48,10 @@ export const Route = createFileRoute("/_dash/market")({
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
+      ogImage(),
+    ],
+    links: [
+      canonicalLink("/market"),
     ],
   }),
   component: MarketPage,
@@ -154,6 +160,7 @@ function IndexCard({
 }
 
 function MarketPage() {
+  const navigate = useNavigate();
   const { autoRefresh, refreshMinutes } = useSettings();
   const snapshot = useQuery({
     ...marketSnapshotQuery(),
@@ -168,6 +175,7 @@ function MarketPage() {
   const [search, setSearch] = useState("");
   const [picked, setPicked] = useState<string | null>(null);
   const [chartIndex, setChartIndex] = useState<MarketIndex | null>(null);
+  const [watchlistOpen, setWatchlistOpen] = useState(false);
 
   const chartGraphName = chartIndex ? INDEX_GRAPH_NAMES[chartIndex.name] : null;
   const chartGraph = useQuery({
@@ -224,6 +232,18 @@ function MarketPage() {
               Updated {formatDateTime(snapshot.data.fetchedAt)}
             </span>
           ) : null}
+          <Button variant="outline" size="sm" onClick={() => setWatchlistOpen(true)}>
+            <Star className={watchlist.symbols.length > 0 ? "fill-warning text-warning" : ""} />
+            Watchlist
+            {watchlist.symbols.length > 0 ? (
+              <span className="num rounded-full bg-muted px-1.5 text-[0.68rem]">
+                {watchlist.symbols.length}
+              </span>
+            ) : null}
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => void navigate({ to: "/terminal" })}>
+            <ChartCandlestick /> Terminal
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -421,7 +441,7 @@ function MarketPage() {
                       ) : null}
                     </div>
                     <p className="num mt-1 text-sm text-muted-foreground">
-                      {sector.close != null ? formatNumber(sector.close) : "—"}
+                      {sector.close != null ? formatNumber(sector.close) : "-"}
                     </p>
                   </li>
                 ))}
@@ -430,8 +450,8 @@ function MarketPage() {
           </section>
 
           <p className="text-xs text-muted-foreground">
-            Market data comes from the live NEPSE mirror plus a community YONEPSE
-            feed and is indicative only.
+            Market data comes from the live NEPSE mirror plus a community YONEPSE feed and is
+            indicative only.
           </p>
         </>
       )}
@@ -440,6 +460,15 @@ function MarketPage() {
         symbol={picked}
         onOpenChange={(open) => {
           if (!open) setPicked(null);
+        }}
+      />
+
+      <WatchlistPanel
+        open={watchlistOpen}
+        onOpenChange={setWatchlistOpen}
+        onPick={(symbol) => {
+          setWatchlistOpen(false);
+          setPicked(symbol);
         }}
       />
 

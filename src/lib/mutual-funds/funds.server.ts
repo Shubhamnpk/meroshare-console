@@ -4,6 +4,7 @@
 import type {
   MfApproval,
   MfDebenture,
+  MfDebentureList,
   MfDebentureSummary,
   MfDocument,
   MfFeedHealth,
@@ -31,7 +32,7 @@ import type {
 const MF_BASE = "https://capitals.nepsetrading.com/api";
 
 export const MF_ATTRIBUTION =
-  "Mutual fund NAV, holdings and returns via the community nepsetrading.com feed — indicative data.";
+  "Mutual fund NAV, holdings and returns via the community nepsetrading.com feed (indicative data).";
 
 interface CacheEntry {
   value: unknown;
@@ -40,7 +41,7 @@ interface CacheEntry {
 
 const cache = new Map<string, CacheEntry>();
 const TTL_SLOW = 30 * 60_000;
-/** Aggregated maps fan out to dozens of upstream calls — cache them longer. */
+/** Aggregated maps fan out to dozens of upstream calls - cache them longer. */
 const TTL_MAP = 2 * 60 * 60_000;
 
 function num(value: unknown): number | null {
@@ -414,15 +415,42 @@ function toDebenture(row: Rec): MfDebenture | null {
   const issuer = str(row["issuer"]);
   const instrument = str(row["instrument"]);
   if (!issuer || !instrument) return null;
+  const maturity = row["maturity_bs"];
   return {
     issuer,
     instrument,
     couponPct: num(row["coupon_pct"]),
+    tenorYears: num(row["tenor_years"]),
+    maturityBs: typeof maturity === "string" || typeof maturity === "number" ? String(maturity) : null,
+    sector: str(row["sector"]),
     units: num(row["units"]),
     faceValue: num(row["face_value"]),
+    amountRegistered: num(row["amount_registered"]),
+    publicIssueAmount: num(row["public_issue_amount"]),
+    privatePlacementAmount: num(row["private_placement_amount"]),
     issueManager: str(row["issue_manager"]),
     dateBs: str(row["date_bs"]),
     fiscalYear: str(row["fiscal_year"]),
+  };
+}
+
+/** Full debenture universe for the explorer tool. */
+export async function getMfDebentureList(): Promise<MfDebentureList> {
+  const data = await mfJson<Rec>(`/debentures`);
+  const list = Array.isArray(data?.["debentures"]) ? (data!["debentures"] as Rec[]) : [];
+  const summary = (data?.["summary"] ?? {}) as Rec;
+  const all = list.flatMap((r) => {
+    const d = toDebenture(r);
+    return d ? [d] : [];
+  });
+  return {
+    debentures: all,
+    summary: {
+      count: num(data?.["count"]) ?? all.length,
+      issuers: num(summary["issuers"]) ?? 0,
+      couponMin: num(summary["coupon_min"]),
+      couponMax: num(summary["coupon_max"]),
+    },
   };
 }
 

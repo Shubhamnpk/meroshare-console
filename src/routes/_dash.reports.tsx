@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/accordion";
 import { formatDateTime, formatQty, toNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { ogImage, canonicalLink } from "@/lib/seo";
 import type { ApplicationReportItem, JsonRecord, JsonValue } from "@/lib/meroshare/types";
 
 export const Route = createFileRoute("/_dash/reports")({
@@ -51,6 +52,10 @@ export const Route = createFileRoute("/_dash/reports")({
         property: "og:description",
         content: "Track the status of your current and past ASBA share applications.",
       },
+      ogImage(),
+    ],
+    links: [
+      canonicalLink("/reports"),
     ],
   }),
   component: ReportsPage,
@@ -188,7 +193,7 @@ function humanize(key: string): string {
 }
 
 function renderValue(value: JsonValue): string {
-  if (value === null || value === undefined || value === "") return "—";
+  if (value === null || value === undefined || value === "") return "-";
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);
 }
@@ -476,7 +481,7 @@ function ReportList({
                         <StatusBadge outcome={outcome} />
                       ) : (
                         <span className="shrink-0 rounded-full bg-muted px-2.5 py-1 text-[0.68rem] font-semibold text-muted-foreground">
-                          {item.statusName ?? "—"}
+                          {item.statusName ?? "-"}
                         </span>
                       )}
                     </span>

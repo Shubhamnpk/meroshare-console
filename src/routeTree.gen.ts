@@ -14,17 +14,21 @@ import { Route as DashRouteImport } from './routes/_dash'
 import { Route as ReleasesRouteImport } from './routes/releases'
 import { Route as DashActivityRouteImport } from './routes/_dash.activity'
 import { Route as DashAnalyticsRouteImport } from './routes/_dash.analytics'
+import { Route as DashBestSharesRouteImport } from './routes/_dash.best-shares'
 import { Route as DashDashboardRouteImport } from './routes/_dash.dashboard'
+import { Route as DashDebenturesRouteImport } from './routes/_dash.debentures'
 import { Route as DashIpoRouteImport } from './routes/_dash.ipo'
 import { Route as DashMarketRouteImport } from './routes/_dash.market'
+import { Route as DashMutualFundsRouteImport } from './routes/_dash.mutual-funds'
 import { Route as DashPortfolioRouteImport } from './routes/_dash.portfolio'
 import { Route as DashProfileRouteImport } from './routes/_dash.profile'
 import { Route as DashReportsRouteImport } from './routes/_dash.reports'
 import { Route as DashSettingsRouteImport } from './routes/_dash.settings'
 import { Route as DashTerminalRouteImport } from './routes/_dash.terminal'
+import { Route as DashToolsRouteImport } from './routes/_dash.tools'
 import { Route as DashTransactionsRouteImport } from './routes/_dash.transactions'
 import { Route as DashWaccRouteImport } from './routes/_dash.wacc'
-import { Route as DashWatchlistRouteImport } from './routes/_dash.watchlist'
+import { Route as ApiPdfRouteImport } from './routes/api.pdf'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -50,9 +54,19 @@ const DashAnalyticsRoute = DashAnalyticsRouteImport.update({
   path: '/analytics',
   getParentRoute: () => DashRoute,
 } as any)
+const DashBestSharesRoute = DashBestSharesRouteImport.update({
+  id: '/best-shares',
+  path: '/best-shares',
+  getParentRoute: () => DashRoute,
+} as any)
 const DashDashboardRoute = DashDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
+  getParentRoute: () => DashRoute,
+} as any)
+const DashDebenturesRoute = DashDebenturesRouteImport.update({
+  id: '/debentures',
+  path: '/debentures',
   getParentRoute: () => DashRoute,
 } as any)
 const DashIpoRoute = DashIpoRouteImport.update({
@@ -63,6 +77,11 @@ const DashIpoRoute = DashIpoRouteImport.update({
 const DashMarketRoute = DashMarketRouteImport.update({
   id: '/market',
   path: '/market',
+  getParentRoute: () => DashRoute,
+} as any)
+const DashMutualFundsRoute = DashMutualFundsRouteImport.update({
+  id: '/mutual-funds',
+  path: '/mutual-funds',
   getParentRoute: () => DashRoute,
 } as any)
 const DashPortfolioRoute = DashPortfolioRouteImport.update({
@@ -90,6 +109,11 @@ const DashTerminalRoute = DashTerminalRouteImport.update({
   path: '/terminal',
   getParentRoute: () => DashRoute,
 } as any)
+const DashToolsRoute = DashToolsRouteImport.update({
+  id: '/tools',
+  path: '/tools',
+  getParentRoute: () => DashRoute,
+} as any)
 const DashTransactionsRoute = DashTransactionsRouteImport.update({
   id: '/transactions',
   path: '/transactions',
@@ -100,10 +124,10 @@ const DashWaccRoute = DashWaccRouteImport.update({
   path: '/wacc',
   getParentRoute: () => DashRoute,
 } as any)
-const DashWatchlistRoute = DashWatchlistRouteImport.update({
-  id: '/watchlist',
-  path: '/watchlist',
-  getParentRoute: () => DashRoute,
+const ApiPdfRoute = ApiPdfRouteImport.update({
+  id: '/api/pdf',
+  path: '/api/pdf',
+  getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -111,34 +135,42 @@ export interface FileRoutesByFullPath {
   '/releases': typeof ReleasesRoute
   '/activity': typeof DashActivityRoute
   '/analytics': typeof DashAnalyticsRoute
+  '/best-shares': typeof DashBestSharesRoute
   '/dashboard': typeof DashDashboardRoute
+  '/debentures': typeof DashDebenturesRoute
   '/ipo': typeof DashIpoRoute
   '/market': typeof DashMarketRoute
+  '/mutual-funds': typeof DashMutualFundsRoute
   '/portfolio': typeof DashPortfolioRoute
   '/profile': typeof DashProfileRoute
   '/reports': typeof DashReportsRoute
   '/settings': typeof DashSettingsRoute
   '/terminal': typeof DashTerminalRoute
+  '/tools': typeof DashToolsRoute
   '/transactions': typeof DashTransactionsRoute
   '/wacc': typeof DashWaccRoute
-  '/watchlist': typeof DashWatchlistRoute
+  '/api/pdf': typeof ApiPdfRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/releases': typeof ReleasesRoute
   '/activity': typeof DashActivityRoute
   '/analytics': typeof DashAnalyticsRoute
+  '/best-shares': typeof DashBestSharesRoute
   '/dashboard': typeof DashDashboardRoute
+  '/debentures': typeof DashDebenturesRoute
   '/ipo': typeof DashIpoRoute
   '/market': typeof DashMarketRoute
+  '/mutual-funds': typeof DashMutualFundsRoute
   '/portfolio': typeof DashPortfolioRoute
   '/profile': typeof DashProfileRoute
   '/reports': typeof DashReportsRoute
   '/settings': typeof DashSettingsRoute
   '/terminal': typeof DashTerminalRoute
+  '/tools': typeof DashToolsRoute
   '/transactions': typeof DashTransactionsRoute
   '/wacc': typeof DashWaccRoute
-  '/watchlist': typeof DashWatchlistRoute
+  '/api/pdf': typeof ApiPdfRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -147,17 +179,21 @@ export interface FileRoutesById {
   '/releases': typeof ReleasesRoute
   '/_dash/activity': typeof DashActivityRoute
   '/_dash/analytics': typeof DashAnalyticsRoute
+  '/_dash/best-shares': typeof DashBestSharesRoute
   '/_dash/dashboard': typeof DashDashboardRoute
+  '/_dash/debentures': typeof DashDebenturesRoute
   '/_dash/ipo': typeof DashIpoRoute
   '/_dash/market': typeof DashMarketRoute
+  '/_dash/mutual-funds': typeof DashMutualFundsRoute
   '/_dash/portfolio': typeof DashPortfolioRoute
   '/_dash/profile': typeof DashProfileRoute
   '/_dash/reports': typeof DashReportsRoute
   '/_dash/settings': typeof DashSettingsRoute
   '/_dash/terminal': typeof DashTerminalRoute
+  '/_dash/tools': typeof DashToolsRoute
   '/_dash/transactions': typeof DashTransactionsRoute
   '/_dash/wacc': typeof DashWaccRoute
-  '/_dash/watchlist': typeof DashWatchlistRoute
+  '/api/pdf': typeof ApiPdfRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -166,34 +202,42 @@ export interface FileRouteTypes {
     | '/releases'
     | '/activity'
     | '/analytics'
+    | '/best-shares'
     | '/dashboard'
+    | '/debentures'
     | '/ipo'
     | '/market'
+    | '/mutual-funds'
     | '/portfolio'
     | '/profile'
     | '/reports'
     | '/settings'
     | '/terminal'
+    | '/tools'
     | '/transactions'
     | '/wacc'
-    | '/watchlist'
+    | '/api/pdf'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/releases'
     | '/activity'
     | '/analytics'
+    | '/best-shares'
     | '/dashboard'
+    | '/debentures'
     | '/ipo'
     | '/market'
+    | '/mutual-funds'
     | '/portfolio'
     | '/profile'
     | '/reports'
     | '/settings'
     | '/terminal'
+    | '/tools'
     | '/transactions'
     | '/wacc'
-    | '/watchlist'
+    | '/api/pdf'
   id:
     | '__root__'
     | '/'
@@ -201,23 +245,28 @@ export interface FileRouteTypes {
     | '/releases'
     | '/_dash/activity'
     | '/_dash/analytics'
+    | '/_dash/best-shares'
     | '/_dash/dashboard'
+    | '/_dash/debentures'
     | '/_dash/ipo'
     | '/_dash/market'
+    | '/_dash/mutual-funds'
     | '/_dash/portfolio'
     | '/_dash/profile'
     | '/_dash/reports'
     | '/_dash/settings'
     | '/_dash/terminal'
+    | '/_dash/tools'
     | '/_dash/transactions'
     | '/_dash/wacc'
-    | '/_dash/watchlist'
+    | '/api/pdf'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DashRoute: typeof DashRouteWithChildren
   ReleasesRoute: typeof ReleasesRoute
+  ApiPdfRoute: typeof ApiPdfRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -257,11 +306,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashAnalyticsRouteImport
       parentRoute: typeof DashRoute
     }
+    '/_dash/best-shares': {
+      id: '/_dash/best-shares'
+      path: '/best-shares'
+      fullPath: '/best-shares'
+      preLoaderRoute: typeof DashBestSharesRouteImport
+      parentRoute: typeof DashRoute
+    }
     '/_dash/dashboard': {
       id: '/_dash/dashboard'
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof DashDashboardRouteImport
+      parentRoute: typeof DashRoute
+    }
+    '/_dash/debentures': {
+      id: '/_dash/debentures'
+      path: '/debentures'
+      fullPath: '/debentures'
+      preLoaderRoute: typeof DashDebenturesRouteImport
       parentRoute: typeof DashRoute
     }
     '/_dash/ipo': {
@@ -276,6 +339,13 @@ declare module '@tanstack/react-router' {
       path: '/market'
       fullPath: '/market'
       preLoaderRoute: typeof DashMarketRouteImport
+      parentRoute: typeof DashRoute
+    }
+    '/_dash/mutual-funds': {
+      id: '/_dash/mutual-funds'
+      path: '/mutual-funds'
+      fullPath: '/mutual-funds'
+      preLoaderRoute: typeof DashMutualFundsRouteImport
       parentRoute: typeof DashRoute
     }
     '/_dash/portfolio': {
@@ -313,6 +383,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashTerminalRouteImport
       parentRoute: typeof DashRoute
     }
+    '/_dash/tools': {
+      id: '/_dash/tools'
+      path: '/tools'
+      fullPath: '/tools'
+      preLoaderRoute: typeof DashToolsRouteImport
+      parentRoute: typeof DashRoute
+    }
     '/_dash/transactions': {
       id: '/_dash/transactions'
       path: '/transactions'
@@ -327,12 +404,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashWaccRouteImport
       parentRoute: typeof DashRoute
     }
-    '/_dash/watchlist': {
-      id: '/_dash/watchlist'
-      path: '/watchlist'
-      fullPath: '/watchlist'
-      preLoaderRoute: typeof DashWatchlistRouteImport
-      parentRoute: typeof DashRoute
+    '/api/pdf': {
+      id: '/api/pdf'
+      path: '/api/pdf'
+      fullPath: '/api/pdf'
+      preLoaderRoute: typeof ApiPdfRouteImport
+      parentRoute: typeof rootRouteImport
     }
   }
 }
@@ -340,33 +417,39 @@ declare module '@tanstack/react-router' {
 interface DashRouteChildren {
   DashActivityRoute: typeof DashActivityRoute
   DashAnalyticsRoute: typeof DashAnalyticsRoute
+  DashBestSharesRoute: typeof DashBestSharesRoute
   DashDashboardRoute: typeof DashDashboardRoute
+  DashDebenturesRoute: typeof DashDebenturesRoute
   DashIpoRoute: typeof DashIpoRoute
   DashMarketRoute: typeof DashMarketRoute
+  DashMutualFundsRoute: typeof DashMutualFundsRoute
   DashPortfolioRoute: typeof DashPortfolioRoute
   DashProfileRoute: typeof DashProfileRoute
   DashReportsRoute: typeof DashReportsRoute
   DashSettingsRoute: typeof DashSettingsRoute
   DashTerminalRoute: typeof DashTerminalRoute
+  DashToolsRoute: typeof DashToolsRoute
   DashTransactionsRoute: typeof DashTransactionsRoute
   DashWaccRoute: typeof DashWaccRoute
-  DashWatchlistRoute: typeof DashWatchlistRoute
 }
 
 const DashRouteChildren: DashRouteChildren = {
   DashActivityRoute: DashActivityRoute,
   DashAnalyticsRoute: DashAnalyticsRoute,
+  DashBestSharesRoute: DashBestSharesRoute,
   DashDashboardRoute: DashDashboardRoute,
+  DashDebenturesRoute: DashDebenturesRoute,
   DashIpoRoute: DashIpoRoute,
   DashMarketRoute: DashMarketRoute,
+  DashMutualFundsRoute: DashMutualFundsRoute,
   DashPortfolioRoute: DashPortfolioRoute,
   DashProfileRoute: DashProfileRoute,
   DashReportsRoute: DashReportsRoute,
   DashSettingsRoute: DashSettingsRoute,
   DashTerminalRoute: DashTerminalRoute,
+  DashToolsRoute: DashToolsRoute,
   DashTransactionsRoute: DashTransactionsRoute,
   DashWaccRoute: DashWaccRoute,
-  DashWatchlistRoute: DashWatchlistRoute,
 }
 
 const DashRouteWithChildren = DashRoute._addFileChildren(DashRouteChildren)
@@ -375,6 +458,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DashRoute: DashRouteWithChildren,
   ReleasesRoute: ReleasesRoute,
+  ApiPdfRoute: ApiPdfRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

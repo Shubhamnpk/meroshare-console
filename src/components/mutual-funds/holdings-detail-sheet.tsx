@@ -221,7 +221,7 @@ export function HoldingsDetailSheet({
                           <p className="num text-sm font-bold">
                             {h.marketValue != null
                               ? formatNpr(h.marketValue, { compact: true })
-                              : "—"}
+                              : "-"}
                           </p>
                           <p className="num text-[0.68rem] text-muted-foreground">
                             {weight.toFixed(1)}%

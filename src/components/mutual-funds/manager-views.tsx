@@ -69,7 +69,7 @@ export function ManagerGrid({
                 Funds managed
               </p>
               <p className="num text-xl font-bold">
-                {a.aum > 0 ? formatNpr(a.aum, { compact: true }) : "—"}
+                {a.aum > 0 ? formatNpr(a.aum, { compact: true }) : "-"}
               </p>
             </div>
             <div className="text-right">
@@ -82,7 +82,7 @@ export function ManagerGrid({
                   a.avgDiscount != null && a.avgDiscount < -2 && "text-gain",
                 )}
               >
-                {a.avgDiscount != null ? formatPercent(a.avgDiscount) : "—"}
+                {a.avgDiscount != null ? formatPercent(a.avgDiscount) : "-"}
               </p>
             </div>
           </div>
@@ -193,7 +193,7 @@ export function ManagerDetail({
                 Funds managed
               </p>
               <p className="num text-2xl font-bold">
-                {agg.aum > 0 ? formatNpr(agg.aum, { compact: true }) : "—"}
+                {agg.aum > 0 ? formatNpr(agg.aum, { compact: true }) : "-"}
               </p>
               {agg.avgDiscount != null ? (
                 <p className="num text-xs text-muted-foreground">
@@ -220,11 +220,11 @@ export function ManagerDetail({
 
         <div className="grid grid-cols-2 gap-px bg-border/60 sm:grid-cols-4">
           <HeroTile label="Schemes" value={String(agg.schemes.length)} />
-          <HeroTile label="Open-end" value={agg.openCount > 0 ? String(agg.openCount) : "—"} />
-          <HeroTile label="Close-end" value={agg.closeCount > 0 ? String(agg.closeCount) : "—"} />
+          <HeroTile label="Open-end" value={agg.openCount > 0 ? String(agg.openCount) : "-"} />
+          <HeroTile label="Close-end" value={agg.closeCount > 0 ? String(agg.closeCount) : "-"} />
           <HeroTile
             label="Bargains"
-            value={agg.bargains > 0 ? String(agg.bargains) : "—"}
+            value={agg.bargains > 0 ? String(agg.bargains) : "-"}
             accent={agg.bargains > 0}
           />
         </div>
@@ -295,12 +295,12 @@ export function ManagerDetail({
                 </span>
                 <span className="num hidden shrink-0 text-right text-xs sm:block">
                   <span className="block text-muted-foreground">
-                    NAV {r.nav != null ? formatNpr(r.nav) : "—"}
+                    NAV {r.nav != null ? formatNpr(r.nav) : "-"}
                   </span>
                   <span className="block font-semibold">
                     {(r.live?.ltp ?? r.perf?.ltp) != null
                       ? formatNpr(r.live?.ltp ?? r.perf?.ltp ?? 0)
-                      : "—"}{" "}
+                      : "-"}{" "}
                     {r.live ? (
                       <DeltaPill value={r.live.percentChange}>
                         {formatPercent(r.live.percentChange)}
@@ -315,7 +315,7 @@ export function ManagerDetail({
                     r.discount != null && r.discount > 2 && "text-amber-600 dark:text-amber-400",
                   )}
                 >
-                  {r.discount != null ? formatPercent(r.discount) : "—"}
+                  {r.discount != null ? formatPercent(r.discount) : "-"}
                 </span>
                 <ArrowUpRight className="size-4 shrink-0 text-muted-foreground" />
               </button>

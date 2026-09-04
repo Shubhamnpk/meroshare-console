@@ -9,6 +9,7 @@ import { HistoryPanel } from "@/components/portfolio/history-panel";
 import { ScripSheet } from "@/components/market/scrip-sheet";
 import { enrichedPortfolioQuery } from "@/lib/queries";
 import { formatNpr, formatPercent } from "@/lib/format";
+import { ogImage, canonicalLink } from "@/lib/seo";
 
 export const Route = createFileRoute("/_dash/analytics")({
   head: () => ({
@@ -23,6 +24,10 @@ export const Route = createFileRoute("/_dash/analytics")({
         property: "og:description",
         content: "Concentration, weight and day-change analytics across your holdings.",
       },
+      ogImage(),
+    ],
+    links: [
+      canonicalLink("/analytics"),
     ],
   }),
   component: AnalyticsPage,

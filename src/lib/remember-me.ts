@@ -36,7 +36,7 @@ export function saveRemembered(username: string, capitalId: number | null): void
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
   } catch {
-    // storage unavailable — sign-in still works, just not remembered
+    // storage unavailable - sign-in still works, just not remembered
   }
 }
 

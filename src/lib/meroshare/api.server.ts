@@ -325,16 +325,50 @@ export async function fetchWaccPending(
   });
 }
 
-/** Scrips whose WACC calculation is still pending (myPurchase/share). */
+/**
+ * Scrips whose WACC calculation is still pending (myPurchase/share).
+ *
+ * CDSC is picky about this endpoint's shape: POST with a filter body is tried
+ * first, then a plain GET (the sibling myShare/ endpoint is GET-only per the
+ * API docs). Accepts a bare array, `{ object: [...] }`, or `{ scrips: [...] }`,
+ * with either plain strings or `{ scrip }` objects.
+ */
 export async function fetchWaccPendingScrips(auth: AuthContext): Promise<WaccPendingScrip[]> {
-  const res = await cdscRequest<WaccPendingScrip[] | JsonRecord>(CDSC_URLS.waccScrips, {
-    method: "POST",
-    token: auth.token,
-    body: { isFilterByAllScript: false },
-  });
-  if (Array.isArray(res)) return res;
-  const obj = res as JsonRecord;
-  return Array.isArray(obj["object"]) ? (obj["object"] as WaccPendingScrip[]) : [];
+  let res: WaccPendingScrip[] | JsonRecord | null = null;
+  let postError: unknown = null;
+  try {
+    res = await cdscRequest<WaccPendingScrip[] | JsonRecord>(CDSC_URLS.waccScrips, {
+      method: "POST",
+      token: auth.token,
+      body: { isFilterByAllScript: false },
+    });
+  } catch (error) {
+    postError = error;
+  }
+  if (res == null) {
+    try {
+      res = await cdscRequest<WaccPendingScrip[] | JsonRecord>(CDSC_URLS.waccScrips, {
+        token: auth.token,
+      });
+    } catch (getError) {
+      console.error("[wacc] myPurchase/share/ failed (POST then GET)", {
+        post: postError instanceof Error ? postError.message : String(postError),
+        get: getError instanceof Error ? getError.message : String(getError),
+      });
+      throw getError;
+    }
+  }
+  const rows = Array.isArray(res)
+    ? res
+    : Array.isArray((res as JsonRecord)["object"])
+      ? ((res as JsonRecord)["object"] as WaccPendingScrip[])
+      : Array.isArray((res as JsonRecord)["scrips"])
+        ? ((res as JsonRecord)["scrips"] as WaccPendingScrip[])
+        : [];
+  return rows.filter(
+    (r): r is WaccPendingScrip =>
+      typeof r === "string" || (typeof r === "object" && r !== null && "scrip" in r),
+  );
 }
 
 /** Account-wide calculated WACC summary (myPurchase/waccReport). */

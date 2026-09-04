@@ -1,7 +1,7 @@
 /**
  * Demo mode mock data.  Used when the user enters the app via "Try Demo Mode"
  * instead of a real CDSC login.  Market data (live prices, indices, news etc.)
- * stays real — only user-specific CDSC data is mocked.
+ * stays real - only user-specific CDSC data is mocked.
  */
 
 import type {
@@ -258,7 +258,7 @@ export const DEMO_ACTIVITY_LOG: ActivityLogItem[] = [
     recordedDate: daysAgo(1) + "T09:15:00",
     browserName: "Chrome",
     broswerVersion: "124.0",
-    osName: "—",
+    osName: "-",
     ipAddress: "3.81.116.5",
     description: "Login successfully",
   },

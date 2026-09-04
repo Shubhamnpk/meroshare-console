@@ -89,6 +89,7 @@ export function TerminalChart({
   light,
   height,
   onHover,
+  onSelectBar,
 }: {
   bars: ChartBar[];
   intraday: PricePoint[];
@@ -100,10 +101,14 @@ export function TerminalChart({
   light: boolean;
   height: number;
   onHover?: (info: HoverInfo | null) => void;
+  /** Fired when a bar is clicked (bar date) or empty space is clicked (null). */
+  onSelectBar?: ((date: string | null) => void) | undefined;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const hoverRef = useRef(onHover);
   hoverRef.current = onHover;
+  const selectRef = useRef(onSelectBar);
+  selectRef.current = onSelectBar;
   const apiRef = useRef<IChartApi | null>(null);
 
   /** Drag-to-measure: armed by double-tap/double-click, active while dragging. */
@@ -157,7 +162,7 @@ export function TerminalChart({
         borderVisible: false,
         timeVisible: isIntraday,
         secondsVisible: false,
-        rightOffset: 4,
+        rightOffset: 0,
         ...(isIntraday
           ? {
               tickMarkFormatter: (time: Time, tickMarkType: TickMarkType) => {
@@ -424,6 +429,28 @@ export function TerminalChart({
     chart.subscribeDblClick(onDblClick);
 
     const byDate = new Map(bars.map((b) => [b.date, b]));
+    const onClick = (param: MouseEventParams) => {
+      const emit = selectRef.current;
+      if (!emit) return;
+      // Skip while a drag-to-measure gesture is in progress.
+      if (draggingRef.current) return;
+      // Clicking empty space (no time) clears the selection.
+      if (!param.time) {
+        emit(null);
+        return;
+      }
+      const direct = byDate.get(String(param.time));
+      // Fall back to the nearest bar by logical index in case the event
+      // time format ever differs from the stored bar dates.
+      const logical = param.logical;
+      const nearest =
+        !direct && typeof logical === "number" && Number.isFinite(logical) && bars.length > 0
+          ? bars[Math.min(bars.length - 1, Math.max(0, Math.round(logical)))]
+          : undefined;
+      const bar = direct ?? nearest;
+      emit(bar ? bar.date : null);
+    };
+    chart.subscribeClick(onClick);
     const handler = (param: MouseEventParams) => {
       if (anchorRef.current && pointerDownRef.current && param.time) {
         draggingRef.current = true;
@@ -480,6 +507,7 @@ export function TerminalChart({
     return () => {
       chart.unsubscribeCrosshairMove(handler);
       chart.unsubscribeDblClick(onDblClick);
+      chart.unsubscribeClick(onClick);
       chart.remove();
       apiRef.current = null;
     };

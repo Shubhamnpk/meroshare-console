@@ -20,6 +20,7 @@ import { ErrorBlock, LoadingBlock } from "@/components/states";
 import { accountProfileQuery } from "@/lib/queries";
 import { useSettings } from "@/lib/settings";
 import { logout } from "@/lib/meroshare/auth.functions";
+import { ogImage, canonicalLink } from "@/lib/seo";
 import type { AccountBank, AccountProfile, JsonRecord } from "@/lib/meroshare/types";
 
 export const Route = createFileRoute("/_dash/profile")({
@@ -37,6 +38,10 @@ export const Route = createFileRoute("/_dash/profile")({
         content:
           "Complete MeroShare account record: identity, citizenship, contact, demat, DP and linked ASBA banks.",
       },
+      ogImage(),
+    ],
+    links: [
+      canonicalLink("/profile"),
     ],
   }),
   component: ProfilePage,

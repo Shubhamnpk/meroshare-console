@@ -14,6 +14,8 @@ export interface MeroShareSessionData {
   renderDashboard?: boolean;
   passwordExpiryDate?: string | null;
   expiresAt?: number;
+  /** Demo mode - bypasses CDSC auth, uses mock data. */
+  demo?: boolean;
 }
 
 // CDSC tokens are short lived; keep the cookie in the same ballpark.
@@ -62,10 +64,26 @@ export interface AuthContext {
   name: string;
   username: string;
   accountNumber: string;
+  demo?: boolean;
 }
 
 export async function requireAuth(): Promise<AuthContext> {
   const data = await readSession();
+
+  // Demo mode: bypass all CDSC auth and expiry checks.
+  if (data.demo || data.token === "demo-token") {
+    return {
+      token: "demo-token",
+      demat: data.demat ?? "12345678",
+      boid: data.boid ?? "NP0000000000000001",
+      clientCode: data.clientCode ?? "DEMO001",
+      name: data.name ?? "Demo User",
+      username: data.username ?? "demo",
+      accountNumber: data.accountNumber ?? "001234567890",
+      demo: true,
+    };
+  }
+
   if (!data.token || !data.demat) {
     throw new SessionExpiredError();
   }

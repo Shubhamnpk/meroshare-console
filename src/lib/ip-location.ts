@@ -17,13 +17,21 @@ export interface IpLocation {
   private: boolean;
 }
 
-const CACHE_KEY = "ip-loc-cache-v2";
+const CACHE_KEY = "ms-cache.v1";
+const LEGACY_CACHE_KEY = "ip-loc-cache-v2";
 const CACHE_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 type CacheEntry = { location: IpLocation; expires: number };
 
 function readCache(): Map<string, CacheEntry> {
   try {
+    // Migrate legacy key if it exists
+    const legacy = localStorage.getItem(LEGACY_CACHE_KEY);
+    if (legacy && !localStorage.getItem(CACHE_KEY)) {
+      localStorage.setItem(CACHE_KEY, legacy);
+    }
+    localStorage.removeItem(LEGACY_CACHE_KEY);
+
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return new Map();
     const parsed = JSON.parse(raw) as Record<string, CacheEntry>;
@@ -41,7 +49,7 @@ function writeCache(map: Map<string, CacheEntry>) {
     const entries = [...map.entries()].slice(-200);
     localStorage.setItem(CACHE_KEY, JSON.stringify(Object.fromEntries(entries)));
   } catch {
-    // Storage full or unavailable — lookups still work, just uncached.
+    // Storage full or unavailable - lookups still work, just uncached.
   }
 }
 
@@ -124,7 +132,7 @@ async function fetchOne(ip: string, cache: Map<string, CacheEntry>): Promise<IpL
 /**
  * Resolve a list of IPs to city/country locations. Results are cached in
  * memory for the session and persisted to localStorage for 30 days.
- * Failed or private lookups degrade to a label-only entry — never throws.
+ * Failed or private lookups degrade to a label-only entry - never throws.
  */
 export function useIpLocations(ips: string[]) {
   const unique = [...new Set(ips.map((ip) => ip.trim()).filter((ip) => ip && ip !== "—"))].sort();

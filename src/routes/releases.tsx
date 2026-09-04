@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { ogImage, canonicalLink } from "@/lib/seo";
 import { getCurrentUser } from "@/lib/meroshare/auth.functions";
 import { APP_VERSION, GITHUB_API_RELEASES_URL, GITHUB_REPO_URL } from "@/lib/version";
 import type { GitHubRelease } from "@/lib/version";
@@ -24,7 +25,7 @@ export const Route = createFileRoute("/releases")({
       {
         name: "description",
         content:
-          "Explore the latest updates, features, improvements, and changelog for MeroShare Console — pulled live from GitHub.",
+          "Explore the latest updates, features, improvements, and changelog for MeroShare Console, pulled live from GitHub.",
       },
       { property: "og:title", content: "Release Notes | MeroShare Console" },
       {
@@ -32,6 +33,10 @@ export const Route = createFileRoute("/releases")({
         content:
           "Explore the latest updates, features, improvements, and changelog for MeroShare Console.",
       },
+      ogImage(),
+    ],
+    links: [
+      canonicalLink("/releases"),
     ],
   }),
   component: ReleasesPage,
@@ -266,7 +271,7 @@ function ReleasesPage() {
 
                     {release.name && release.name !== release.tag_name && (
                       <span className="text-base font-semibold text-foreground/80 sm:text-lg">
-                        — {release.name}
+                        {release.name}
                       </span>
                     )}
                   </div>
@@ -289,7 +294,7 @@ function ReleasesPage() {
                   </div>
                 </div>
 
-                {/* Body — rendered markdown */}
+                {/* Body - rendered markdown */}
                 {release.body ? (
                   <div
                     className="release-body prose-sm mt-5 max-w-none space-y-3 text-sm leading-relaxed text-muted-foreground

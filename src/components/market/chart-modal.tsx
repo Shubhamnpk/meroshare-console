@@ -21,6 +21,9 @@ import type { ChartBar, DailyBar, PricePoint } from "@/lib/nepse/types";
 
 const TZ = "Asia/Kathmandu";
 
+/** Stable empty intraday (a fresh `[]` literal would rebuild TerminalChart each render). */
+const NO_POINTS: PricePoint[] = [];
+
 /** "14:32" in NPT, for intraday series. */
 export function chartTimeLabel(time: number): string {
   return new Date(time * 1000).toLocaleTimeString("en-GB", {
@@ -45,14 +48,16 @@ export const SCRIP_RANGES = [
   { key: "3M", label: "3M", days: 66 },
   { key: "6M", label: "6M", days: 132 },
   { key: "1Y", label: "1Y", days: 264 },
+  { key: "All", label: "All", days: Number.POSITIVE_INFINITY },
 ] as const;
 
-/** Slice intraday + daily bars into the 1D/1M/3M/6M/1Y buckets. */
+/** Slice intraday + daily bars into the 1D/1M/3M/6M/1Y/All buckets. */
 export function buildScripRanges(
   intraday: PricePoint[],
   daily: PricePoint[],
 ): { key: string; label: string; points: PricePoint[] }[] {
   return SCRIP_RANGES.flatMap((range) => {
+    // slice(-Infinity) keeps the whole array, giving the full-archive range.
     const points = range.days === null ? intraday : daily.slice(-range.days);
     return points.length >= 2 ? [{ key: range.key, label: range.label, points }] : [];
   });
@@ -283,7 +288,7 @@ export function ChartModal({
               <HoverLegend info={hover} origin={stats?.start ?? 0} />
               <TerminalChart
                 bars={candleBars}
-                intraday={[]}
+                intraday={NO_POINTS}
                 style="candles"
                 indicators={indicators}
                 logScale={false}

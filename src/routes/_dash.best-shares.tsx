@@ -28,6 +28,7 @@ import {
 } from "@/lib/nepse/screener";
 import { formatNpr, formatPercent, formatQty } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { ogImage, canonicalLink } from "@/lib/seo";
 
 export const Route = createFileRoute("/_dash/best-shares")({
   head: () => ({
@@ -45,6 +46,10 @@ export const Route = createFileRoute("/_dash/best-shares")({
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
+      ogImage(),
+    ],
+    links: [
+      canonicalLink("/best-shares"),
     ],
   }),
   component: BestSharesPage,

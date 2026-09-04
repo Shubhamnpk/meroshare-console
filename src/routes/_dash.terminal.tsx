@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Camera, Loader2, Maximize2, Minimize2, Search, SlidersHorizontal } from "lucide-react";
+import {
+  Camera,
+  Loader2,
+  Maximize2,
+  Minimize2,
+  Search,
+  SlidersHorizontal,
+  Star,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -16,19 +24,26 @@ import {
   type IndicatorConfig,
 } from "@/components/market/terminal-chart";
 import { normalise, type LinePoint } from "@/lib/nepse/indicators";
+import { PointBreakdown } from "@/components/portfolio/history-panel";
+import { WatchlistPanel } from "@/components/market/watchlist-panel";
 import {
   chartSeriesQuery,
   enrichedPortfolioQuery,
   marketSnapshotQuery,
   portfolioHistoryQuery,
 } from "@/lib/queries";
-import type { ChartBar, ChartRange } from "@/lib/nepse/types";
+import type { ChartBar, ChartRange, PricePoint } from "@/lib/nepse/types";
 import { formatNpr, formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { useSettings } from "@/lib/settings";
-import { useWatchlist } from "@/lib/watchlist";
+import { useSettings, useWatchlist, type TerminalState } from "@/lib/prefs";
+import { ogImage, canonicalLink } from "@/lib/seo";
 
 export const Route = createFileRoute("/_dash/terminal")({
+  validateSearch: (search: Record<string, unknown>): { symbol?: string | undefined } => {
+    const raw = typeof search["symbol"] === "string" ? search["symbol"].toUpperCase() : "";
+    const symbol = raw.replace(/[^A-Z0-9]/g, "").slice(0, 24);
+    return symbol ? { symbol } : {};
+  },
   head: () => ({
     meta: [
       { title: "Trading Terminal | MeroShare Investor Console" },
@@ -45,6 +60,10 @@ export const Route = createFileRoute("/_dash/terminal")({
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
+      ogImage(),
+    ],
+    links: [
+      canonicalLink("/terminal"),
     ],
   }),
   component: TerminalPage,
@@ -70,6 +89,10 @@ const INDICATOR_LABELS: { key: keyof IndicatorConfig; label: string; hint: strin
 const STORE_KEY = "meroshare.terminal.v1";
 const DEFAULT_SYMBOL = "NABIL";
 
+/** Shared stable empty arrays (see note at activeBars/intraday). */
+const NO_BARS: ChartBar[] = [];
+const NO_POINTS: PricePoint[] = [];
+
 interface Stored {
   symbol: string;
   range: ChartRange;
@@ -78,35 +101,17 @@ interface Stored {
   logScale: boolean;
 }
 
-function loadStored(): Stored {
-  const fallback: Stored = {
-    symbol: DEFAULT_SYMBOL,
-    range: "1Y",
-    style: "candles",
-    indicators: DEFAULT_INDICATORS,
-    logScale: false,
-  };
-  if (typeof window === "undefined") return fallback;
-  try {
-    const raw = window.localStorage.getItem(STORE_KEY);
-    if (!raw) return fallback;
-    const parsed = JSON.parse(raw) as Partial<Stored>;
-    return {
-      ...fallback,
-      ...parsed,
-      indicators: { ...DEFAULT_INDICATORS, ...(parsed.indicators ?? {}) },
-    };
-  } catch {
-    return fallback;
-  }
+function loadStored(prefs: { terminal: TerminalState }): Stored {
+  // Prefs store the loose shape; the page works with the strict one.
+  return prefs.terminal as unknown as Stored;
 }
 
 function num(value: number | null | undefined, digits = 2) {
-  return typeof value === "number" && Number.isFinite(value) ? value.toFixed(digits) : "—";
+  return typeof value === "number" && Number.isFinite(value) ? value.toFixed(digits) : "-";
 }
 
 function TerminalPage() {
-  const { theme } = useSettings();
+  const { theme, terminal, setTerminal } = useSettings();
   const [light, setLight] = useState(false);
   useEffect(() => {
     const resolve = () =>
@@ -121,23 +126,32 @@ function TerminalPage() {
   }, [theme]);
 
   const [hydrated, setHydrated] = useState(false);
-  const [state, setState] = useState<Stored>(() => loadStored());
+  const [state, setState] = useState<Stored>(() => loadStored({ terminal }));
+  const [watchlistOpen, setWatchlistOpen] = useState(false);
+  const watchlist = useWatchlist();
+  // Deep link (e.g. from Market): ?symbol=XYZ overrides the remembered symbol.
+  const linkedSymbol = Route.useSearch({ select: (s) => s.symbol });
   useEffect(() => {
-    setState(loadStored());
+    setState({ ...loadStored({ terminal }), ...(linkedSymbol ? { symbol: linkedSymbol } : {}) });
     setHydrated(true);
-  }, []);
+  }, [linkedSymbol]);
   useEffect(() => {
     if (!hydrated) return;
-    window.localStorage.setItem(STORE_KEY, JSON.stringify(state));
-  }, [state, hydrated]);
+    setTerminal({ ...state, indicators: { ...state.indicators } });
+  }, [state, hydrated, setTerminal]);
 
   const [mode, setMode] = useState<"scrip" | "portfolio">("scrip");
   const [query, setQuery] = useState("");
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [compareSymbol, setCompareSymbol] = useState("");
+  /** Pinned net-worth date (portfolio mode): shows that day's per-scrip prices below. */
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  useEffect(() => {
+    setSelectedDate(null);
+  }, [mode, state.range]);
 
-  const { symbols: watchSymbols } = useWatchlist();
+  const watchSymbols = watchlist.symbols;
   const snapshot = useQuery(marketSnapshotQuery());
   const portfolio = useQuery(enrichedPortfolioQuery());
 
@@ -197,6 +211,29 @@ function TerminalPage() {
     });
   }, [netWorth.data?.points]);
 
+  const selectedPoint = useMemo(() => {
+    if (mode !== "portfolio" || !selectedDate) return null;
+    const points = netWorth.data?.points ?? [];
+    const exact =
+      points.find((p) => new Date(p.time * 1000).toISOString().slice(0, 10) === selectedDate) ??
+      null;
+    if (exact) return exact;
+    // Fall back to the nearest point (within 3 days) so a pinned date
+    // can never silently resolve to nothing.
+    const target = Date.parse(`${selectedDate}T00:00:00Z`) / 1000;
+    if (!Number.isFinite(target)) return null;
+    let best: (typeof points)[number] | null = null;
+    let bestGap = 3 * 86400;
+    for (const p of points) {
+      const gap = Math.abs(p.time - target);
+      if (gap < bestGap) {
+        bestGap = gap;
+        best = p;
+      }
+    }
+    return best;
+  }, [mode, selectedDate, netWorth.data]);
+
   const compareLine: LinePoint[] | undefined = useMemo(() => {
     const bars = compare.data?.bars ?? [];
     const compareIntraday = compare.data?.intraday ?? [];
@@ -212,24 +249,36 @@ function TerminalPage() {
     return undefined;
   }, [compare.data?.bars, compare.data?.intraday]);
 
-  const activeBars = mode === "portfolio" ? netWorthBars : (series.data?.bars ?? []);
-  const intraday = mode === "portfolio" ? [] : (series.data?.intraday ?? []);
+  // Stable empty fallbacks: fresh `[]` literals here would also rebuild the
+  // chart on every render (they are effect deps of TerminalChart).
+  const activeBars = mode === "portfolio" ? netWorthBars : (series.data?.bars ?? NO_BARS);
+  const intraday = mode === "portfolio" ? NO_POINTS : (series.data?.intraday ?? NO_POINTS);
   const isIntraday = activeBars.length === 0 && intraday.length > 0;
   const loading = mode === "portfolio" ? netWorth.isPending : series.isPending;
   const chartHeight = expanded ? 720 : 480;
 
-  const indicators: IndicatorConfig =
-    mode === "portfolio"
-      ? { ...state.indicators, volume: false, vwap: false, bollinger: false }
-      : state.indicators;
+  // Memoized: a fresh object identity here would tear down and rebuild
+  // the lightweight-charts instance on every render (e.g. each hover),
+  // resetting zoom and swallowing clicks.
+  const indicators: IndicatorConfig = useMemo(
+    () =>
+      mode === "portfolio"
+        ? { ...state.indicators, volume: false, vwap: false, bollinger: false }
+        : state.indicators,
+    [mode, state.indicators],
+  );
 
   const first = activeBars[0]?.close ?? 0;
   const last = activeBars[activeBars.length - 1]?.close ?? 0;
   const intradayFirst = intraday[0]?.value ?? 0;
   const intradayLast = intraday[intraday.length - 1]?.value ?? 0;
   const rangeReturn = isIntraday
-    ? (intradayFirst > 0 ? ((intradayLast - intradayFirst) / intradayFirst) * 100 : 0)
-    : (first > 0 ? ((last - first) / first) * 100 : 0);
+    ? intradayFirst > 0
+      ? ((intradayLast - intradayFirst) / intradayFirst) * 100
+      : 0
+    : first > 0
+      ? ((last - first) / first) * 100
+      : 0;
 
   const setIndicator = (key: keyof IndicatorConfig, value: boolean) =>
     setState((prev) => ({ ...prev, indicators: { ...prev.indicators, [key]: value } }));
@@ -393,6 +442,23 @@ function TerminalPage() {
           </div>
 
           <div className="ml-auto flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 text-xs"
+              onClick={() => setWatchlistOpen(true)}
+              aria-label="Open watchlist"
+            >
+              <Star
+                className={
+                  watchlist.symbols.length > 0 ? "size-3.5 fill-warning text-warning" : "size-3.5"
+                }
+              />
+              {watchlist.symbols.length > 0 ? (
+                <span className="num">{watchlist.symbols.length}</span>
+              ) : null}
+              <span className="hidden sm:inline">Watchlist</span>
+            </Button>
             <Popover>
               <PopoverTrigger asChild>
                 <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
@@ -504,6 +570,11 @@ function TerminalPage() {
               light={light}
               height={chartHeight}
               onHover={setHover}
+              onSelectBar={
+                mode === "portfolio"
+                  ? (d) => setSelectedDate((cur) => (cur === d ? null : d))
+                  : undefined
+              }
             />
           )}
         </div>
@@ -519,6 +590,24 @@ function TerminalPage() {
           </div>
         )}
       </div>
+
+      {mode === "portfolio" && selectedPoint && (
+        <PointBreakdown
+          point={selectedPoint}
+          formatLabel={(t) =>
+            new Date(t * 1000).toLocaleDateString("en-GB", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+              timeZone: "Asia/Kathmandu",
+            })
+          }
+          onPickScrip={(s) => {
+            setMode("scrip");
+            setState((prev) => ({ ...prev, symbol: s }));
+          }}
+        />
+      )}
 
       {mode === "scrip" && position && (
         <div className="grid grid-cols-2 gap-3 rounded-2xl border border-border/60 bg-surface p-3 sm:grid-cols-4">
@@ -536,19 +625,29 @@ function TerminalPage() {
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Sector</p>
-            <p className="truncate text-sm font-medium">{position.sector ?? "—"}</p>
+            <p className="truncate text-sm font-medium">{position.sector ?? "-"}</p>
           </div>
         </div>
       )}
 
       <p className="text-xs text-muted-foreground">
         {mode === "portfolio"
-          ? "Net worth is your current unit counts valued at each historical close; it does not reflect past buys and sells."
+          ? "Net worth is your current unit counts valued at each historical close; it does not reflect past buys and sells. Click any point to pin its per-scrip prices below."
           : series.data?.hasSynthetic
             ? "Long ranges use archived daily closes where high/low were never published, so those candle bodies are derived from the previous close."
             : "Daily OHLC from public NEPSE mirrors."}{" "}
         Indicative data only, not for order placement.
       </p>
+
+      <WatchlistPanel
+        open={watchlistOpen}
+        onOpenChange={setWatchlistOpen}
+        onPick={(symbol) => {
+          setWatchlistOpen(false);
+          setMode("scrip");
+          setState((prev) => ({ ...prev, symbol }));
+        }}
+      />
     </div>
   );
 }

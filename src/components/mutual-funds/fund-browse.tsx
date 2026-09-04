@@ -114,13 +114,13 @@ function FundCard({ fund, onPick }: { fund: BrowseFund; onPick: (symbol: string)
           <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
             NAV <span className="normal-case">({navLabel})</span>
           </p>
-          <p className="num text-xl font-bold">{nav != null ? formatNpr(nav) : "—"}</p>
+          <p className="num text-xl font-bold">{nav != null ? formatNpr(nav) : "-"}</p>
         </div>
         {closeEnd ? (
           <div className="text-right">
             <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">Market</p>
             <p className="num text-sm font-semibold">
-              {ltp != null ? formatNpr(ltp) : "—"}{" "}
+              {ltp != null ? formatNpr(ltp) : "-"}{" "}
               {live ? (
                 <DeltaPill value={live.percentChange}>
                   {formatPercent(live.percentChange)}
@@ -147,7 +147,7 @@ function FundCard({ fund, onPick }: { fund: BrowseFund; onPick: (symbol: string)
       <div className="mt-auto flex items-center justify-between border-t border-border/60 pt-2.5 text-[11px] text-muted-foreground">
         <span className="inline-flex min-w-0 items-center gap-1">
           <Building2 className="size-3 shrink-0" />
-          <span className="truncate">{scheme.manager || "—"}</span>
+          <span className="truncate">{scheme.manager || "-"}</span>
         </span>
         {countdown ? <span className="num shrink-0">{countdown}</span> : null}
       </div>
