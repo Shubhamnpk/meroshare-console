@@ -1,5 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowRight, Blocks, Building2, ClipboardList, PiggyBank, TrendingUp } from "lucide-react";
+import {
+  ArrowRight,
+  Blocks,
+  Building2,
+  ClipboardList,
+  Landmark,
+  PiggyBank,
+  TrendingUp,
+} from "lucide-react";
 
 export const Route = createFileRoute("/_dash/tools")({
   head: () => ({
@@ -48,6 +56,13 @@ const TOOLS = [
     description:
       "Every IPO, right, FPO and debenture issue waiting on SEBON approval, plus fresh approvals.",
     tag: "Coming soon",
+  },
+  {
+    to: "/debentures",
+    icon: Landmark,
+    title: "Debentures",
+    description: "Follow listed debentures, coupons and maturities in one place.",
+    tag: "Bonds",
   },
 ] as const;
 
