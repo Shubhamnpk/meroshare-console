@@ -13,6 +13,7 @@ import {
   TrendingUp,
   Wallet,
 } from "lucide-react";
+import { Panel } from "@/components/ui/panel";
 import { StatCard, DeltaPill } from "@/components/stat-card";
 import { WatchlistPanel } from "@/components/market/watchlist-panel";
 import { useWatchlist } from "@/lib/watchlist";
@@ -277,10 +278,12 @@ function DashboardPage() {
             <SwipeableCards cards={statCards} />
           </div>
 
-          <button
+          <Panel
+            as="button"
             type="button"
             onClick={() => setChartOpen(true)}
-            className="group relative w-full overflow-hidden rounded-2xl border border-border/70 bg-card p-4 text-left transition-colors hover:border-primary/40 sm:p-5"
+            interactive
+            className="group relative w-full overflow-hidden text-left transition-colors"
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -317,9 +320,9 @@ function DashboardPage() {
             <p className="mt-3 flex items-center gap-1 text-[0.68rem] font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100">
               Click for the full chart <ArrowUpRight className="size-3" />
             </p>
-          </button>
+          </Panel>
 
-          <section className="rounded-2xl border border-border/70 bg-card p-4 sm:p-5">
+          <Panel as="section">
             <div className="mb-3 flex items-center justify-between gap-3">
               <h2 className="flex items-center gap-2 font-display text-base font-semibold">
                 <Star className="size-4 fill-warning text-warning" /> Watchlist
@@ -363,9 +366,9 @@ function DashboardPage() {
                 })}
               </div>
             )}
-          </section>
+          </Panel>
 
-          <section className="rounded-2xl border border-border/70 bg-card p-4 sm:p-5">
+          <Panel as="section">
             <div className="mb-3 flex items-center justify-between gap-3">
               <h2 className="font-display text-base font-semibold">Today's movers</h2>
               <Link to="/portfolio" className="text-xs font-medium text-primary hover:underline">
@@ -393,10 +396,10 @@ function DashboardPage() {
                 />
               </div>
             )}
-          </section>
+          </Panel>
 
           {data && data.sectors.length > 0 ? (
-            <section className="rounded-2xl border border-border/70 bg-card p-4 sm:p-5">
+            <Panel as="section">
               <h2 className="mb-3 font-display text-base font-semibold">Sector allocation</h2>
               <ul className="space-y-2">
                 {data.sectors.slice(0, 6).map((s) => (
@@ -414,12 +417,12 @@ function DashboardPage() {
                   </li>
                 ))}
               </ul>
-            </section>
+            </Panel>
           ) : null}
         </>
       )}
 
-      <section className="rounded-2xl border border-border/70 bg-card p-4 sm:p-5">
+      <Panel as="section">
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="font-display text-base font-semibold">Issues</h2>
           <Link
@@ -444,16 +447,21 @@ function DashboardPage() {
             {openIssues.map((issue) => (
               <li
                 key={issue.companyShareId}
-                className="rounded-xl border border-border/60 bg-surface p-3"
+                className="min-w-0 rounded-xl border border-border/60 bg-surface p-3"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold">{issue.companyName}</p>
-                    <p className="num text-xs text-muted-foreground">
+                    <p className="truncate text-sm font-semibold" title={issue.companyName ?? ""}>
+                      {issue.companyName}
+                    </p>
+                    <p
+                      className="num truncate text-xs text-muted-foreground"
+                      title={`${issue.scrip ?? ""} · ${issue.shareTypeName ?? ""} ${issue.shareGroupName ?? ""}`}
+                    >
                       {issue.scrip} · {issue.shareTypeName} {issue.shareGroupName}
                     </p>
                   </div>
-                  <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[0.68rem] font-semibold text-primary">
+                  <span className="shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[0.68rem] font-semibold text-primary">
                     {issue.statusName ?? "Open"}
                   </span>
                 </div>
@@ -463,24 +471,35 @@ function DashboardPage() {
               </li>
             ))}
             {upcomingIssues.map((item) => (
-              <li
-                key={item.key}
-                className="rounded-xl border border-dashed border-border/60 bg-surface/60 p-3"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold">{item.title}</p>
-                    <p className="num mt-0.5 text-xs text-muted-foreground">{item.sub}</p>
+              <li key={item.key} className="min-w-0">
+                <Link
+                  to="/ipo"
+                  search={{ tab: "calendar" }}
+                  title={`${item.title} - view in IPO calendar`}
+                  className="block rounded-xl border border-dashed border-border/60 bg-surface/60 p-3 transition-colors hover:border-primary/40"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold" title={item.title}>
+                        {item.title}
+                      </p>
+                      <p
+                        className="num mt-0.5 truncate text-xs text-muted-foreground"
+                        title={item.sub}
+                      >
+                        {item.sub}
+                      </p>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[0.68rem] font-semibold text-muted-foreground">
+                      Upcoming
+                    </span>
                   </div>
-                  <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[0.68rem] font-semibold text-muted-foreground">
-                    Upcoming
-                  </span>
-                </div>
+                </Link>
               </li>
             ))}
           </ul>
         )}
-      </section>
+      </Panel>
 
       <ScripSheet
         symbol={picked}

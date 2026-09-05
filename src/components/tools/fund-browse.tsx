@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown, Building2, Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Panel } from "@/components/ui/panel";
 import {
   Select,
   SelectContent,
@@ -81,11 +82,20 @@ function FundCard({ fund, onPick }: { fund: BrowseFund; onPick: (symbol: string)
   const disc = discountPct(ltp, nav);
   const countdown = maturityCountdown(scheme.maturityDate ?? perf?.maturityDate ?? null);
   const closeEnd = scheme.fundType === "close_end";
+  // Open-end rows in the live file carry the mapped daily NAV (value, previous
+  // close and day change), so show that instead of the weekly figure.
+  const omfLive =
+    !closeEnd && live?.assetType === "open_ended_mutual_fund" && live.ltp > 0 ? live : null;
+  const navValue = omfLive?.ltp ?? nav;
+  const navLabelShown = omfLive ? "daily NAV" : navLabel;
   return (
-    <button
+    <Panel
+      as="button"
       type="button"
       onClick={() => onPick(scheme.symbol)}
-      className="group flex flex-col gap-3 rounded-2xl border border-border/70 bg-card p-4 text-left transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5"
+      padding="sm"
+      interactive
+      className="group flex flex-col gap-3 text-left transition-all hover:-translate-y-0.5 hover:shadow-primary/5"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
@@ -112,9 +122,16 @@ function FundCard({ fund, onPick }: { fund: BrowseFund; onPick: (symbol: string)
       <div className="flex items-end justify-between gap-2">
         <div>
           <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-            NAV <span className="normal-case">({navLabel})</span>
+            NAV <span className="normal-case">({navLabelShown})</span>
           </p>
-          <p className="num text-xl font-bold">{nav != null ? formatNpr(nav) : "-"}</p>
+          <p className="num text-xl font-bold">
+            {navValue != null ? formatNpr(navValue) : "-"}{" "}
+            {omfLive ? (
+              <DeltaPill value={omfLive.percentChange}>
+                {formatPercent(omfLive.percentChange)}
+              </DeltaPill>
+            ) : null}
+          </p>
         </div>
         {closeEnd ? (
           <div className="text-right">
@@ -151,7 +168,7 @@ function FundCard({ fund, onPick }: { fund: BrowseFund; onPick: (symbol: string)
         </span>
         {countdown ? <span className="num shrink-0">{countdown}</span> : null}
       </div>
-    </button>
+    </Panel>
   );
 }
 

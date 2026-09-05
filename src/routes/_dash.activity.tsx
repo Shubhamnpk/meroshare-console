@@ -18,6 +18,8 @@ import {
   Search,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { BackButton } from "@/components/back-button";
+import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
 import {
   Dialog,
   DialogContent,
@@ -56,9 +58,7 @@ export const Route = createFileRoute("/_dash/activity")({
       },
       ogImage(),
     ],
-    links: [
-      canonicalLink("/activity"),
-    ],
+    links: [canonicalLink("/activity")],
   }),
   component: ActivityPage,
 });
@@ -254,6 +254,13 @@ function ActivityPage() {
   const q = useQuery(activityLogQuery(range.startDate, range.endDate));
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<ActivityLogItem | null>(null);
+  const { sort, toggle } = useSort<"activity" | "device" | "location" | "date">(
+    {
+      key: "date",
+      dir: "desc",
+    },
+    { activity: "text", device: "text", location: "text", date: "number" },
+  );
   const all = q.data?.items ?? [];
 
   const { locations, isLocating } = useIpLocations(all.map((i) => String(i.ipAddress ?? "")));
@@ -280,6 +287,24 @@ function ActivityPage() {
         .some((v) => v.toLowerCase().includes(term));
     });
   }, [all, search, locations]);
+
+  const sorted = useMemo(() => {
+    const getter = (item: ActivityLogItem): string => {
+      const ip = clean(item.ipAddress);
+      const loc = ip ? locations[ip] : undefined;
+      switch (sort.key) {
+        case "activity":
+          return clean(item.description) || clean(item.activityType);
+        case "device":
+          return `${browserLabel(item)} ${osLabel(item)}`;
+        case "location":
+          return loc && !loc.private ? `${loc.label} ${ip}` : ip;
+        default:
+          return String(item.recordedDate ?? "");
+      }
+    };
+    return sortBy(items, getter, sort.dir);
+  }, [items, locations, sort]);
 
   const uniqueIps = useMemo(
     () => new Set(all.map((i) => clean(i.ipAddress)).filter(Boolean)).size,
@@ -351,6 +376,7 @@ function ActivityPage() {
 
   return (
     <div className="space-y-5">
+      <BackButton />
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl font-semibold sm:text-3xl">Activity Log</h1>
@@ -449,14 +475,42 @@ function ActivityPage() {
               <TableHeader>
                 <TableRow className="bg-muted/40 hover:bg-muted/40">
                   <TableHead className="w-10 pl-4">SN</TableHead>
-                  <TableHead>Activity</TableHead>
-                  <TableHead>Device</TableHead>
-                  <TableHead>Location</TableHead>
-                  <TableHead className="pr-4 text-right">Recorded on</TableHead>
+                  <SortableTh
+                    label="Activity"
+                    active={sort.key === "activity"}
+                    dir={sort.dir}
+                    onClick={() => toggle("activity")}
+                    align="left"
+                    kind="text"
+                  />
+                  <SortableTh
+                    label="Device"
+                    active={sort.key === "device"}
+                    dir={sort.dir}
+                    onClick={() => toggle("device")}
+                    align="left"
+                    kind="text"
+                  />
+                  <SortableTh
+                    label="Location"
+                    active={sort.key === "location"}
+                    dir={sort.dir}
+                    onClick={() => toggle("location")}
+                    align="left"
+                    kind="text"
+                  />
+                  <SortableTh
+                    label="Recorded on"
+                    active={sort.key === "date"}
+                    dir={sort.dir}
+                    onClick={() => toggle("date")}
+                    align="right"
+                    className="pr-4"
+                  />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {items.map((item, idx) => {
+                {sorted.map((item, idx) => {
                   const { Icon, chip } = activityMeta(item);
                   const ip = clean(item.ipAddress);
                   const loc = ip ? locations[ip] : undefined;

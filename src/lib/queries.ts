@@ -25,7 +25,12 @@ import {
   getMyDetail,
 } from "./meroshare/account.functions";
 import {
+  getBrokerDirectory,
   getChartData,
+  getFloorSheetDates as getFloorSheetDateList,
+  getFloorSheetDayData,
+  getFloorSheetRangeData,
+  getFloorSheetTrailData,
   getIndexGraph,
   getIpoArchiveList,
   getMarketMovers,
@@ -461,4 +466,66 @@ export const mfMarketHoldingsQuery = (enabled = true) =>
     queryFn: () => getMfMarketHoldingsMap(),
     enabled,
     staleTime: 30 * 60_000,
+  });
+
+export const brokerDirectoryQuery = () =>
+  queryOptions({
+    queryKey: ["broker-directory"],
+    queryFn: () => getBrokerDirectory(),
+    staleTime: 30 * 60_000,
+  });
+
+export const floorSheetDatesQuery = () =>
+  queryOptions({
+    queryKey: ["floorsheet-dates"],
+    queryFn: () => getFloorSheetDateList(),
+    staleTime: 60_000,
+  });
+
+export const floorSheetDayQuery = (date: string | null) =>
+  queryOptions({
+    queryKey: ["floorsheet-day", date],
+    queryFn: () => getFloorSheetDayData({ data: { date: date ?? "" } }),
+    enabled: Boolean(date),
+    staleTime: 60_000,
+  });
+
+export const floorSheetRangeQuery = (from: string | null, to: string | null) =>
+  queryOptions({
+    queryKey: ["floorsheet-range", from, to],
+    queryFn: () => getFloorSheetRangeData({ data: { from: from ?? "", to: to ?? from ?? "" } }),
+    enabled: Boolean(from),
+    staleTime: 60_000,
+  });
+
+export const floorSheetTrailQuery = (
+  date: string | null,
+  filter: {
+    brokerCode: string | null;
+    symbol: string | null;
+    contractId?: string | null;
+    dateTo?: string | null;
+  },
+) =>
+  queryOptions({
+    queryKey: [
+      "floorsheet-trail",
+      date,
+      filter.brokerCode,
+      filter.symbol,
+      filter.contractId ?? null,
+      filter.dateTo ?? null,
+    ],
+    queryFn: () =>
+      getFloorSheetTrailData({
+        data: {
+          date: date ?? "",
+          dateTo: filter.dateTo ?? null,
+          brokerCode: filter.brokerCode,
+          symbol: filter.symbol,
+          contractId: filter.contractId ?? null,
+        },
+      }),
+    enabled: Boolean(date) && Boolean(filter.brokerCode || filter.symbol || filter.contractId),
+    staleTime: 60_000,
   });

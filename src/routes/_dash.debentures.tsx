@@ -184,7 +184,10 @@ function DebenturesPage() {
                 </div>
               </div>
               <div
-                className={cn("grid gap-2", compareRows.length >= 3 ? "sm:grid-cols-3" : "sm:grid-cols-2")}
+                className={cn(
+                  "grid gap-2",
+                  compareRows.length >= 3 ? "sm:grid-cols-3" : "sm:grid-cols-2",
+                )}
               >
                 {compareRows.map((d) => {
                   const annual =
@@ -210,7 +213,10 @@ function DebenturesPage() {
                       <p className="mt-1 truncate text-[13px] font-bold" title={d.issuer}>
                         {d.issuer}
                       </p>
-                      <p className="truncate text-[11px] text-muted-foreground" title={d.instrument}>
+                      <p
+                        className="truncate text-[11px] text-muted-foreground"
+                        title={d.instrument}
+                      >
                         {d.instrument}
                       </p>
                       <dl className="num mt-2 space-y-1 text-[11px] text-muted-foreground">
@@ -264,7 +270,11 @@ function DebenturesPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-1.5">
-            <FilterChip active={sector === null} onClick={() => setSector(null)} label="All sectors" />
+            <FilterChip
+              active={sector === null}
+              onClick={() => setSector(null)}
+              label="All sectors"
+            />
             {sectors.map(([s, n]) => (
               <FilterChip
                 key={s}
@@ -325,13 +335,13 @@ function DebenturesPage() {
                     <div className="flex items-start gap-3">
                       <CouponBadge value={d.couponPct} />
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-[15px] font-bold leading-tight" title={d.issuer}>
+                        <p
+                          className="truncate text-[15px] font-bold leading-tight"
+                          title={d.issuer}
+                        >
                           {d.issuer}
                         </p>
-                        <p
-                          className="truncate text-xs text-muted-foreground"
-                          title={d.instrument}
-                        >
+                        <p className="truncate text-xs text-muted-foreground" title={d.instrument}>
                           {d.instrument}
                         </p>
                         <p className="mt-1 flex flex-wrap gap-1 text-[10px]">
@@ -353,9 +363,7 @@ function DebenturesPage() {
                       <div className="rounded-lg bg-surface px-2.5 py-1.5">
                         <dt className="text-muted-foreground">Tenor</dt>
                         <dd className="font-bold">
-                          {d.tenorYears != null
-                            ? `${d.tenorYears} yrs`
-                            : (d.maturityBs ?? "—")}
+                          {d.tenorYears != null ? `${d.tenorYears} yrs` : (d.maturityBs ?? "—")}
                         </dd>
                       </div>
                       <div className="rounded-lg bg-surface px-2.5 py-1.5">

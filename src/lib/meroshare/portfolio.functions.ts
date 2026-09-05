@@ -388,8 +388,7 @@ export const getInvestmentSummary = createServerFn({ method: "GET" }).handler(
         const pending = Array.isArray(res.waccUpdateResponse) ? res.waccUpdateResponse : [];
         const qtyOf = (r: PurchaseSourceItem) =>
           Math.max(0, toNum(r.quantity ?? r.transactionQuantity));
-        const priceOf = (r: PurchaseSourceItem) =>
-          toNum(r.userPrice ?? r.rate ?? r.purchasePrice);
+        const priceOf = (r: PurchaseSourceItem) => toNum(r.userPrice ?? r.rate ?? r.purchasePrice);
         if (summary.length > 0) {
           let units = 0;
           let cost = 0;

@@ -94,9 +94,14 @@ function pruneSnooze(map: Record<string, number>, now: number): Record<string, n
 // Migrate legacy individual keys into the unified key
 function migrateLegacy(): void {
   try {
-    const hasLegacy = ["ms-notif-read.v1", "ms-notif-dismissed.v1", "ms-notif-snooze.v1",
-      "ms-notif-toasted.v1", "ms-notif-popups.v1", "ms-notif-push.v1"]
-      .some((k) => localStorage.getItem(k) !== null);
+    const hasLegacy = [
+      "ms-notif-read.v1",
+      "ms-notif-dismissed.v1",
+      "ms-notif-snooze.v1",
+      "ms-notif-toasted.v1",
+      "ms-notif-popups.v1",
+      "ms-notif-push.v1",
+    ].some((k) => localStorage.getItem(k) !== null);
     if (!hasLegacy) return;
 
     const state = { ...DEFAULT_STATE };
@@ -105,25 +110,34 @@ function migrateLegacy(): void {
     try {
       const raw = JSON.parse(localStorage.getItem("ms-notif-read.v1") ?? "{}");
       if (raw && typeof raw === "object") state.read = raw;
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
 
     // Dismissed
     try {
       const raw = JSON.parse(localStorage.getItem("ms-notif-dismissed.v1") ?? "[]");
-      if (Array.isArray(raw)) state.dismissed = raw.filter((v): v is string => typeof v === "string");
-    } catch { /* ignore */ }
+      if (Array.isArray(raw))
+        state.dismissed = raw.filter((v): v is string => typeof v === "string");
+    } catch {
+      /* ignore */
+    }
 
     // Snooze
     try {
       const raw = JSON.parse(localStorage.getItem("ms-notif-snooze.v1") ?? "{}");
       if (raw && typeof raw === "object") state.snooze = raw;
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
 
     // Toasted
     try {
       const raw = JSON.parse(localStorage.getItem("ms-notif-toasted.v1") ?? "[]");
       if (Array.isArray(raw)) state.toasted = raw.filter((v): v is string => typeof v === "string");
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
 
     // Popups
     state.popups = localStorage.getItem("ms-notif-popups.v1") !== "0";
@@ -134,8 +148,14 @@ function migrateLegacy(): void {
     save(state);
 
     // Delete legacy keys
-    for (const k of ["ms-notif-read.v1", "ms-notif-dismissed.v1", "ms-notif-snooze.v1",
-      "ms-notif-toasted.v1", "ms-notif-popups.v1", "ms-notif-push.v1"]) {
+    for (const k of [
+      "ms-notif-read.v1",
+      "ms-notif-dismissed.v1",
+      "ms-notif-snooze.v1",
+      "ms-notif-toasted.v1",
+      "ms-notif-popups.v1",
+      "ms-notif-push.v1",
+    ]) {
       localStorage.removeItem(k);
     }
   } catch {
@@ -324,7 +344,7 @@ export function buildNotifications(args: {
         kind: "ipo-upcoming",
         title: `${name} announced`,
         body: `Opens ${formatDate(issue.issueOpenDate)} · Rs ${issue.sharePerUnit ?? "-"}/unit`,
-        href: "/ipo",
+        href: "/ipo?tab=calendar",
       });
     } else if (group === "open") {
       const closes = daysUntil(issue.issueCloseDate);
@@ -334,7 +354,7 @@ export function buildNotifications(args: {
           kind: "ipo-closing",
           title: `${name} closes ${closes === 0 ? "today" : closes === 1 ? "tomorrow" : `in ${closes} days`}`,
           body: `Last chance to apply · closes ${formatDate(issue.issueCloseDate)}`,
-          href: "/ipo",
+          href: "/ipo?tab=calendar",
           urgent: true,
         });
       } else {
@@ -360,7 +380,7 @@ export function buildNotifications(args: {
       body: [row.units ? `${row.units} units` : null, row.dateRange ?? null]
         .filter(Boolean)
         .join(" · "),
-      href: "/ipo",
+      href: "/ipo?tab=calendar",
     });
   }
 

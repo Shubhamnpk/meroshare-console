@@ -44,6 +44,7 @@ import {
   chartTimeLabel,
 } from "@/components/market/chart-modal";
 import { useDocViewer } from "@/components/ui/use-doc-viewer";
+import { Panel } from "@/components/ui/panel";
 import {
   dividendsQuery,
   enrichedPortfolioQuery,
@@ -57,9 +58,11 @@ import {
   waccReportQuery,
 } from "@/lib/queries";
 import { formatDate, formatNpr, formatPercent, formatQty, toNumber } from "@/lib/format";
+import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
 import { useWatchlist } from "@/lib/watchlist";
 import { cn } from "@/lib/utils";
 import type { FinancialReport, PricePoint } from "@/lib/nepse/types";
+import type { TransactionItem } from "@/lib/meroshare/types";
 
 /**
  * Resolve face value with priority: API-reported value → YONEPSE sector heuristic → Rs 100.
@@ -92,7 +95,7 @@ function PositionCard({
   const plPct = pl && totalCost ? (pl / totalCost) * 100 : 0;
   const up = pl >= 0;
   return (
-    <div className="rounded-2xl border border-border/70 bg-card p-4">
+    <Panel padding="sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="font-display text-sm font-semibold">Your position</h3>
         <span className="rounded-full bg-muted px-2 py-0.5 text-[0.68rem] font-medium text-muted-foreground">
@@ -126,7 +129,7 @@ function PositionCard({
           {formatNpr(pl)} <span className="text-xs">({formatPercent(plPct / 100)})</span>
         </span>
       </div>
-    </div>
+    </Panel>
   );
 }
 
@@ -483,6 +486,102 @@ function ReportGroups({
   );
 }
 
+function ScripHistoryTable({ items }: { items: TransactionItem[] }) {
+  const { sort, toggle } = useSort<"date" | "description" | "credit" | "debit" | "balance">(
+    { key: "date", dir: "desc" },
+    { date: "number", description: "text", credit: "number", debit: "number", balance: "number" },
+  );
+  const sorted = useMemo(() => {
+    const getter = (t: TransactionItem): string | number => {
+      switch (sort.key) {
+        case "description":
+          return t.historyDescription ?? "";
+        case "credit":
+          return toNumber(t.creditQuantity);
+        case "debit":
+          return toNumber(t.debitQuantity);
+        case "balance":
+          return toNumber(t.balanceAfterTransaction);
+        default:
+          return String(t.transactionDate ?? "");
+      }
+    };
+    return sortBy(items, getter, sort.dir);
+  }, [items, sort]);
+  return (
+    <div className="overflow-hidden rounded-xl border border-border/60 bg-surface">
+      <Table>
+        <TableHeader>
+          <TableRow className="bg-muted/30 hover:bg-muted/30">
+            <SortableTh
+              label="Date"
+              active={sort.key === "date"}
+              dir={sort.dir}
+              onClick={() => toggle("date")}
+              align="left"
+              className="pl-3"
+            />
+            <SortableTh
+              label="Description"
+              active={sort.key === "description"}
+              dir={sort.dir}
+              onClick={() => toggle("description")}
+              align="left"
+              kind="text"
+            />
+            <SortableTh
+              label="Credit"
+              active={sort.key === "credit"}
+              dir={sort.dir}
+              onClick={() => toggle("credit")}
+              align="right"
+            />
+            <SortableTh
+              label="Debit"
+              active={sort.key === "debit"}
+              dir={sort.dir}
+              onClick={() => toggle("debit")}
+              align="right"
+            />
+            <SortableTh
+              label="Balance"
+              active={sort.key === "balance"}
+              dir={sort.dir}
+              onClick={() => toggle("balance")}
+              align="right"
+              className="pr-3"
+            />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {sorted.map((t, i) => (
+            <TableRow key={`${String(t.transactionDate)}-${i}`}>
+              <TableCell className="num whitespace-nowrap pl-3 text-xs">
+                {formatDate(t.transactionDate)}
+              </TableCell>
+              <TableCell
+                className="max-w-44 truncate text-xs text-muted-foreground"
+                title={t.historyDescription}
+              >
+                {t.historyDescription ?? "-"}
+              </TableCell>
+              <TableCell className="num text-right text-xs text-gain">
+                {t.creditQuantity ? `+${formatQty(t.creditQuantity)}` : "-"}
+              </TableCell>
+              <TableCell className="num text-right text-xs text-loss">
+                {t.debitQuantity ? `-${formatQty(t.debitQuantity)}` : "-"}
+              </TableCell>
+              <TableCell className="num pr-3 text-right text-xs">
+                {formatQty(t.balanceAfterTransaction)}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
 export function ScripSheet({
   symbol,
   onOpenChange,
@@ -724,7 +823,7 @@ export function ScripSheet({
                   }
                 />
               ) : null}
-              <div className="rounded-2xl border border-border/70 bg-card p-4">
+              <Panel padding="sm">
                 <div className="flex items-center justify-between gap-3">
                   <h3 className="font-display text-sm font-semibold">Price history</h3>
                   {ranges.length > 0 ? (
@@ -810,7 +909,7 @@ export function ScripSheet({
                     No price history in the feed for this scrip yet.
                   </p>
                 )}
-              </div>
+              </Panel>
 
               {stats.length > 0 ? (
                 <dl className="grid grid-cols-3 gap-3">
@@ -829,7 +928,7 @@ export function ScripSheet({
               ) : null}
 
               {companyRows.length > 0 ? (
-                <section className="rounded-2xl border border-border/70 bg-card p-4">
+                <Panel padding="sm">
                   <h3 className="flex items-center gap-2 font-display text-sm font-semibold">
                     <Building2 className="size-4 text-primary" /> Company overview
                   </h3>
@@ -860,11 +959,11 @@ export function ScripSheet({
                       ) : null}
                     </div>
                   ) : null}
-                </section>
+                </Panel>
               ) : null}
 
               {holding ? (
-                <section className="rounded-2xl border border-border/70 bg-card p-4">
+                <Panel padding="sm">
                   <h3 className="font-display text-sm font-semibold">Your holding</h3>
                   <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
                     <div>
@@ -888,12 +987,12 @@ export function ScripSheet({
                       <dd className="num font-medium">{formatNpr(holding.previousValue)}</dd>
                     </div>
                   </dl>
-                </section>
+                </Panel>
               ) : null}
             </TabsContent>
 
             <TabsContent value="financials" className="space-y-4">
-              <section className="rounded-2xl border border-border/70 bg-card p-4">
+              <Panel padding="sm">
                 <h3 className="flex items-center gap-2 font-display text-sm font-semibold">
                   <FileText className="size-4 text-primary" /> Latest financials
                 </h3>
@@ -908,10 +1007,10 @@ export function ScripSheet({
                     No financial data in the feed for this scrip yet.
                   </p>
                 )}
-              </section>
+              </Panel>
 
               {financials.data && financials.data.reports.length > 1 ? (
-                <section className="rounded-2xl border border-border/70 bg-card p-4">
+                <Panel padding="sm">
                   <h3 className="font-display text-sm font-semibold">Report history</h3>
                   <ReportGroups
                     reports={financials.data.reports}
@@ -921,13 +1020,13 @@ export function ScripSheet({
                     Figures are indicative from the YONEPSE community feed and follow NEPSE-reported
                     annual / quarterly results.
                   </p>
-                </section>
+                </Panel>
               ) : null}
             </TabsContent>
 
             <TabsContent value="dividend" className="space-y-3">
               {yearlyDividends.length > 0 ? (
-                <section className="rounded-2xl border border-border/70 bg-card p-4">
+                <Panel padding="sm">
                   <h3 className="font-display text-sm font-semibold">All announced dividends</h3>
                   <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
                     <div>
@@ -1050,7 +1149,7 @@ export function ScripSheet({
                       .
                     </p>
                   ) : null}
-                </section>
+                </Panel>
               ) : (
                 <p className="rounded-xl border border-border/60 bg-surface px-3 py-2.5 text-sm text-muted-foreground">
                   No dividend announcements in the feed for this scrip.
@@ -1065,43 +1164,7 @@ export function ScripSheet({
                 </p>
               ) : (myHistory.data?.items.length ?? 0) > 0 ? (
                 <>
-                  <div className="overflow-hidden rounded-xl border border-border/60 bg-surface">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-muted/30 hover:bg-muted/30">
-                          <TableHead className="pl-3">Date</TableHead>
-                          <TableHead>Description</TableHead>
-                          <TableHead className="text-right">Credit</TableHead>
-                          <TableHead className="text-right">Debit</TableHead>
-                          <TableHead className="pr-3 text-right">Balance</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {(myHistory.data?.items ?? []).map((t, i) => (
-                          <TableRow key={`${String(t.transactionDate)}-${i}`}>
-                            <TableCell className="num whitespace-nowrap pl-3 text-xs">
-                              {formatDate(t.transactionDate)}
-                            </TableCell>
-                            <TableCell
-                              className="max-w-44 truncate text-xs text-muted-foreground"
-                              title={t.historyDescription}
-                            >
-                              {t.historyDescription ?? "-"}
-                            </TableCell>
-                            <TableCell className="num text-right text-xs text-gain">
-                              {t.creditQuantity ? `+${formatQty(t.creditQuantity)}` : "-"}
-                            </TableCell>
-                            <TableCell className="num text-right text-xs text-loss">
-                              {t.debitQuantity ? `-${formatQty(t.debitQuantity)}` : "-"}
-                            </TableCell>
-                            <TableCell className="num pr-3 text-right text-xs">
-                              {formatQty(t.balanceAfterTransaction)}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
+                  <ScripHistoryTable items={myHistory.data?.items ?? []} />
                   <p className="text-[0.68rem] text-muted-foreground">
                     Your demat movement history for {upper}, straight from MeroShare (newest first).
                   </p>

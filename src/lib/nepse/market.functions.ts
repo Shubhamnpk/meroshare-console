@@ -25,13 +25,24 @@ import {
   getSectorIndices,
   getTopStocks,
 } from "./feed.server";
+import {
+  getFloorSheetDates as fetchFloorSheetDates,
+  getFloorSheetDay as fetchFloorSheetDay,
+  getFloorSheetRange as fetchFloorSheetRange,
+  getFloorSheetTrail as fetchFloorSheetTrail,
+  getBrokers as fetchBrokers,
+} from "./brokers.server";
 import { parseNptEpoch, type UnitSnapshot } from "./timeline";
 import type {
+  BrokerRow,
   ChartSeries,
   DailyBar,
   DividendRow,
   ExchangeMessageRow,
   FinancialReport,
+  FloorSheetDay,
+  FloorSheetManifest,
+  FloorSheetTrail,
   IpoArchiveRow,
   LivePrice,
   MarketSnapshot,
@@ -199,7 +210,7 @@ export const getScreenerData = createServerFn({ method: "GET" }).handler(
       dividendsBySymbol[key].push(d);
     }
     for (const key of Object.keys(dividendsBySymbol)) {
-      dividendsBySymbol[key].sort((a, b) =>
+      dividendsBySymbol[key]?.sort((a, b) =>
         (b.announcementDate ?? "").localeCompare(a.announcementDate ?? ""),
       );
     }
@@ -369,4 +380,66 @@ export const getChartData = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<ChartSeries> => {
     await requireAuth();
     return fetchChartSeries(data.symbol, data.range);
+  });
+
+export const getBrokerDirectory = createServerFn({ method: "GET" }).handler(
+  async (): Promise<BrokerRow[]> => {
+    await requireAuth();
+    return fetchBrokers();
+  },
+);
+
+export const getFloorSheetDates = createServerFn({ method: "GET" }).handler(
+  async (): Promise<FloorSheetManifest> => {
+    await requireAuth();
+    return fetchFloorSheetDates();
+  },
+);
+
+export const getFloorSheetDayData = createServerFn({ method: "POST" })
+  .validator((input: unknown) =>
+    z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).parse(input),
+  )
+  .handler(async ({ data }): Promise<FloorSheetDay | null> => {
+    await requireAuth();
+    return fetchFloorSheetDay(data.date);
+  });
+
+export const getFloorSheetRangeData = createServerFn({ method: "POST" })
+  .validator((input: unknown) =>
+    z
+      .object({
+        from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data }): Promise<FloorSheetDay | null> => {
+    await requireAuth();
+    return fetchFloorSheetRange(data.from, data.to);
+  });
+
+export const getFloorSheetTrailData = createServerFn({ method: "POST" })
+  .validator((input: unknown) =>
+    z
+      .object({
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        dateTo: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .nullish(),
+        brokerCode: z.string().trim().max(12).nullish(),
+        symbol: z.string().trim().max(24).nullish(),
+        contractId: z.string().trim().max(32).nullish(),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data }): Promise<FloorSheetTrail | null> => {
+    await requireAuth();
+    return fetchFloorSheetTrail(data.date, {
+      dateTo: data.dateTo ?? null,
+      brokerCode: data.brokerCode ?? null,
+      symbol: data.symbol ?? null,
+      contractId: data.contractId ?? null,
+    });
   });

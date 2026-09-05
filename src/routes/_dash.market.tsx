@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Activity, ChartCandlestick, Maximize2, RefreshCw, Search, Star } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Panel } from "@/components/ui/panel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -14,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ErrorBlock, LoadingBlock, EmptyBlock } from "@/components/states";
+import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
 import { DeltaPill } from "@/components/stat-card";
 import { ScripSheet } from "@/components/market/scrip-sheet";
 import { WatchlistPanel } from "@/components/market/watchlist-panel";
@@ -50,9 +52,7 @@ export const Route = createFileRoute("/_dash/market")({
       { name: "twitter:card", content: "summary" },
       ogImage(),
     ],
-    links: [
-      canonicalLink("/market"),
-    ],
+    links: [canonicalLink("/market")],
   }),
   component: MarketPage,
 });
@@ -189,6 +189,19 @@ function MarketPage() {
   });
 
   const prices = snapshot.data?.prices ?? [];
+  const { sort, toggle } = useSort<"symbol" | "ltp" | "percentChange" | "volume" | "turnover">(
+    {
+      key: "turnover",
+      dir: "desc",
+    },
+    {
+      symbol: "text",
+      ltp: "number",
+      percentChange: "number",
+      volume: "number",
+      turnover: "number",
+    },
+  );
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     const rows = term
@@ -196,8 +209,22 @@ function MarketPage() {
           (p) => p.symbol.toLowerCase().includes(term) || p.name.toLowerCase().includes(term),
         )
       : prices;
-    return [...rows].sort((a, b) => b.turnover - a.turnover).slice(0, 200);
-  }, [prices, search]);
+    const getter = (p: (typeof rows)[number]): string | number => {
+      switch (sort.key) {
+        case "symbol":
+          return p.symbol;
+        case "ltp":
+          return p.ltp;
+        case "percentChange":
+          return p.percentChange;
+        case "volume":
+          return p.volume;
+        default:
+          return p.turnover;
+      }
+    };
+    return sortBy(rows, getter, sort.dir).slice(0, 200);
+  }, [prices, search, sort]);
 
   const nepse =
     snapshot.data?.indices.find((i) => /nepse/i.test(i.name)) ?? snapshot.data?.indices[0];
@@ -299,7 +326,7 @@ function MarketPage() {
             ))}
           </div>
 
-          <section className="rounded-2xl border border-border/70 bg-card p-4 sm:p-5">
+          <Panel as="section">
             <h2 className="mb-3 font-display text-base font-semibold">Movers &amp; activity</h2>
             {movers.isLoading ? (
               <LoadingBlock label="Loading movers" rows={2} />
@@ -331,7 +358,7 @@ function MarketPage() {
                 </TabsContent>
               </Tabs>
             )}
-          </section>
+          </Panel>
 
           <section className="space-y-3">
             <div className="relative">
@@ -347,15 +374,49 @@ function MarketPage() {
             {filtered.length === 0 ? (
               <EmptyBlock title="No matches" description="No listed scrip matches that search." />
             ) : (
-              <div className="overflow-hidden rounded-2xl border border-border/70 bg-card">
+              <Panel padding="none" className="overflow-hidden">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/40 hover:bg-muted/40">
-                      <TableHead className="pl-4">Scrip</TableHead>
-                      <TableHead className="text-right">LTP</TableHead>
-                      <TableHead className="text-right">Change</TableHead>
-                      <TableHead className="hidden text-right sm:table-cell">Volume</TableHead>
-                      <TableHead className="hidden text-right md:table-cell">Turnover</TableHead>
+                      <SortableTh
+                        label="Scrip"
+                        active={sort.key === "symbol"}
+                        dir={sort.dir}
+                        onClick={() => toggle("symbol")}
+                        align="left"
+                        className="pl-4"
+                        kind="text"
+                      />
+                      <SortableTh
+                        label="LTP"
+                        active={sort.key === "ltp"}
+                        dir={sort.dir}
+                        onClick={() => toggle("ltp")}
+                        align="right"
+                      />
+                      <SortableTh
+                        label="Change"
+                        active={sort.key === "percentChange"}
+                        dir={sort.dir}
+                        onClick={() => toggle("percentChange")}
+                        align="right"
+                      />
+                      <SortableTh
+                        label="Volume"
+                        active={sort.key === "volume"}
+                        dir={sort.dir}
+                        onClick={() => toggle("volume")}
+                        align="right"
+                        className="hidden sm:table-cell"
+                      />
+                      <SortableTh
+                        label="Turnover"
+                        active={sort.key === "turnover"}
+                        dir={sort.dir}
+                        onClick={() => toggle("turnover")}
+                        align="right"
+                        className="hidden md:table-cell"
+                      />
                       <TableHead className="w-12 pr-4" />
                     </TableRow>
                   </TableHeader>
@@ -413,11 +474,11 @@ function MarketPage() {
                     ))}
                   </TableBody>
                 </Table>
-              </div>
+              </Panel>
             )}
           </section>
 
-          <section className="rounded-2xl border border-border/70 bg-card p-4 sm:p-5">
+          <Panel as="section">
             <h2 className="mb-3 flex items-center gap-2 font-display text-base font-semibold">
               <Activity className="size-4 text-primary" /> Sector indices
             </h2>
@@ -447,7 +508,7 @@ function MarketPage() {
                 ))}
               </ul>
             )}
-          </section>
+          </Panel>
 
           <p className="text-xs text-muted-foreground">
             Market data comes from the live NEPSE mirror plus a community YONEPSE feed and is

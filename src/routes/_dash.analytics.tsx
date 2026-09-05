@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState, type ComponentProps } from "react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Sector, Tooltip } from "recharts";
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
+import { Panel } from "@/components/ui/panel";
 import { ErrorBlock, LoadingBlock, EmptyBlock } from "@/components/states";
 import { StatCard } from "@/components/stat-card";
 import { HistoryPanel } from "@/components/portfolio/history-panel";
@@ -26,9 +27,7 @@ export const Route = createFileRoute("/_dash/analytics")({
       },
       ogImage(),
     ],
-    links: [
-      canonicalLink("/analytics"),
-    ],
+    links: [canonicalLink("/analytics")],
   }),
   component: AnalyticsPage,
 });
@@ -69,7 +68,7 @@ function AllocationPie({
   const active = activeIndex != null ? slices[activeIndex] : undefined;
 
   return (
-    <section className="rounded-2xl border border-border/70 bg-card p-4 sm:p-5">
+    <Panel as="section">
       <h2 className="mb-3 font-display text-base font-semibold">{title}</h2>
       <div className="flex flex-col items-center gap-4 sm:flex-row">
         <div className="relative h-52 w-full max-w-56 shrink-0">
@@ -143,7 +142,7 @@ function AllocationPie({
           ))}
         </ul>
       </div>
-    </section>
+    </Panel>
   );
 }
 
@@ -233,7 +232,7 @@ function AnalyticsPage() {
           </div>
 
           {movers.length > 0 ? (
-            <section className="rounded-2xl border border-border/70 bg-card p-4 sm:p-5">
+            <Panel as="section">
               <h2 className="mb-3 font-display text-base font-semibold">Biggest movers today</h2>
               <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                 {movers.map((m) => (
@@ -258,10 +257,10 @@ function AnalyticsPage() {
                   </li>
                 ))}
               </ul>
-            </section>
+            </Panel>
           ) : null}
 
-          <section className="rounded-2xl border border-border/70 bg-card p-4 sm:p-5">
+          <Panel as="section">
             <h2 className="mb-4 font-display text-base font-semibold">Allocation by scrip</h2>
             <ul className="space-y-3">
               {rows.map((r) => (
@@ -290,7 +289,7 @@ function AnalyticsPage() {
                 </li>
               ))}
             </ul>
-          </section>
+          </Panel>
 
           <HistoryPanel holdings={holdings} onPickScrip={setPicked} />
         </>

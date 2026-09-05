@@ -21,7 +21,7 @@ import { useDocViewer } from "@/components/ui/use-doc-viewer";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { HoldingsDetailSheet } from "./holdings-detail-sheet";
-import { formatNpr, formatPercent, formatQty } from "@/lib/format";
+import { formatDate, formatNpr, formatPercent, formatQty } from "@/lib/format";
 import type { LivePrice } from "@/lib/nepse/types";
 import type { ChartRange } from "@/lib/nepse/types";
 import type {
@@ -178,6 +178,24 @@ export function FundDetail({
     : { nav: nav[nav.length - 1]?.nav ?? null, label: "latest NAV" };
   const ltp = live?.ltp ?? perf?.ltp ?? null;
   const disc = discountPct(ltp, refNav);
+  // Open-end funds never trade: their live feed row is the mapped daily NAV
+  // (daily value, previous close and day change straight from the feed).
+  const omfRow =
+    !closeEnd && live?.assetType === "open_ended_mutual_fund" && live.ltp > 0 ? live : null;
+  const heroNav = omfRow?.ltp ?? refNav;
+  const heroNavLabel = omfRow ? "daily NAV" : navLabel;
+  const heroChange = omfRow ? omfRow.percentChange : null;
+  const heroDate = omfRow?.lastUpdated ?? null;
+  // Fallback when the live row is missing: last two published NAV points.
+  const navLatest = nav.length > 0 ? (nav[nav.length - 1] ?? null) : null;
+  const navPrev = nav.length > 1 ? (nav[nav.length - 2] ?? null) : null;
+  const navChange = navLatest && navPrev && navPrev.nav > 0 ? navLatest.nav - navPrev.nav : null;
+  const navChangePct =
+    navChange !== null && navPrev && navPrev.nav > 0 ? (navChange / navPrev.nav) * 100 : null;
+  const fallbackChange = omfRow ? null : navChangePct;
+  const fallbackDate = omfRow ? null : (navLatest?.date ?? null);
+  const heroChangeShown = heroChange ?? fallbackChange;
+  const heroDateShown = heroDate ?? fallbackDate;
   const countdown = maturityCountdown(scheme?.maturityDate ?? perf?.maturityDate ?? null);
   const lifeProgress = maturityProgress(
     scheme?.allotmentDate ?? null,
@@ -398,10 +416,16 @@ export function FundDetail({
               </div>
               <div className="text-right">
                 <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                  NAV <span className="normal-case">({navLabel})</span>
+                  NAV <span className="normal-case">({closeEnd ? navLabel : heroNavLabel})</span>
                 </p>
                 <p className="num text-2xl font-bold sm:text-3xl">
-                  {refNav != null ? formatNpr(refNav) : "-"}
+                  {closeEnd
+                    ? refNav != null
+                      ? formatNpr(refNav)
+                      : "-"
+                    : heroNav != null
+                      ? formatNpr(heroNav)
+                      : "-"}
                 </p>
                 {closeEnd ? (
                   <p className="num mt-0.5 text-sm text-muted-foreground">
@@ -412,7 +436,20 @@ export function FundDetail({
                       </DeltaPill>
                     ) : null}
                   </p>
-                ) : null}
+                ) : (
+                  <div className="mt-1 flex items-center justify-end gap-2">
+                    {heroChangeShown !== null ? (
+                      <DeltaPill value={heroChangeShown}>
+                        {formatPercent(heroChangeShown)}
+                      </DeltaPill>
+                    ) : null}
+                    {heroDateShown ? (
+                      <span className="num text-[11px] text-muted-foreground">
+                        as of {formatDate(heroDateShown)}
+                      </span>
+                    ) : null}
+                  </div>
+                )}
               </div>
             </div>
             {closeEnd ? (
@@ -460,7 +497,7 @@ export function FundDetail({
           </div>
         </section>
 
-          {/* Market snapshot - close-end only (open-end trades at NAV, no market price) */}
+        {/* Market snapshot - close-end only (open-end trades at NAV, no market price) */}
         {closeEnd ? (
           <Section
             icon={Wallet}

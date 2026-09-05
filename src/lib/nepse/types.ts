@@ -17,6 +17,8 @@ export interface LivePrice {
   sector: string | null;
   fiftyTwoWeekHigh: number | null;
   fiftyTwoWeekLow: number | null;
+  /** YONEPSE row kind, e.g. "open_ended_mutual_fund" whose ltp is the daily NAV. */
+  assetType?: string | null;
 }
 
 export interface MarketIndex {
@@ -252,4 +254,165 @@ export interface EnrichedPortfolio {
   marketStale: boolean;
   status: MarketStatus;
   sectors: { sector: string; value: number; weight: number }[];
+}
+export interface EnrichedPortfolio {
+  holdings: EnrichedHolding[];
+  totalValue: number;
+  totalPreviousValue: number;
+  dayChange: number;
+  dayChangePercent: number;
+  totalUnits: number;
+  liveCount: number;
+  marketStale: boolean;
+  status: MarketStatus;
+  sectors: { sector: string; value: number; weight: number }[];
+}
+
+/** Per-scrip buy/sell split for a broker's busiest scrip today. */
+export interface BrokerTopStock {
+  symbol: string;
+  name: string;
+  totalAmount: number;
+  buyAmount: number;
+  sellAmount: number;
+}
+
+/** A broker's aggregated trading stats for the current/last session. */
+export interface BrokerTodayStats {
+  totalAmount: number;
+  buyAmount: number;
+  sellAmount: number;
+  topStock: BrokerTopStock | null;
+}
+
+/** Community rating for a broker (ShareHub/Arthakendra data). */
+export interface BrokerRating {
+  averageRating: number;
+  totalRatings: number;
+  averageShareTransferDays: number;
+  averageCashDepositDays: number;
+}
+
+/** One NEPSE member broker from the YONEPSE broker directory. */
+export interface BrokerRow {
+  /** NEPSE member code, e.g. 58 for Naasa Securities. */
+  code: number;
+  name: string;
+  membershipType: string;
+  phone: string | null;
+  tmsLink: string | null;
+  branchCount: number;
+  provinces: string[];
+  districts: string[];
+  isDealer: boolean;
+  active: boolean;
+  logoUrl: string | null;
+  rating: BrokerRating | null;
+  /** Turnover over the trailing 30 sessions. */
+  thirtyDaysTurnover: number;
+  /** Turnover on the most recent published session before today. */
+  latestTurnover: number;
+  /** Aggregated buy/sell for today — null when the session hasn't published yet. */
+  todayStats: BrokerTodayStats | null;
+}
+
+/** Dates with floor sheet data available. */
+export interface FloorSheetManifest {
+  latestDate: string | null;
+  dates: string[];
+}
+
+/** Per-broker trading stats aggregated for one trading day. */
+export interface BrokerDayStat {
+  code: string;
+  name: string;
+  trades: number;
+  buyAmount: number;
+  sellAmount: number;
+  totalAmount: number;
+  buyVolume: number;
+  sellVolume: number;
+  /** sellAmount - buyAmount; positive means the broker sold more than it bought (net supply). */
+  netAmount: number;
+  topSymbols: { symbol: string; amount: number; trades: number }[];
+}
+
+/** Per-scrip trading stats aggregated for one trading day. */
+export interface SymbolDayStat {
+  symbol: string;
+  name: string;
+  trades: number;
+  volume: number;
+  amount: number;
+  avgPrice: number;
+  high: number;
+  low: number;
+  brokers: number;
+}
+
+/** Hourly market activity bucket for one trading day. */
+export interface HourPoint {
+  hour: string;
+  trades: number;
+  amount: number;
+}
+
+/** One reconstructed floor-sheet transaction. */
+export interface FloorSheetTrade {
+  contractId: string;
+  symbol: string;
+  buyer: { code: string; name: string } | null;
+  seller: { code: string; name: string } | null;
+  quantity: number;
+  rate: number;
+  amount: number;
+  time: string | null;
+  /** Trading day — set on multi-day trail lookups. */
+  date?: string | null;
+}
+
+/** Top counterparty for one scrip over the looked-up range. */
+export interface TrailParty {
+  code: string;
+  name: string;
+  amount: number;
+  trades: number;
+}
+
+/** Everything the brokers page draws for one trading day, aggregated server-side. */
+export interface FloorSheetDay {
+  date: string;
+  /** Latest day in the range, null for single-day aggregates. */
+  dateTo: string | null;
+  /** Trading sessions actually scanned. */
+  sessions: number;
+  stale: boolean;
+  totalTrades: number;
+  totalVolume: number;
+  totalAmount: number;
+  scripsTraded: number;
+  brokersActive: number;
+  biggestTrade: FloorSheetTrade | null;
+  /** Largest single-contract trades of the day, descending by amount. */
+  biggestTrades: FloorSheetTrade[];
+  hourly: HourPoint[];
+  brokerLeaderboard: BrokerDayStat[];
+  symbolLeaderboard: SymbolDayStat[];
+}
+
+/** Result of a floor-sheet trade trail lookup (broker / scrip / contract, date range). */
+export interface FloorSheetTrail {
+  date: string;
+  /** Latest day in the range, null for single-day lookups. */
+  dateTo: string | null;
+  stale: boolean;
+  /** Total matching trades and amount before the response cap. */
+  totalTrades: number;
+  totalAmount: number;
+  truncated: boolean;
+  trades: FloorSheetTrade[];
+  /** Top buyers of the scrip over the range (only when a symbol is set). */
+  topBuyers: TrailParty[];
+  /** Top sellers of the scrip over the range (only when a symbol is set). */
+  topSellers: TrailParty[];
 }

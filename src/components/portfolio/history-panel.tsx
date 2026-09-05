@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { ErrorBlock, LoadingBlock, EmptyBlock } from "@/components/states";
 import { DeltaPill } from "@/components/stat-card";
+import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
 import { useMemo, useState, type ReactNode } from "react";
 import { ChevronDown, Gift, LineChart } from "lucide-react";
 import {
@@ -332,7 +333,31 @@ export function PointBreakdown({
   formatLabel: (time: number) => string;
   onPickScrip: (scrip: string) => void;
 }) {
-  const rows = [...point.breakdown].sort((a, b) => b.value - a.value);
+  type Key = "symbol" | "close" | "units" | "value";
+  const { sort, toggle } = useSort<Key>(
+    { key: "value", dir: "desc" },
+    {
+      symbol: "text",
+      close: "number",
+      units: "number",
+      value: "number",
+    },
+  );
+  const rows = useMemo(() => {
+    const getter = (b: (typeof point.breakdown)[number]): string | number => {
+      switch (sort.key) {
+        case "symbol":
+          return b.symbol;
+        case "close":
+          return b.close;
+        case "units":
+          return b.units;
+        default:
+          return b.value;
+      }
+    };
+    return sortBy([...point.breakdown], getter, sort.dir);
+  }, [point, sort]);
   return (
     <div className="overflow-hidden rounded-xl border border-border/60 bg-surface">
       <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 px-3 py-2">
@@ -344,10 +369,35 @@ export function PointBreakdown({
       <Table>
         <TableHeader>
           <TableRow className="bg-muted/30 hover:bg-muted/30">
-            <TableHead className="pl-3">Symbol</TableHead>
-            <TableHead className="text-right">Price</TableHead>
-            <TableHead className="text-right">Units</TableHead>
-            <TableHead className="pr-3 text-right">Value</TableHead>
+            <SortableTh
+              label="Symbol"
+              active={sort.key === "symbol"}
+              dir={sort.dir}
+              onClick={() => toggle("symbol")}
+              align="left"
+              kind="text"
+            />
+            <SortableTh
+              label="Price"
+              active={sort.key === "close"}
+              dir={sort.dir}
+              onClick={() => toggle("close")}
+              align="right"
+            />
+            <SortableTh
+              label="Units"
+              active={sort.key === "units"}
+              dir={sort.dir}
+              onClick={() => toggle("units")}
+              align="right"
+            />
+            <SortableTh
+              label="Value"
+              active={sort.key === "value"}
+              dir={sort.dir}
+              onClick={() => toggle("value")}
+              align="right"
+            />
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -418,6 +468,182 @@ function emptyDivEntry(): DivEntry {
     creditRows: [],
     divRows: [],
   };
+}
+
+type DivRow = DivEntry["divRows"][number];
+
+function DividendTable({ rows, scrip }: { rows: DivRow[]; scrip: string }) {
+  const { sort, toggle } = useSort<
+    "year" | "cash" | "bonus" | "total" | "announced" | "estCash" | "estBonus"
+  >(
+    {
+      key: "year",
+      dir: "desc",
+    },
+    {
+      year: "text",
+      cash: "number",
+      bonus: "number",
+      total: "number",
+      announced: "number",
+      estCash: "number",
+      estBonus: "number",
+    },
+  );
+  const sorted = useMemo(() => {
+    const getter = (r: DivRow): string | number => {
+      switch (sort.key) {
+        case "cash":
+          return r.cashDividend;
+        case "bonus":
+          return r.bonusShare;
+        case "total":
+          return r.totalDividend;
+        case "announced":
+          return r.announcementDate ?? "";
+        case "estCash":
+          return r.cashValue;
+        case "estBonus":
+          return r.bonusUnits;
+        default:
+          return r.fiscalYear ?? "";
+      }
+    };
+    return sortBy(rows, getter, sort.dir);
+  }, [rows, sort]);
+  const th = (
+    label: string,
+    key: "year" | "cash" | "bonus" | "total" | "announced" | "estCash" | "estBonus",
+    align: "left" | "right" = "right",
+    className = "",
+  ) => (
+    <SortableTh
+      label={label}
+      active={sort.key === key}
+      dir={sort.dir}
+      onClick={() => toggle(key)}
+      align={align}
+      className={className}
+      kind={key === "year" ? "text" : "number"}
+    />
+  );
+  return (
+    <div className="overflow-x-auto rounded-lg border border-border/60">
+      <Table>
+        <TableHeader>
+          <TableRow className="bg-muted/30 hover:bg-muted/30">
+            {th("Dividend", "year", "left", "pl-3")}
+            {th("Cash", "cash")}
+            {th("Bonus", "bonus")}
+            {th("Total", "total")}
+            {th("Announced", "announced", "left", "hidden sm:table-cell")}
+            {th("Est. cash (your units)", "estCash")}
+            {th("Est. bonus (your units)", "estBonus", "right", "pr-3")}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {sorted.map((r, i) => (
+            <TableRow key={`${scrip}-div-${r.fiscalYear ?? i}`}>
+              <TableCell className="num pl-3 font-medium">{r.fiscalYear ?? "-"}</TableCell>
+              <TableCell className="num text-right text-muted-foreground">
+                {r.cashDividend > 0 ? `${r.cashDividend}%` : "-"}
+              </TableCell>
+              <TableCell className="num text-right text-muted-foreground">
+                {r.bonusShare > 0 ? `${r.bonusShare}%` : "-"}
+              </TableCell>
+              <TableCell className="num text-right font-semibold">
+                {r.totalDividend > 0 ? `${r.totalDividend}%` : "-"}
+              </TableCell>
+              <TableCell className="num hidden text-left text-muted-foreground sm:table-cell">
+                {r.announcementDate ? formatDate(r.announcementDate) : "-"}
+              </TableCell>
+              <TableCell className="num text-right font-medium">
+                {r.cashValue > 0 ? formatNpr(r.cashValue) : "-"}
+              </TableCell>
+              <TableCell className="num pr-3 text-right font-medium text-primary">
+                {r.bonusUnits > 0 ? `+${formatQty(r.bonusUnits)}` : "-"}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+function CreditTable({ rows, scrip }: { rows: TransactionItem[]; scrip: string }) {
+  const { sort, toggle } = useSort<"date" | "description" | "units">(
+    {
+      key: "date",
+      dir: "desc",
+    },
+    { date: "number", description: "text", units: "number" },
+  );
+  const sorted = useMemo(() => {
+    const getter = (r: TransactionItem): string | number => {
+      switch (sort.key) {
+        case "description":
+          return r.historyDescription ?? "";
+        case "units":
+          return toNumber(r.creditQuantity);
+        default:
+          return String(r.transactionDate ?? "");
+      }
+    };
+    return sortBy(rows, getter, sort.dir);
+  }, [rows, sort]);
+  return (
+    <div className="overflow-x-auto rounded-lg border border-border/60">
+      <Table>
+        <TableHeader>
+          <TableRow className="bg-muted/30 hover:bg-muted/30">
+            <SortableTh
+              label="Credited"
+              active={sort.key === "date"}
+              dir={sort.dir}
+              onClick={() => toggle("date")}
+              align="left"
+              className="pl-3"
+            />
+            <SortableTh
+              label="Description"
+              active={sort.key === "description"}
+              dir={sort.dir}
+              onClick={() => toggle("description")}
+              align="left"
+              kind="text"
+            />
+            <SortableTh
+              label="Units"
+              active={sort.key === "units"}
+              dir={sort.dir}
+              onClick={() => toggle("units")}
+              align="right"
+              className="pr-3"
+            />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {sorted.map((r, i) => (
+            <TableRow key={`${scrip}-credit-${String(r.transactionDate)}-${i}`}>
+              <TableCell className="num whitespace-nowrap pl-3 text-xs">
+                {formatDate(r.transactionDate)}
+              </TableCell>
+              <TableCell
+                className="max-w-64 truncate text-xs text-muted-foreground"
+                title={r.historyDescription}
+              >
+                {r.historyDescription ?? "-"}
+              </TableCell>
+              <TableCell className="num pr-3 text-right font-semibold text-gain">
+                +{formatQty(r.creditQuantity)}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
 }
 
 /** Actual credits from your demat movement history: bonuses, mergers and rights (IPO allotments excluded). */
@@ -704,86 +930,11 @@ function DividendHistoryTab({ onPickScrip }: { onPickScrip: (scrip: string) => v
                 </summary>
                 <div className="space-y-3 border-t border-border/60 p-3">
                   {entry.divRows.length > 0 ? (
-                    <div className="overflow-x-auto rounded-lg border border-border/60">
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="bg-muted/30 hover:bg-muted/30">
-                            <TableHead className="pl-3">Dividend</TableHead>
-                            <TableHead className="text-right">Cash</TableHead>
-                            <TableHead className="text-right">Bonus</TableHead>
-                            <TableHead className="text-right">Total</TableHead>
-                            <TableHead className="hidden text-left sm:table-cell">
-                              Announced
-                            </TableHead>
-                            <TableHead className="text-right">Est. cash (your units)</TableHead>
-                            <TableHead className="pr-3 text-right">
-                              Est. bonus (your units)
-                            </TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {entry.divRows.map((r, i) => (
-                            <TableRow key={`${entry.scrip}-div-${r.fiscalYear ?? i}`}>
-                              <TableCell className="num pl-3 font-medium">
-                                {r.fiscalYear ?? "-"}
-                              </TableCell>
-                              <TableCell className="num text-right text-muted-foreground">
-                                {r.cashDividend > 0 ? `${r.cashDividend}%` : "-"}
-                              </TableCell>
-                              <TableCell className="num text-right text-muted-foreground">
-                                {r.bonusShare > 0 ? `${r.bonusShare}%` : "-"}
-                              </TableCell>
-                              <TableCell className="num text-right font-semibold">
-                                {r.totalDividend > 0 ? `${r.totalDividend}%` : "-"}
-                              </TableCell>
-                              <TableCell className="num hidden text-left text-muted-foreground sm:table-cell">
-                                {r.announcementDate ? formatDate(r.announcementDate) : "-"}
-                              </TableCell>
-                              <TableCell className="num text-right font-medium">
-                                {r.cashValue > 0 ? formatNpr(r.cashValue) : "-"}
-                              </TableCell>
-                              <TableCell className="num pr-3 text-right font-medium text-primary">
-                                {r.bonusUnits > 0 ? `+${formatQty(r.bonusUnits)}` : "-"}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
+                    <DividendTable rows={entry.divRows} scrip={entry.scrip} />
                   ) : null}
 
                   {entry.creditRows.length > 0 ? (
-                    <div className="overflow-x-auto rounded-lg border border-border/60">
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="bg-muted/30 hover:bg-muted/30">
-                            <TableHead className="pl-3">Credited</TableHead>
-                            <TableHead>Description</TableHead>
-                            <TableHead className="pr-3 text-right">Units</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {entry.creditRows.map((r, i) => (
-                            <TableRow
-                              key={`${entry.scrip}-credit-${String(r.transactionDate)}-${i}`}
-                            >
-                              <TableCell className="num whitespace-nowrap pl-3 text-xs">
-                                {formatDate(r.transactionDate)}
-                              </TableCell>
-                              <TableCell
-                                className="max-w-64 truncate text-xs text-muted-foreground"
-                                title={r.historyDescription}
-                              >
-                                {r.historyDescription ?? "-"}
-                              </TableCell>
-                              <TableCell className="num pr-3 text-right font-semibold text-gain">
-                                +{formatQty(r.creditQuantity)}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
+                    <CreditTable rows={entry.creditRows} scrip={entry.scrip} />
                   ) : null}
                 </div>
               </details>

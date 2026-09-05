@@ -19,6 +19,7 @@ import type {
   MfProduct,
 } from "@/lib/mutual-funds/types";
 import { cn } from "@/lib/utils";
+import { Panel } from "@/components/ui/panel";
 import { discountPct, referenceNav, type ManagerAgg } from "./mf-math";
 import { StockMap } from "./stock-map";
 
@@ -171,7 +172,7 @@ export function ManagerDetail({
         <ArrowLeft className="size-3.5" /> All managers
       </button>
 
-      <section className="overflow-hidden rounded-2xl border border-border/70 bg-card">
+      <Panel padding="none" className="overflow-hidden" as="section">
         <div className="bg-gradient-to-br from-primary/15 via-transparent to-transparent p-4 sm:p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
@@ -246,18 +247,18 @@ export function ManagerDetail({
             </div>
           </div>
         ) : null}
-      </section>
+      </Panel>
 
       {/* House stock map */}
       {stockMapLoading ? (
-        <section className="rounded-2xl border border-border/70 bg-card p-4">
+        <Panel as="section">
           <div className="h-5 w-44 animate-pulse rounded-lg bg-muted" />
           <div className="mt-3 space-y-2.5">
             {[0, 1, 2, 3, 4].map((i) => (
               <div key={i} className="h-4 animate-pulse rounded-lg bg-muted/60" />
             ))}
           </div>
-        </section>
+        </Panel>
       ) : stockMap && stockMap.slices.length > 0 ? (
         <StockMap
           map={stockMap}
@@ -267,7 +268,7 @@ export function ManagerDetail({
       ) : null}
 
       {/* Schemes */}
-      <section className="rounded-2xl border border-border/70 bg-card p-4">
+      <Panel as="section">
         <h3 className="flex items-center gap-2 font-display text-sm font-semibold">
           <Landmark className="size-4 text-primary" /> Schemes
           <span className="num rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
@@ -322,11 +323,11 @@ export function ManagerDetail({
             </li>
           ))}
         </ul>
-      </section>
+      </Panel>
 
       {/* House facts */}
       {facts && facts.facts.length > 0 ? (
-        <section className="rounded-2xl border border-border/70 bg-card p-4">
+        <Panel as="section">
           <h3 className="flex items-center gap-2 font-display text-sm font-semibold">
             <ScrollText className="size-4 text-primary" /> About the house
           </h3>
@@ -363,12 +364,12 @@ export function ManagerDetail({
               </ul>
             </div>
           ) : null}
-        </section>
+        </Panel>
       ) : null}
 
       {/* Beyond mutual funds */}
       {otherProducts.length > 0 ? (
-        <section className="rounded-2xl border border-border/70 bg-card p-4">
+        <Panel as="section">
           <h3 className="flex items-center gap-2 font-display text-sm font-semibold">
             <Building2 className="size-4 text-primary" /> Also from this house
           </h3>
@@ -388,12 +389,12 @@ export function ManagerDetail({
             {otherProducts.length === 1 ? "" : "s"} beyond mutual funds, SIP, PMS, DP and issue
             management.
           </p>
-        </section>
+        </Panel>
       ) : null}
 
       {/* Documents & portals */}
       {detail && (detail.portals.length > 0 || detail.documents.length > 0) ? (
-        <section className="rounded-2xl border border-border/70 bg-card p-4">
+        <Panel as="section">
           <h3 className="flex items-center gap-2 font-display text-sm font-semibold">
             <ScrollText className="size-4 text-primary" /> Documents & portals
             <span className="num rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
@@ -450,7 +451,7 @@ export function ManagerDetail({
               +{detail.documents.length - 8} more documents in the feed
             </p>
           ) : null}
-        </section>
+        </Panel>
       ) : null}
     </div>
   );

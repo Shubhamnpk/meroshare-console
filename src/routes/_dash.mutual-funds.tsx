@@ -3,13 +3,14 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { PiggyBank } from "lucide-react";
 import { ErrorBlock, EmptyBlock, LoadingBlock } from "@/components/states";
+import { BackButton as HistoryBackButton } from "@/components/back-button";
 import { ScripSheet } from "@/components/market/scrip-sheet";
-import { FundBrowse } from "@/components/mutual-funds/fund-browse";
-import { FundDetail, type PeerRow } from "@/components/mutual-funds/fund-detail";
-import { FundHeatmap, type HeatRow } from "@/components/mutual-funds/fund-heatmap";
-import { ManagerDetail, ManagerGrid } from "@/components/mutual-funds/manager-views";
-import { MarketView } from "@/components/mutual-funds/market-view";
-import { aggregateManager, discountPct, referenceNav } from "@/components/mutual-funds/mf-math";
+import { FundBrowse } from "@/components/tools/fund-browse";
+import { FundDetail, type PeerRow } from "@/components/tools/fund-detail";
+import { FundHeatmap, type HeatRow } from "@/components/tools/fund-heatmap";
+import { ManagerDetail, ManagerGrid } from "@/components/tools/manager-views";
+import { MarketView } from "@/components/tools/market-view";
+import { aggregateManager, discountPct, referenceNav } from "@/components/tools/mf-math";
 import {
   mfApprovalsQuery,
   mfDebenturesQuery,
@@ -46,13 +47,12 @@ export const Route = createFileRoute("/_dash/mutual-funds")({
       { property: "og:title", content: "Mutual Funds | MeroShare Investor Console" },
       {
         property: "og:description",
-        content: "Nepali mutual fund schemes with NAV tracking, discount analytics and manager views.",
+        content:
+          "Nepali mutual fund schemes with NAV tracking, discount analytics and manager views.",
       },
       ogImage(),
     ],
-    links: [
-      canonicalLink("/mutual-funds"),
-    ],
+    links: [canonicalLink("/mutual-funds")],
   }),
   component: MutualFundsPage,
 });
@@ -199,6 +199,7 @@ function MutualFundsPage() {
 
   return (
     <div className="space-y-5">
+      <HistoryBackButton fallback="/tools" />
       <div className="flex items-center gap-3">
         <span className="flex size-11 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary">
           <PiggyBank className="size-5" />

@@ -63,7 +63,7 @@ function str(value: unknown): string | null {
  * On failure the last good value is served (marked stale); if nothing was ever
  * cached the caller receives `null` and renders a degraded state.
  */
-async function feedJson<T>(
+export async function feedJson<T>(
   url: string,
   ttlMs: number,
 ): Promise<{ data: T | null; stale: boolean }> {
@@ -73,13 +73,22 @@ async function feedJson<T>(
   if (hit && hit.expires > now) return { data: hit.value as T, stale: false };
 
   try {
-    const res = await fetch(url, {
-      headers: { Accept: "application/json" },
-    });
-    if (!res.ok) throw new Error(`feed ${res.status}`);
-    const data = (await res.json()) as T;
-    cache.set(key, { value: data, expires: now + ttlMs, fetchedAt: now });
-    return { data, stale: false };
+    // Give the upstream 8s; slower than that and it counts as failed so the
+    // fallback source (or stale cache) takes over instead of hanging the page.
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    try {
+      const res = await fetch(url, {
+        headers: { Accept: "application/json" },
+        signal: ctrl.signal,
+      });
+      if (!res.ok) throw new Error(`feed ${res.status}`);
+      const data = (await res.json()) as T;
+      cache.set(key, { value: data, expires: now + ttlMs, fetchedAt: now });
+      return { data, stale: false };
+    } finally {
+      clearTimeout(timer);
+    }
   } catch {
     if (hit) return { data: hit.value as T, stale: true };
     return { data: null, stale: true };
@@ -158,41 +167,56 @@ async function getSectorMap(): Promise<Map<string, string>> {
 }
 
 export async function getLivePrices(): Promise<{ prices: LivePrice[]; stale: boolean }> {
-  const [{ data, stale }, sectors] = await Promise.all([
-    withFallback(bitnepalJson<Rec[]>("/prices/today", TTL.fast), () =>
-      feedJson<Rec[]>(`${YONEPSE_BASE}/data/market/live.json`, TTL.fast),
-    ),
+  const [primary, yonepseFile, sectors] = await Promise.all([
+    bitnepalJson<Rec[]>("/prices/today", TTL.fast),
+    feedJson<Rec[]>(`${YONEPSE_BASE}/data/market/live.json`, TTL.fast),
     getSectorMap(),
   ]);
   // Accept both shapes: bitnepal (lastUpdatedPrice/…) and YONEPSE (ltp/…).
-  const prices = (data ?? []).flatMap((row): LivePrice[] => {
-    const symbol = str(row["symbol"]);
-    if (!symbol) return [];
-    const ltp = num(row["lastUpdatedPrice"]) || num(row["closePrice"]) || num(row["ltp"]);
-    const previousClose = num(row["previousDayClosePrice"]) || num(row["previous_close"]);
-    return [
-      {
-        symbol: symbol.toUpperCase(),
-        name: str(row["securityName"]) ?? str(row["name"]) ?? symbol,
-        ltp,
-        previousClose,
-        change: num(row["change"]) || ltp - previousClose,
-        percentChange:
-          num(row["percentChange"]) ||
-          num(row["percent_change"]) ||
-          (previousClose > 0 ? ((ltp - previousClose) / previousClose) * 100 : 0),
-        high: num(row["highPrice"]) || num(row["high"]),
-        low: num(row["lowPrice"]) || num(row["low"]),
-        volume: num(row["totalTradedQuantity"]) || num(row["volume"]),
-        turnover: num(row["totalTradedValue"]) || num(row["turnover"]),
-        trades: num(row["totalTrades"]) || num(row["trades"]),
-        lastUpdated: str(row["lastUpdatedTime"]) ?? str(row["last_updated"]),
-        sector: sectors.get(symbol.toUpperCase()) ?? null,
-        fiftyTwoWeekHigh: row["fiftyTwoWeekHigh"] == null ? null : num(row["fiftyTwoWeekHigh"]),
-        fiftyTwoWeekLow: row["fiftyTwoWeekLow"] == null ? null : num(row["fiftyTwoWeekLow"]),
-      },
-    ];
-  });
+  const parse = (rows: Rec[]): LivePrice[] =>
+    rows.flatMap((row): LivePrice[] => {
+      const symbol = str(row["symbol"]);
+      if (!symbol) return [];
+      const ltp = num(row["lastUpdatedPrice"]) || num(row["closePrice"]) || num(row["ltp"]);
+      const previousClose = num(row["previousDayClosePrice"]) || num(row["previous_close"]);
+      return [
+        {
+          symbol: symbol.toUpperCase(),
+          name: str(row["securityName"]) ?? str(row["name"]) ?? symbol,
+          ltp,
+          previousClose,
+          change: num(row["change"]) || ltp - previousClose,
+          percentChange:
+            num(row["percentChange"]) ||
+            num(row["percent_change"]) ||
+            (previousClose > 0 ? ((ltp - previousClose) / previousClose) * 100 : 0),
+          high: num(row["highPrice"]) || num(row["high"]),
+          low: num(row["lowPrice"]) || num(row["low"]),
+          volume: num(row["totalTradedQuantity"]) || num(row["volume"]),
+          turnover: num(row["totalTradedValue"]) || num(row["turnover"]),
+          trades: num(row["totalTrades"]) || num(row["trades"]),
+          lastUpdated: str(row["lastUpdatedTime"]) ?? str(row["last_updated"]),
+          sector: sectors.get(symbol.toUpperCase()) ?? null,
+          fiftyTwoWeekHigh: row["fiftyTwoWeekHigh"] == null ? null : num(row["fiftyTwoWeekHigh"]),
+          fiftyTwoWeekLow: row["fiftyTwoWeekLow"] == null ? null : num(row["fiftyTwoWeekLow"]),
+          assetType: str(row["asset_type"]),
+        },
+      ];
+    });
+  const prices = parse(primary.data ?? yonepseFile.data ?? []);
+  const stale = primary.data ? primary.stale : yonepseFile.stale;
+  // Open-end mutual fund rows live in the same file carrying their daily NAV
+  // (ltp), previous NAV and day change — overlay them so they win even when
+  // the primary mirror is serving.
+  if (yonepseFile.data) {
+    const bySymbol = new Map(prices.map((p) => [p.symbol, p]));
+    for (const row of parse(
+      yonepseFile.data.filter((r) => str(r["asset_type"]) === "open_ended_mutual_fund"),
+    )) {
+      bySymbol.set(row.symbol, row);
+    }
+    return { prices: [...bySymbol.values()], stale };
+  }
   return { prices, stale };
 }
 
@@ -965,9 +989,17 @@ async function archiveMonthBars(symbol: string, month: string): Promise<DailyBar
 
   let bars: DailyBar[] = [];
   try {
-    const res = await fetch(`${YONEPSE_BASE}/data/ltp/monthly/${month}.json`, {
-      headers: { Accept: "application/json" },
-    });
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    let res: Response;
+    try {
+      res = await fetch(`${YONEPSE_BASE}/data/ltp/monthly/${month}.json`, {
+        headers: { Accept: "application/json" },
+        signal: ctrl.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
     if (!res.ok) throw new Error(`archive ${res.status}`);
     const doc = (await res.json()) as Rec;
     const dates = (doc["dates"] ?? []) as string[];

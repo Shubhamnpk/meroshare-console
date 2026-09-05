@@ -14,6 +14,7 @@ import {
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { BackButton } from "@/components/back-button";
 import { ErrorBlock, LoadingBlock } from "@/components/states";
 import { DeltaPill } from "@/components/stat-card";
 import { ScripSheet } from "@/components/market/scrip-sheet";
@@ -48,9 +49,7 @@ export const Route = createFileRoute("/_dash/best-shares")({
       { name: "twitter:card", content: "summary" },
       ogImage(),
     ],
-    links: [
-      canonicalLink("/best-shares"),
-    ],
+    links: [canonicalLink("/best-shares")],
   }),
   component: BestSharesPage,
 });
@@ -95,7 +94,8 @@ const RED_FLAG_SHORT: Record<RedFlag, string> = {
 // ---------------------------------------------------------------------------
 
 type ShortTermSortKey = "score" | "percentChange" | "volume" | "rsi" | "turnover";
-type LongTermSortKey = "score" | "pe" | "pb" | "roe" | "dividendYield" | "dividendStreak" | "volume";
+type LongTermSortKey =
+  "score" | "pe" | "pb" | "roe" | "dividendYield" | "dividendStreak" | "volume";
 
 function sortStocks<T extends RankedStock>(
   stocks: T[],
@@ -272,6 +272,7 @@ function BestSharesPage() {
 
   return (
     <div className="space-y-5">
+      <BackButton fallback="/tools" />
       {/* Header */}
       <div>
         <h1 className="font-display text-2xl font-semibold sm:text-3xl">Best Shares</h1>
@@ -438,31 +439,39 @@ function BestSharesPage() {
                     />
                   ),
                 )
-              : (["score", "pe", "pb", "roe", "dividendYield", "dividendStreak", "volume"] as LongTermSortKey[]).map(
-                  (key) => (
-                    <SortButton
-                      key={key}
-                      label={
-                        key === "score"
-                          ? "Score"
-                          : key === "pe"
-                            ? "P/E"
-                            : key === "pb"
-                              ? "P/B"
-                              : key === "roe"
-                                ? "ROE"
-                                : key === "dividendYield"
-                                  ? "Yield"
-                                  : key === "dividendStreak"
-                                    ? "Streak"
-                                    : "Volume"
-                      }
-                      active={sortKey === key}
-                      dir={sortDir}
-                      onClick={() => toggleSort(key)}
-                    />
-                  ),
-                )}
+              : (
+                  [
+                    "score",
+                    "pe",
+                    "pb",
+                    "roe",
+                    "dividendYield",
+                    "dividendStreak",
+                    "volume",
+                  ] as LongTermSortKey[]
+                ).map((key) => (
+                  <SortButton
+                    key={key}
+                    label={
+                      key === "score"
+                        ? "Score"
+                        : key === "pe"
+                          ? "P/E"
+                          : key === "pb"
+                            ? "P/B"
+                            : key === "roe"
+                              ? "ROE"
+                              : key === "dividendYield"
+                                ? "Yield"
+                                : key === "dividendStreak"
+                                  ? "Streak"
+                                  : "Volume"
+                    }
+                    active={sortKey === key}
+                    dir={sortDir}
+                    onClick={() => toggleSort(key)}
+                  />
+                ))}
           </div>
 
           {/* Table */}
@@ -600,7 +609,8 @@ function BestSharesPage() {
                           )}
                         </td>
                         <td className="num hidden px-3 py-3 text-right text-xs md:table-cell">
-                          {stock.longTerm?.dividendStreak != null && stock.longTerm.dividendStreak > 0 ? (
+                          {stock.longTerm?.dividendStreak != null &&
+                          stock.longTerm.dividendStreak > 0 ? (
                             <span
                               className={cn(
                                 stock.longTerm.dividendStreak >= 5
@@ -630,19 +640,21 @@ function BestSharesPage() {
                         >
                           {tab === "short" ? stock.shortTerm?.signal : stock.longTerm?.signal}
                         </span>
-                        {tab === "long" && stock.longTerm?.redFlags && stock.longTerm.redFlags.length > 0 && (
-                          <div className="flex flex-wrap justify-center gap-0.5">
-                            {stock.longTerm.redFlags.map((flag) => (
-                              <span
-                                key={flag}
-                                className="inline-block rounded bg-red-500/15 px-1 py-px text-[0.55rem] font-medium text-red-400"
-                                title={RED_FLAG_LABELS[flag]}
-                              >
-                                {RED_FLAG_SHORT[flag]}
-                              </span>
-                            ))}
-                          </div>
-                        )}
+                        {tab === "long" &&
+                          stock.longTerm?.redFlags &&
+                          stock.longTerm.redFlags.length > 0 && (
+                            <div className="flex flex-wrap justify-center gap-0.5">
+                              {stock.longTerm.redFlags.map((flag) => (
+                                <span
+                                  key={flag}
+                                  className="inline-block rounded bg-red-500/15 px-1 py-px text-[0.55rem] font-medium text-red-400"
+                                  title={RED_FLAG_LABELS[flag]}
+                                >
+                                  {RED_FLAG_SHORT[flag]}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                       </div>
                     </td>
                   </tr>

@@ -35,9 +35,7 @@ export const Route = createFileRoute("/releases")({
       },
       ogImage(),
     ],
-    links: [
-      canonicalLink("/releases"),
-    ],
+    links: [canonicalLink("/releases")],
   }),
   component: ReleasesPage,
 });

@@ -71,9 +71,7 @@ export const Route = createFileRoute("/")({
       },
       ogImage(),
     ],
-    links: [
-      canonicalLink("/"),
-    ],
+    links: [canonicalLink("/")],
   }),
   component: LoginPage,
 });

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Archive, CalendarRange, Loader2, Rocket } from "lucide-react";
+import { Archive, CalendarRange, ClipboardList, Loader2, Rocket } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,29 +40,32 @@ import {
   toNumber,
 } from "@/lib/format";
 import type { ApplicableIssue } from "@/lib/meroshare/types";
+import type { IpoArchiveRow } from "@/lib/nepse/types";
 import type { MfPipelineType } from "@/lib/mutual-funds/types";
 import { sameCompany } from "@/lib/notifications";
+import { ApplicationReports } from "@/components/tools/application-reports";
 import { cn } from "@/lib/utils";
 import { ogImage, canonicalLink } from "@/lib/seo";
 
 export const Route = createFileRoute("/_dash/ipo")({
+  validateSearch: (search: Record<string, unknown>): { tab?: string | undefined } => ({
+    tab: typeof search["tab"] === "string" ? search["tab"] : undefined,
+  }),
   head: () => ({
     meta: [
-      { title: "Apply for Issue | MeroShare Investor Console" },
+      { title: "IPO | MeroShare Investor Console" },
       {
         name: "description",
-        content: "Browse open IPO, FPO and right share issues and submit your ASBA application.",
+        content: "Apply for open IPO, FPO and right share issues and track your ASBA applications.",
       },
-      { property: "og:title", content: "Apply for Issue | MeroShare Investor Console" },
+      { property: "og:title", content: "IPO | MeroShare Investor Console" },
       {
         property: "og:description",
-        content: "Browse open IPO, FPO and right share issues and submit your ASBA application.",
+        content: "Apply for open IPO, FPO and right share issues and track your ASBA applications.",
       },
       ogImage(),
     ],
-    links: [
-      canonicalLink("/ipo"),
-    ],
+    links: [canonicalLink("/ipo")],
   }),
   component: IpoPage,
 });
@@ -105,6 +108,84 @@ function CountdownChip({ target }: { target: string | undefined }) {
   );
 }
 
+/** Split announced-but-not-open issues from both sources, deduped by company. */
+function upcomingMerged(
+  open: ApplicableIssue[],
+  calendarList: ApplicableIssue[],
+  archived: IpoArchiveRow[],
+) {
+  const listedNames = [...open, ...calendarList].map((i) => i.companyName || i.scrip || "");
+  const cdscUpcoming = calendarList.filter((i) => statusGroup(i) === "upcoming");
+  const known = [...listedNames, ...cdscUpcoming.map((i) => i.companyName || i.scrip || "")];
+  const archUpcoming = archived.filter(
+    (row) => !known.some((name) => sameCompany(name, row.company)),
+  );
+  return { cdscUpcoming, archUpcoming };
+}
+
+function UpcomingSection({
+  cdscUpcoming,
+  archUpcoming,
+}: {
+  cdscUpcoming: ApplicableIssue[];
+  archUpcoming: IpoArchiveRow[];
+}) {
+  if (cdscUpcoming.length === 0 && archUpcoming.length === 0) return null;
+  return (
+    <section className="space-y-2">
+      <h2 className="font-display text-base font-semibold">
+        Upcoming{" "}
+        <span className="num rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+          {cdscUpcoming.length + archUpcoming.length}
+        </span>
+      </h2>
+      <ul className="grid gap-2 md:grid-cols-2">
+        {cdscUpcoming.map((issue) => (
+          <li
+            key={issue.companyShareId}
+            className="rounded-xl border border-border/60 bg-surface p-3"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold">{issue.companyName}</p>
+                <p className="num text-xs text-muted-foreground">
+                  {issue.scrip} · {issue.shareTypeName} {issue.shareGroupName}
+                </p>
+              </div>
+              <CountdownChip target={issue.issueOpenDate} />
+            </div>
+            <p className="num mt-2 text-xs text-muted-foreground">
+              Opens {formatDate(issue.issueOpenDate)} · Rs {formatNumber(issue.sharePerUnit)}/unit
+            </p>
+          </li>
+        ))}
+        {archUpcoming.map((row, i) => (
+          <li
+            key={`arch-${row.company}-${i}`}
+            className="rounded-xl border border-border/60 bg-surface p-3"
+          >
+            <p className="text-sm font-semibold">{row.company}</p>
+            <p className="num mt-1 text-xs text-muted-foreground">
+              {row.units ? `${row.units} units` : "Units TBA"}
+              {row.dateRange ? ` · ${row.dateRange}` : ""}
+            </p>
+            {row.url ? (
+              <a
+                href={row.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 inline-block text-xs font-medium text-primary hover:underline"
+              >
+                Announcement →
+              </a>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function CalendarView() {
   const issues = useQuery(currentIssuesQuery());
   const archive = useQuery(ipoArchiveQuery());
@@ -118,10 +199,12 @@ function CalendarView() {
 
   // CDSC rarely lists anything as upcoming and only carries open issues -
   // fill both gaps with archive announcements it doesn't carry yet.
-  const listedNames = list.map((i) => i.companyName || i.scrip || "");
-  const archiveUpcoming = (archive.data?.upcoming ?? []).filter(
-    (row) => !listedNames.some((name) => sameCompany(name, row.company)),
+  const { archUpcoming: archiveUpcoming } = upcomingMerged(
+    list,
+    list,
+    archive.data?.upcoming ?? [],
   );
+  const listedNames = list.map((i) => i.companyName || i.scrip || "");
   const archivePast = (archive.data?.past ?? [])
     .filter((row) => !listedNames.some((name) => sameCompany(name, row.company)))
     .slice(0, 10);
@@ -178,59 +261,7 @@ function CalendarView() {
             )}
           </section>
 
-          <section className="space-y-2">
-            <h2 className="font-display text-base font-semibold">Upcoming</h2>
-            {groups.upcoming.length === 0 && archiveUpcoming.length === 0 && !archive.isLoading ? (
-              <p className="rounded-xl border border-border/60 bg-surface px-3 py-2.5 text-sm text-muted-foreground">
-                No announced issues yet.
-              </p>
-            ) : (
-              <ul className="grid gap-2 md:grid-cols-2">
-                {groups.upcoming.map((issue) => (
-                  <li
-                    key={issue.companyShareId}
-                    className="rounded-xl border border-border/60 bg-surface p-3"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold">{issue.companyName}</p>
-                        <p className="num text-xs text-muted-foreground">
-                          {issue.scrip} · {issue.shareTypeName} {issue.shareGroupName}
-                        </p>
-                      </div>
-                      <CountdownChip target={issue.issueOpenDate} />
-                    </div>
-                    <p className="num mt-2 text-xs text-muted-foreground">
-                      Opens {formatDate(issue.issueOpenDate)} · Rs{" "}
-                      {formatNumber(issue.sharePerUnit)}/unit
-                    </p>
-                  </li>
-                ))}
-                {archiveUpcoming.map((row, i) => (
-                  <li
-                    key={`arch-${row.company}-${i}`}
-                    className="rounded-xl border border-border/60 bg-surface p-3"
-                  >
-                    <p className="text-sm font-semibold">{row.company}</p>
-                    <p className="num mt-1 text-xs text-muted-foreground">
-                      {row.units ? `${row.units} units` : "Units TBA"}
-                      {row.dateRange ? ` · ${row.dateRange}` : ""}
-                    </p>
-                    {row.url ? (
-                      <a
-                        href={row.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-2 inline-block text-xs font-medium text-primary hover:underline"
-                      >
-                        Announcement →
-                      </a>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+          <UpcomingSection cdscUpcoming={groups.upcoming} archUpcoming={archiveUpcoming} />
 
           <section className="space-y-2">
             <h2 className="font-display text-base font-semibold">Recently closed</h2>
@@ -321,11 +352,24 @@ function ArchiveView() {
               {pipeline.items.slice(0, 8).map((item) => (
                 <li
                   key={`${item.company}-${item.units ?? ""}-${item.appliedDate ?? ""}`}
-                  className="rounded-xl border border-border/60 bg-surface p-3"
+                  className="min-w-0 rounded-xl border border-border/60 bg-surface p-3"
                   title={item.remarks ?? undefined}
                 >
-                  <p className="truncate text-sm font-semibold">{item.company}</p>
-                  <p className="num mt-1 text-xs text-muted-foreground">
+                  <p className="truncate text-sm font-semibold" title={item.company}>
+                    {item.company}
+                  </p>
+                  <p
+                    className="num mt-1 truncate text-xs text-muted-foreground"
+                    title={
+                      [
+                        item.units ? `${formatNumber(item.units)} units` : null,
+                        item.sector,
+                        item.appliedDate ? `applied ${item.appliedDate}` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ") || undefined
+                    }
+                  >
                     {item.units ? `${formatNumber(item.units)} units` : ""}
                     {item.sector ? ` · ${item.sector}` : ""}
                     {item.appliedDate ? ` · applied ${item.appliedDate}` : ""}
@@ -359,10 +403,23 @@ function ArchiveView() {
                 {data.past.map((row, i) => (
                   <li
                     key={`${row.company}-${i}`}
-                    className="rounded-xl border border-border/60 bg-surface p-3"
+                    className="min-w-0 rounded-xl border border-border/60 bg-surface p-3"
                   >
-                    <p className="truncate text-sm font-semibold">{row.company}</p>
-                    <p className="num mt-1 text-xs text-muted-foreground">
+                    <p className="truncate text-sm font-semibold" title={row.company}>
+                      {row.company}
+                    </p>
+                    <p
+                      className="num mt-1 truncate text-xs text-muted-foreground"
+                      title={
+                        [
+                          row.units ? `${row.units} units` : null,
+                          row.dateRange,
+                          row.announcementDate,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ") || undefined
+                      }
+                    >
                       {row.units ? `${row.units} units` : ""}
                       {row.dateRange ? ` · ${row.dateRange}` : ""}
                       {row.announcementDate ? ` · ${row.announcementDate}` : ""}
@@ -386,7 +443,8 @@ function IpoPage() {
   const queryClient = useQueryClient();
   const issues = useQuery(applicableIssuesQuery());
   const banks = useQuery(banksQuery());
-  const [tab, setTab] = useState("apply");
+  const { tab: tabParam } = Route.useSearch();
+  const [tab, setTab] = useState(tabParam ?? "apply");
   const [active, setActive] = useState<ApplicableIssue | null>(null);
   const [bankId, setBankId] = useState<string>("");
   const [kitta, setKitta] = useState("10");
@@ -406,6 +464,7 @@ function IpoPage() {
       setPin("");
       void queryClient.invalidateQueries({ queryKey: ["applicable-issues"] });
       void queryClient.invalidateQueries({ queryKey: ["application-reports"] });
+      setTab("applications");
     },
     onError: (error) => toast.error(errorMessage(error, "Could not submit the application.")),
   });
@@ -428,24 +487,34 @@ function IpoPage() {
   };
 
   const list = issues.data ?? [];
+  const calendar = useQuery(currentIssuesQuery());
+  const archive = useQuery(ipoArchiveQuery());
+  const { cdscUpcoming, archUpcoming } = upcomingMerged(
+    list,
+    calendar.data ?? [],
+    archive.data?.upcoming ?? [],
+  );
 
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="font-display text-2xl font-semibold sm:text-3xl">Issues</h1>
+        <h1 className="font-display text-2xl font-semibold sm:text-3xl">IPO</h1>
         <p className="mt-1 hidden text-sm text-muted-foreground sm:block">
-          Apply for open issues, browse the issue calendar, or check the archive.
+          Apply for open issues and track your applications.
         </p>
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
           <TabsTrigger value="apply">Apply for issue</TabsTrigger>
+          <TabsTrigger value="applications">
+            <ClipboardList className="hidden size-4 sm:block" /> My applications
+          </TabsTrigger>
           <TabsTrigger value="calendar">
-            <CalendarRange className="size-4" /> Calendar
+            <CalendarRange className="hidden size-4 sm:block" /> Calendar
           </TabsTrigger>
           <TabsTrigger value="archive">
-            <Archive className="size-4" /> Archive
+            <Archive className="hidden size-4 sm:block" /> Archive
           </TabsTrigger>
         </TabsList>
 
@@ -454,58 +523,81 @@ function IpoPage() {
             <SkeletonCards count={4} />
           ) : issues.isError ? (
             <ErrorBlock error={issues.error} retry={() => void issues.refetch()} />
-          ) : list.length === 0 ? (
+          ) : list.length === 0 && cdscUpcoming.length === 0 && archUpcoming.length === 0 ? (
             <EmptyBlock
               title="No open issues"
               description="Check back when a new issue opens."
               icon={<Rocket className="size-6" />}
             />
           ) : (
-            <ul className="grid gap-3 md:grid-cols-2">
-              {list.map((issue) => (
-                <li
-                  key={issue.companyShareId}
-                  className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-card p-4"
-                >
-                  <div>
-                    <p className="font-display text-base font-semibold">{issue.companyName}</p>
-                    <p className="num text-xs text-muted-foreground">
-                      {issue.scrip} · {issue.shareTypeName} {issue.shareGroupName}
-                    </p>
-                  </div>
-                  <dl className="grid grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <dt className="text-muted-foreground">Opens</dt>
-                      <dd>{formatDate(issue.issueOpenDate)}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-muted-foreground">Closes</dt>
-                      <dd>{formatDate(issue.issueCloseDate)}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-muted-foreground">Price / unit</dt>
-                      <dd className="num">Rs {formatNumber(issue.sharePerUnit)}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-muted-foreground">Units</dt>
-                      <dd className="num">
-                        {formatNumber(issue.minUnit)} – {formatNumber(issue.maxUnit)}
-                      </dd>
-                    </div>
-                  </dl>
-                  <Button
-                    className="mt-auto"
-                    onClick={() => {
-                      setActive(issue);
-                      setKitta(String(issue.minUnit ?? 10));
-                    }}
-                  >
-                    Apply
-                  </Button>
-                </li>
-              ))}
-            </ul>
+            <div className="space-y-6">
+              <section className="space-y-2">
+                <h2 className="flex items-center gap-2 font-display text-base font-semibold">
+                  Open now{" "}
+                  <span className="num rounded-full bg-gain/15 px-2 py-0.5 text-xs font-semibold text-gain">
+                    {list.length}
+                  </span>
+                </h2>
+                {list.length === 0 ? (
+                  <p className="rounded-xl border border-border/60 bg-surface px-3 py-2.5 text-sm text-muted-foreground">
+                    Nothing open right now. Upcoming issues are listed below.
+                  </p>
+                ) : (
+                  <ul className="grid gap-3 md:grid-cols-2">
+                    {list.map((issue) => (
+                      <li
+                        key={issue.companyShareId}
+                        className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-card p-4"
+                      >
+                        <div>
+                          <p className="font-display text-base font-semibold">
+                            {issue.companyName}
+                          </p>
+                          <p className="num text-xs text-muted-foreground">
+                            {issue.scrip} · {issue.shareTypeName} {issue.shareGroupName}
+                          </p>
+                        </div>
+                        <dl className="grid grid-cols-2 gap-2 text-xs">
+                          <div>
+                            <dt className="text-muted-foreground">Opens</dt>
+                            <dd>{formatDate(issue.issueOpenDate)}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-muted-foreground">Closes</dt>
+                            <dd>{formatDate(issue.issueCloseDate)}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-muted-foreground">Price / unit</dt>
+                            <dd className="num">Rs {formatNumber(issue.sharePerUnit)}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-muted-foreground">Units</dt>
+                            <dd className="num">
+                              {formatNumber(issue.minUnit)} – {formatNumber(issue.maxUnit)}
+                            </dd>
+                          </div>
+                        </dl>
+                        <Button
+                          className="mt-auto"
+                          onClick={() => {
+                            setActive(issue);
+                            setKitta(String(issue.minUnit ?? 10));
+                          }}
+                        >
+                          Apply
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+              <UpcomingSection cdscUpcoming={cdscUpcoming} archUpcoming={archUpcoming} />
+            </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="applications" className="mt-4">
+          <ApplicationReports />
         </TabsContent>
 
         <TabsContent value="calendar" className="mt-4">

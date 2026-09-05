@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -9,6 +9,7 @@ import {
   Copy,
   Eye,
   EyeOff,
+  History,
   Landmark,
   LogOut,
   ShieldCheck,
@@ -40,9 +41,7 @@ export const Route = createFileRoute("/_dash/profile")({
       },
       ogImage(),
     ],
-    links: [
-      canonicalLink("/profile"),
-    ],
+    links: [canonicalLink("/profile")],
   }),
   component: ProfilePage,
 });
@@ -388,7 +387,7 @@ function ProfilePage() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-border/70 bg-card p-5">
+      <div className="relative flex flex-wrap items-center gap-4 rounded-2xl border border-border/70 bg-card p-5">
         {avatarUrl ? (
           <img
             src={avatarUrl}
@@ -400,12 +399,21 @@ function ProfilePage() {
             {initials(name)}
           </div>
         )}
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 pr-10">
           <p className="truncate font-display text-xl font-semibold">{name}</p>
           <p className="num truncate text-sm text-muted-foreground">
             {data.session.username} · {data.session.demat}
           </p>
         </div>
+        <Link
+          to="/activity"
+          title="Activity log: recent sign-ins, devices and locations"
+          aria-label="View activity log"
+          className="absolute right-4 top-4 inline-flex items-center gap-1.5 rounded-xl border border-border/70 bg-secondary px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+        >
+          <History className="size-3.5" />
+          Recent activity
+        </Link>
       </div>
 
       <nav className="flex flex-wrap gap-2">

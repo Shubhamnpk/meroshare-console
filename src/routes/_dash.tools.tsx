@@ -1,14 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import {
-  ArrowRight,
-  BarChart3,
-  CandlestickChart,
-  Landmark,
-  PiggyBank,
-  TrendingUp,
-  Wrench,
-} from "lucide-react";
-import { ogImage, canonicalLink } from "@/lib/seo";
+import { ArrowRight, Blocks, Building2, ClipboardList, PiggyBank, TrendingUp } from "lucide-react";
 
 export const Route = createFileRoute("/_dash/tools")({
   head: () => ({
@@ -17,39 +8,15 @@ export const Route = createFileRoute("/_dash/tools")({
       {
         name: "description",
         content:
-          "Investor tools: trading terminal, portfolio analytics, top-ranked NEPSE shares and listed mutual fund schemes.",
+          "Investor tools: top-ranked shares, mutual funds and broker floor-sheet analytics.",
       },
       { property: "og:title", content: "Tools | MeroShare Investor Console" },
-      {
-        property: "og:description",
-        content: "Investor tools: trading terminal, portfolio analytics, mutual fund screener and IPO application helper.",
-      },
-      ogImage(),
-    ],
-    links: [
-      canonicalLink("/tools"),
     ],
   }),
   component: ToolsPage,
 });
 
 const TOOLS = [
-  {
-    to: "/terminal",
-    icon: CandlestickChart,
-    title: "Trading Terminal",
-    description:
-      "Full NEPSE charting: candlesticks back to 2012, moving averages, Bollinger Bands, RSI, MACD, VWAP and volume.",
-    tag: "Charting",
-  },
-  {
-    to: "/analytics",
-    icon: BarChart3,
-    title: "Analytics",
-    description:
-      "Concentration, weight and day-change analytics across your holdings, with dividend history.",
-    tag: "Portfolio",
-  },
   {
     to: "/best-shares",
     icon: TrendingUp,
@@ -67,12 +34,20 @@ const TOOLS = [
     tag: "Fund explorer",
   },
   {
-    to: "/debentures",
-    icon: Landmark,
-    title: "Debentures",
+    to: "/brokers",
+    icon: Building2,
+    title: "Brokers",
     description:
-      "Compare fixed-income issues by coupon, issuer and size — with a yearly income estimator.",
-    tag: "Fixed income",
+      "Daily floor sheet, money flow, biggest trades and the full NEPSE broker directory.",
+    tag: "Market flow",
+  },
+  {
+    to: "/ipo-pipeline",
+    icon: ClipboardList,
+    title: "IPO Pipeline",
+    description:
+      "Every IPO, right, FPO and debenture issue waiting on SEBON approval, plus fresh approvals.",
+    tag: "Coming soon",
   },
 ] as const;
 
@@ -81,17 +56,17 @@ function ToolsPage() {
     <div className="space-y-5">
       <div className="flex items-center gap-3">
         <span className="flex size-11 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary">
-          <Wrench className="size-5" />
+          <Blocks className="size-5" />
         </span>
         <div>
           <h1 className="font-display text-2xl font-semibold sm:text-3xl">Tools</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            Small helpers for researching the Nepali market. Informational only, not advice.
+            Small helpers for researching the Nepali market. Informational only not a advice
           </p>
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {TOOLS.map((tool) => (
           <Link
             key={tool.to}

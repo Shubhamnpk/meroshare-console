@@ -20,6 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ExportButton, csvRow } from "@/components/export-dialog";
+import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
 import { holdingSymbolsQuery, transactionsQuery } from "@/lib/queries";
 import { formatDate, formatQty, toNumber } from "@/lib/format";
 import { ogImage, canonicalLink } from "@/lib/seo";
@@ -40,9 +41,7 @@ export const Route = createFileRoute("/_dash/transactions")({
       },
       ogImage(),
     ],
-    links: [
-      canonicalLink("/transactions"),
-    ],
+    links: [canonicalLink("/transactions")],
   }),
   component: TransactionsPage,
 });
@@ -90,19 +89,50 @@ function StatChip({
 function TransactionsPage() {
   const [symbol, setSymbol] = useState<string>("all");
   const [search, setSearch] = useState("");
+  const { sort, toggle } = useSort<
+    "date" | "script" | "description" | "credit" | "debit" | "balance"
+  >(
+    { key: "date", dir: "desc" },
+    {
+      date: "number",
+      script: "text",
+      description: "text",
+      credit: "number",
+      debit: "number",
+      balance: "number",
+    },
+  );
   const symbols = useQuery(holdingSymbolsQuery());
   const q = useQuery(transactionsQuery(symbol === "all" ? null : symbol));
   const items = q.data?.items ?? [];
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
-    if (!term) return items;
-    return items.filter((t) =>
-      [t.script, t.historyDescription, String(t.transactionDate ?? "")]
-        .filter(Boolean)
-        .some((s) => String(s).toLowerCase().includes(term)),
-    );
-  }, [items, search]);
+    const rows = term
+      ? items.filter((t) =>
+          [t.script, t.historyDescription, String(t.transactionDate ?? "")]
+            .filter(Boolean)
+            .some((s) => String(s).toLowerCase().includes(term)),
+        )
+      : items;
+    const getter = (t: (typeof rows)[number]): string | number => {
+      switch (sort.key) {
+        case "script":
+          return t.script ?? "";
+        case "description":
+          return t.historyDescription ?? "";
+        case "credit":
+          return toNumber(t.creditQuantity);
+        case "debit":
+          return toNumber(t.debitQuantity);
+        case "balance":
+          return toNumber(t.balanceAfterTransaction);
+        default:
+          return String(t.transactionDate ?? "");
+      }
+    };
+    return sortBy(rows, getter, sort.dir);
+  }, [items, search, sort]);
 
   const totalCredit = filtered.reduce((sum, t) => sum + Math.max(0, toNumber(t.creditQuantity)), 0);
   const totalDebit = filtered.reduce((sum, t) => sum + Math.max(0, toNumber(t.debitQuantity)), 0);
@@ -222,12 +252,52 @@ function TransactionsPage() {
             <TableHeader>
               <TableRow className="bg-muted/40 hover:bg-muted/40">
                 <TableHead className="w-10 pl-4">SN</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Script</TableHead>
-                <TableHead className="hidden md:table-cell">Description</TableHead>
-                <TableHead className="text-right">Credit</TableHead>
-                <TableHead className="text-right">Debit</TableHead>
-                <TableHead className="pr-4 text-right">Balance</TableHead>
+                <SortableTh
+                  label="Date"
+                  active={sort.key === "date"}
+                  dir={sort.dir}
+                  onClick={() => toggle("date")}
+                  align="left"
+                />
+                <SortableTh
+                  label="Script"
+                  active={sort.key === "script"}
+                  dir={sort.dir}
+                  onClick={() => toggle("script")}
+                  align="left"
+                  kind="text"
+                />
+                <SortableTh
+                  label="Description"
+                  active={sort.key === "description"}
+                  dir={sort.dir}
+                  onClick={() => toggle("description")}
+                  align="left"
+                  className="hidden md:table-cell"
+                  kind="text"
+                />
+                <SortableTh
+                  label="Credit"
+                  active={sort.key === "credit"}
+                  dir={sort.dir}
+                  onClick={() => toggle("credit")}
+                  align="right"
+                />
+                <SortableTh
+                  label="Debit"
+                  active={sort.key === "debit"}
+                  dir={sort.dir}
+                  onClick={() => toggle("debit")}
+                  align="right"
+                />
+                <SortableTh
+                  label="Balance"
+                  active={sort.key === "balance"}
+                  dir={sort.dir}
+                  onClick={() => toggle("balance")}
+                  align="right"
+                  className="pr-4"
+                />
               </TableRow>
             </TableHeader>
             <TableBody>

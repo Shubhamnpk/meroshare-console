@@ -1,12 +1,11 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   BarChart3,
+  Blocks,
   Briefcase,
-  CalendarClock,
   ChartCandlestick,
   ChevronsLeft,
   ChevronsRight,
-  ClipboardList,
   Coins,
   History,
   LayoutDashboard,
@@ -14,7 +13,6 @@ import {
   Rocket,
   Settings,
   UserRound,
-  Wrench,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -25,20 +23,18 @@ export const PRIMARY_NAV: NavItem[] = [
   { to: "/portfolio", label: "Portfolio", icon: Briefcase },
   { to: "/market", label: "Market", icon: LineChart },
   { to: "/terminal", label: "Terminal", icon: ChartCandlestick },
-  { to: "/tools", label: "Tools", icon: Wrench },
+  { to: "/tools", label: "Tools", icon: Blocks },
   { to: "/transactions", label: "Transactions", icon: History },
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
 ];
 
 export const IPO_NAV: NavItem[] = [
-  { to: "/ipo", label: "Apply for Issue", icon: Rocket },
-  { to: "/reports", label: "Application Report", icon: ClipboardList },
+  { to: "/ipo", label: "IPO", icon: Rocket },
   { to: "/wacc", label: "Purchase Source", icon: Coins },
 ];
 
 export const ACCOUNT_NAV: NavItem[] = [
   { to: "/profile", label: "My Profile", icon: UserRound },
-  { to: "/activity", label: "Activity Log", icon: CalendarClock },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -47,7 +43,6 @@ export const MOBILE_NAV: NavItem[] = [
   { to: "/portfolio", label: "Portfolio", icon: Briefcase },
   { to: "/market", label: "Market", icon: LineChart },
   { to: "/ipo", label: "IPO", icon: Rocket },
-  { to: "/reports", label: "Reports", icon: ClipboardList },
 ];
 
 function NavGroup({
@@ -137,7 +132,7 @@ export function MobileNav() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border/70 bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
-      <div className="grid grid-cols-5">
+      <div className="grid grid-cols-4">
         {MOBILE_NAV.map((item) => {
           const active = pathname === item.to;
           return (

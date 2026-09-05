@@ -17,12 +17,7 @@ import { rsi as computeRsi } from "./indicators";
 export type ShortTermSignal = "BREAKOUT" | "OVERSOLD" | "MOMENTUM" | "WATCHLIST";
 export type LongTermSignal = "VALUE" | "INCOME" | "GROWTH" | "BLUECHIP" | "WATCHLIST";
 
-export type RedFlag =
-  | "EPS_DECLINING"
-  | "NO_DIVIDEND"
-  | "PE_TOO_HIGH"
-  | "NEGATIVE_EPS"
-  | "LOW_ROE";
+export type RedFlag = "EPS_DECLINING" | "NO_DIVIDEND" | "PE_TOO_HIGH" | "NEGATIVE_EPS" | "LOW_ROE";
 
 export interface ShortTermScore {
   score: number;
@@ -239,9 +234,10 @@ export function computeLongTermScore(
   const profit = latestReport?.profit ?? null;
 
   // ROE = EPS / Net Worth per Share * 100
-  const roe = eps != null && netWorth != null && netWorth > 0
-    ? Math.round((eps / netWorth) * 1000) / 10
-    : null;
+  const roe =
+    eps != null && netWorth != null && netWorth > 0
+      ? Math.round((eps / netWorth) * 1000) / 10
+      : null;
 
   // Use latest dividend from history for yield calculation
   const latestDividend = dividends[0] ?? null;
@@ -258,7 +254,9 @@ export function computeLongTermScore(
       : 0;
 
   // Dividend streak: count consecutive fiscal years with dividends
-  const fiscalYears = [...new Set(dividends.map((d) => d.fiscalYear).filter(Boolean))].sort().reverse();
+  const fiscalYears = [...new Set(dividends.map((d) => d.fiscalYear).filter(Boolean))]
+    .sort()
+    .reverse();
   let dividendStreak = 0;
   if (fiscalYears.length > 0) {
     let expectedYear = parseInt(fiscalYears[0]!);
@@ -276,7 +274,9 @@ export function computeLongTermScore(
   // Dividend growth: compare latest vs 3 years ago
   let dividendGrowth = 0;
   if (dividends.length >= 3 && dividends[2]!.totalDividend > 0) {
-    dividendGrowth = ((dividends[0]!.totalDividend - dividends[2]!.totalDividend) / dividends[2]!.totalDividend) * 100;
+    dividendGrowth =
+      ((dividends[0]!.totalDividend - dividends[2]!.totalDividend) / dividends[2]!.totalDividend) *
+      100;
   }
 
   // 52-week stability (narrower range = more stable)
@@ -412,11 +412,11 @@ export function computeLongTermScore(
   // === Composite score ===
   const rawScore =
     valuation * 0.25 +
-    profitability * 0.20 +
+    profitability * 0.2 +
     quality * 0.15 +
-    dividendScore * 0.20 +
-    stability * 0.10 +
-    growth * 0.10;
+    dividendScore * 0.2 +
+    stability * 0.1 +
+    growth * 0.1;
   const score = Math.round(clamp(rawScore, 0, 100));
 
   // === Red flags ===
@@ -429,7 +429,8 @@ export function computeLongTermScore(
 
   // === Signal tag ===
   let signal: LongTermSignal = "WATCHLIST";
-  if (redFlags.length === 0 && pe != null && pe > 0 && pe < 12 && pb != null && pb < 1.5) signal = "VALUE";
+  if (redFlags.length === 0 && pe != null && pe > 0 && pe < 12 && pb != null && pb < 1.5)
+    signal = "VALUE";
   if (redFlags.length === 0 && dividendYield != null && dividendYield > 4) signal = "INCOME";
   if (redFlags.length === 0 && epsTrend > 10 && eps != null && eps > 0) signal = "GROWTH";
   // BLUECHIP: high turnover (proxy for large cap) + consistent dividends

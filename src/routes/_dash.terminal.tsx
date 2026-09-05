@@ -62,9 +62,7 @@ export const Route = createFileRoute("/_dash/terminal")({
       { name: "twitter:card", content: "summary_large_image" },
       ogImage(),
     ],
-    links: [
-      canonicalLink("/terminal"),
-    ],
+    links: [canonicalLink("/terminal")],
   }),
   component: TerminalPage,
 });

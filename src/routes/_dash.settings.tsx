@@ -35,6 +35,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Panel } from "@/components/ui/panel";
 import {
   Dialog,
   DialogContent,
@@ -96,9 +97,7 @@ export const Route = createFileRoute("/_dash/settings")({
       },
       ogImage(),
     ],
-    links: [
-      canonicalLink("/settings"),
-    ],
+    links: [canonicalLink("/settings")],
   }),
   component: SettingsPage,
 });
@@ -157,7 +156,7 @@ function InstallCard() {
   const ios = isIosDevice();
 
   return (
-    <section className="space-y-4 rounded-2xl border border-border/70 bg-card p-6 shadow-sm">
+    <Panel padding="lg" shadow className="space-y-4">
       <SectionHeader
         icon={Download}
         title="App Installation"
@@ -194,7 +193,7 @@ function InstallCard() {
           </p>
         </div>
       )}
-    </section>
+    </Panel>
   );
 }
 
@@ -583,7 +582,7 @@ function NotificationCard() {
             : "Off: turn back on anytime.";
 
   return (
-    <section className="space-y-5 rounded-2xl border border-border/70 bg-card p-6 shadow-sm">
+    <Panel padding="lg" shadow className="space-y-5">
       <SectionHeader
         icon={Bell}
         title="Notifications"
@@ -675,7 +674,7 @@ function NotificationCard() {
         Alerts fire for IPOs closing within 3 days, password expiry within 30 days and DEMAT expiry
         within 90 days, while the app is open.
       </p>
-    </section>
+    </Panel>
   );
 }
 
@@ -774,7 +773,7 @@ function SettingsPage() {
   const activeMeta = TABS.find((t) => t.id === current) ?? TABS[0]!;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8 pb-8">
+    <div className="space-y-8 pb-8">
       {/* Top Page Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -853,7 +852,7 @@ function SettingsPage() {
           <div className="min-w-0 flex-1 space-y-6">
             <div className={current === "appearance" ? "space-y-6" : "hidden"}>
               {/* Appearance & Themes */}
-              <section className="space-y-5 rounded-2xl border border-border/70 bg-card p-6 shadow-sm">
+              <Panel padding="lg" shadow className="space-y-5">
                 <SectionHeader
                   icon={Palette}
                   title="Appearance & Theme"
@@ -931,11 +930,11 @@ function SettingsPage() {
                     })}
                   </div>
                 </div>
-              </section>
+              </Panel>
             </div>
             <div className={current === "general" ? "space-y-6" : "hidden"}>
               {/* Data Sync & Preferences */}
-              <section className="space-y-5 rounded-2xl border border-border/70 bg-card p-6 shadow-sm">
+              <Panel padding="lg" shadow className="space-y-5">
                 <SectionHeader
                   icon={Database}
                   title="Data Sync & Presentation"
@@ -1011,7 +1010,7 @@ function SettingsPage() {
                     />
                   </div>
                 </div>
-              </section>
+              </Panel>
             </div>
             <div className={current === "general" ? "space-y-6" : "hidden"}>
               {/* Notifications */}
@@ -1019,7 +1018,7 @@ function SettingsPage() {
             </div>
             <div className={current === "security" ? "space-y-6" : "hidden"}>
               {/* Security & Credentials */}
-              <section className="space-y-5 rounded-2xl border border-border/70 bg-card p-6 shadow-sm">
+              <Panel padding="lg" shadow className="space-y-5">
                 <SectionHeader
                   icon={Lock}
                   title="Account & Security"
@@ -1058,7 +1057,7 @@ function SettingsPage() {
 
                   <RememberedRow />
                 </div>
-              </section>
+              </Panel>
             </div>
             <div className={current === "general" ? "space-y-6" : "hidden"}>
               {/* App Install Card */}
@@ -1066,7 +1065,7 @@ function SettingsPage() {
             </div>
             <div className={current === "about" ? "space-y-6" : "hidden"}>
               {/* About & System Info */}
-              <section className="space-y-5 rounded-2xl border border-border/70 bg-card p-6 shadow-sm">
+              <Panel padding="lg" shadow className="space-y-5">
                 <SectionHeader
                   icon={Info}
                   title="About MeroShare Console"
@@ -1171,7 +1170,7 @@ function SettingsPage() {
                     ),
                   )}
                 </div>
-              </section>
+              </Panel>
             </div>
           </div>
         </div>

@@ -421,7 +421,8 @@ function toDebenture(row: Rec): MfDebenture | null {
     instrument,
     couponPct: num(row["coupon_pct"]),
     tenorYears: num(row["tenor_years"]),
-    maturityBs: typeof maturity === "string" || typeof maturity === "number" ? String(maturity) : null,
+    maturityBs:
+      typeof maturity === "string" || typeof maturity === "number" ? String(maturity) : null,
     sector: str(row["sector"]),
     units: num(row["units"]),
     faceValue: num(row["face_value"]),

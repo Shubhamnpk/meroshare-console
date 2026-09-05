@@ -168,7 +168,11 @@ function migrateLegacy(prefs: Prefs): Prefs {
   // meroshare.terminal.v1
   const term = readJson<Partial<TerminalState>>(LEGACY_KEYS.terminal);
   if (term) {
-    next.terminal = { ...DEFAULT_TERMINAL, ...term, indicators: { ...DEFAULT_TERMINAL.indicators, ...(term.indicators ?? {}) } };
+    next.terminal = {
+      ...DEFAULT_TERMINAL,
+      ...term,
+      indicators: { ...DEFAULT_TERMINAL.indicators, ...(term.indicators ?? {}) },
+    };
   }
 
   // ms.watchlist.v1
@@ -193,7 +197,9 @@ function loadPrefs(): Prefs {
     const stored = readJson<Partial<Prefs>>(STORAGE_KEY);
     const base = stored ? { ...DEFAULT_PREFS, ...stored } : { ...DEFAULT_PREFS };
     // Only migrate if legacy keys still exist
-    const hasLegacy = Object.values(LEGACY_KEYS).some((k) => window.localStorage.getItem(k) !== null);
+    const hasLegacy = Object.values(LEGACY_KEYS).some(
+      (k) => window.localStorage.getItem(k) !== null,
+    );
     if (hasLegacy) return migrateLegacy(base);
     return base;
   } catch {
@@ -254,10 +260,25 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     applyTheme(prefs.theme);
     applyColorTheme(prefs.colorTheme);
-    const { theme, colorTheme, compactNumbers, autoRefresh, refreshMinutes, sidebarCollapsed, terminal, watchlist } = prefs;
+    const {
+      theme,
+      colorTheme,
+      compactNumbers,
+      autoRefresh,
+      refreshMinutes,
+      sidebarCollapsed,
+      terminal,
+      watchlist,
+    } = prefs;
     writeJson(STORAGE_KEY, {
-      theme, colorTheme, compactNumbers, autoRefresh, refreshMinutes,
-      sidebarCollapsed, terminal, watchlist,
+      theme,
+      colorTheme,
+      compactNumbers,
+      autoRefresh,
+      refreshMinutes,
+      sidebarCollapsed,
+      terminal,
+      watchlist,
     });
   }, [prefs]);
 

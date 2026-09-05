@@ -1,13 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { Panel } from "@/components/ui/panel";
 import { ErrorBlock, LoadingBlock, EmptyBlock } from "@/components/states";
 import { DeltaPill } from "@/components/stat-card";
 import { useMemo, useState, type ReactNode } from "react";
 import {
-  ArrowDown,
   ArrowDownRight,
-  ArrowUp,
-  ArrowUpDown,
   ArrowUpRight,
   Coins,
   PiggyBank,
@@ -17,6 +15,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
 import { ExportButton, csvRow } from "@/components/export-dialog";
 import {
   Table,
@@ -53,9 +52,7 @@ export const Route = createFileRoute("/_dash/portfolio")({
       },
       ogImage(),
     ],
-    links: [
-      canonicalLink("/portfolio"),
-    ],
+    links: [canonicalLink("/portfolio")],
   }),
   component: PortfolioPage,
 });
@@ -141,50 +138,6 @@ type SortKey =
   | "unrealized"
   | "percentChange"
   | "weight";
-type SortDir = "asc" | "desc";
-type SortState = { key: SortKey; dir: SortDir };
-
-function SortableHead({
-  label,
-  sortKey,
-  sort,
-  onSort,
-  className,
-  align = "right",
-}: {
-  label: string;
-  sortKey: SortKey;
-  sort: SortState;
-  onSort: (key: SortKey) => void;
-  className?: string;
-  align?: "left" | "right";
-}) {
-  const active = sort.key === sortKey;
-  return (
-    <TableHead className={className}>
-      <button
-        type="button"
-        onClick={() => onSort(sortKey)}
-        className={cn(
-          "inline-flex items-center gap-1 transition-colors",
-          align === "right" ? "w-full justify-end" : "justify-start",
-          active ? "text-foreground" : "hover:text-foreground",
-        )}
-      >
-        {label}
-        {active ? (
-          sort.dir === "asc" ? (
-            <ArrowUp className="size-3 text-primary" aria-hidden />
-          ) : (
-            <ArrowDown className="size-3 text-primary" aria-hidden />
-          )
-        ) : (
-          <ArrowUpDown className="size-3 opacity-40" aria-hidden />
-        )}
-      </button>
-    </TableHead>
-  );
-}
 
 function PortfolioPage() {
   const { compactNumbers, autoRefresh, refreshMinutes } = useSettings();
@@ -195,7 +148,20 @@ function PortfolioPage() {
   const investment = useQuery(investmentSummaryQuery());
   const [search, setSearch] = useState("");
   const [picked, setPicked] = useState<string | null>(null);
-  const [sort, setSort] = useState<SortState>({ key: "value", dir: "desc" });
+  const { sort, toggle } = useSort<SortKey>(
+    { key: "value", dir: "desc" },
+    {
+      scrip: "text",
+      units: "number",
+      ltp: "number",
+      previousClose: "number",
+      value: "number",
+      avgBuy: "number",
+      unrealized: "number",
+      percentChange: "number",
+      weight: "number",
+    },
+  );
 
   const holdings = q.data?.holdings ?? [];
   const totals = {
@@ -227,37 +193,31 @@ function PortfolioPage() {
           [h.scrip, h.description, h.name].some((s) => s.toLowerCase().includes(term)),
         )
       : holdings;
-    const mul = sort.dir === "asc" ? 1 : -1;
     const weightOf = (h: EnrichedHolding) => (totals.value > 0 ? h.value / totals.value : 0);
-    return [...filtered].sort((a, b) => {
+    const getter = (h: EnrichedHolding): string | number => {
       switch (sort.key) {
         case "scrip":
-          return a.scrip.localeCompare(b.scrip) * mul;
+          return h.scrip;
         case "units":
-          return (a.units - b.units) * mul;
+          return h.units;
         case "ltp":
-          return (a.ltp - b.ltp) * mul;
+          return h.ltp;
         case "previousClose":
-          return (a.previousClose - b.previousClose) * mul;
+          return h.previousClose;
         case "value":
-          return (a.value - b.value) * mul;
+          return h.value;
         case "avgBuy":
-          return ((costMap.get(a.scrip)?.waccRate ?? 0) - (costMap.get(b.scrip)?.waccRate ?? 0)) * mul;
+          return costMap.get(h.scrip)?.waccRate ?? 0;
         case "unrealized":
-          return (plOf(a) - plOf(b)) * mul;
+          return plOf(h);
         case "percentChange":
-          return (a.percentChange - b.percentChange) * mul;
+          return h.percentChange;
         case "weight":
-          return (weightOf(a) - weightOf(b)) * mul;
+          return weightOf(h);
       }
-    });
+    };
+    return sortBy(filtered, getter, sort.dir);
   }, [holdings, search, sort, totals.value, costMap]);
-
-  const onSort = (key: SortKey) => {
-    setSort((s) =>
-      s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" },
-    );
-  };
 
   const liveCount = q.data?.liveCount ?? 0;
 
@@ -296,7 +256,17 @@ function PortfolioPage() {
               build: () => "",
               pdf: () => ({
                 title: "Portfolio holdings at live prices",
-                head: ["SN", "Scrip", "Description", "Units", "LTP", "Value", "Avg buy", "P/L", "Day %"],
+                head: [
+                  "SN",
+                  "Scrip",
+                  "Description",
+                  "Units",
+                  "LTP",
+                  "Value",
+                  "Avg buy",
+                  "P/L",
+                  "Day %",
+                ],
                 body: items.map((h, i) => {
                   const c = costOf(h.scrip);
                   const pl = c && c.cost > 0 ? h.value - c.cost : null;
@@ -432,35 +402,74 @@ function PortfolioPage() {
           description="Nothing matches your search. Try a different scrip or company."
         />
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-border/70 bg-card">
+        <Panel padding="none" className="overflow-hidden">
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/40 hover:bg-muted/40">
                 <TableHead className="w-10 pl-4">SN</TableHead>
-                <SortableHead
+                <SortableTh
                   label="Scrip"
-                  sortKey="scrip"
-                  sort={sort}
-                  onSort={onSort}
+                  active={sort.key === "scrip"}
+                  dir={sort.dir}
+                  onClick={() => toggle("scrip")}
                   align="left"
+                  kind="text"
                 />
-                <SortableHead label="Units" sortKey="units" sort={sort} onSort={onSort} />
-                <SortableHead label="LTP" sortKey="ltp" sort={sort} onSort={onSort} />
-                <SortableHead
+                <SortableTh
+                  label="Units"
+                  active={sort.key === "units"}
+                  dir={sort.dir}
+                  onClick={() => toggle("units")}
+                  align="right"
+                />
+                <SortableTh
+                  label="LTP"
+                  active={sort.key === "ltp"}
+                  dir={sort.dir}
+                  onClick={() => toggle("ltp")}
+                  align="right"
+                />
+                <SortableTh
                   label="Prev close"
-                  sortKey="previousClose"
-                  sort={sort}
-                  onSort={onSort}
+                  active={sort.key === "previousClose"}
+                  dir={sort.dir}
+                  onClick={() => toggle("previousClose")}
+                  align="right"
                 />
-                <SortableHead label="Value" sortKey="value" sort={sort} onSort={onSort} />
-                <SortableHead label="Avg buy" sortKey="avgBuy" sort={sort} onSort={onSort} />
-                <SortableHead label="P/L" sortKey="unrealized" sort={sort} onSort={onSort} />
-                <SortableHead label="Day" sortKey="percentChange" sort={sort} onSort={onSort} />
-                <SortableHead
+                <SortableTh
+                  label="Value"
+                  active={sort.key === "value"}
+                  dir={sort.dir}
+                  onClick={() => toggle("value")}
+                  align="right"
+                />
+                <SortableTh
+                  label="Avg buy"
+                  active={sort.key === "avgBuy"}
+                  dir={sort.dir}
+                  onClick={() => toggle("avgBuy")}
+                  align="right"
+                />
+                <SortableTh
+                  label="P/L"
+                  active={sort.key === "unrealized"}
+                  dir={sort.dir}
+                  onClick={() => toggle("unrealized")}
+                  align="right"
+                />
+                <SortableTh
+                  label="Day"
+                  active={sort.key === "percentChange"}
+                  dir={sort.dir}
+                  onClick={() => toggle("percentChange")}
+                  align="right"
+                />
+                <SortableTh
                   label="Weight"
-                  sortKey="weight"
-                  sort={sort}
-                  onSort={onSort}
+                  active={sort.key === "weight"}
+                  dir={sort.dir}
+                  onClick={() => toggle("weight")}
+                  align="right"
                   className="pr-4"
                 />
               </TableRow>
@@ -471,7 +480,8 @@ function PortfolioPage() {
                 const basis = costOf(h.scrip);
                 const hasBasis = Boolean(basis && basis.cost > 0);
                 const pl = hasBasis ? h.value - (basis?.cost ?? 0) : 0;
-                const plPct = hasBasis && (basis?.cost ?? 0) > 0 ? (pl / (basis?.cost ?? 1)) * 100 : 0;
+                const plPct =
+                  hasBasis && (basis?.cost ?? 0) > 0 ? (pl / (basis?.cost ?? 1)) * 100 : 0;
                 return (
                   <TableRow
                     key={`${h.scrip}-${idx}`}
@@ -587,10 +597,10 @@ function PortfolioPage() {
                       <DeltaPill value={unrealizedPL}>
                         {`${unrealizedPL >= 0 ? "+" : "-"}${formatNpr(Math.abs(unrealizedPL))}`}
                       </DeltaPill>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">-</span>
-                      )}
-                    </TableCell>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">-</span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-right">
                     <DeltaPill value={totals.dayChange}>
                       {`${totals.dayChange >= 0 ? "+" : "-"}${formatNpr(Math.abs(totals.dayChange))} (${totals.dayPct.toFixed(2)}%)`}
@@ -607,11 +617,11 @@ function PortfolioPage() {
               {formatNpr(items.reduce((s, h) => s + h.value, 0))}
             </p>
           ) : null}
-        </div>
+        </Panel>
       )}
 
       {q.data && q.data.sectors.length > 0 ? (
-        <section className="rounded-2xl border border-border/70 bg-card p-4 sm:p-5">
+        <Panel as="section">
           <h2 className="mb-3 font-display text-base font-semibold">Sector allocation</h2>
           <ul className="flex flex-wrap gap-2">
             {q.data.sectors.slice(0, 8).map((s) => (
@@ -624,7 +634,7 @@ function PortfolioPage() {
               </li>
             ))}
           </ul>
-        </section>
+        </Panel>
       ) : null}
 
       {holdings.length > 0 ? <HistoryPanel holdings={holdings} onPickScrip={setPicked} /> : null}

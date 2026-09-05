@@ -22,6 +22,7 @@ import {
   type MfPipelineType,
   type MfScheme,
 } from "@/lib/mutual-funds/types";
+import { Panel } from "@/components/ui/panel";
 import { cn } from "@/lib/utils";
 import { StockMap } from "./stock-map";
 
@@ -142,7 +143,7 @@ export function MarketView({
     <div className="space-y-4">
       {docModal}
       {/* Where the industry's money sits */}
-      <section className="rounded-2xl border border-border/70 bg-card p-4">
+      <Panel as="section">
         <h3 className="flex items-center gap-2 font-display text-sm font-semibold">
           <PieChart className="size-4 text-primary" /> Where the industry's money sits
         </h3>
@@ -163,18 +164,18 @@ export function MarketView({
           Weighted by fund size from the latest disclosed portfolios. When this tilts toward cash,
           managers are waiting, often the brave moment to buy discounted units.
         </p>
-      </section>
+      </Panel>
 
       {/* Industry stock map */}
       {stockMapLoading ? (
-        <section className="rounded-2xl border border-border/70 bg-card p-4">
+        <Panel as="section">
           <div className="h-5 w-52 animate-pulse rounded-lg bg-muted" />
           <div className="mt-3 space-y-2.5">
             {[0, 1, 2, 3, 4, 5].map((i) => (
               <div key={i} className="h-4 animate-pulse rounded-lg bg-muted/60" />
             ))}
           </div>
-        </section>
+        </Panel>
       ) : stockMap && stockMap.slices.length > 0 ? (
         <StockMap
           map={stockMap}
@@ -186,7 +187,7 @@ export function MarketView({
 
       {/* Coming soon */}
       {pipeline && pipeline.items.length > 0 ? (
-        <section className="rounded-2xl border border-border/70 bg-card p-4">
+        <Panel as="section">
           <h3 className="flex items-center gap-2 font-display text-sm font-semibold">
             <Hourglass className="size-4 text-primary" /> Coming soon
             <span className="num rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
@@ -267,12 +268,12 @@ export function MarketView({
               );
             })}
           </ul>
-        </section>
+        </Panel>
       ) : null}
 
       {/* Fresh approvals */}
       {approvals.length > 0 ? (
-        <section className="rounded-2xl border border-border/70 bg-card p-4">
+        <Panel as="section">
           <h3 className="flex items-center gap-2 font-display text-sm font-semibold">
             <Stamp className="size-4 text-primary" /> Fresh SEBON approvals
           </h3>
@@ -310,12 +311,12 @@ export function MarketView({
               </li>
             ))}
           </ul>
-        </section>
+        </Panel>
       ) : null}
 
       {/* Fixed-income corner */}
       {debentures && debentures.top.length > 0 ? (
-        <section className="rounded-2xl border border-border/70 bg-card p-4">
+        <Panel as="section">
           <h3 className="flex items-center gap-2 font-display text-sm font-semibold">
             <Landmark className="size-4 text-primary" /> Fixed-income corner
           </h3>
@@ -359,7 +360,7 @@ export function MarketView({
             Compare these locked-in coupons against a fund's expected payout before choosing between
             steady income and market upside.
           </p>
-        </section>
+        </Panel>
       ) : null}
     </div>
   );

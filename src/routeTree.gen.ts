@@ -15,9 +15,11 @@ import { Route as ReleasesRouteImport } from './routes/releases'
 import { Route as DashActivityRouteImport } from './routes/_dash.activity'
 import { Route as DashAnalyticsRouteImport } from './routes/_dash.analytics'
 import { Route as DashBestSharesRouteImport } from './routes/_dash.best-shares'
+import { Route as DashBrokersRouteImport } from './routes/_dash.brokers'
 import { Route as DashDashboardRouteImport } from './routes/_dash.dashboard'
 import { Route as DashDebenturesRouteImport } from './routes/_dash.debentures'
 import { Route as DashIpoRouteImport } from './routes/_dash.ipo'
+import { Route as DashIpoPipelineRouteImport } from './routes/_dash.ipo-pipeline'
 import { Route as DashMarketRouteImport } from './routes/_dash.market'
 import { Route as DashMutualFundsRouteImport } from './routes/_dash.mutual-funds'
 import { Route as DashPortfolioRouteImport } from './routes/_dash.portfolio'
@@ -59,6 +61,11 @@ const DashBestSharesRoute = DashBestSharesRouteImport.update({
   path: '/best-shares',
   getParentRoute: () => DashRoute,
 } as any)
+const DashBrokersRoute = DashBrokersRouteImport.update({
+  id: '/brokers',
+  path: '/brokers',
+  getParentRoute: () => DashRoute,
+} as any)
 const DashDashboardRoute = DashDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -72,6 +79,11 @@ const DashDebenturesRoute = DashDebenturesRouteImport.update({
 const DashIpoRoute = DashIpoRouteImport.update({
   id: '/ipo',
   path: '/ipo',
+  getParentRoute: () => DashRoute,
+} as any)
+const DashIpoPipelineRoute = DashIpoPipelineRouteImport.update({
+  id: '/ipo-pipeline',
+  path: '/ipo-pipeline',
   getParentRoute: () => DashRoute,
 } as any)
 const DashMarketRoute = DashMarketRouteImport.update({
@@ -136,9 +148,11 @@ export interface FileRoutesByFullPath {
   '/activity': typeof DashActivityRoute
   '/analytics': typeof DashAnalyticsRoute
   '/best-shares': typeof DashBestSharesRoute
+  '/brokers': typeof DashBrokersRoute
   '/dashboard': typeof DashDashboardRoute
   '/debentures': typeof DashDebenturesRoute
   '/ipo': typeof DashIpoRoute
+  '/ipo-pipeline': typeof DashIpoPipelineRoute
   '/market': typeof DashMarketRoute
   '/mutual-funds': typeof DashMutualFundsRoute
   '/portfolio': typeof DashPortfolioRoute
@@ -157,9 +171,11 @@ export interface FileRoutesByTo {
   '/activity': typeof DashActivityRoute
   '/analytics': typeof DashAnalyticsRoute
   '/best-shares': typeof DashBestSharesRoute
+  '/brokers': typeof DashBrokersRoute
   '/dashboard': typeof DashDashboardRoute
   '/debentures': typeof DashDebenturesRoute
   '/ipo': typeof DashIpoRoute
+  '/ipo-pipeline': typeof DashIpoPipelineRoute
   '/market': typeof DashMarketRoute
   '/mutual-funds': typeof DashMutualFundsRoute
   '/portfolio': typeof DashPortfolioRoute
@@ -180,9 +196,11 @@ export interface FileRoutesById {
   '/_dash/activity': typeof DashActivityRoute
   '/_dash/analytics': typeof DashAnalyticsRoute
   '/_dash/best-shares': typeof DashBestSharesRoute
+  '/_dash/brokers': typeof DashBrokersRoute
   '/_dash/dashboard': typeof DashDashboardRoute
   '/_dash/debentures': typeof DashDebenturesRoute
   '/_dash/ipo': typeof DashIpoRoute
+  '/_dash/ipo-pipeline': typeof DashIpoPipelineRoute
   '/_dash/market': typeof DashMarketRoute
   '/_dash/mutual-funds': typeof DashMutualFundsRoute
   '/_dash/portfolio': typeof DashPortfolioRoute
@@ -203,9 +221,11 @@ export interface FileRouteTypes {
     | '/activity'
     | '/analytics'
     | '/best-shares'
+    | '/brokers'
     | '/dashboard'
     | '/debentures'
     | '/ipo'
+    | '/ipo-pipeline'
     | '/market'
     | '/mutual-funds'
     | '/portfolio'
@@ -224,9 +244,11 @@ export interface FileRouteTypes {
     | '/activity'
     | '/analytics'
     | '/best-shares'
+    | '/brokers'
     | '/dashboard'
     | '/debentures'
     | '/ipo'
+    | '/ipo-pipeline'
     | '/market'
     | '/mutual-funds'
     | '/portfolio'
@@ -246,9 +268,11 @@ export interface FileRouteTypes {
     | '/_dash/activity'
     | '/_dash/analytics'
     | '/_dash/best-shares'
+    | '/_dash/brokers'
     | '/_dash/dashboard'
     | '/_dash/debentures'
     | '/_dash/ipo'
+    | '/_dash/ipo-pipeline'
     | '/_dash/market'
     | '/_dash/mutual-funds'
     | '/_dash/portfolio'
@@ -313,6 +337,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashBestSharesRouteImport
       parentRoute: typeof DashRoute
     }
+    '/_dash/brokers': {
+      id: '/_dash/brokers'
+      path: '/brokers'
+      fullPath: '/brokers'
+      preLoaderRoute: typeof DashBrokersRouteImport
+      parentRoute: typeof DashRoute
+    }
     '/_dash/dashboard': {
       id: '/_dash/dashboard'
       path: '/dashboard'
@@ -332,6 +363,13 @@ declare module '@tanstack/react-router' {
       path: '/ipo'
       fullPath: '/ipo'
       preLoaderRoute: typeof DashIpoRouteImport
+      parentRoute: typeof DashRoute
+    }
+    '/_dash/ipo-pipeline': {
+      id: '/_dash/ipo-pipeline'
+      path: '/ipo-pipeline'
+      fullPath: '/ipo-pipeline'
+      preLoaderRoute: typeof DashIpoPipelineRouteImport
       parentRoute: typeof DashRoute
     }
     '/_dash/market': {
@@ -418,9 +456,11 @@ interface DashRouteChildren {
   DashActivityRoute: typeof DashActivityRoute
   DashAnalyticsRoute: typeof DashAnalyticsRoute
   DashBestSharesRoute: typeof DashBestSharesRoute
+  DashBrokersRoute: typeof DashBrokersRoute
   DashDashboardRoute: typeof DashDashboardRoute
   DashDebenturesRoute: typeof DashDebenturesRoute
   DashIpoRoute: typeof DashIpoRoute
+  DashIpoPipelineRoute: typeof DashIpoPipelineRoute
   DashMarketRoute: typeof DashMarketRoute
   DashMutualFundsRoute: typeof DashMutualFundsRoute
   DashPortfolioRoute: typeof DashPortfolioRoute
@@ -437,9 +477,11 @@ const DashRouteChildren: DashRouteChildren = {
   DashActivityRoute: DashActivityRoute,
   DashAnalyticsRoute: DashAnalyticsRoute,
   DashBestSharesRoute: DashBestSharesRoute,
+  DashBrokersRoute: DashBrokersRoute,
   DashDashboardRoute: DashDashboardRoute,
   DashDebenturesRoute: DashDebenturesRoute,
   DashIpoRoute: DashIpoRoute,
+  DashIpoPipelineRoute: DashIpoPipelineRoute,
   DashMarketRoute: DashMarketRoute,
   DashMutualFundsRoute: DashMutualFundsRoute,
   DashPortfolioRoute: DashPortfolioRoute,

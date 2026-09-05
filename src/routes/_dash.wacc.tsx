@@ -44,9 +44,7 @@ export const Route = createFileRoute("/_dash/wacc")({
       },
       ogImage(),
     ],
-    links: [
-      canonicalLink("/wacc"),
-    ],
+    links: [canonicalLink("/wacc")],
   }),
   component: WaccPage,
 });
