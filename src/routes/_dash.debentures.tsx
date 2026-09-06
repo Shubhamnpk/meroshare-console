@@ -1,9 +1,24 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowUpDown, Landmark, Search, X } from "lucide-react";
+import { ArrowUpDown, Landmark, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ErrorBlock, EmptyBlock, LoadingBlock } from "@/components/states";
+import { BackButton } from "@/components/back-button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { mfDebentureListQuery } from "@/lib/queries";
 import { formatNpr, formatQty } from "@/lib/format";
 import type { MfDebenture } from "@/lib/mutual-funds/types";
@@ -59,14 +74,111 @@ function CouponBadge({ value }: { value: number | null }) {
   );
 }
 
+function DebentureDetail({ d, onClose }: { d: MfDebenture | null; onClose: () => void }) {
+  const facts: [string, string][] = d
+    ? [
+        ["Coupon", d.couponPct != null ? `${d.couponPct.toFixed(2)}% p.a.` : "-"],
+        [
+          "Tenor",
+          d.tenorYears != null
+            ? `${d.tenorYears} yrs${d.maturityBs ? ` · ${d.maturityBs}` : ""}`
+            : (d.maturityBs ?? "-"),
+        ],
+        ["Face value", d.faceValue != null ? formatNpr(d.faceValue) : "-"],
+        ["Units", d.units != null ? formatQty(d.units) : "-"],
+        ["Sector", d.sector ?? "-"],
+        ["Fiscal year", d.fiscalYear ?? "-"],
+        ["Record date", d.dateBs ?? "-"],
+        ["Issue manager", d.issueManager ?? "-"],
+      ]
+    : [];
+  const registered = d?.amountRegistered ?? null;
+  const pub = d?.publicIssueAmount ?? null;
+  const priv = d?.privatePlacementAmount ?? null;
+  const pubPct = registered && registered > 0 && pub != null ? (pub / registered) * 100 : null;
+  return (
+    <Dialog
+      open={d !== null}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-3 text-left">
+            <CouponBadge value={d?.couponPct ?? null} />
+            <span className="min-w-0">
+              <span className="block truncate">{d?.issuer}</span>
+              <span className="block truncate text-xs font-normal text-muted-foreground">
+                {d?.instrument}
+              </span>
+            </span>
+          </DialogTitle>
+          <DialogDescription className="text-left">
+            Full issue record from SEBON public data.
+          </DialogDescription>
+        </DialogHeader>
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm">
+          {facts.map(([label, value]) => (
+            <div key={label}>
+              <dt className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
+                {label}
+              </dt>
+              <dd className="num mt-0.5 font-semibold">{value}</dd>
+            </div>
+          ))}
+        </dl>
+        {registered != null && registered > 0 ? (
+          <div className="rounded-xl border border-border/60 bg-muted/30 p-3">
+            <p className="flex items-baseline justify-between text-xs">
+              <span className="font-semibold uppercase tracking-wide text-muted-foreground">
+                Registered size
+              </span>
+              <span className="num text-sm font-bold">
+                {formatNpr(registered, { compact: true })}
+              </span>
+            </p>
+            {pub != null || priv != null ? (
+              <>
+                <div className="mt-2 flex h-2.5 overflow-hidden rounded-full bg-muted">
+                  <div className="bg-primary/80" style={{ width: `${pubPct ?? 0}%` }} />
+                </div>
+                <div className="num mt-1.5 flex justify-between text-[11px] text-muted-foreground">
+                  <span>
+                    Public{" "}
+                    <span className="font-semibold text-foreground">
+                      {pub != null ? formatNpr(pub, { compact: true }) : "-"}
+                    </span>
+                  </span>
+                  <span>
+                    Private placement{" "}
+                    <span className="font-semibold text-foreground">
+                      {priv != null ? formatNpr(priv, { compact: true }) : "-"}
+                    </span>
+                  </span>
+                </div>
+              </>
+            ) : null}
+          </div>
+        ) : null}
+        <p className="text-[0.68rem] leading-relaxed text-muted-foreground">
+          Indicative only, not investment advice. Coupons are annual rates before tax; payout
+          frequency varies by issue.
+        </p>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function DebenturesPage() {
   const listQ = useQuery(mfDebentureListQuery());
   const [search, setSearch] = useState("");
-  const [sector, setSector] = useState<string | null>(null);
+  const [sector, setSector] = useState<string>("__all__");
   const [sortKey, setSortKey] = useState<SortKey>("coupon");
   const [sortDir, setSortDir] = useState<1 | -1>(-1);
   const [compared, setCompared] = useState<string[]>([]);
   const [principal, setPrincipal] = useState("100000");
+  const [detail, setDetail] = useState<MfDebenture | null>(null);
 
   const all = useMemo(() => listQ.data?.debentures ?? [], [listQ.data]);
   const summary = listQ.data?.summary ?? null;
@@ -84,7 +196,7 @@ function DebenturesPage() {
   const visible = useMemo(() => {
     const term = search.trim().toLowerCase();
     const rows = all.filter((d) => {
-      if (sector && d.sector !== sector) return false;
+      if (sector !== "__all__" && d.sector !== sector) return false;
       if (!term) return true;
       return (
         d.issuer.toLowerCase().includes(term) ||
@@ -92,7 +204,7 @@ function DebenturesPage() {
         (d.issueManager ?? "").toLowerCase().includes(term)
       );
     });
-    const score = (d: MfDebenture): number => {
+    const score = (d: MfDebenture): number | string => {
       switch (sortKey) {
         case "coupon":
           return d.couponPct ?? -1;
@@ -105,7 +217,8 @@ function DebenturesPage() {
     return [...rows].sort((a, b) => {
       const va = score(a);
       const vb = score(b);
-      if (typeof va === "string") return va.localeCompare(vb as string) * sortDir;
+      if (typeof va === "string" || typeof vb === "string")
+        return String(va).localeCompare(String(vb)) * sortDir;
       return ((va as number) - (vb as number)) * sortDir;
     });
   }, [all, search, sector, sortKey, sortDir]);
@@ -118,7 +231,7 @@ function DebenturesPage() {
   };
   const compareRows = useMemo(
     () => compared.flatMap((k) => all.filter((d) => keyOf(d) === k)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
     [compared, all],
   );
   const principalNum = Number(String(principal).replace(/,/g, ""));
@@ -126,6 +239,7 @@ function DebenturesPage() {
 
   return (
     <div className="space-y-5">
+      <BackButton fallback="/tools" />
       <div className="flex items-center gap-3">
         <span className="flex size-11 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary">
           <Landmark className="size-5" />
@@ -186,7 +300,7 @@ function DebenturesPage() {
               <div
                 className={cn(
                   "grid gap-2",
-                  compareRows.length >= 3 ? "sm:grid-cols-3" : "sm:grid-cols-2",
+                  compareRows.length >= 3 ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2",
                 )}
               >
                 {compareRows.map((d) => {
@@ -205,10 +319,10 @@ function DebenturesPage() {
                         onClick={() => toggleCompare(d)}
                         className="absolute right-2 top-2 rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
                       >
-                        <X className="size-3.5" />
+                        ×
                       </button>
                       <p className="num text-2xl font-bold text-gain">
-                        {d.couponPct != null ? `${d.couponPct.toFixed(2)}%` : "—"}
+                        {d.couponPct != null ? `${d.couponPct.toFixed(2)}%` : "-"}
                       </p>
                       <p className="mt-1 truncate text-[13px] font-bold" title={d.issuer}>
                         {d.issuer}
@@ -225,13 +339,13 @@ function DebenturesPage() {
                           <dd className="font-semibold text-foreground">
                             {d.tenorYears != null
                               ? `${d.tenorYears}y${d.maturityBs ? ` · ${d.maturityBs}` : ""}`
-                              : (d.maturityBs ?? "—")}
+                              : (d.maturityBs ?? "-")}
                           </dd>
                         </div>
                         <div className="flex justify-between gap-2">
                           <dt>Face</dt>
                           <dd className="font-semibold text-foreground">
-                            {d.faceValue != null ? formatNpr(d.faceValue) : "—"}
+                            {d.faceValue != null ? formatNpr(d.faceValue) : "-"}
                           </dd>
                         </div>
                         <div className="flex justify-between gap-2">
@@ -239,13 +353,13 @@ function DebenturesPage() {
                           <dd className="font-semibold text-foreground">
                             {d.publicIssueAmount != null
                               ? formatNpr(d.publicIssueAmount, { compact: true })
-                              : "—"}
+                              : "-"}
                           </dd>
                         </div>
                         <div className="flex justify-between gap-2 border-t border-border/60 pt-1">
                           <dt>Yearly on input</dt>
                           <dd className="font-bold text-gain">
-                            {annual != null ? formatNpr(Math.round(annual)) : "—"}
+                            {annual != null ? formatNpr(Math.round(annual)) : "-"}
                           </dd>
                         </div>
                       </dl>
@@ -259,66 +373,67 @@ function DebenturesPage() {
             </section>
           ) : null}
 
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search issuer, instrument or issue manager…"
-              className="h-10 rounded-xl pl-9"
-            />
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search issuer, instrument…"
+                className="h-10 rounded-xl pl-9"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Select value={sector} onValueChange={setSector}>
+                <SelectTrigger className="h-10 w-[160px] rounded-xl text-xs">
+                  <SelectValue placeholder="All sectors" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All sectors</SelectItem>
+                  {sectors.map(([s, n]) => (
+                    <SelectItem key={s} value={s}>
+                      {s} ({n})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div className="flex items-center gap-1 self-start rounded-xl border border-border/60 bg-card p-1">
+                {SORTS.map((s) => (
+                  <button
+                    key={s.key}
+                    type="button"
+                    onClick={() => {
+                      if (s.key === sortKey) setSortDir((d) => (d === 1 ? -1 : 1));
+                      else {
+                        setSortKey(s.key);
+                        setSortDir(-1);
+                      }
+                    }}
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-colors",
+                      sortKey === s.key
+                        ? "bg-primary/15 text-primary"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {s.label}
+                    <ArrowUpDown className="size-3 opacity-60" />
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-1.5">
-            <FilterChip
-              active={sector === null}
-              onClick={() => setSector(null)}
-              label="All sectors"
-            />
-            {sectors.map(([s, n]) => (
-              <FilterChip
-                key={s}
-                active={sector === s}
-                onClick={() => setSector((cur) => (cur === s ? null : s))}
-                label={`${s} · ${n}`}
-              />
-            ))}
-            <span className="mx-1 hidden h-4 w-px bg-border sm:block" />
-            <div className="flex flex-wrap gap-1.5">
-              {SORTS.map((s) => (
-                <button
-                  key={s.key}
-                  type="button"
-                  onClick={() => {
-                    if (s.key === sortKey) setSortDir((d) => (d === 1 ? -1 : 1));
-                    else {
-                      setSortKey(s.key);
-                      setSortDir(-1);
-                    }
-                  }}
-                  className={cn(
-                    "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
-                    sortKey === s.key
-                      ? "border-primary/50 bg-primary/15 text-primary"
-                      : "border-border/60 bg-surface text-muted-foreground",
-                  )}
-                >
-                  {s.label}
-                  <ArrowUpDown className="size-3 opacity-60" />
-                </button>
-              ))}
-            </div>
-            <span className="num ml-auto text-[11px] text-muted-foreground">
-              {visible.length} of {all.length}
-            </span>
-          </div>
+          <p className="num text-[11px] text-muted-foreground">
+            {visible.length} of {all.length}
+          </p>
 
           {visible.length === 0 ? (
             <p className="rounded-2xl border border-border/60 bg-card px-4 py-8 text-center text-sm text-muted-foreground">
               No debentures match your filters.
             </p>
           ) : (
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3">
               {visible.map((d) => {
                 const k = keyOf(d);
                 const picked = compared.includes(k);
@@ -363,7 +478,7 @@ function DebenturesPage() {
                       <div className="rounded-lg bg-surface px-2.5 py-1.5">
                         <dt className="text-muted-foreground">Tenor</dt>
                         <dd className="font-bold">
-                          {d.tenorYears != null ? `${d.tenorYears} yrs` : (d.maturityBs ?? "—")}
+                          {d.tenorYears != null ? `${d.tenorYears} yrs` : (d.maturityBs ?? "-")}
                         </dd>
                       </div>
                       <div className="rounded-lg bg-surface px-2.5 py-1.5">
@@ -371,28 +486,37 @@ function DebenturesPage() {
                         <dd className="font-bold">
                           {d.publicIssueAmount != null
                             ? formatNpr(d.publicIssueAmount, { compact: true })
-                            : "—"}
+                            : "-"}
                         </dd>
                       </div>
                     </dl>
 
                     <div className="mt-auto flex items-center justify-between gap-2 border-t border-border/60 pt-2.5 text-[11px] text-muted-foreground">
                       <span className="truncate">
-                        {d.issueManager ? `via ${d.issueManager}` : "—"}
+                        {d.issueManager ? `via ${d.issueManager}` : "-"}
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => toggleCompare(d)}
-                        disabled={!picked && compared.length >= 3}
-                        className={cn(
-                          "shrink-0 rounded-full border px-2.5 py-1 font-semibold transition-colors disabled:opacity-40",
-                          picked
-                            ? "border-primary/60 bg-primary/15 text-primary"
-                            : "border-border/60 hover:border-primary/40 hover:text-primary",
-                        )}
-                      >
-                        {picked ? "Added" : "Compare"}
-                      </button>
+                      <span className="flex shrink-0 gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setDetail(d)}
+                          className="rounded-full border border-border/60 px-2.5 py-1 font-semibold text-foreground transition-colors hover:border-primary/40 hover:text-primary"
+                        >
+                          Details
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => toggleCompare(d)}
+                          disabled={!picked && compared.length >= 3}
+                          className={cn(
+                            "rounded-full border px-2.5 py-1 font-semibold transition-colors disabled:opacity-40",
+                            picked
+                              ? "border-primary/60 bg-primary/15 text-primary"
+                              : "border-border/60 hover:border-primary/40 hover:text-primary",
+                          )}
+                        >
+                          {picked ? "Added" : "Compare"}
+                        </button>
+                      </span>
                     </div>
                     {d.units != null || d.faceValue != null ? (
                       <p className="num -mt-1 text-[0.68rem] text-muted-foreground">
@@ -412,31 +536,7 @@ function DebenturesPage() {
           </p>
         </>
       )}
+      <DebentureDetail d={detail} onClose={() => setDetail(null)} />
     </div>
-  );
-}
-
-function FilterChip({
-  active,
-  onClick,
-  label,
-}: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
-        active
-          ? "border-primary/50 bg-primary/15 text-primary"
-          : "border-border/60 bg-surface text-muted-foreground hover:border-primary/30",
-      )}
-    >
-      {label}
-    </button>
   );
 }

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Activity, ChartCandlestick, Maximize2, RefreshCw, Search, Star } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ErrorBlock, LoadingBlock, EmptyBlock } from "@/components/states";
+import { SwipeStrip } from "@/components/swipeable-cards";
+import { Heatmap, type HeatTile } from "@/components/market/heatmap";
+import { CategoryDropdown, ModeSwitch } from "@/components/market/heatmap-controls";
 import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
 import { DeltaPill } from "@/components/stat-card";
 import { ScripSheet } from "@/components/market/scrip-sheet";
@@ -27,6 +31,7 @@ import {
   indexGraphQuery,
 } from "@/lib/queries";
 import { formatDateTime, formatNpr, formatNumber, formatPercent, formatQty } from "@/lib/format";
+import { sectorOf } from "@/lib/nepse/sectors";
 import { useWatchlist } from "@/lib/watchlist";
 import { useSettings } from "@/lib/settings";
 import { cn } from "@/lib/utils";
@@ -226,6 +231,96 @@ function MarketPage() {
     return sortBy(rows, getter, sort.dir).slice(0, 200);
   }, [prices, search, sort]);
 
+  // Whole-market heatmap: top 60 scrips by turnover. Grouped splits sectors
+  // into labeled regions on one scale; mixed throws all into a single pool
+  // (same Layout switch as the mutual fund heat map).
+  const [heatGrouped, setHeatGrouped] = useState(true);
+  const [heatSize, setHeatSize] = useState<"turnover" | "volume">("turnover");
+  const [heatSector, setHeatSector] = useState<string | null>(null);
+  const heatSizeLabel = heatSize === "turnover" ? "turnover" : "volume";
+  // Every sector in the session, biggest turnover first — chips isolate even
+  // sectors too small to earn a labeled region on the shared map.
+  const heatSectors = useMemo(() => {
+    const totals = new Map<string, { turnover: number; count: number }>();
+    for (const p of prices) {
+      const sector = p.sector ?? sectorOf(p.symbol) ?? "Unclassified";
+      const entry = totals.get(sector) ?? { turnover: 0, count: 0 };
+      entry.turnover += p.turnover;
+      entry.count += 1;
+      totals.set(sector, entry);
+    }
+    return [...totals.entries()]
+      .map(([sector, stats]) => ({ sector, ...stats }))
+      .sort((a, b) => b.turnover - a.turnover);
+  }, [prices]);
+  const heatTiles: HeatTile[] = useMemo(
+    () =>
+      [...prices]
+        .filter((p) =>
+          heatSector
+            ? (p.sector ?? sectorOf(p.symbol) ?? "Unclassified") === heatSector
+            : true,
+        )
+        .sort((a, b) =>
+          heatSize === "turnover" ? b.turnover - a.turnover : b.volume - a.volume,
+        )
+        .slice(0, 60)
+        .map((p) => {
+          const sizeValue = heatSize === "turnover" ? p.turnover : p.volume;
+          const tile: HeatTile = {
+            key: p.symbol,
+            label: p.symbol,
+            detail: formatPercent(p.percentChange),
+            value: sizeValue,
+            change: p.percentChange,
+            title: `${p.symbol} · ${p.name} · LTP ${formatNpr(p.ltp)} · ${heatSize === "turnover" ? `Turnover ${formatNpr(p.turnover, { compact: true })}` : `Volume ${formatQty(p.volume)}`} · ${formatPercent(p.percentChange)} today`,
+          };
+          if (heatGrouped) tile.group = p.sector ?? sectorOf(p.symbol) ?? "Unclassified";
+          return tile;
+        }),
+    [prices, heatGrouped, heatSize, heatSector],
+  );
+  const priceBySymbol = useMemo(() => new Map(prices.map((p) => [p.symbol, p])), [prices]);
+  const renderMarketTooltip = (tile: HeatTile) => {
+    const p = priceBySymbol.get(tile.key);
+    if (!p) return null;
+    return (
+      <>
+        <div className="flex flex-col gap-0.5 border-b border-border/50 pb-1.5">
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-xs font-black uppercase tracking-wider">{p.symbol}</span>
+            <span className="rounded bg-primary/10 px-1 text-[9px] font-bold uppercase tracking-wider text-primary">
+              {p.sector ?? sectorOf(p.symbol) ?? "Market"}
+            </span>
+          </div>
+          <span className="truncate text-[9px] font-medium text-muted-foreground">{p.name}</span>
+        </div>
+        <div className="space-y-1.5 text-[11px] font-semibold text-muted-foreground">
+          <div className="flex justify-between gap-6">
+            <span>LTP:</span>
+            <span className="font-bold text-foreground">{formatNpr(p.ltp)}</span>
+          </div>
+          <div className="flex justify-between gap-6">
+            <span>Day change:</span>
+            <span className={cn("font-bold", p.percentChange >= 0 ? "text-gain" : "text-loss")}>
+              {formatPercent(p.percentChange)}
+            </span>
+          </div>
+          <div className="flex justify-between gap-6">
+            <span>Turnover:</span>
+            <span className="font-bold text-foreground">
+              {formatNpr(p.turnover, { compact: true })}
+            </span>
+          </div>
+          <div className="flex justify-between gap-6">
+            <span>Volume:</span>
+            <span className="font-bold text-foreground">{formatQty(p.volume)}</span>
+          </div>
+        </div>
+      </>
+    );
+  };
+
   const nepse =
     snapshot.data?.indices.find((i) => /nepse/i.test(i.name)) ?? snapshot.data?.indices[0];
 
@@ -294,7 +389,7 @@ function MarketPage() {
             </p>
           ) : null}
 
-          <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-2 sm:snap-none sm:overflow-x-visible sm:pb-0 xl:grid-cols-4">
+          <SwipeStrip>
             {indices.map((index) => (
               <IndexCard
                 key={index.name}
@@ -303,9 +398,9 @@ function MarketPage() {
                 className="w-[15.5rem] shrink-0 snap-start sm:w-auto"
               />
             ))}
-          </div>
+          </SwipeStrip>
 
-          <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-2 sm:snap-none sm:overflow-x-visible sm:pb-0 xl:grid-cols-4">
+          <SwipeStrip>
             {(snapshot.data?.summary ?? []).slice(0, 4).map((row) => (
               <div
                 key={row.detail}
@@ -324,7 +419,72 @@ function MarketPage() {
                 ) : null}
               </div>
             ))}
-          </div>
+          </SwipeStrip>
+
+          <Panel as="section">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h2 className="font-display text-base font-semibold">Market heatmap</h2>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Top 60 by {heatSizeLabel}
+                  {heatSector ? ` in ${heatSector}` : ""}
+                  {heatGrouped && !heatSector ? ", grouped by sector" : ""}
+                  {!heatGrouped && !heatSector ? ", all mixed" : ""}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <ModeSwitch
+                  label="Size"
+                  options={
+                    [
+                      { key: "turnover", label: "Turnover" },
+                      { key: "volume", label: "Volume" },
+                    ] as const
+                  }
+                  value={heatSize}
+                  onChange={setHeatSize}
+                />
+                <ModeSwitch
+                  label="Layout"
+                  options={
+                    [
+                      { key: "grouped", label: "Grouped" },
+                      { key: "mixed", label: "Mixed" },
+                    ] as const
+                  }
+                  value={heatGrouped ? "grouped" : "mixed"}
+                  onChange={(v) => setHeatGrouped(v === "grouped")}
+                />
+              </div>
+            </div>
+            <CategoryDropdown
+              value={heatSector ?? "all"}
+              options={[
+                { value: "all", label: `All sectors · ${prices.length}` },
+                ...heatSectors.map((s) => ({
+                  value: s.sector,
+                  label: `${s.sector} · ${s.count}`,
+                })),
+              ]}
+              onChange={(v) => setHeatSector(v === "all" ? null : v)}
+              placeholder="Filter by sector"
+              className="mb-2.5"
+            />
+            {heatTiles.length === 0 ? (
+              <EmptyBlock
+                title="No heatmap data"
+                description="Turnover data is unavailable for this session."
+              />
+            ) : (
+              <Heatmap
+                tiles={heatTiles}
+                onPick={setPicked}
+                sizeLabel={heatSizeLabel}
+                heightClass="h-[52vh] sm:h-[60vh]"
+                renderTooltip={renderMarketTooltip}
+              />
+            )}
+          </Panel>
 
           <Panel as="section">
             <h2 className="mb-3 font-display text-base font-semibold">Movers &amp; activity</h2>
@@ -457,7 +617,11 @@ function MarketPage() {
                             }
                             onClick={(e) => {
                               e.stopPropagation();
+                              const wasIn = watchlist.has(price.symbol);
                               watchlist.toggle(price.symbol);
+                              toast.success(
+                                wasIn ? "Removed from watchlist" : "Added to watchlist",
+                              );
                             }}
                             className="text-muted-foreground transition-colors hover:text-warning"
                           >

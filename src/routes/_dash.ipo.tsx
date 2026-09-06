@@ -164,8 +164,10 @@ function UpcomingSection({
             key={`arch-${row.company}-${i}`}
             className="rounded-xl border border-border/60 bg-surface p-3"
           >
-            <p className="text-sm font-semibold">{row.company}</p>
-            <p className="num mt-1 text-xs text-muted-foreground">
+            <p className="truncate text-sm font-semibold" title={row.company}>
+              {row.company}
+            </p>
+            <p className="num mt-1 truncate text-xs text-muted-foreground">
               {row.units ? `${row.units} units` : "Units TBA"}
               {row.dateRange ? ` · ${row.dateRange}` : ""}
             </p>
@@ -245,7 +247,7 @@ function CalendarView() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold">{issue.companyName}</p>
-                        <p className="num text-xs text-muted-foreground">
+                        <p className="num truncate text-xs text-muted-foreground">
                           {issue.scrip} · {issue.shareTypeName} {issue.shareGroupName}
                         </p>
                       </div>
@@ -505,15 +507,20 @@ function IpoPage() {
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList>
-          <TabsTrigger value="apply">Apply for issue</TabsTrigger>
-          <TabsTrigger value="applications">
-            <ClipboardList className="hidden size-4 sm:block" /> My applications
+        <TabsList className="max-w-full overflow-x-auto">
+          <TabsTrigger value="apply" className="shrink-0 px-2 text-xs sm:px-3 sm:text-sm">
+            <span className="hidden sm:inline">Apply for issue</span>
+            <span className="sm:hidden">Apply</span>
           </TabsTrigger>
-          <TabsTrigger value="calendar">
+          <TabsTrigger value="applications" className="shrink-0 px-2 text-xs sm:px-3 sm:text-sm">
+            <ClipboardList className="hidden size-4 sm:block" />
+            <span className="hidden sm:inline">My applications</span>
+            <span className="sm:hidden">Applications</span>
+          </TabsTrigger>
+          <TabsTrigger value="calendar" className="shrink-0 px-2 text-xs sm:px-3 sm:text-sm">
             <CalendarRange className="hidden size-4 sm:block" /> Calendar
           </TabsTrigger>
-          <TabsTrigger value="archive">
+          <TabsTrigger value="archive" className="shrink-0 px-2 text-xs sm:px-3 sm:text-sm">
             <Archive className="hidden size-4 sm:block" /> Archive
           </TabsTrigger>
         </TabsList>
@@ -549,11 +556,14 @@ function IpoPage() {
                         key={issue.companyShareId}
                         className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-card p-4"
                       >
-                        <div>
-                          <p className="font-display text-base font-semibold">
+                        <div className="min-w-0">
+                          <p
+                            className="truncate font-display text-base font-semibold"
+                            title={issue.companyName}
+                          >
                             {issue.companyName}
                           </p>
-                          <p className="num text-xs text-muted-foreground">
+                          <p className="num truncate text-xs text-muted-foreground">
                             {issue.scrip} · {issue.shareTypeName} {issue.shareGroupName}
                           </p>
                         </div>

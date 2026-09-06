@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Search, Star, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
@@ -88,7 +89,9 @@ export function WatchlistPanel({
                   <button
                     type="button"
                     onClick={() => {
+                      const wasIn = watchlist.symbols.includes(s.symbol);
                       watchlist.toggle(s.symbol);
+                      toast.success(wasIn ? "Removed from watchlist" : "Added to watchlist");
                       setTerm("");
                     }}
                     className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-accent/10"
@@ -144,7 +147,10 @@ export function WatchlistPanel({
                   <button
                     type="button"
                     aria-label={`Remove ${symbol}`}
-                    onClick={() => watchlist.remove(symbol)}
+                    onClick={() => {
+                      watchlist.remove(symbol);
+                      toast.success("Removed from watchlist");
+                    }}
                     className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                   >
                     <Trash2 className="size-4" />

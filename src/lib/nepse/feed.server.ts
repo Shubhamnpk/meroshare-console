@@ -30,6 +30,8 @@ import type {
   TopStocks,
 } from "./types";
 import { monthKeyFromEpoch, monthStartEpoch, unitsHeldAt, type UnitSnapshot } from "./timeline";
+import { vendoredSectorMap } from "./sectors";
+import { canonicalSymbol, matchSymbols } from "./aliases";
 
 const BITNEPAL_BASE = "https://nepse.bitnepal.net/api/v1";
 const YONEPSE_BASE = "https://shubhamnpk.github.io/yonepse";
@@ -152,18 +154,19 @@ let sectorLookup: { map: Map<string, string>; expires: number } | null = null;
 async function getSectorMap(): Promise<Map<string, string>> {
   const now = Date.now();
   if (sectorLookup && sectorLookup.expires > now) return sectorLookup.map;
-  const { data } = await bitnepalJson<Record<string, string[]>>("/securities/sectors", TTL.daily);
-  const map = new Map<string, string>();
-  for (const [sector, symbols] of Object.entries(data ?? {})) {
-    for (const symbol of symbols ?? []) map.set(symbol.toUpperCase(), sector);
+  // Primary: YONEPSE sector_codes.json — single source of truth for sectors.
+  try {
+    const remote = await getYonepseSectorMap();
+    if (remote.size > 0) {
+      sectorLookup = { map: remote, expires: now + TTL.daily };
+      return remote;
+    }
+  } catch {
+    // fall through to vendored snapshot
   }
-  // Only cache when the source actually answered. A transient fetch failure or
-  // an empty payload must not lock in an empty sector map for hours.
-  if (data && map.size > 0) sectorLookup = { map, expires: now + TTL.daily };
-  if (map.size > 0) return map;
-  // bitnepal's sector endpoint is unavailable, fall back to the static
-  // YONEPSE sector codes so portfolio sector allocation keeps working.
-  return getYonepseSectorMap();
+  // Outage fallback: checked-in static snapshot — sector display keeps working
+  // app-wide with zero network.
+  return vendoredSectorMap();
 }
 
 export async function getLivePrices(): Promise<{ prices: LivePrice[]; stale: boolean }> {
@@ -196,7 +199,7 @@ export async function getLivePrices(): Promise<{ prices: LivePrice[]; stale: boo
           turnover: num(row["totalTradedValue"]) || num(row["turnover"]),
           trades: num(row["totalTrades"]) || num(row["trades"]),
           lastUpdated: str(row["lastUpdatedTime"]) ?? str(row["last_updated"]),
-          sector: sectors.get(symbol.toUpperCase()) ?? null,
+          sector: sectors.get(symbol.toUpperCase()) ?? sectors.get(canonicalSymbol(symbol.toUpperCase())) ?? null,
           fiftyTwoWeekHigh: row["fiftyTwoWeekHigh"] == null ? null : num(row["fiftyTwoWeekHigh"]),
           fiftyTwoWeekLow: row["fiftyTwoWeekLow"] == null ? null : num(row["fiftyTwoWeekLow"]),
           assetType: str(row["asset_type"]),
@@ -224,6 +227,14 @@ export async function getPriceMap(): Promise<{ map: Map<string, LivePrice>; stal
   const { prices, stale } = await getLivePrices();
   const map = new Map<string, LivePrice>();
   for (const price of prices) map.set(price.symbol, price);
+  // Index canonical names too (renamed schemes, e.g. holding GYSM vs feed
+  // GYSA): every existing consumer resolves through one lookup, unchanged.
+  // Exact feed keys always win — canonical never overwrites a real row.
+  for (const price of prices) {
+    for (const key of matchSymbols(price.symbol)) {
+      if (!map.has(key)) map.set(key, price);
+    }
+  }
   return { map, stale };
 }
 
@@ -635,6 +646,18 @@ async function getYonepseSectorMap(): Promise<Map<string, string>> {
       if (symbol) map.set(symbol.toUpperCase(), sector);
     }
   }
+  // Alias expansion for Garima open-ended fund: CDSC GSYM/GYSM == feed GYSA/GSYA.
+  for (const sym of ["GYSA", "GSYA"] as const) {
+    if (!map.has(sym)) map.set(sym, "Mutual Fund");
+  }
+  for (const [alias, canonical] of Object.entries({
+    GYSM: "GYSA",
+    GSYM: "GYSA",
+    GSYA: "GYSA",
+  } as const)) {
+    const sector = map.get(canonical);
+    if (sector && !map.has(alias)) map.set(alias, sector);
+  }
   // Never cache an empty map; a failed fetch should be retried next time.
   if (data && map.size > 0) sectorCodeLookup = { map, expires: now + TTL.daily };
   return map;
@@ -646,7 +669,7 @@ export async function getFaceValues(symbols: string[]): Promise<Record<string, n
   for (const raw of new Set(symbols)) {
     const symbol = raw.trim().toUpperCase();
     if (!symbol) continue;
-    const sector = sectors.get(symbol) ?? "";
+    const sector = sectors.get(symbol) ?? sectors.get(canonicalSymbol(symbol)) ?? "";
     out[symbol] = /mutual fund/i.test(sector) ? 10 : 100;
   }
   return out;
@@ -749,12 +772,16 @@ export async function getYonepseHistory(symbol: string, limitDays = 264): Promis
 
 export async function getScripDetail(symbol: string): Promise<ScripDetail> {
   const upper = symbol.toUpperCase();
+  // Feeds know renamed schemes by their canonical name (e.g. GYSA, not the
+  // holding-side GYSM) — query those, but keep the requested symbol on the
+  // overview so the UI still shows what the user asked for.
+  const feedSymbol = canonicalSymbol(upper);
   const [detail, history, intraday, dividends, yonepse] = await Promise.all([
-    bitnepalJson<Rec>(`/securities/${encodeURIComponent(upper)}`, TTL.medium),
-    bitnepalJson<Rec[]>(`/securities/${encodeURIComponent(upper)}/history`, TTL.medium),
-    bitnepalJson<Rec[]>(`/securities/${encodeURIComponent(upper)}/graph`, TTL.fast),
+    bitnepalJson<Rec>(`/securities/${encodeURIComponent(feedSymbol)}`, TTL.medium),
+    bitnepalJson<Rec[]>(`/securities/${encodeURIComponent(feedSymbol)}/history`, TTL.medium),
+    bitnepalJson<Rec[]>(`/securities/${encodeURIComponent(feedSymbol)}/graph`, TTL.fast),
     getDividends(),
-    getYonepseHistory(upper),
+    getYonepseHistory(feedSymbol),
   ]);
 
   const daily = (detail?.data?.["securityDailyTradeDto"] ?? {}) as Rec;

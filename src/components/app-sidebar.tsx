@@ -43,6 +43,7 @@ export const MOBILE_NAV: NavItem[] = [
   { to: "/portfolio", label: "Portfolio", icon: Briefcase },
   { to: "/market", label: "Market", icon: LineChart },
   { to: "/ipo", label: "IPO", icon: Rocket },
+  { to: "/tools", label: "Tools", icon: Blocks },
 ];
 
 function NavGroup({
@@ -132,7 +133,7 @@ export function MobileNav() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border/70 bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
-      <div className="grid grid-cols-4">
+      <div className="grid grid-cols-5">
         {MOBILE_NAV.map((item) => {
           const active = pathname === item.to;
           return (

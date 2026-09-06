@@ -20,7 +20,6 @@ export function StatCard({
     <div
       className={cn(
         "relative overflow-hidden rounded-2xl border border-border/70 bg-card p-4 sm:p-5",
-        tone === "brand" && "glow",
         className,
       )}
     >
@@ -45,16 +44,27 @@ export function StatCard({
   );
 }
 
-export function DeltaPill({ value, children }: { value: number; children: ReactNode }) {
+export function DeltaPill({
+  value,
+  children,
+  className,
+}: {
+  value: number;
+  children: ReactNode;
+  className?: string;
+}) {
   return (
     <span
       className={cn(
-        "num inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold",
+        // text-center + leading-snug keep the stadium shape clean when long
+        // values wrap onto a 2nd/3rd row in squeezed table cells.
+        "num inline-flex max-w-full items-center justify-center gap-1 rounded-full px-2 py-0.5 text-center text-xs font-semibold leading-snug",
         value > 0
           ? "bg-gain/15 text-gain"
           : value < 0
             ? "bg-loss/15 text-loss"
             : "bg-muted text-muted-foreground",
+        className,
       )}
     >
       {children}

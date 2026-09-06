@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   Camera,
   Loader2,
@@ -282,12 +283,17 @@ function TerminalPage() {
     setState((prev) => ({ ...prev, indicators: { ...prev.indicators, [key]: value } }));
 
   const snapshotPng = () => {
-    const canvas = document.querySelector<HTMLCanvasElement>("#terminal-chart canvas");
-    if (!canvas) return;
-    const link = document.createElement("a");
-    link.download = `${mode === "portfolio" ? "portfolio" : state.symbol}-${state.range}.png`;
-    link.href = canvas.toDataURL("image/png");
-    link.click();
+    try {
+      const canvas = document.querySelector<HTMLCanvasElement>("#terminal-chart canvas");
+      if (!canvas) return;
+      const link = document.createElement("a");
+      link.download = `${mode === "portfolio" ? "portfolio" : state.symbol}-${state.range}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+      toast.success("Chart snapshot saved");
+    } catch {
+      toast.error("Failed to save chart");
+    }
   };
 
   return (

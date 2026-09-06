@@ -41,6 +41,7 @@ import { activityLogQuery, defaultActivityRange } from "@/lib/queries";
 import { formatDate, formatDateTime, formatNumber } from "@/lib/format";
 import { useIpLocations, type IpLocation } from "@/lib/ip-location";
 import { ogImage, canonicalLink } from "@/lib/seo";
+import { CountryFlag } from "@/components/ui/country-flag";
 import type { ActivityLogItem } from "@/lib/meroshare/types";
 
 export const Route = createFileRoute("/_dash/activity")({
@@ -231,11 +232,11 @@ function LocationCell({
   }
   return (
     <div className="space-y-0.5">
-      <p className="text-xs font-medium">
+      <p className="flex items-center gap-1.5 text-xs font-medium">
         {loc.flag ? (
-          <span className="mr-1">{loc.flag}</span>
+          <CountryFlag code={loc.countryCode} emoji={loc.flag} size={14} />
         ) : (
-          <MapPin className="mr-1 inline size-3 text-muted-foreground" />
+          <MapPin className="size-3 text-muted-foreground" />
         )}
         {loc.label}
       </p>
@@ -603,8 +604,18 @@ function ActivityPage() {
                   <selectedMeta.Icon className="size-5" />
                 </span>
                 <div className="min-w-0">
-                  <DialogTitle className="truncate">
-                    {String(selected.description ?? selected.activityType ?? "Activity")}
+                  <DialogTitle className="flex items-center gap-2 truncate">
+                    <span className="truncate">
+                      {String(selected.description ?? selected.activityType ?? "Activity")}
+                    </span>
+                    {selectedLoc?.flag ? (
+                      <CountryFlag
+                        code={selectedLoc.countryCode}
+                        emoji={selectedLoc.flag}
+                        size={18}
+                        className="shrink-0"
+                      />
+                    ) : null}
                   </DialogTitle>
                   <DialogDescription>
                     {formatDateTime(selected.recordedDate)}
@@ -633,8 +644,14 @@ function ActivityPage() {
                 <p className="flex items-center gap-1.5 text-[0.68rem] font-medium uppercase tracking-wide text-muted-foreground">
                   <MapPin className="size-3.5" /> Location
                 </p>
-                <p className="mt-1.5 text-sm font-semibold">
-                  {selectedLoc?.flag ? <span className="mr-1">{selectedLoc.flag}</span> : null}
+                <p className="mt-1.5 flex items-center gap-1.5 text-sm font-semibold">
+                  {selectedLoc?.flag ? (
+                    <CountryFlag
+                      code={selectedLoc.countryCode}
+                      emoji={selectedLoc.flag}
+                      size={16}
+                    />
+                  ) : null}
                   {selectedLoc && !selectedLoc.private
                     ? selectedLoc.label
                     : selectedLoc?.private
@@ -660,6 +677,17 @@ function ActivityPage() {
                 ) : null}
               </div>
             </div>
+
+            {selectedLoc?.latitude != null && selectedLoc?.longitude != null ? (
+              <div className="overflow-hidden rounded-xl border border-border/70">
+                <iframe
+                  title="Location map"
+                  src={`https://www.openstreetmap.org/export/embed.html?bbox=${selectedLoc.longitude - 0.05}%2C${selectedLoc.latitude - 0.035}%2C${selectedLoc.longitude + 0.05}%2C${selectedLoc.latitude + 0.035}&layer=mapnik&marker=${selectedLoc.latitude}%2C${selectedLoc.longitude}`}
+                  className="h-48 w-full border-0 sm:h-56"
+                  loading="lazy"
+                />
+              </div>
+            ) : null}
 
             {selectedGroup ? (
               <div className="rounded-xl border border-border/70 p-3.5">
@@ -753,7 +781,12 @@ function ActivityPage() {
                         <span className="min-w-0 flex-1">
                           <span className="block truncate font-medium">
                             {group.loc?.flag ? (
-                              <span className="mr-1">{group.loc.flag}</span>
+                              <CountryFlag
+                                code={group.loc.countryCode}
+                                emoji={group.loc.flag}
+                                size={14}
+                                className="mr-1"
+                              />
                             ) : null}
                             {group.loc && !group.loc.private
                               ? group.loc.label

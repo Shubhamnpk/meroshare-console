@@ -81,31 +81,23 @@ function ToolsPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {TOOLS.map((tool) => (
           <Link
             key={tool.to}
             to={tool.to}
-            className="group flex flex-col gap-4 rounded-2xl border border-border/70 bg-card p-5 transition-colors hover:border-primary/40 sm:p-6"
+            className="group flex items-center gap-3 rounded-2xl border border-border/70 bg-card p-3 transition-colors hover:border-primary/40 sm:flex-col sm:items-start sm:gap-4 sm:p-5"
           >
-            <div className="flex items-start justify-between">
-              <span className="flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                <tool.icon className="size-5" />
-              </span>
-              <span className="rounded-full bg-muted px-2.5 py-1 text-[0.7rem] font-medium text-muted-foreground">
-                {tool.tag}
-              </span>
-            </div>
-            <div>
-              <p className="font-display text-lg font-semibold">{tool.title}</p>
-              <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary sm:size-11 sm:rounded-2xl">
+              <tool.icon className="size-5" />
+            </span>
+            <div className="min-w-0 flex-1 sm:flex-none">
+              <p className="font-display text-sm font-semibold sm:text-lg">{tool.title}</p>
+              <p className="hidden text-sm leading-relaxed text-muted-foreground sm:mt-1 sm:block">
                 {tool.description}
               </p>
             </div>
-            <span className="mt-auto inline-flex items-center gap-1.5 text-sm font-medium text-primary">
-              Open tool
-              <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
-            </span>
+            <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 sm:ml-auto sm:hidden" />
           </Link>
         ))}
       </div>

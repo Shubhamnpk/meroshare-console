@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ListChecks, RotateCcw, ShieldCheck } from "lucide-react";
+import { ListChecks, RotateCcw, ShieldCheck, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ import { ExportButton, csvRow } from "@/components/export-dialog";
 import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
 import {
   holdingSymbolsQuery,
+  investmentSummaryQuery,
   waccReportQuery,
   waccScripsQuery,
   waccSearchQuery,
@@ -29,6 +30,12 @@ import { ogImage, canonicalLink } from "@/lib/seo";
 import type { PurchaseSourceItem, WaccReportItem } from "@/lib/meroshare/types";
 
 export const Route = createFileRoute("/_dash/wacc")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    scrip:
+      typeof search["scrip"] === "string" && (search["scrip"] as string).trim()
+        ? (search["scrip"] as string).trim().toUpperCase()
+        : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Purchase Source | MeroShare Investor Console" },
@@ -87,7 +94,10 @@ function rowDate(r: PurchaseSourceItem): number {
 }
 
 function SummaryTable({ scrip, rows }: { scrip: string; rows: PurchaseSourceItem[] }) {
-  const { sort, toggle } = useSort<RowSortKey>({ key: "date", dir: "asc" });
+  const { sort, toggle } = useSort<RowSortKey>(
+    { key: "date", dir: "asc" },
+    { date: "number", qty: "number", price: "number", cost: "number" },
+  );
   const sorted = useMemo(() => {
     switch (sort.key) {
       case "qty":
@@ -247,7 +257,10 @@ function PendingTable({ scrip, rows }: { scrip: string; rows: PurchaseSourceItem
     return { units, cost, wacc: units ? cost / units : 0 };
   }, [selected]);
 
-  const { sort, toggle } = useSort<RowSortKey>({ key: "date", dir: "asc" });
+  const { sort, toggle } = useSort<RowSortKey>(
+    { key: "date", dir: "asc" },
+    { date: "number", qty: "number", price: "number", cost: "number" },
+  );
   // Sorted view keeps each draft's original index so edits map back correctly.
   const sortedView = useMemo(() => {
     const view = drafts.map((d, idx) => ({ d, idx }));
@@ -281,6 +294,7 @@ function PendingTable({ scrip, rows }: { scrip: string; rows: PurchaseSourceItem
       void queryClient.invalidateQueries({ queryKey: ["wacc-search"] });
       void queryClient.invalidateQueries({ queryKey: ["wacc-scrips"] });
       void queryClient.invalidateQueries({ queryKey: ["wacc-report"] });
+      void queryClient.invalidateQueries({ queryKey: ["investment-summary"] });
     },
     onError: (error) => toast.error(errorMessage(error, "Could not submit the purchase source.")),
   });
@@ -490,13 +504,21 @@ function reportCsv(holdings: WaccReportItem[]) {
   );
 }
 
-function WaccReportPanel() {
+function WaccReportPanel({
+  highlightScrip,
+  autoScroll,
+  onPickScrip,
+}: {
+  highlightScrip: string | undefined;
+  autoScroll: boolean;
+  onPickScrip: (scrip: string) => void;
+}) {
   const report = useQuery(waccReportQuery());
   const holdings = report.data?.waccReportResponse ?? [];
-  const { sort, toggle } = useSort<"scrip" | "qty" | "rate" | "cost">({
-    key: "scrip",
-    dir: "asc",
-  });
+  const { sort, toggle } = useSort<"scrip" | "qty" | "rate" | "cost">(
+    { key: "scrip", dir: "asc" },
+    { scrip: "text", qty: "number", rate: "number", cost: "number" },
+  );
   const sorted = useMemo(() => {
     switch (sort.key) {
       case "qty":
@@ -509,6 +531,19 @@ function WaccReportPanel() {
         return sortBy(holdings, (h) => String(h.scrip ?? ""), sort.dir);
     }
   }, [holdings, sort]);
+  const highlight = highlightScrip?.toUpperCase() ?? "";
+  // Deep-link landing (?scrip=): jump once to the scrip's row in the
+  // all-calculated table. Manual picks only highlight, never yank scroll.
+  const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
+  const scrolledFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!autoScroll || !highlight || scrolledFor.current === highlight) return;
+    const el = rowRefs.current.get(highlight);
+    if (el) {
+      scrolledFor.current = highlight;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  });
   if (!report.data || holdings.length === 0) return null;
   const totalCost = holdings.reduce((s, h) => s + Math.max(0, toNumber(h.totalCost)), 0);
   const totalUnits = holdings.reduce((s, h) => s + Math.max(0, toNumber(h.totalQuantity)), 0);
@@ -549,6 +584,7 @@ function WaccReportPanel() {
                 active={sort.key === "scrip"}
                 dir={sort.dir}
                 onClick={() => toggle("scrip")}
+                kind="text"
               />
               <SortableTh
                 label="Quantity"
@@ -577,8 +613,20 @@ function WaccReportPanel() {
             </tr>
           </thead>
           <tbody className="divide-y divide-border/60">
-            {sorted.map((h) => (
-              <tr key={String(h.scrip)} className="hover:bg-accent/30">
+            {sorted.map((h) => {
+              const key = String(h.scrip ?? "").toUpperCase();
+              const isHi = highlight !== "" && key === highlight;
+              return (
+              <tr
+                key={String(h.scrip)}
+                ref={(el) => {
+                  if (el) rowRefs.current.set(key, el);
+                  else rowRefs.current.delete(key);
+                }}
+                onClick={() => onPickScrip(String(h.scrip ?? ""))}
+                title={`View WACC detail for ${String(h.scrip ?? "")}`}
+                className={cn("cursor-pointer hover:bg-accent/30", isHi && "bg-primary/10")}
+              >
                 <td className="px-4 py-2.5 font-semibold">{h.scrip}</td>
                 <td className="num px-4 py-2.5 text-right">
                   {formatQty(toNumber(h.totalQuantity))}
@@ -591,7 +639,8 @@ function WaccReportPanel() {
                   {h.lastModifiedDate ?? ""}
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
           <tfoot>
             <tr className="border-t border-border/70 bg-muted/40 font-semibold">
@@ -621,14 +670,98 @@ function WaccReportPanel() {
 function WaccPage() {
   const symbols = useQuery(holdingSymbolsQuery());
   const pendingScrips = useQuery(waccScripsQuery());
-  const [scrip, setScrip] = useState("");
+  const { scrip: scripParam } = Route.useSearch();
+  const [scrip, setScrip] = useState(scripParam ?? "");
+  // Follow ?scrip= links (e.g. from a stock's detail sheet) even when the
+  // page is already open — without this the selection would go stale.
+  useEffect(() => {
+    if (scripParam) setScrip(scripParam);
+  }, [scripParam]);
   const search = useQuery(waccSearchQuery(scrip || null));
+  const investment = useQuery(investmentSummaryQuery());
+  // Same cache as the Calculated WACC panel below — if the totals show there,
+  // this entry exists here too. No separate fetch, no separate failure mode.
+  const report = useQuery(waccReportQuery());
+
+  // Already-known basis for the selected scrip. The account-wide report is
+  // authoritative and read directly (it visibly works); the investment
+  // summary backs it up for view-/purchase-source-only scrips.
+  const upperScrip = scrip.toUpperCase();
+  const reportRow = (report.data?.waccReportResponse ?? []).find(
+    (h) => String(h.scrip ?? "").toUpperCase() === upperScrip && toNumber(h.totalCost) > 0,
+  );
+  const reportUnits = Math.max(0, toNumber(reportRow?.totalQuantity));
+  const reportCost = Math.max(0, toNumber(reportRow?.totalCost));
+  const reportRate = toNumber(reportRow?.averageBuyRate);
+  const basisEntry = reportRow
+    ? {
+        scrip: upperScrip,
+        units: reportUnits,
+        cost: reportCost,
+        waccRate: reportRate > 0 ? reportRate : reportUnits > 0 ? reportCost / reportUnits : 0,
+        status: "calculated" as const,
+      }
+    : ((investment.data?.scrips ?? []).find(
+        (s) => s.scrip === upperScrip && s.cost > 0 && s.units > 0,
+      ) ?? null);
+  const searchHasSummary = (search.data?.waccSummaryResponse ?? []).length > 0;
+  // Calculated WACC renders its SummaryTable by default from the known basis
+  // when the per-scrip search can't supply its own rows (blocked or empty).
+  // A single aggregate row stands in for the transaction detail, labeled as
+  // such in Remarks.
+  const fallbackSummaryRows: PurchaseSourceItem[] =
+    basisEntry?.status === "calculated" && !searchHasSummary && !search.isPending
+      ? [
+          {
+            scrip,
+            quantity: basisEntry.units,
+            transactionQuantity: basisEntry.units,
+            rate: Math.round(basisEntry.waccRate * 100) / 100,
+            purchasePrice: Math.round(basisEntry.waccRate * 100) / 100,
+            userPrice: Math.round(basisEntry.waccRate * 100) / 100,
+            userCost: basisEntry.cost,
+            remarks: "Aggregated total — transaction rows unavailable",
+          },
+        ]
+      : [];
+  // Pending estimates keep the compact banner (no table to fill).
+  const showBasisBanner = Boolean(
+    scrip && basisEntry && basisEntry.status === "pending" && !search.isPending,
+  );
 
   const pendingList = pendingScrips.data?.scrips ?? [];
   const pendingFailed = pendingScrips.data?.failed === true;
   const manualSymbols = useMemo(
     () => (symbols.data ?? []).filter((s) => !pendingList.includes(s)),
     [symbols.data, pendingList],
+  );
+
+  // Default overview (no scrip selected): completed WACC straight from the
+  // aggregated investment summary, plus a guided list of pending scrips that
+  // jump straight into their calculation when tapped.
+  const doneScrips = useMemo(
+    () =>
+      (investment.data?.scrips ?? [])
+        .filter((s) => s.status === "calculated" && s.cost > 0)
+        .sort((a, b) => a.scrip.localeCompare(b.scrip)),
+    [investment.data],
+  );
+  const todoScrips = useMemo(() => {
+    const fromPending = pendingList.filter(
+      (s) => !doneScrips.some((d) => d.scrip === s),
+    );
+    if (fromPending.length > 0) return fromPending;
+    return (investment.data?.scrips ?? [])
+      .filter((s) => s.status !== "calculated")
+      .map((s) => s.scrip)
+      .sort();
+  }, [pendingList, investment.data, doneScrips]);
+  const doneTotals = useMemo(
+    () => ({
+      units: doneScrips.reduce((s, r) => s + r.units, 0),
+      cost: doneScrips.reduce((s, r) => s + r.cost, 0),
+    }),
+    [doneScrips],
   );
 
   return (
@@ -704,6 +837,17 @@ function WaccPage() {
               Checking pending scrips…
             </span>
           ) : null}
+          {scrip ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setScrip("")}
+              className="sm:ml-auto"
+              title="Clear selection and return to the overview"
+            >
+              <X className="size-3.5" /> Overview
+            </Button>
+          ) : null}
         </div>
         {pendingList.length > 1 ? (
           <div className="flex flex-wrap gap-1.5">
@@ -726,15 +870,130 @@ function WaccPage() {
         ) : null}
       </div>
 
+      {showBasisBanner && basisEntry ? (
+        <section className="flex flex-wrap items-center gap-2 rounded-2xl border border-border/70 bg-card p-4">
+          {basisEntry.status === "calculated" ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-600">
+              <ShieldCheck className="size-3.5" /> WACC calculated for {scrip}
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-600">
+              <ListChecks className="size-3.5" /> WACC estimate for {scrip} · pending
+            </span>
+          )}
+          <span className="num text-sm text-muted-foreground">
+            {formatQty(basisEntry.units)} units · {formatNpr(basisEntry.cost)} total · WACC{" "}
+            {formatNpr(Math.round(basisEntry.waccRate * 100) / 100)}
+          </span>
+        </section>
+      ) : null}
+
       {!scrip ? (
-        <EmptyBlock
-          title="Select a scrip"
-          description={
-            pendingList.length
-              ? `Start with ${pendingList[0]}, it has a pending WACC calculation.`
-              : "Pick a scrip above to load its purchase source entries."
-          }
-        />
+        investment.isPending || pendingScrips.isPending || symbols.isPending ? (
+          <SkeletonCards count={2} />
+        ) : doneScrips.length > 0 || todoScrips.length > 0 ? (
+          <div className="space-y-8">
+            {doneScrips.length > 0 ? (
+              <section className="space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="font-display text-base font-semibold">Calculated WACC</h2>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-600">
+                    <ShieldCheck className="size-3" /> {doneScrips.length} done
+                  </span>
+                  <span className="num ml-auto rounded-full border border-border/70 bg-card px-3 py-1.5 text-xs text-muted-foreground">
+                    {formatQty(doneTotals.units)} units · {formatNpr(doneTotals.cost)} invested
+                  </span>
+                </div>
+                <div className="overflow-x-auto rounded-2xl border border-border/70 bg-card">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border/70 bg-muted/40 text-muted-foreground">
+                        <th className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider">
+                          Scrip
+                        </th>
+                        <th className="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wider">
+                          Quantity
+                        </th>
+                        <th className="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wider">
+                          WACC rate
+                        </th>
+                        <th className="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wider">
+                          Total cost
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/60">
+                      {doneScrips.map((s) => (
+                        <tr
+                          key={s.scrip}
+                          onClick={() => setScrip(s.scrip)}
+                          title={`View WACC detail for ${s.scrip}`}
+                          className="cursor-pointer hover:bg-accent/30"
+                        >
+                          <td className="px-4 py-2.5 font-semibold">{s.scrip}</td>
+                          <td className="num px-4 py-2.5 text-right">{formatQty(s.units)}</td>
+                          <td className="num px-4 py-2.5 text-right">{formatNpr(s.waccRate)}</td>
+                          <td className="num px-4 py-2.5 text-right">{formatNpr(s.cost)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t border-border/70 bg-muted/40 font-semibold">
+                        <td className="px-4 py-2.5">
+                          Total · {doneScrips.length} scrip{doneScrips.length > 1 ? "s" : ""}
+                        </td>
+                        <td className="num px-4 py-2.5 text-right">{formatQty(doneTotals.units)}</td>
+                        <td
+                          className="num px-4 py-2.5 text-right"
+                          title="Average WACC across calculated scrips (total cost / total units)"
+                        >
+                          {formatNpr(
+                            Math.round((doneTotals.cost / Math.max(1, doneTotals.units)) * 100) /
+                              100,
+                          )}
+                        </td>
+                        <td className="num px-4 py-2.5 text-right">
+                          {formatNpr(doneTotals.cost)}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </section>
+            ) : null}
+            {todoScrips.length > 0 ? (
+              <section className="space-y-3 rounded-2xl border border-border/70 bg-card p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="font-display text-base font-semibold">Pending completion</h2>
+                  <span className="rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs font-semibold text-amber-600">
+                    {todoScrips.length} to do
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  These still need their purchase prices confirmed. Tap one to jump straight
+                  into its calculation.
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {todoScrips.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setScrip(s)}
+                      className="rounded-full border border-border/60 bg-surface px-3 py-1 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground"
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            ) : null}
+          </div>
+        ) : (
+          <EmptyBlock
+            title="Select a scrip"
+            description="Pick a scrip above to load its purchase source entries."
+          />
+        )
       ) : search.isPending ? (
         <SkeletonCards count={2} />
       ) : search.isError ? (
@@ -752,6 +1011,11 @@ function WaccPage() {
             </section>
           ) : null}
         </div>
+      ) : fallbackSummaryRows.length > 0 ? (
+        <section className="space-y-3">
+          <h2 className="font-display text-base font-semibold">Calculated for {scrip}</h2>
+          <SummaryTable scrip={scrip} rows={fallbackSummaryRows} />
+        </section>
       ) : (
         <EmptyBlock
           title="Nothing to do"
@@ -759,7 +1023,14 @@ function WaccPage() {
         />
       )}
 
-      <WaccReportPanel />
+      <WaccReportPanel
+        highlightScrip={scrip || undefined}
+        autoScroll={Boolean(scripParam && scripParam === scrip)}
+        onPickScrip={(s) => {
+          setScrip(s);
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }}
+      />
     </div>
   );
 }

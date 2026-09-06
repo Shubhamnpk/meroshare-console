@@ -283,7 +283,7 @@ function DashboardPage() {
             type="button"
             onClick={() => setChartOpen(true)}
             interactive
-            className="group relative w-full overflow-hidden text-left transition-colors"
+            className="group relative hidden w-full overflow-hidden text-left transition-colors sm:block"
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>

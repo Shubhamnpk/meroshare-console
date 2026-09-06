@@ -1,14 +1,18 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSettings } from "@/lib/prefs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Heatmap, type HeatTile } from "@/components/market/heatmap";
+import {
+  CategoryDropdown,
+  HeatSearch,
+  ModeSwitch,
+} from "@/components/market/heatmap-controls";
 import {
   LayoutGrid,
   X,
-  Search,
   Info,
   Filter,
   PieChart,
@@ -37,430 +41,6 @@ type SizeMode = "size" | "units";
 type ColorMode = "day" | "discount";
 type TypeFilter = "all" | "open" | "close";
 
-interface Rect {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  index: number;
-}
-
-interface GroupBox {
-  key: string;
-  label: string;
-  count: number;
-  /** Share of total map area, 0–1. */
-  share: number;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
-
-function HeatMapContent({
-  items,
-  sizeMode,
-  colorMode,
-  searchQuery,
-  selectedItem,
-  setSelectedItem,
-  onPick,
-  heightClass,
-  grouped,
-}: {
-  items: HeatRow[];
-  sizeMode: SizeMode;
-  colorMode: ColorMode;
-  searchQuery: string;
-  selectedItem: HeatRow | null;
-  setSelectedItem: (item: HeatRow | null) => void;
-  onPick: (symbol: string) => void;
-  heightClass: string;
-  grouped: boolean;
-}) {
-  // Positive displayPct = green. Discount is inverted: below NAV (negative) is good.
-  const displayOf = (r: HeatRow): number | null => {
-    if (colorMode === "day") return r.dayChange;
-    return r.discount == null ? null : -r.discount;
-  };
-  const labelOf = (r: HeatRow): number | null => (colorMode === "day" ? r.dayChange : r.discount);
-
-  const maxAbs = useMemo(() => {
-    let m = 0;
-    for (const r of items) {
-      const v = displayOf(r);
-      if (v != null && Number.isFinite(v)) m = Math.max(m, Math.abs(v));
-    }
-    return m > 0 ? m : 1;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, colorMode]);
-
-  const sizingKey = sizeMode === "size" ? "size" : "units";
-
-  const layout = useMemo(() => {
-    const result: Rect[] = [];
-    const boxes: GroupBox[] = [];
-
-    function squarify(
-      entries: { value: number; index: number }[],
-      rect: { x: number; y: number; w: number; h: number },
-      res: Rect[],
-    ) {
-      if (entries.length === 0) return;
-      // Degenerate rect (float overshoot clamped to 0 upstream) or no value:
-      // emit empty cells so every call consumes entries and always terminates.
-      if (!(rect.w > 0) || !(rect.h > 0)) {
-        for (const e of entries) res.push({ x: 0, y: 0, w: 0, h: 0, index: e.index });
-        return;
-      }
-      const totalValue = entries.reduce((s, e) => s + e.value, 0);
-      if (!(totalValue > 0)) {
-        for (const e of entries) res.push({ x: 0, y: 0, w: 0, h: 0, index: e.index });
-        return;
-      }
-
-      const row: typeof entries = [];
-      let rowValue = 0;
-      let bestAspect = Infinity;
-      const isVertical = rect.w >= rect.h;
-
-      for (let i = 0; i < entries.length; i++) {
-        const candidate = [...row, entries[i]!];
-        const cv = candidate.reduce((s, e) => s + e.value, 0);
-        const frac = cv / totalValue;
-        const rowSize = isVertical
-          ? (frac * rect.w * rect.h) / rect.h
-          : (frac * rect.w * rect.h) / rect.w;
-
-        const aspects = candidate.map((e) => {
-          const c = isVertical
-            ? ((e.value / cv) * rect.w) / rowSize
-            : ((e.value / cv) * rect.h) / rowSize;
-          return Math.max(c, 1 / c);
-        });
-        const worst = Math.max(...aspects);
-        if (worst < bestAspect) {
-          bestAspect = worst;
-          row.push(entries[i]!);
-          rowValue = cv;
-        } else {
-          break;
-        }
-      }
-
-      const remaining = entries.slice(row.length === 0 ? 1 : row.length);
-      if (row.length === 0) {
-        // Aspect math refused every candidate (degenerate rect sliver):
-        // force the largest entry through so recursion always shrinks.
-        row.push(entries[0]!);
-        rowValue = entries[0]!.value;
-      }
-      const frac = rowValue / totalValue;
-      let rowW: number;
-      let rowH: number;
-      let rowX: number;
-      let rowY: number;
-      if (isVertical) {
-        rowW = frac * rect.w;
-        rowH = rect.h;
-        rowX = rect.x;
-        rowY = rect.y;
-      } else {
-        rowW = rect.w;
-        rowH = frac * rect.h;
-        rowX = rect.x;
-        rowY = rect.y;
-      }
-
-      const rowTotal = row.reduce((s, e) => s + e.value, 0) || 1;
-      let acc = 0;
-      for (const e of row) {
-        const f = e.value / rowTotal;
-        if (isVertical) {
-          res.push({ x: rowX, y: rowY + acc * rowH, w: rowW, h: f * rowH, index: e.index });
-          acc += f;
-        } else {
-          res.push({ x: rowX + acc * rowW, y: rowY, w: f * rowW, h: rowH, index: e.index });
-          acc += f;
-        }
-      }
-
-      const remainingRect = isVertical
-        ? { x: rect.x + rowW, y: rect.y, w: Math.max(0, rect.w - rowW), h: rect.h }
-        : {
-            x: rect.x,
-            y: rect.y + rowH,
-            w: rect.w,
-            h: Math.max(0, rect.h - rowH),
-          };
-
-      squarify(remaining, remainingRect, res);
-    }
-
-    // One shared map: each structure gets its own region, split from the root
-    // in proportion to its total, so every tile stays on the same scale.
-    const buckets = new Map<string, number[]>();
-    items.forEach((r, i) => {
-      const key = r.fundType === "open_end" ? "open" : "close";
-      const arr = buckets.get(key);
-      if (arr) arr.push(i);
-      else buckets.set(key, [i]);
-    });
-    const groups = [...buckets.entries()]
-      .map(([key, idx]) => ({
-        key,
-        label: key === "open" ? "Open-end" : "Close-end",
-        idx,
-        total: idx.reduce((s, i) => s + Math.abs(items[i]![sizingKey] ?? 0), 0),
-      }))
-      .sort((a, b) => b.total - a.total);
-    const grand = groups.reduce((s, g) => s + g.total, 0) || 1;
-    if (!grouped || groups.length < 2) {
-      // All-together: every fund competes in one pool, biggest tile wins
-      // regardless of category.
-      const entries = items
-        .map((item, i) => ({ value: Math.abs(item[sizingKey] ?? 0) / grand, index: i }))
-        .sort((a, b) => b.value - a.value);
-      squarify(entries, { x: 0, y: 0, w: 100, h: 100 }, result);
-      return { rects: result.sort((a, b) => a.index - b.index), boxes };
-    }
-    let edge = 0;
-    for (const g of groups) {
-      const share = (g.total / grand) * 100;
-      const sub = g.total > 0 ? { x: edge, y: 0, w: share, h: 100 } : { x: 0, y: 0, w: 0, h: 0 };
-      const entries = g.idx
-        .map((i) => ({ value: Math.abs(items[i]![sizingKey] ?? 0) / grand, index: i }))
-        .sort((a, b) => b.value - a.value);
-      squarify(entries, sub, result);
-      boxes.push({
-        key: g.key,
-        label: g.label,
-        count: g.idx.length,
-        share: g.total / grand,
-        ...sub,
-      });
-      edge += share;
-    }
-    return { rects: result.sort((a, b) => a.index - b.index), boxes };
-  }, [items, sizingKey, grouped]);
-
-  const gap = 0;
-
-  return (
-    <div
-      className={`relative w-full overflow-hidden rounded-xl border border-border/40 bg-muted/5 transition-all duration-300 ${heightClass}`}
-    >
-      {layout.boxes.length > 1
-        ? layout.boxes.map((g) =>
-            g.w > 14 && g.h > 10 ? (
-              <div
-                key={g.key}
-                className="num pointer-events-none absolute z-10 rounded-md bg-background/85 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest text-muted-foreground backdrop-blur-sm"
-                style={{ left: `${g.x + 0.6}%`, top: `${g.y + 0.8}%` }}
-                title={`${g.count} schemes · ${Math.round(g.share * 100)}% of map area`}
-              >
-                {g.label} ({g.count} · {Math.round(g.share * 100)}%)
-              </div>
-            ) : null,
-          )
-        : null}
-      {items.map((item, idx) => {
-        const r = layout.rects[idx];
-        if (!r || r.w <= 0 || r.h <= 0) return null;
-
-        const displayPct = displayOf(item);
-        const rawLabel = labelOf(item);
-        const isNeutral = displayPct == null || (colorMode === "discount" && displayPct === 0);
-        const intensity = isNeutral ? 0 : Math.min(Math.abs(displayPct!) / maxAbs, 1);
-
-        const grayRGB = "148, 163, 184";
-        let rgb: string;
-        let alpha: number;
-        if (isNeutral) {
-          rgb = grayRGB;
-          alpha = 0.12;
-        } else {
-          rgb = displayPct! > 0 ? "34, 197, 94" : "239, 68, 68";
-          alpha = 0.15 + intensity * 0.75;
-        }
-        const bgColor = `rgba(${rgb}, ${alpha})`;
-
-        const cellArea = r.w * r.h;
-        const showLabel = cellArea > 12 && r.w > 6 && r.h > 6;
-        const showValue = cellArea > 35 && r.w > 8 && r.h > 8;
-        const fontSize = Math.max(9, Math.min(22, Math.sqrt(cellArea * 0.18)));
-
-        const isHighlighted = searchQuery
-          ? item.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            item.name.toLowerCase().includes(searchQuery.toLowerCase())
-          : false;
-        const isSelected = selectedItem?.symbol === item.symbol;
-
-        const opacityClass =
-          searchQuery && !isHighlighted
-            ? "opacity-30 scale-[0.98] saturate-50 blur-[0.3px]"
-            : "opacity-100";
-        const highlightRing = isHighlighted
-          ? "ring-2 ring-primary ring-offset-1 z-20 scale-[1.02] shadow-lg shadow-primary/20 animate-pulse"
-          : isSelected
-            ? "ring-2 ring-foreground scale-[1.01] z-20 shadow-md"
-            : "";
-
-        const isDarkText = intensity <= 0.6;
-        const textClass = isNeutral
-          ? "text-zinc-400 dark:text-zinc-600"
-          : isDarkText
-            ? "text-zinc-950 dark:text-white"
-            : "text-white";
-        const subtextClass = isNeutral
-          ? "text-zinc-400 dark:text-zinc-600"
-          : isDarkText
-            ? "text-zinc-700 dark:text-white/80"
-            : "text-white/90";
-        const textShadowStyle =
-          isNeutral || isDarkText ? undefined : { textShadow: "0 1px 2px rgba(0,0,0,0.5)" };
-
-        const cellContent = (
-          <div
-            onClick={() => {
-              const next = selectedItem?.symbol === item.symbol ? null : item;
-              setSelectedItem(next);
-              if (next) onPick(item.symbol);
-            }}
-            className={cn(
-              "group absolute flex cursor-pointer flex-col items-center justify-center overflow-hidden text-center shadow-sm transition-all duration-300 ease-in-out hover:brightness-110 active:scale-[0.98]",
-              opacityClass,
-              highlightRing,
-            )}
-            style={{
-              left: `${r.x + gap}%`,
-              top: `${r.y + gap}%`,
-              width: `${Math.max(0, r.w - 2 * gap)}%`,
-              height: `${Math.max(0, r.h - 2 * gap)}%`,
-              backgroundColor: bgColor,
-            }}
-          >
-            {showLabel ? (
-              <div className="flex max-w-full flex-col items-center justify-center px-1">
-                <span
-                  className={cn(
-                    "max-w-full truncate font-black leading-none tracking-tight transition-colors duration-200",
-                    textClass,
-                  )}
-                  style={{ fontSize: `${fontSize}px`, ...textShadowStyle }}
-                >
-                  {item.symbol}
-                </span>
-                {showValue && rawLabel != null ? (
-                  <span
-                    className={cn("mt-1 font-bold transition-colors duration-200", subtextClass)}
-                    style={{ fontSize: `${Math.max(7, fontSize * 0.72)}px`, ...textShadowStyle }}
-                  >
-                    {formatPercent(rawLabel)}
-                  </span>
-                ) : null}
-              </div>
-            ) : (
-              <div className="absolute inset-0 flex items-center justify-center bg-background/90 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-                <span className="text-[9px] font-black tracking-tighter text-foreground">
-                  {item.symbol}
-                </span>
-              </div>
-            )}
-          </div>
-        );
-
-        return (
-          <TooltipProvider key={item.symbol}>
-            <Tooltip delayDuration={150}>
-              <TooltipTrigger asChild>{cellContent}</TooltipTrigger>
-              <TooltipContent
-                className="z-50 max-w-xs animate-in space-y-2 rounded-xl border border-border bg-card/95 p-3 text-foreground shadow-2xl backdrop-blur-md fade-in-50"
-                sideOffset={6}
-                avoidCollisions
-                collisionPadding={12}
-              >
-                <div className="flex flex-col gap-0.5 border-b border-border/50 pb-1.5">
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-xs font-black uppercase tracking-wider">
-                      {item.symbol}
-                    </span>
-                    <Badge
-                      variant="secondary"
-                      className="h-4 bg-primary/10 px-1 text-[9px] uppercase tracking-wider text-primary"
-                    >
-                      {item.fundType === "open_end" ? "Open-end" : "Close-end"}
-                    </Badge>
-                  </div>
-                  <span className="truncate text-[9px] font-medium text-muted-foreground">
-                    {item.name}
-                  </span>
-                </div>
-                <div className="space-y-1.5 text-[11px] font-semibold text-muted-foreground">
-                  <div className="flex justify-between gap-6">
-                    <span>Fund size:</span>
-                    <span className="font-bold text-foreground">
-                      {formatNpr(item.size, { compact: true })}
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-6">
-                    <span>Units:</span>
-                    <span className="font-bold text-foreground">
-                      {item.units != null ? formatQty(item.units) : "-"}
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-6">
-                    <span>NAV:</span>
-                    <span className="font-bold text-foreground">
-                      {item.nav != null ? formatNpr(item.nav) : "-"}
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-6 border-t border-border/20 pt-1">
-                    <span>LTP:</span>
-                    <span className="font-bold text-foreground">
-                      {item.ltp != null ? formatNpr(item.ltp) : "-"}
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-6">
-                    <span>Discount:</span>
-                    <span
-                      className={cn(
-                        "font-bold",
-                        item.discount == null
-                          ? "text-muted-foreground/60"
-                          : item.discount < 0
-                            ? "text-gain"
-                            : "text-loss",
-                      )}
-                    >
-                      {item.discount != null ? formatPercent(item.discount) : "-"}
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-6">
-                    <span>Day change:</span>
-                    <span
-                      className={cn(
-                        "font-bold",
-                        item.dayChange == null
-                          ? "text-muted-foreground/60"
-                          : item.dayChange >= 0
-                            ? "text-gain"
-                            : "text-loss",
-                      )}
-                    >
-                      {item.dayChange != null ? formatPercent(item.dayChange) : "-"}
-                    </span>
-                  </div>
-                </div>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        );
-      })}
-    </div>
-  );
-}
-
 export function FundHeatmap({
   rows,
   onPick,
@@ -483,6 +63,120 @@ export function FundHeatmap({
       return r.fundType !== "open_end";
     });
   }, [rows, typeFilter]);
+
+  const bySymbol = useMemo(() => new Map(rows.map((r) => [r.symbol, r])), [rows]);
+
+  // Shared-map tiles. Discount is inverted (below NAV = good = green), size
+  // follows the Size switch, groups follow the Layout switch.
+  const mapTiles: HeatTile[] = useMemo(
+    () =>
+      heatMapItems.map((r) => {
+        const raw = colorMode === "day" ? r.dayChange : r.discount;
+        const display = colorMode === "day" ? raw : raw == null ? null : -raw;
+        const tile: HeatTile = {
+          key: r.symbol,
+          label: r.symbol,
+          detail: raw != null ? formatPercent(raw) : "—",
+          value: Math.abs(sizeMode === "size" ? (r.size ?? 0) : (r.units ?? 0)),
+          change: display ?? 0,
+          title: `${r.symbol} · ${r.name}`,
+        };
+        if (grouped) tile.group = r.fundType;
+        return tile;
+      }),
+    [heatMapItems, sizeMode, colorMode, grouped],
+  );
+
+  const searchMatches = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return undefined;
+    return new Set(
+      heatMapItems
+        .filter(
+          (r) => r.symbol.toLowerCase().includes(q) || r.name.toLowerCase().includes(q),
+        )
+        .map((r) => r.symbol),
+    );
+  }, [heatMapItems, searchQuery]);
+
+  const renderFundTooltip = (tile: HeatTile) => {
+    const row = bySymbol.get(tile.key);
+    if (!row) return null;
+    return (
+      <>
+        <div className="flex flex-col gap-0.5 border-b border-border/50 pb-1.5">
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-xs font-black uppercase tracking-wider">{row.symbol}</span>
+            <Badge
+              variant="secondary"
+              className="h-4 bg-primary/10 px-1 text-[9px] uppercase tracking-wider text-primary"
+            >
+              {row.fundType === "open_end" ? "Open-end" : "Close-end"}
+            </Badge>
+          </div>
+          <span className="truncate text-[9px] font-medium text-muted-foreground">
+            {row.name}
+          </span>
+        </div>
+        <div className="space-y-1.5 text-[11px] font-semibold text-muted-foreground">
+          <div className="flex justify-between gap-6">
+            <span>Fund size:</span>
+            <span className="font-bold text-foreground">
+              {formatNpr(row.size, { compact: true })}
+            </span>
+          </div>
+          <div className="flex justify-between gap-6">
+            <span>Units:</span>
+            <span className="font-bold text-foreground">
+              {row.units != null ? formatQty(row.units) : "-"}
+            </span>
+          </div>
+          <div className="flex justify-between gap-6">
+            <span>NAV:</span>
+            <span className="font-bold text-foreground">
+              {row.nav != null ? formatNpr(row.nav) : "-"}
+            </span>
+          </div>
+          <div className="flex justify-between gap-6 border-t border-border/20 pt-1">
+            <span>LTP:</span>
+            <span className="font-bold text-foreground">
+              {row.ltp != null ? formatNpr(row.ltp) : "-"}
+            </span>
+          </div>
+          <div className="flex justify-between gap-6">
+            <span>Discount:</span>
+            <span
+              className={cn(
+                "font-bold",
+                row.discount == null
+                  ? "text-muted-foreground/60"
+                  : row.discount < 0
+                    ? "text-gain"
+                    : "text-loss",
+              )}
+            >
+              {row.discount != null ? formatPercent(row.discount) : "-"}
+            </span>
+          </div>
+          <div className="flex justify-between gap-6">
+            <span>Day change:</span>
+            <span
+              className={cn(
+                "font-bold",
+                row.dayChange == null
+                  ? "text-muted-foreground/60"
+                  : row.dayChange >= 0
+                    ? "text-gain"
+                    : "text-loss",
+              )}
+            >
+              {row.dayChange != null ? formatPercent(row.dayChange) : "-"}
+            </span>
+          </div>
+        </div>
+      </>
+    );
+  };
 
   if (rows.length === 0) {
     return (
@@ -507,51 +201,30 @@ export function FundHeatmap({
   return (
     <div className="space-y-3">
       <div className="flex flex-col gap-2 sm:flex-row">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="text"
-            placeholder="Search schemes…"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="h-10 rounded-xl pl-9"
-          />
-          {searchQuery && (
-            <button
-              type="button"
-              onClick={() => setSearchQuery("")}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              <X className="size-3.5" />
-            </button>
-          )}
-        </div>
-        <div className="flex items-center gap-1 self-start rounded-xl border border-border/60 bg-card p-1 sm:self-auto">
-          {(
-            [
-              { key: "all", label: "All" },
-              { key: "open", label: "Open-end" },
-              { key: "close", label: "Close-end" },
-            ] as const
-          ).map((f) => (
-            <button
-              key={f.key}
-              type="button"
-              onClick={() => {
-                setTypeFilter(f.key);
-                setSelectedItem(null);
-              }}
-              className={cn(
-                "rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
-                typeFilter === f.key
-                  ? "bg-primary/15 text-primary"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
+        <HeatSearch
+          value={searchQuery}
+          onChange={setSearchQuery}
+          placeholder="Search schemes…"
+        />
+        <CategoryDropdown
+          value={typeFilter}
+          options={[
+            { value: "all", label: `All structures · ${rows.length}` },
+            {
+              value: "open",
+              label: `Open-end · ${rows.filter((r) => r.fundType === "open_end").length}`,
+            },
+            {
+              value: "close",
+              label: `Close-end · ${rows.filter((r) => r.fundType !== "open_end").length}`,
+            },
+          ]}
+          onChange={(v) => {
+            setTypeFilter(v as TypeFilter);
+            setSelectedItem(null);
+          }}
+          placeholder="Filter by structure"
+        />
       </div>
 
       <Card className="flex flex-col gap-0 overflow-hidden rounded-2xl border border-border/40 bg-card/45 text-left shadow-xl backdrop-blur-md">
@@ -561,12 +234,42 @@ export function FundHeatmap({
               <CardTitle className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider">
                 <LayoutGrid className="h-3.5 w-3.5 text-primary" /> Fund Heat Map
               </CardTitle>
-              <CardDescription className="mt-0.5 text-[9px] font-bold text-muted-foreground/80">
-                {heatMapItems.length} schemes · Sized by{" "}
-                <span className="text-primary">{sizeModeLabel}</span> · Colored by{" "}
-                <span className="text-primary">{colorModeLabel}</span>
-              </CardDescription>
             </div>
+            <div className="flex flex-wrap items-center gap-1.5 border-t border-border/5 pt-2">
+            <ModeSwitch
+              label="Size"
+              options={
+                [
+                  { key: "size", label: "Fund size" },
+                  { key: "units", label: "Units" },
+                ] as const
+              }
+              value={sizeMode}
+              onChange={setSizeMode}
+            />
+            <ModeSwitch
+              label="Color"
+              options={
+                [
+                  { key: "day", label: "Day %" },
+                  { key: "discount", label: "Discount %" },
+                ] as const
+              }
+              value={colorMode}
+              onChange={setColorMode}
+            />
+            <ModeSwitch
+              label="Layout"
+              options={
+                [
+                  { key: "grouped", label: "Grouped" },
+                  { key: "mixed", label: "All mixed" },
+                ] as const
+              }
+              value={grouped ? "grouped" : "mixed"}
+              onChange={(v) => setGrouped(v === "grouped")}
+            />
+          </div>
             <Button
               variant="outline"
               size="icon"
@@ -576,86 +279,6 @@ export function FundHeatmap({
             >
               <Info className="h-3.5 w-3.5" />
             </Button>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-0.5 border-t border-border/5">
-            <div className="flex items-center gap-1 rounded-lg border border-border/20 bg-muted/20 p-0.5">
-              <span className="px-1.5 text-[9px] font-black uppercase text-muted-foreground">
-                Size:
-              </span>
-              {(
-                [
-                  { key: "size", label: "Fund size" },
-                  { key: "units", label: "Units" },
-                ] as const
-              ).map((m) => (
-                <button
-                  key={m.key}
-                  type="button"
-                  onClick={() => setSizeMode(m.key)}
-                  className={cn(
-                    "rounded-md px-2 py-0.5 text-[9px] font-bold transition-all",
-                    sizeMode === m.key
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {m.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex items-center gap-1 rounded-lg border border-border/20 bg-muted/20 p-0.5">
-              <span className="px-1.5 text-[9px] font-black uppercase text-muted-foreground">
-                Color:
-              </span>
-              {(
-                [
-                  { key: "day", label: "Day %" },
-                  { key: "discount", label: "Discount %" },
-                ] as const
-              ).map((m) => (
-                <button
-                  key={m.key}
-                  type="button"
-                  onClick={() => setColorMode(m.key)}
-                  className={cn(
-                    "rounded-md px-2 py-0.5 text-[9px] font-bold transition-all",
-                    colorMode === m.key
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {m.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex items-center gap-1 rounded-lg border border-border/20 bg-muted/20 p-0.5">
-              <span className="px-1.5 text-[9px] font-black uppercase text-muted-foreground">
-                Layout:
-              </span>
-              {(
-                [
-                  { key: true, label: "Grouped" },
-                  { key: false, label: "All mixed" },
-                ] as const
-              ).map((m) => (
-                <button
-                  key={m.label}
-                  type="button"
-                  onClick={() => setGrouped(m.key)}
-                  className={cn(
-                    "rounded-md px-2 py-0.5 text-[9px] font-bold transition-all",
-                    grouped === m.key
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {m.label}
-                </button>
-              ))}
-            </div>
           </div>
         </CardHeader>
 
@@ -668,16 +291,21 @@ export function FundHeatmap({
             </div>
           ) : (
             <>
-              <HeatMapContent
-                items={heatMapItems}
-                sizeMode={sizeMode}
-                colorMode={colorMode}
-                searchQuery={searchQuery}
-                selectedItem={selectedItem}
-                setSelectedItem={setSelectedItem}
-                onPick={onPick}
-                grouped={grouped}
+              <Heatmap
+                tiles={mapTiles}
+                onPick={(symbol) => {
+                  const next =
+                    selectedItem?.symbol === symbol ? null : (bySymbol.get(symbol) ?? null);
+                  setSelectedItem(next);
+                  if (next) onPick(symbol);
+                }}
+                sizeLabel={sizeModeLabel}
                 heightClass="h-[62vh] sm:h-[68vh] lg:h-[74vh]"
+                hideLegend
+                groupLabels={{ open_end: "Open-end", close_end: "Close-end" }}
+                selectedKey={selectedItem?.symbol ?? null}
+                highlightedKeys={searchMatches}
+                renderTooltip={renderFundTooltip}
               />
 
               <div className="flex flex-col items-start justify-between gap-2 rounded-xl border border-border/20 bg-muted/10 px-3 py-2 text-[10px] font-bold text-muted-foreground sm:flex-row sm:items-center">

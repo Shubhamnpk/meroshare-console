@@ -239,36 +239,43 @@ export function computeLongTermScore(
       ? Math.round((eps / netWorth) * 1000) / 10
       : null;
 
-  // Use latest dividend from history for yield calculation
-  const latestDividend = dividends[0] ?? null;
-  const dividendYield =
-    latestDividend && faceValue > 0 && price.ltp > 0
-      ? (latestDividend.totalDividend * faceValue) / (price.ltp * 100)
-      : null;
-
-  // Average dividend over last 3 years for consistency scoring
+  // Use average of last 3 years' dividends for yield (more realistic than latest only)
   const recentDividends = dividends.slice(0, 3);
   const avgDividendTotal =
     recentDividends.length > 0
       ? recentDividends.reduce((a, d) => a + d.totalDividend, 0) / recentDividends.length
       : 0;
+  const dividendYield =
+    avgDividendTotal > 0 && faceValue > 0 && price.ltp > 0
+      ? (avgDividendTotal * faceValue) / (price.ltp * 100)
+      : null;
 
   // Dividend streak: count consecutive fiscal years with dividends
+  // MUST start from the most recent fiscal year — if latest year is missing, streak = 0
   const fiscalYears = [...new Set(dividends.map((d) => d.fiscalYear).filter(Boolean))]
     .sort()
     .reverse();
   let dividendStreak = 0;
   if (fiscalYears.length > 0) {
-    let expectedYear = parseInt(fiscalYears[0]!);
-    for (const fy of fiscalYears) {
-      const yr = parseInt(fy!);
-      if (yr === expectedYear) {
-        dividendStreak++;
-        expectedYear--;
-      } else if (yr < expectedYear) {
-        break; // gap found
+    const latestFY = parseInt(fiscalYears[0]!);
+    // Streak only counts if the most recent year has a dividend
+    // Use a tolerance of 1 year (Nepal FY calendar can shift reporting)
+    const currentNepalFY = new Date().getFullYear() + 57; // BS year approx
+    const latestReported = latestFY;
+    // If the latest reported FY is more than 1 year behind current, streak is broken
+    if (currentNepalFY - latestReported <= 1) {
+      let expectedYear = latestFY;
+      for (const fy of fiscalYears) {
+        const yr = parseInt(fy!);
+        if (yr === expectedYear) {
+          dividendStreak++;
+          expectedYear--;
+        } else if (yr < expectedYear) {
+          break; // gap found
+        }
       }
     }
+    // else: latest dividend is too old, streak = 0 (broken)
   }
 
   // Dividend growth: compare latest vs 3 years ago
@@ -383,8 +390,8 @@ export function computeLongTermScore(
   if (dividendGrowth > 20) dividendScore += 4;
   else if (dividendGrowth > 5) dividendScore += 3;
   else if (dividendGrowth > 0) dividendScore += 2;
-  // Bonus for bonus shares in latest
-  if (latestDividend && latestDividend.bonusShare > 0) {
+  // Bonus for bonus shares in latest dividend
+  if (dividends[0] && dividends[0].bonusShare > 0) {
     dividendScore += 1;
   }
   dividendScore = clamp(dividendScore, 0, 100);

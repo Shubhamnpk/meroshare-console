@@ -1,15 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useState, type ComponentProps } from "react";
+import { useMemo, useState, type ComponentProps } from "react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Sector, Tooltip } from "recharts";
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import { Panel } from "@/components/ui/panel";
+import { SwipeStrip, SwipeItem } from "@/components/swipeable-cards";
+import { Heatmap, type HeatTile } from "@/components/market/heatmap";
+import { ModeSwitch } from "@/components/market/heatmap-controls";
 import { ErrorBlock, LoadingBlock, EmptyBlock } from "@/components/states";
 import { StatCard } from "@/components/stat-card";
 import { HistoryPanel } from "@/components/portfolio/history-panel";
 import { ScripSheet } from "@/components/market/scrip-sheet";
 import { enrichedPortfolioQuery } from "@/lib/queries";
-import { formatNpr, formatPercent } from "@/lib/format";
+import { formatNpr, formatPercent, formatQty } from "@/lib/format";
+import { sectorOf } from "@/lib/nepse/sectors";
+import { cn } from "@/lib/utils";
 import { ogImage, canonicalLink } from "@/lib/seo";
 
 export const Route = createFileRoute("/_dash/analytics")({
@@ -53,6 +58,30 @@ function ActiveSector(props: ComponentProps<typeof Sector>) {
   return <Sector {...props} outerRadius={radius + 5} />;
 }
 
+function PieTooltip({
+  active,
+  payload,
+  total,
+}: {
+  active?: boolean;
+  payload?: Array<{ name: string; value: number }>;
+  total: number;
+}) {
+  if (!active || !payload?.length) return null;
+  const first = payload[0];
+  if (!first) return null;
+  const { name, value } = first;
+  const pct = total > 0 ? ((value / total) * 100).toFixed(1) : "0";
+  return (
+    <div className="max-w-[180px] rounded-xl border border-border/70 bg-card px-3 py-2 text-xs shadow-lg">
+      <p className="truncate font-semibold">{name}</p>
+      <p className="num mt-0.5 text-muted-foreground">
+        {formatNpr(value, { compact: true })} ({pct}%)
+      </p>
+    </div>
+  );
+}
+
 function AllocationPie({
   title,
   slices,
@@ -93,16 +122,7 @@ function AllocationPie({
               </Pie>
               <Tooltip
                 wrapperStyle={{ zIndex: 50, outline: "none" }}
-                contentStyle={{
-                  borderRadius: "0.75rem",
-                  border: "1px solid var(--border)",
-                  background: "var(--card)",
-                  fontSize: "0.75rem",
-                }}
-                formatter={(value: number, name: string) => [
-                  `${formatNpr(value, { compact: true })} (${total > 0 ? ((value / total) * 100).toFixed(1) : "0"}%)`,
-                  name,
-                ]}
+                content={<PieTooltip total={total} />}
               />
             </PieChart>
           </ResponsiveContainer>
@@ -149,6 +169,7 @@ function AllocationPie({
 function AnalyticsPage() {
   const q = useQuery(enrichedPortfolioQuery());
   const [picked, setPicked] = useState<string | null>(null);
+  const [heatGrouped, setHeatGrouped] = useState(false);
 
   const holdings = q.data?.holdings ?? [];
   const total = q.data?.totalValue ?? 0;
@@ -160,8 +181,51 @@ function AnalyticsPage() {
       value: h.value,
       weight: total > 0 ? (h.value / total) * 100 : 0,
       pct: h.previousClose > 0 ? h.percentChange : 0,
+      sector: h.sector ?? sectorOf(h.scrip) ?? "Unclassified",
+      units: h.units,
+      ltp: h.ltp,
     }))
     .sort((a, b) => b.value - a.value);
+  const rowByScrip = useMemo(() => new Map(rows.map((r) => [r.scrip, r])), [rows]);
+  const renderHoldingTooltip = (tile: HeatTile) => {
+    const r = rowByScrip.get(tile.key);
+    if (!r) return null;
+    return (
+      <>
+        <div className="flex flex-col gap-0.5 border-b border-border/50 pb-1.5">
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-xs font-black uppercase tracking-wider">{r.scrip}</span>
+            <span className="rounded bg-primary/10 px-1 text-[9px] font-bold uppercase tracking-wider text-primary">
+              {r.sector}
+            </span>
+          </div>
+          <span className="truncate text-[9px] font-medium text-muted-foreground">{r.name}</span>
+        </div>
+        <div className="space-y-1.5 text-[11px] font-semibold text-muted-foreground">
+          <div className="flex justify-between gap-6">
+            <span>LTP:</span>
+            <span className="font-bold text-foreground">{formatNpr(r.ltp)}</span>
+          </div>
+          <div className="flex justify-between gap-6">
+            <span>Units:</span>
+            <span className="font-bold text-foreground">{formatQty(r.units)}</span>
+          </div>
+          <div className="flex justify-between gap-6">
+            <span>Value:</span>
+            <span className="font-bold text-foreground">
+              {formatNpr(r.value, { compact: true })} ({r.weight.toFixed(1)}%)
+            </span>
+          </div>
+          <div className="flex justify-between gap-6">
+            <span>Day change:</span>
+            <span className={cn("font-bold", r.pct >= 0 ? "text-gain" : "text-loss")}>
+              {formatPercent(r.pct)}
+            </span>
+          </div>
+        </div>
+      </>
+    );
+  };
 
   const top5 = rows.slice(0, 5).reduce((s, r) => s + r.weight, 0);
   const gainers = rows.filter((r) => r.pct > 0);
@@ -205,19 +269,62 @@ function AnalyticsPage() {
         />
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <StatCard label="Total value" value={formatNpr(total)} tone="brand" />
-            <StatCard
-              label="Top 5 concentration"
-              value={`${top5.toFixed(1)}%`}
-              sub="Share of portfolio in largest 5 scrips"
+          <SwipeStrip cols="sm:grid-cols-3">
+            <SwipeItem>
+              <StatCard label="Total value" value={formatNpr(total)} tone="brand" className="h-full" />
+            </SwipeItem>
+            <SwipeItem>
+              <StatCard
+                label="Top 5 concentration"
+                value={`${top5.toFixed(1)}%`}
+                sub="Share of portfolio in largest 5 scrips"
+                className="h-full"
+              />
+            </SwipeItem>
+            <SwipeItem>
+              <StatCard
+                label="Gainers today"
+                value={`${gainers.length}/${rows.length}`}
+                sub={`${losers.length} losing · ${rows.length - gainers.length - losers.length} flat`}
+                className="h-full"
+              />
+            </SwipeItem>
+          </SwipeStrip>
+
+          <Panel as="section">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="font-display text-base font-semibold">Holdings heatmap</h2>
+              <ModeSwitch
+                label="Layout"
+                options={
+                  [
+                    { key: "grouped", label: "Grouped" },
+                    { key: "mixed", label: "Mixed" },
+                  ] as const
+                }
+                value={heatGrouped ? "grouped" : "mixed"}
+                onChange={(v) => setHeatGrouped(v === "grouped")}
+              />
+            </div>
+            <Heatmap
+              sizeLabel="holding value"
+              heightClass="h-[300px] sm:h-[360px]"
+              onPick={setPicked}
+              renderTooltip={renderHoldingTooltip}
+              tiles={rows.map((r) => {
+                const tile: HeatTile = {
+                  key: r.scrip,
+                  label: r.scrip,
+                  detail: `${formatPercent(r.pct)} · ${formatNpr(r.value, { compact: true })}`,
+                  value: r.value,
+                  change: r.pct,
+                  title: `${r.scrip} (${r.name}) · ${formatNpr(r.value)} · ${r.weight.toFixed(1)}% of portfolio · ${formatPercent(r.pct)} today`,
+                };
+                if (heatGrouped) tile.group = r.sector;
+                return tile;
+              })}
             />
-            <StatCard
-              label="Gainers today"
-              value={`${gainers.length}/${rows.length}`}
-              sub={`${losers.length} losing · ${rows.length - gainers.length - losers.length} flat`}
-            />
-          </div>
+          </Panel>
 
           <div className={`grid gap-4 ${hasSectors ? "lg:grid-cols-2" : ""}`}>
             {hasSectors ? (

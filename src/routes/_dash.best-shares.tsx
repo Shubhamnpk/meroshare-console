@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -13,12 +13,12 @@ import {
   TrendingUp,
   Zap,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { BackButton } from "@/components/back-button";
 import { ErrorBlock, LoadingBlock } from "@/components/states";
 import { DeltaPill } from "@/components/stat-card";
+import { DividendSimulator } from "@/components/market/dividend-simulator";
 import { ScripSheet } from "@/components/market/scrip-sheet";
-import { screenerDataQuery, scripBarsQuery } from "@/lib/queries";
+import { enrichedPortfolioQuery, screenerDataQuery, scripBarsQuery } from "@/lib/queries";
 import {
   computeLongTermScore,
   computeShortTermScore,
@@ -27,7 +27,8 @@ import {
   type RedFlag,
   type ShortTermScore,
 } from "@/lib/nepse/screener";
-import { formatNpr, formatPercent, formatQty } from "@/lib/format";
+import type { DividendRow } from "@/lib/nepse/types";
+import { formatNpr, formatPercent, formatNumber, formatQty } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { ogImage, canonicalLink } from "@/lib/seo";
 
@@ -70,6 +71,7 @@ const LONG_SIGNAL_COLORS: Record<string, string> = {
   INCOME: "bg-amber-500/15 text-amber-400 border-amber-500/30",
   GROWTH: "bg-blue-500/15 text-blue-400 border-blue-500/30",
   BLUECHIP: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+  LEGENDARY: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
   WATCHLIST: "bg-muted/50 text-muted-foreground border-border/50",
 };
 
@@ -96,6 +98,7 @@ const RED_FLAG_SHORT: Record<RedFlag, string> = {
 type ShortTermSortKey = "score" | "percentChange" | "volume" | "rsi" | "turnover";
 type LongTermSortKey =
   "score" | "pe" | "pb" | "roe" | "dividendYield" | "dividendStreak" | "volume";
+type DividendSortKey = "dividendYield" | "dividendStreak" | "score" | "volume";
 
 function sortStocks<T extends RankedStock>(
   stocks: T[],
@@ -111,15 +114,25 @@ function sortStocks<T extends RankedStock>(
 }
 
 // ---------------------------------------------------------------------------
+// Dividend stock with history
+// ---------------------------------------------------------------------------
+
+interface DividendStock extends RankedStock {
+  dividendHistory: DividendRow[];
+  faceValue: number;
+}
+
+// ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
 
 function BestSharesPage() {
-  const [tab, setTab] = useState<"short" | "long">("short");
+  const [tab, setTab] = useState<"short" | "long" | "dividends">("short");
   const [signalFilter, setSignalFilter] = useState<string>("ALL");
   const [sortKey, setSortKey] = useState<string>("score");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [picked, setPicked] = useState<string | null>(null);
+  const [simulatorStock, setSimulatorStock] = useState<string | null>(null);
 
   const screenerQuery = useQuery(screenerDataQuery());
   const prices = screenerQuery.data?.prices ?? [];
@@ -138,6 +151,12 @@ function BestSharesPage() {
 
   const barsQuery = useQuery(scripBarsQuery(topSymbols));
   const allBars = barsQuery.data ?? {};
+  const portfolioQ = useQuery(enrichedPortfolioQuery());
+  const holdingUnitsBySymbol = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const h of portfolioQ.data?.holdings ?? []) m.set(h.scrip, h.units);
+    return m;
+  }, [portfolioQ.data]);
 
   // Compute scores for all stocks
   const ranked = useMemo<RankedStock[]>(() => {
@@ -172,11 +191,26 @@ function BestSharesPage() {
 
   // Signal filter options
   const shortSignals = ["ALL", "BREAKOUT", "MOMENTUM", "OVERSOLD", "WATCHLIST"];
-  const longSignals = ["ALL", "VALUE", "INCOME", "GROWTH", "BLUECHIP", "WATCHLIST"];
-  const activeSignals = tab === "short" ? shortSignals : longSignals;
+  const longSignals = ["ALL", "LEGENDARY", "VALUE", "INCOME", "GROWTH", "BLUECHIP", "WATCHLIST"];
+  const dividendSignals = ["ALL", "HIGH_YIELD", "CONSISTENT", "INCOME"];
+  const activeSignals =
+    tab === "short" ? shortSignals : tab === "long" ? longSignals : dividendSignals;
 
   // Apply signal filter
   const filtered = useMemo(() => {
+    if (tab === "dividends") {
+      const withDividends = ranked.filter(
+        (s) => s.longTerm?.dividendYield != null && s.longTerm.dividendYield > 0,
+      );
+      if (signalFilter === "ALL") return withDividends;
+      if (signalFilter === "HIGH_YIELD")
+        return withDividends.filter((s) => (s.longTerm?.dividendYield ?? 0) > 4);
+      if (signalFilter === "CONSISTENT")
+        return withDividends.filter((s) => (s.longTerm?.dividendStreak ?? 0) >= 3);
+      if (signalFilter === "INCOME")
+        return withDividends.filter((s) => s.longTerm?.signal === "INCOME");
+      return withDividends;
+    }
     if (signalFilter === "ALL") return ranked;
     return ranked.filter((s) => {
       const sig = tab === "short" ? s.shortTerm?.signal : s.longTerm?.signal;
@@ -187,6 +221,21 @@ function BestSharesPage() {
   // Apply sort
   const sorted = useMemo(() => {
     const getter = (s: RankedStock) => {
+      if (tab === "dividends") {
+        const lt = s.longTerm!;
+        switch (sortKey) {
+          case "dividendYield":
+            return lt.dividendYield ?? 0;
+          case "dividendStreak":
+            return lt.dividendStreak;
+          case "score":
+            return lt.score;
+          case "volume":
+            return s.volume;
+          default:
+            return lt.dividendYield ?? 0;
+        }
+      }
       if (tab === "short") {
         const st = s.shortTerm!;
         switch (sortKey) {
@@ -319,6 +368,23 @@ function BestSharesPage() {
           Long-Term
           <span className="hidden text-xs opacity-70 sm:inline">(Quality)</span>
         </button>
+        <button
+          type="button"
+          onClick={() => {
+            setTab("dividends");
+            setSignalFilter("ALL");
+            setSortKey("dividendYield");
+          }}
+          className={cn(
+            "flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors",
+            tab === "dividends"
+              ? "bg-primary text-primary-foreground"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          <Coins className="size-4" />
+          Best Dividends
+        </button>
       </div>
 
       {screenerQuery.isLoading ? (
@@ -327,6 +393,28 @@ function BestSharesPage() {
         <ErrorBlock error={screenerQuery.error} retry={() => void screenerQuery.refetch()} />
       ) : (
         <>
+          {/* What-if dividend simulator - shared logic with stock details, collapsed at top */}
+          {tab === "dividends" && sorted.length > 0
+            ? (() => {
+                const simSymbol = simulatorStock ?? sorted[0]!.symbol;
+                const simStock = sorted.find((s) => s.symbol === simSymbol) ?? sorted[0]!;
+                const simDividends = dividends[simStock.symbol] ?? [];
+                return (
+                  <DividendSimulator
+                    key={simStock.symbol}
+                    symbol={simStock.symbol}
+                    dividends={simDividends}
+                    holdingUnits={holdingUnitsBySymbol.get(simStock.symbol) ?? null}
+                    faceValue={faceValues[simStock.symbol] ?? 100}
+                    history={[]}
+                    currentLtp={simStock.ltp}
+                    transactions={[]}
+                    actualCost={null}
+                  />
+                );
+              })()
+            : null}
+
           {/* Signal filter chips */}
           <div className="flex flex-wrap gap-2">
             {activeSignals.map((sig) => (
@@ -341,18 +429,36 @@ function BestSharesPage() {
                     : "border-border/70 bg-card text-muted-foreground hover:text-foreground",
                 )}
               >
-                {sig === "ALL" ? "All" : sig}
+                {sig === "ALL"
+                  ? "All"
+                  : sig === "HIGH_YIELD"
+                    ? "High Yield (>4%)"
+                    : sig === "CONSISTENT"
+                      ? "Consistent (3y+)"
+                      : sig}
                 {sig !== "ALL" ? (
                   <span className="ml-1.5 text-[0.65rem] opacity-60">
-                    {
-                      ranked.filter((s) => {
-                        const signal = tab === "short" ? s.shortTerm?.signal : s.longTerm?.signal;
-                        return signal === sig;
-                      }).length
-                    }
+                    {tab === "dividends"
+                      ? ranked.filter((s) => {
+                          if (s.longTerm?.dividendYield == null) return false;
+                          if (sig === "HIGH_YIELD") return s.longTerm.dividendYield > 4;
+                          if (sig === "CONSISTENT") return (s.longTerm.dividendStreak ?? 0) >= 3;
+                          if (sig === "INCOME") return s.longTerm.signal === "INCOME";
+                          return true;
+                        }).length
+                      : ranked.filter((s) => {
+                          const signal = tab === "short" ? s.shortTerm?.signal : s.longTerm?.signal;
+                          return signal === sig;
+                        }).length}
                   </span>
                 ) : (
-                  <span className="ml-1.5 text-[0.65rem] opacity-60">{ranked.length}</span>
+                  <span className="ml-1.5 text-[0.65rem] opacity-60">
+                    {tab === "dividends"
+                      ? ranked.filter(
+                          (s) => s.longTerm?.dividendYield != null && s.longTerm.dividendYield > 0,
+                        ).length
+                      : ranked.length}
+                  </span>
                 )}
               </button>
             ))}
@@ -386,7 +492,7 @@ function BestSharesPage() {
                     accent="text-amber-400"
                   />
                 </>
-              ) : (
+              ) : tab === "long" ? (
                 <>
                   <StatCard
                     icon={<Target className="size-4" />}
@@ -409,6 +515,40 @@ function BestSharesPage() {
                     label="Income Picks"
                     value={String(stats.incomePicks)}
                     accent="text-amber-400"
+                  />
+                </>
+              ) : (
+                <>
+                  <StatCard
+                    icon={<Coins className="size-4" />}
+                    label="Dividend Stocks"
+                    value={String(
+                      ranked.filter(
+                        (s) => s.longTerm?.dividendYield != null && s.longTerm.dividendYield > 0,
+                      ).length,
+                    )}
+                  />
+                  <StatCard
+                    icon={<TrendingUp className="size-4" />}
+                    label="High Yield (>4%)"
+                    value={String(
+                      ranked.filter((s) => (s.longTerm?.dividendYield ?? 0) > 4).length,
+                    )}
+                    accent="text-emerald-400"
+                  />
+                  <StatCard
+                    icon={<Flame className="size-4" />}
+                    label="Consistent (3y+)"
+                    value={String(
+                      ranked.filter((s) => (s.longTerm?.dividendStreak ?? 0) >= 3).length,
+                    )}
+                    accent="text-amber-400"
+                  />
+                  <StatCard
+                    icon={<Filter className="size-4" />}
+                    label="Income Signal"
+                    value={String(stats.incomePicks)}
+                    accent="text-blue-400"
                   />
                 </>
               )}
@@ -439,39 +579,59 @@ function BestSharesPage() {
                     />
                   ),
                 )
-              : (
-                  [
-                    "score",
-                    "pe",
-                    "pb",
-                    "roe",
-                    "dividendYield",
-                    "dividendStreak",
-                    "volume",
-                  ] as LongTermSortKey[]
-                ).map((key) => (
-                  <SortButton
-                    key={key}
-                    label={
-                      key === "score"
-                        ? "Score"
-                        : key === "pe"
-                          ? "P/E"
-                          : key === "pb"
-                            ? "P/B"
-                            : key === "roe"
-                              ? "ROE"
-                              : key === "dividendYield"
-                                ? "Yield"
-                                : key === "dividendStreak"
-                                  ? "Streak"
-                                  : "Volume"
-                    }
-                    active={sortKey === key}
-                    dir={sortDir}
-                    onClick={() => toggleSort(key)}
-                  />
-                ))}
+              : tab === "long"
+                ? (
+                    [
+                      "score",
+                      "pe",
+                      "pb",
+                      "roe",
+                      "dividendYield",
+                      "dividendStreak",
+                      "volume",
+                    ] as LongTermSortKey[]
+                  ).map((key) => (
+                    <SortButton
+                      key={key}
+                      label={
+                        key === "score"
+                          ? "Score"
+                          : key === "pe"
+                            ? "P/E"
+                            : key === "pb"
+                              ? "P/B"
+                              : key === "roe"
+                                ? "ROE"
+                                : key === "dividendYield"
+                                  ? "Yield"
+                                  : key === "dividendStreak"
+                                    ? "Streak"
+                                    : "Volume"
+                      }
+                      active={sortKey === key}
+                      dir={sortDir}
+                      onClick={() => toggleSort(key)}
+                    />
+                  ))
+                : (["dividendYield", "dividendStreak", "score", "volume"] as DividendSortKey[]).map(
+                    (key) => (
+                      <SortButton
+                        key={key}
+                        label={
+                          key === "dividendYield"
+                            ? "Yield"
+                            : key === "dividendStreak"
+                              ? "Streak"
+                              : key === "score"
+                                ? "Score"
+                                : "Volume"
+                        }
+                        active={sortKey === key}
+                        dir={sortDir}
+                        onClick={() => toggleSort(key)}
+                      />
+                    ),
+                  )}
           </div>
 
           {/* Table */}
@@ -483,182 +643,282 @@ function BestSharesPage() {
                   <th className="px-3 py-3">Scrip</th>
                   <th className="num px-3 py-3 text-right">LTP</th>
                   <th className="num px-3 py-3 text-right">Chg%</th>
-                  <th className="num px-3 py-3 text-right">Score</th>
-                  {tab === "short" ? (
+                  {tab === "dividends" ? (
                     <>
-                      <th className="num px-3 py-3 text-right">RSI</th>
-                      <th className="num px-3 py-3 text-right hidden sm:table-cell">Volume</th>
+                      <th className="num px-3 py-3 text-right">Yield</th>
+                      <th className="num px-3 py-3 text-right hidden sm:table-cell">Streak</th>
+                      <th className="px-3 py-3 text-center hidden md:table-cell">Cash/Bonus</th>
                       <th className="px-3 py-3 text-center">Signal</th>
                     </>
                   ) : (
                     <>
-                      <th className="num px-3 py-3 text-right">P/E</th>
-                      <th className="num px-3 py-3 text-right hidden sm:table-cell">P/B</th>
-                      <th className="num px-3 py-3 text-right hidden md:table-cell">ROE</th>
-                      <th className="num px-3 py-3 text-right hidden sm:table-cell">Yield</th>
-                      <th className="num px-3 py-3 text-right hidden md:table-cell">Streak</th>
-                      <th className="px-3 py-3 text-center">Signal</th>
+                      <th className="num px-3 py-3 text-right">Score</th>
+                      {tab === "short" ? (
+                        <>
+                          <th className="num px-3 py-3 text-right">RSI</th>
+                          <th className="num px-3 py-3 text-right hidden sm:table-cell">Volume</th>
+                          <th className="px-3 py-3 text-center">Signal</th>
+                        </>
+                      ) : (
+                        <>
+                          <th className="num px-3 py-3 text-right">P/E</th>
+                          <th className="num px-3 py-3 text-right hidden sm:table-cell">P/B</th>
+                          <th className="num px-3 py-3 text-right hidden md:table-cell">ROE</th>
+                          <th className="num px-3 py-3 text-right hidden sm:table-cell">Yield</th>
+                          <th className="num px-3 py-3 text-right hidden md:table-cell">Streak</th>
+                          <th className="px-3 py-3 text-center">Signal</th>
+                        </>
+                      )}
                     </>
                   )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/50">
-                {sorted.slice(0, 100).map((stock, i) => (
-                  <tr
-                    key={stock.symbol}
-                    className="cursor-pointer transition-colors hover:bg-accent/10"
-                    onClick={() => setPicked(stock.symbol)}
-                  >
-                    <td className="px-3 py-3 pl-4 text-xs text-muted-foreground">{i + 1}</td>
-                    <td className="px-3 py-3">
-                      <p className="font-semibold">{stock.symbol}</p>
-                      <p className="max-w-[120px] truncate text-xs text-muted-foreground sm:max-w-none">
-                        {stock.name}
-                      </p>
-                    </td>
-                    <td className="num px-3 py-3 text-right font-medium">{formatNpr(stock.ltp)}</td>
-                    <td className="px-3 py-3 text-right">
-                      <DeltaPill value={stock.percentChange} className="inline-flex">
-                        {formatPercent(stock.percentChange)}
-                      </DeltaPill>
-                    </td>
-                    <td className="num px-3 py-3 text-right">
-                      <span
-                        className={cn(
-                          "inline-flex size-8 items-center justify-center rounded-full text-xs font-bold",
-                          ((tab === "short" ? stock.shortTerm?.score : stock.longTerm?.score) ??
-                            0 >= 70)
-                            ? "bg-emerald-500/15 text-emerald-400"
-                            : ((tab === "short" ? stock.shortTerm?.score : stock.longTerm?.score) ??
-                                0 >= 40)
-                              ? "bg-blue-500/15 text-blue-400"
-                              : "bg-muted/50 text-muted-foreground",
-                        )}
-                      >
-                        {tab === "short" ? stock.shortTerm?.score : stock.longTerm?.score}
-                      </span>
-                    </td>
-                    {tab === "short" ? (
-                      <>
-                        <td className="num px-3 py-3 text-right text-xs">
-                          {stock.shortTerm?.rsi != null ? (
-                            <span
-                              className={cn(
-                                "rounded-md px-1.5 py-0.5",
-                                stock.shortTerm.rsi < 30
-                                  ? "bg-amber-500/15 text-amber-400"
-                                  : stock.shortTerm.rsi > 70
-                                    ? "bg-red-500/15 text-red-400"
-                                    : "text-muted-foreground",
-                              )}
-                            >
-                              {stock.shortTerm.rsi}
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground/50">-</span>
-                          )}
-                        </td>
-                        <td className="num hidden px-3 py-3 text-right text-xs text-muted-foreground sm:table-cell">
-                          {formatQty(stock.volume)}
-                        </td>
-                      </>
-                    ) : (
-                      <>
-                        <td className="num px-3 py-3 text-right text-xs">
-                          {stock.longTerm?.pe != null ? (
-                            <span
-                              className={cn(
-                                stock.longTerm.pe < 12
-                                  ? "text-emerald-400"
-                                  : stock.longTerm.pe > 20
-                                    ? "text-red-400"
-                                    : "text-muted-foreground",
-                              )}
-                            >
-                              {stock.longTerm.pe}
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground/50">-</span>
-                          )}
-                        </td>
-                        <td className="num hidden px-3 py-3 text-right text-xs text-muted-foreground sm:table-cell">
-                          {stock.longTerm?.pb != null ? stock.longTerm.pb : "-"}
-                        </td>
-                        <td className="num hidden px-3 py-3 text-right text-xs md:table-cell">
-                          {stock.longTerm?.roe != null ? (
-                            <span
-                              className={cn(
-                                stock.longTerm.roe > 15
-                                  ? "text-emerald-400"
-                                  : stock.longTerm.roe > 9
-                                    ? "text-blue-400"
-                                    : "text-red-400",
-                              )}
-                            >
-                              {stock.longTerm.roe}%
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground/50">-</span>
-                          )}
-                        </td>
-                        <td className="num hidden px-3 py-3 text-right text-xs sm:table-cell">
-                          {stock.longTerm?.dividendYield != null ? (
-                            <span className="text-amber-400">{stock.longTerm.dividendYield}%</span>
-                          ) : (
-                            <span className="text-muted-foreground/50">-</span>
-                          )}
-                        </td>
-                        <td className="num hidden px-3 py-3 text-right text-xs md:table-cell">
-                          {stock.longTerm?.dividendStreak != null &&
-                          stock.longTerm.dividendStreak > 0 ? (
-                            <span
-                              className={cn(
-                                stock.longTerm.dividendStreak >= 5
-                                  ? "text-emerald-400"
-                                  : stock.longTerm.dividendStreak >= 3
-                                    ? "text-blue-400"
-                                    : "text-muted-foreground",
-                              )}
-                            >
-                              {stock.longTerm.dividendStreak}y
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground/50">-</span>
-                          )}
-                        </td>
-                      </>
-                    )}
-                    <td className="px-3 py-3 text-center">
-                      <div className="flex flex-col items-center gap-1">
-                        <span
-                          className={cn(
-                            "inline-block rounded-full border px-2 py-0.5 text-[0.65rem] font-medium",
-                            tab === "short"
-                              ? SHORT_SIGNAL_COLORS[stock.shortTerm?.signal ?? "WATCHLIST"]
-                              : LONG_SIGNAL_COLORS[stock.longTerm?.signal ?? "WATCHLIST"],
-                          )}
-                        >
-                          {tab === "short" ? stock.shortTerm?.signal : stock.longTerm?.signal}
-                        </span>
-                        {tab === "long" &&
-                          stock.longTerm?.redFlags &&
-                          stock.longTerm.redFlags.length > 0 && (
-                            <div className="flex flex-wrap justify-center gap-0.5">
-                              {stock.longTerm.redFlags.map((flag) => (
-                                <span
-                                  key={flag}
-                                  className="inline-block rounded bg-red-500/15 px-1 py-px text-[0.55rem] font-medium text-red-400"
-                                  title={RED_FLAG_LABELS[flag]}
-                                >
-                                  {RED_FLAG_SHORT[flag]}
+                {sorted.slice(0, 100).map((stock, i) => {
+                  const isDividendTab = tab === "dividends";
+                  const divHistory = isDividendTab ? (dividends[stock.symbol] ?? []) : [];
+                  return (
+                    <tr
+                      key={stock.symbol}
+                      className={cn(
+                        "transition-colors hover:bg-accent/10",
+                        "cursor-pointer",
+                        isDividendTab &&
+                          (simulatorStock ? simulatorStock === stock.symbol : i === 0) &&
+                          "bg-accent/20",
+                      )}
+                      onClick={() => {
+                        setPicked(stock.symbol);
+                        if (isDividendTab) setSimulatorStock(stock.symbol);
+                      }}
+                    >
+                      <td className="px-3 py-3 pl-4 text-xs text-muted-foreground">{i + 1}</td>
+                      <td className="px-3 py-3">
+                        <p className="font-semibold">{stock.symbol}</p>
+                        <p className="max-w-[120px] truncate text-xs text-muted-foreground sm:max-w-none">
+                          {stock.name}
+                        </p>
+                      </td>
+                      <td className="num px-3 py-3 text-right font-medium">
+                        {formatNpr(stock.ltp)}
+                      </td>
+                      <td className="px-3 py-3 text-right">
+                        <DeltaPill value={stock.percentChange} className="inline-flex">
+                          {formatPercent(stock.percentChange)}
+                        </DeltaPill>
+                      </td>
+                      {isDividendTab ? (
+                        <>
+                          <td className="num px-3 py-3 text-right text-xs">
+                            {stock.longTerm?.dividendYield != null ? (
+                              <span
+                                className={cn(
+                                  "font-medium",
+                                  stock.longTerm.dividendYield > 6
+                                    ? "text-emerald-400"
+                                    : stock.longTerm.dividendYield > 4
+                                      ? "text-blue-400"
+                                      : "text-amber-400",
+                                )}
+                              >
+                                {stock.longTerm.dividendYield}%
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground/50">-</span>
+                            )}
+                          </td>
+                          <td className="num hidden px-3 py-3 text-right text-xs sm:table-cell">
+                            {stock.longTerm?.dividendStreak != null &&
+                            stock.longTerm.dividendStreak > 0 ? (
+                              <span
+                                className={cn(
+                                  stock.longTerm.dividendStreak >= 5
+                                    ? "text-emerald-400"
+                                    : stock.longTerm.dividendStreak >= 3
+                                      ? "text-blue-400"
+                                      : "text-muted-foreground",
+                                )}
+                              >
+                                {stock.longTerm.dividendStreak}y
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground/50">-</span>
+                            )}
+                          </td>
+                          <td className="hidden px-3 py-3 text-center md:table-cell">
+                            <div className="flex flex-col items-center gap-0.5">
+                              {stock.longTerm?.dividendYield != null && (
+                                <span className="text-[0.65rem] text-amber-400">
+                                  {stock.longTerm.dividendYield}%
                                 </span>
-                              ))}
+                              )}
+                              {divHistory.length > 0 && (
+                                <span className="text-[0.55rem] text-muted-foreground">
+                                  {divHistory.length} records
+                                </span>
+                              )}
                             </div>
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="num px-3 py-3 text-right">
+                            <span
+                              className={cn(
+                                "inline-flex size-8 items-center justify-center rounded-full text-xs font-bold",
+                                ((tab === "short"
+                                  ? stock.shortTerm?.score
+                                  : stock.longTerm?.score) ?? 0 >= 70)
+                                  ? "bg-emerald-500/15 text-emerald-400"
+                                  : ((tab === "short"
+                                        ? stock.shortTerm?.score
+                                        : stock.longTerm?.score) ?? 0 >= 40)
+                                    ? "bg-blue-500/15 text-blue-400"
+                                    : "bg-muted/50 text-muted-foreground",
+                              )}
+                            >
+                              {tab === "short" ? stock.shortTerm?.score : stock.longTerm?.score}
+                            </span>
+                          </td>
+                          {tab === "short" ? (
+                            <>
+                              <td className="num px-3 py-3 text-right text-xs">
+                                {stock.shortTerm?.rsi != null ? (
+                                  <span
+                                    className={cn(
+                                      "rounded-md px-1.5 py-0.5",
+                                      stock.shortTerm.rsi < 30
+                                        ? "bg-amber-500/15 text-amber-400"
+                                        : stock.shortTerm.rsi > 70
+                                          ? "bg-red-500/15 text-red-400"
+                                          : "text-muted-foreground",
+                                    )}
+                                  >
+                                    {stock.shortTerm.rsi}
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground/50">-</span>
+                                )}
+                              </td>
+                              <td className="num hidden px-3 py-3 text-right text-xs text-muted-foreground sm:table-cell">
+                                {formatQty(stock.volume)}
+                              </td>
+                            </>
+                          ) : (
+                            <>
+                              <td className="num px-3 py-3 text-right text-xs">
+                                {stock.longTerm?.pe != null ? (
+                                  <span
+                                    className={cn(
+                                      stock.longTerm.pe < 12
+                                        ? "text-emerald-400"
+                                        : stock.longTerm.pe > 20
+                                          ? "text-red-400"
+                                          : "text-muted-foreground",
+                                    )}
+                                  >
+                                    {stock.longTerm.pe}
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground/50">-</span>
+                                )}
+                              </td>
+                              <td className="num hidden px-3 py-3 text-right text-xs text-muted-foreground sm:table-cell">
+                                {stock.longTerm?.pb != null ? stock.longTerm.pb : "-"}
+                              </td>
+                              <td className="num hidden px-3 py-3 text-right text-xs md:table-cell">
+                                {stock.longTerm?.roe != null ? (
+                                  <span
+                                    className={cn(
+                                      stock.longTerm.roe > 15
+                                        ? "text-emerald-400"
+                                        : stock.longTerm.roe > 9
+                                          ? "text-blue-400"
+                                          : "text-red-400",
+                                    )}
+                                  >
+                                    {stock.longTerm.roe}%
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground/50">-</span>
+                                )}
+                              </td>
+                              <td className="num hidden px-3 py-3 text-right text-xs sm:table-cell">
+                                {stock.longTerm?.dividendYield != null ? (
+                                  <span className="text-amber-400">
+                                    {stock.longTerm.dividendYield}%
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground/50">-</span>
+                                )}
+                              </td>
+                              <td className="num hidden px-3 py-3 text-right text-xs md:table-cell">
+                                {stock.longTerm?.dividendStreak != null &&
+                                stock.longTerm.dividendStreak > 0 ? (
+                                  <span
+                                    className={cn(
+                                      stock.longTerm.dividendStreak >= 5
+                                        ? "text-emerald-400"
+                                        : stock.longTerm.dividendStreak >= 3
+                                          ? "text-blue-400"
+                                          : "text-muted-foreground",
+                                    )}
+                                  >
+                                    {stock.longTerm.dividendStreak}y
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground/50">-</span>
+                                )}
+                              </td>
+                            </>
                           )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                        </>
+                      )}
+                      <td className="px-3 py-3 text-center">
+                        <div className="flex flex-col items-center gap-1">
+                          {isDividendTab ? (
+                            <span
+                              className={cn(
+                                "inline-block rounded-full border px-2 py-0.5 text-[0.65rem] font-medium",
+                                LONG_SIGNAL_COLORS[stock.longTerm?.signal ?? "WATCHLIST"],
+                              )}
+                            >
+                              {stock.longTerm?.signal}
+                            </span>
+                          ) : (
+                            <>
+                              <span
+                                className={cn(
+                                  "inline-block rounded-full border px-2 py-0.5 text-[0.65rem] font-medium",
+                                  tab === "short"
+                                    ? SHORT_SIGNAL_COLORS[stock.shortTerm?.signal ?? "WATCHLIST"]
+                                    : LONG_SIGNAL_COLORS[stock.longTerm?.signal ?? "WATCHLIST"],
+                                )}
+                              >
+                                {tab === "short" ? stock.shortTerm?.signal : stock.longTerm?.signal}
+                              </span>
+                              {tab === "long" &&
+                                stock.longTerm?.redFlags &&
+                                stock.longTerm.redFlags.length > 0 && (
+                                  <div className="flex flex-wrap justify-center gap-0.5">
+                                    {stock.longTerm.redFlags.map((flag) => (
+                                      <span
+                                        key={flag}
+                                        className="inline-block rounded bg-red-500/15 px-1 py-px text-[0.55rem] font-medium text-red-400"
+                                        title={RED_FLAG_LABELS[flag]}
+                                      >
+                                        {RED_FLAG_SHORT[flag]}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

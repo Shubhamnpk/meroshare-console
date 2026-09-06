@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
+import { toast } from "sonner";
 import {
   Building2,
+  Calculator,
   ChartCandlestick,
   ExternalLink,
   FileText,
@@ -37,6 +40,7 @@ import {
 import { DeltaPill } from "@/components/stat-card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AreaChart } from "@/components/market/area-chart";
+import { DividendSimulator, actualMatchedTotals } from "@/components/market/dividend-simulator";
 import {
   ChartModal,
   buildScripRanges,
@@ -60,30 +64,70 @@ import {
 import { formatDate, formatNpr, formatPercent, formatQty, toNumber } from "@/lib/format";
 import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
 import { useWatchlist } from "@/lib/watchlist";
+import { sectorOf } from "@/lib/nepse/sectors";
 import { cn } from "@/lib/utils";
 import type { FinancialReport, PricePoint } from "@/lib/nepse/types";
 import type { TransactionItem } from "@/lib/meroshare/types";
 
-/**
- * Resolve face value with priority: API-reported value → YONEPSE sector heuristic → Rs 100.
- * Mutual fund units have a face value of Rs 10; equities Rs 100.
- */
 function resolveFaceValue(
   apiFaceValue: number | null | undefined,
   sector: string | null | undefined,
+  symbol?: string | null | undefined,
 ): number {
+  const isMF =
+    /mutual fund/i.test(sector ?? "") || (symbol ? sectorOf(symbol) === "Mutual Fund" : false);
+  if (isMF) return 10;
   if (apiFaceValue != null && apiFaceValue > 0) return apiFaceValue;
-  return /mutual fund/i.test(sector ?? "") ? 10 : 100;
+  return 100;
+}
+/** Range bar with a labeled marker at the current value's position. */
+function RangeBar({
+  low,
+  high,
+  value,
+  format,
+  tone,
+}: {
+  low: number;
+  high: number;
+  value: number;
+  format: (v: number) => string;
+  tone?: "gain" | "loss" | null;
+}) {
+  const pct = high > low ? Math.min(100, Math.max(0, ((value - low) / (high - low)) * 100)) : 0;
+  const toneClass =
+    tone === "gain" ? "text-gain" : tone === "loss" ? "text-loss" : "text-foreground";
+  const dotClass = tone === "gain" ? "bg-gain" : tone === "loss" ? "bg-loss" : "bg-primary";
+  return (
+    <div>
+      <div className="relative mt-2 flex h-1.5 rounded-full bg-muted">
+        <div className="rounded-full bg-primary/70" style={{ width: `${pct}%` }} />
+        <span
+          aria-hidden
+          title={format(value)}
+          className={`absolute top-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-surface ${dotClass}`}
+          style={{ left: `${pct}%` }}
+        />
+      </div>
+      <div className="num mt-1 flex justify-between text-[0.65rem] text-muted-foreground">
+        <span>{format(low)}</span>
+        <span className={`font-semibold ${toneClass}`}>{format(value)}</span>
+        <span>{format(high)}</span>
+      </div>
+    </div>
+  );
 }
 
 /** Unrealized P/L against a cost basis (CDSC WACC, or purchase-source estimate). */
 function PositionCard({
+  scrip,
   units,
   waccRate,
   totalCost,
   ltp,
   basisLabel = "vs CDSC WACC",
 }: {
+  scrip: string;
   units: number;
   waccRate: number;
   totalCost: number;
@@ -102,6 +146,13 @@ function PositionCard({
           {basisLabel}
         </span>
       </div>
+      <Link
+        to="/wacc"
+        search={{ scrip }}
+        className="mt-1 inline-block text-[0.7rem] font-medium text-primary hover:underline"
+      >
+        View full WACC detail →
+      </Link>
       <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
         <div>
           <p className="text-[0.65rem] uppercase tracking-wide text-muted-foreground">Units</p>
@@ -600,10 +651,12 @@ export function ScripSheet({
   const [tab, setTab] = useState("overview");
   const [rangeKey, setRangeKey] = useState<string>("1D");
   const [chartOpen, setChartOpen] = useState(false);
+  const [dividendSimOpen, setDividendSimOpen] = useState(false);
   const { openPreview, modal: docModal } = useDocViewer();
 
   useEffect(() => {
     setRangeKey("1D");
+    setDividendSimOpen(false);
   }, [symbol]);
 
   const upper = symbol?.toUpperCase() ?? "";
@@ -633,6 +686,21 @@ export function ScripSheet({
         .sort((a, b) => (b.announcementDate ?? "").localeCompare(a.announcementDate ?? "")),
     [dividends.data, upper],
   );
+
+  // Factual overview: work back from the current holding through real demat
+  // movements, so each announcement pays on the units truly held then.
+  const faceForSim = resolveFaceValue(overview?.faceValue, overview?.sector, upper);
+  const actualTotals = useMemo(() => {
+    if (!holding || holding.units <= 0) return null;
+    const tx = myHistory.data?.items ?? [];
+    if (tx.length === 0) return null;
+    return actualMatchedTotals({
+      rows: yearlyDividends,
+      holdingUnits: holding.units,
+      transactions: tx,
+      face: faceForSim,
+    });
+  }, [holding, myHistory.data, yearlyDividends, faceForSim]);
 
   const newsItems = useMemo(
     () =>
@@ -684,26 +752,37 @@ export function ScripSheet({
   const stats: { label: string; value: string }[] = price
     ? [
         { label: "Previous close", value: formatNpr(price.previousClose) },
-        { label: "Day high", value: price.high ? formatNpr(price.high) : "-" },
-        { label: "Day low", value: price.low ? formatNpr(price.low) : "-" },
         { label: "Volume", value: formatQty(price.volume) },
         { label: "Turnover", value: formatNpr(price.turnover, { compact: true }) },
         { label: "Trades", value: formatQty(price.trades) },
-        ...(price.fiftyTwoWeekHigh
-          ? [
-              { label: "52-week high", value: formatNpr(price.fiftyTwoWeekHigh) },
-              {
-                label: "52-week low",
-                value: price.fiftyTwoWeekLow ? formatNpr(price.fiftyTwoWeekLow) : "-",
-              },
-            ]
-          : []),
       ]
     : [];
 
+  const dayRange =
+    price && price.low > 0 && price.high > price.low && price.ltp > 0
+      ? {
+          low: price.low,
+          high: price.high,
+          value: Math.min(Math.max(price.ltp, price.low), price.high),
+        }
+      : null;
+  const yearRange =
+    price &&
+    (price.fiftyTwoWeekLow ?? 0) > 0 &&
+    (price.fiftyTwoWeekHigh ?? 0) > (price.fiftyTwoWeekLow ?? 0) &&
+    price.ltp > 0
+      ? {
+          low: price.fiftyTwoWeekLow ?? 0,
+          high: price.fiftyTwoWeekHigh ?? 0,
+          value: Math.min(
+            Math.max(price.ltp, price.fiftyTwoWeekLow ?? 0),
+            price.fiftyTwoWeekHigh ?? 0,
+          ),
+        }
+      : null;
+
   const companyRows: { label: string; value: string }[] = overview
     ? [
-        { label: "Sector", value: overview.sector ?? "-" },
         { label: "Instrument", value: overview.instrumentType ?? "-" },
         { label: "ISIN", value: overview.isin ?? "-" },
         {
@@ -751,45 +830,67 @@ export function ScripSheet({
   return (
     <Sheet open={Boolean(symbol)} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full overflow-y-auto p-0 sm:max-w-xl">
-        <SheetHeader className="items-start px-4 pb-0 pt-6 text-left">
-          <SheetTitle className="font-display text-xl">{upper || "Scrip"}</SheetTitle>
-          {price || overview ? (
-            <SheetDescription className="text-left">
-              {overview?.name ?? price?.name}
-            </SheetDescription>
-          ) : null}
-        </SheetHeader>
-        <div className="space-y-5 px-4 pb-8">
-          {price ? (
-            <>
-              <div>
-                <div className="mt-2 flex items-end gap-3">
-                  <p className="num font-display text-3xl font-semibold">{formatNpr(price.ltp)}</p>
-                  <DeltaPill value={price.percentChange}>
-                    {formatPercent(price.percentChange)}
-                  </DeltaPill>
-                </div>
-                {overview?.sector ? (
-                  <span className="mt-2 inline-block rounded-full bg-muted px-2 py-0.5 text-[0.65rem] font-medium text-muted-foreground">
-                    {overview.sector}
-                  </span>
-                ) : null}
+        <SheetHeader className="px-4 pb-0 pt-6 text-left">
+          <div className="flex items-start justify-between gap-3 pr-8">
+            <div className="min-w-0">
+              <SheetTitle className="font-display text-xl">{upper || "Scrip"}</SheetTitle>
+              {price || overview ? (
+                <SheetDescription className="truncate text-left">
+                  {overview?.name ?? price?.name}
+                </SheetDescription>
+              ) : null}
+            </div>
+            {price ? (
+              <div className="shrink-0 text-right">
+                <p className="num font-display text-2xl font-semibold leading-none">
+                  {formatNpr(price.ltp)}
+                </p>
+                <DeltaPill value={price.percentChange}>
+                  {formatPercent(price.percentChange)}
+                </DeltaPill>
               </div>
-
-              <Button
-                variant={watched ? "secondary" : "outline"}
-                className="w-full"
-                onClick={() => watchlist.toggle(upper)}
+            ) : null}
+          </div>
+          <div className="mb-1 flex items-center justify-between gap-2 pb-2 pr-8">
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+              {overview?.sector ? (
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[0.65rem] font-medium text-muted-foreground">
+                  {overview.sector}
+                </span>
+              ) : null}
+              {overview?.instrumentType ? (
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[0.65rem] font-medium text-muted-foreground">
+                  {overview.instrumentType}
+                </span>
+              ) : null}
+            </div>
+            {price ? (
+              <button
+                type="button"
+                onClick={() => {
+                  watchlist.toggle(upper);
+                  toast.success(watched ? "Removed from watchlist" : "Added to watchlist");
+                }}
+                aria-label={watched ? "Remove from watchlist" : "Add to watchlist"}
+                title={watched ? "Remove from watchlist" : "Add to watchlist"}
+                className={cn(
+                  "inline-flex size-8 shrink-0 items-center justify-center rounded-xl border transition-colors",
+                  watched
+                    ? "border-primary/50 bg-primary/15 text-primary"
+                    : "border-border/70 text-muted-foreground hover:border-primary/40 hover:text-primary",
+                )}
               >
                 {watched ? <StarOff className="size-4" /> : <Star className="size-4" />}
-                {watched ? "Remove from watchlist" : "Add to watchlist"}
-              </Button>
-            </>
-          ) : (
-            <p className="text-sm text-muted-foreground">
+              </button>
+            ) : null}
+          </div>
+        </SheetHeader>
+        <div className="space-y-5 px-4 pb-8">
+          {!price ? (
+            <p className="mt-2 text-sm text-muted-foreground">
               No live market data for this scrip right now.
             </p>
-          )}
+          ) : null}
 
           <Tabs value={tab} onValueChange={setTab}>
             <TabsList className="w-full justify-start">
@@ -805,6 +906,7 @@ export function ScripSheet({
             <TabsContent value="overview" className="space-y-4">
               {waccEntry && toNumber(waccEntry.averageBuyRate) > 0 && price?.ltp ? (
                 <PositionCard
+                  scrip={upper}
                   units={toNumber(waccEntry.totalQuantity)}
                   waccRate={toNumber(waccEntry.averageBuyRate)}
                   totalCost={toNumber(waccEntry.totalCost)}
@@ -812,6 +914,7 @@ export function ScripSheet({
                 />
               ) : hasInvBasis && invEntry && price?.ltp ? (
                 <PositionCard
+                  scrip={upper}
                   units={invEntry.units}
                   waccRate={invEntry.waccRate}
                   totalCost={invEntry.cost}
@@ -911,20 +1014,52 @@ export function ScripSheet({
                 )}
               </Panel>
 
-              {stats.length > 0 ? (
-                <dl className="grid grid-cols-3 gap-3">
-                  {stats.map((row) => (
-                    <div
-                      key={row.label}
-                      className="rounded-xl border border-border/60 bg-surface px-3 py-2"
-                    >
-                      <dt className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                        {row.label}
-                      </dt>
-                      <dd className="num text-sm font-medium">{row.value}</dd>
-                    </div>
-                  ))}
-                </dl>
+              {stats.length > 0 || dayRange || yearRange ? (
+                <Panel padding="sm">
+                  <h3 className="font-display text-sm font-semibold">Today&apos;s session</h3>
+                  {stats.length > 0 ? (
+                    <dl className="mt-3 grid grid-cols-5 gap-2">
+                      {stats.map((row) => (
+                        <div key={row.label} className="min-w-0">
+                          <dt className="truncate text-[0.65rem] uppercase tracking-wide text-muted-foreground">
+                            {row.label}
+                          </dt>
+                          <dd className="num truncate text-[0.8rem] font-medium">{row.value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  ) : null}
+                  <div className="mt-3 grid grid-cols-2 gap-3">
+                    {dayRange ? (
+                      <div className="rounded-xl border border-border/60 bg-surface p-2.5">
+                        <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-muted-foreground">
+                          Day range
+                        </p>
+                        <RangeBar
+                          low={dayRange.low}
+                          high={dayRange.high}
+                          value={dayRange.value}
+                          format={(v) => formatNpr(v)}
+                          tone={price?.percentChange != null && price.percentChange < 0 ? "loss" : "gain"}
+                        />
+                      </div>
+                    ) : null}
+                    {yearRange ? (
+                      <div className="rounded-xl border border-border/60 bg-surface p-2.5">
+                        <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-muted-foreground">
+                          52-week range
+                        </p>
+                        <RangeBar
+                          low={yearRange.low}
+                          high={yearRange.high}
+                          value={yearRange.value}
+                          format={(v) => formatNpr(v, { compact: true })}
+                          tone={price?.percentChange != null && price.percentChange < 0 ? "loss" : "gain"}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                </Panel>
               ) : null}
 
               {companyRows.length > 0 ? (
@@ -1026,130 +1161,172 @@ export function ScripSheet({
 
             <TabsContent value="dividend" className="space-y-3">
               {yearlyDividends.length > 0 ? (
-                <Panel padding="sm">
-                  <h3 className="font-display text-sm font-semibold">All announced dividends</h3>
-                  <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <dt className="text-xs text-muted-foreground">Announcements</dt>
-                      <dd className="num font-medium">{yearlyDividends.length}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs text-muted-foreground">Fiscal years</dt>
-                      <dd className="num font-medium">
-                        {new Set(yearlyDividends.map((d) => d.fiscalYear ?? "")).size}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs text-muted-foreground">Latest</dt>
-                      <dd className="num font-medium">
-                        {dividend && dividend.totalDividend > 0
-                          ? `${dividend.totalDividend}%`
-                          : "-"}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs text-muted-foreground">Latest FY</dt>
-                      <dd className="num font-medium">{dividend?.fiscalYear ?? "-"}</dd>
-                    </div>
-                    {price?.ltp && dividend?.cashDividend ? (
-                      <div>
-                        <dt className="text-xs text-muted-foreground">Yield (cash)</dt>
-                        <dd className="num font-medium">
-                          {formatPercent(
-                            ((dividend.cashDividend / 100) *
-                              resolveFaceValue(overview?.faceValue, overview?.sector)) /
-                              price.ltp,
-                          )}
-                        </dd>
-                      </div>
-                    ) : null}
-                  </dl>
-                  <ul className="mt-3 space-y-1.5">
-                    {yearlyDividends.slice(0, 12).map((d, i) => (
-                      <li
-                        key={`${d.fiscalYear ?? "fy"}-${d.announcementDate ?? i}`}
-                        className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-surface px-3 py-2 text-xs"
+                dividendSimOpen ? (
+                  <Panel padding="sm">
+                    <DividendSimulator
+                      symbol={upper}
+                      dividends={yearlyDividends}
+                      holdingUnits={holding ? holding.units : null}
+                      faceValue={resolveFaceValue(overview?.faceValue, overview?.sector, upper)}
+                      history={detail.data?.history ?? []}
+                      currentLtp={price?.ltp ?? null}
+                      transactions={myHistory.data?.items ?? []}
+                      actualCost={hasInvBasis && invEntry ? invEntry.cost : null}
+                      controlledOpen={true}
+                      onOpenChange={setDividendSimOpen}
+                    />
+                  </Panel>
+                ) : (
+                  <Panel padding="sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="font-display text-sm font-semibold">
+                        All announced dividends
+                      </h3>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setDividendSimOpen(true)}
+                        className="gap-1.5 text-xs"
                       >
-                        <div className="min-w-0">
-                          <p className="font-semibold">
-                            {d.fiscalYear ?? "-"}
-                            {d.announcementDate ? (
-                              <span className="num ml-1.5 font-normal text-muted-foreground">
-                                · {formatDate(d.announcementDate)}
-                              </span>
-                            ) : null}
-                          </p>
-                          <p className="text-muted-foreground">
-                            {d.cashDividend > 0 ? `${d.cashDividend}% cash` : "cash -"}
-                            {d.cashDividend > 0 && d.bonusShare > 0 ? " + " : " · "}
-                            {d.bonusShare > 0 ? `${d.bonusShare}% bonus` : "bonus -"}
-                          </p>
-                        </div>
-                        {holding ? (
-                          <span className="num shrink-0 text-right font-medium">
-                            {d.cashDividend > 0 ? (
-                              <>
-                                est.{" "}
-                                {formatNpr(
-                                  (d.cashDividend / 100) *
-                                    resolveFaceValue(overview?.faceValue, overview?.sector) *
-                                    holding.units,
-                                )}
-                              </>
-                            ) : (
-                              "-"
-                            )}
-                            {d.bonusShare > 0 ? (
-                              <span className="block text-[0.65rem] font-normal text-muted-foreground">
-                                +{formatQty((d.bonusShare / 100) * holding.units)} bonus
-                              </span>
-                            ) : null}
-                          </span>
-                        ) : (
-                          <span className="num shrink-0 text-right font-semibold">
-                            {d.totalDividend > 0 ? `${d.totalDividend}%` : "-"}
-                          </span>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                  {holding ? (
-                    <p className="mt-3 rounded-xl bg-gain/10 px-3 py-2 text-xs text-muted-foreground">
-                      On your {formatQty(holding.units)} units, the years shown total an estimated
-                      cash{" "}
-                      <span className="num font-semibold text-gain">
-                        {formatNpr(
-                          yearlyDividends.reduce(
-                            (s, d) =>
-                              s +
-                              (d.cashDividend / 100) *
-                                resolveFaceValue(overview?.faceValue, overview?.sector) *
-                                holding.units,
-                            0,
-                          ),
-                        )}
-                      </span>
-                      {yearlyDividends.some((d) => d.bonusShare > 0) ? (
-                        <>
-                          {" "}
-                          and bonus{" "}
-                          <span className="num font-semibold">
-                            {formatQty(
-                              Math.floor(
+                        <Calculator className="size-3.5 text-primary" />
+                        What if
+                      </Button>
+                    </div>
+                    {holding ? (
+                      <p className="mt-3 rounded-xl bg-gain/10 px-3 py-2 text-xs text-muted-foreground">
+                        On your {formatQty(holding.units)} units, the shown total an estimated cash{" "}
+                        <span className="num font-semibold text-gain">
+                          {actualTotals?.matched
+                            ? formatNpr(actualTotals.totalCash)
+                            : formatNpr(
                                 yearlyDividends.reduce(
-                                  (s, d) => s + (d.bonusShare / 100) * holding.units,
+                                  (s, d) =>
+                                    s +
+                                    (d.cashDividend / 100) *
+                                      resolveFaceValue(
+                                        overview?.faceValue,
+                                        overview?.sector,
+                                        upper,
+                                      ) *
+                                      holding.units,
                                   0,
                                 ),
-                              ),
+                              )}
+                        </span>
+                        {yearlyDividends.some((d) => d.bonusShare > 0) ? (
+                          <>
+                            {" "}
+                            and bonus{" "}
+                            <span className="num font-semibold">
+                              {actualTotals?.matched
+                                ? formatQty(Math.floor(actualTotals.totalBonus))
+                                : formatQty(
+                                    Math.floor(
+                                      yearlyDividends.reduce(
+                                        (s, d) => s + (d.bonusShare / 100) * holding.units,
+                                        0,
+                                      ),
+                                    ),
+                                  )}
+                            </span>{" "}
+                            units
+                          </>
+                        ) : null}
+                        .
+                      </p>
+                    ) : null}
+                    <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Announcements</dt>
+                        <dd className="num font-medium">{yearlyDividends.length}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Fiscal years</dt>
+                        <dd className="num font-medium">
+                          {new Set(yearlyDividends.map((d) => d.fiscalYear ?? "")).size}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Latest</dt>
+                        <dd className="num font-medium">
+                          {dividend && dividend.totalDividend > 0
+                            ? `${dividend.totalDividend}%`
+                            : "-"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Latest FY</dt>
+                        <dd className="num font-medium">{dividend?.fiscalYear ?? "-"}</dd>
+                      </div>
+                      {price?.ltp && dividend?.cashDividend ? (
+                        <div>
+                          <dt className="text-xs text-muted-foreground">Yield (cash)</dt>
+                          <dd className="num font-medium">
+                            {formatPercent(
+                              ((dividend.cashDividend / 100) *
+                                resolveFaceValue(overview?.faceValue, overview?.sector, upper)) /
+                                price.ltp,
                             )}
-                          </span>{" "}
-                          units
-                        </>
+                          </dd>
+                        </div>
                       ) : null}
-                      .
-                    </p>
-                  ) : null}
-                </Panel>
+                    </dl>
+                    <ul className="mt-3 space-y-1.5">
+                      {yearlyDividends.slice(0, 12).map((d, i) => (
+                        <li
+                          key={`${d.fiscalYear ?? "fy"}-${d.announcementDate ?? i}`}
+                          className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-surface px-3 py-2 text-xs"
+                        >
+                          <div className="min-w-0">
+                            <p className="font-semibold">
+                              {d.fiscalYear ?? "-"}
+                              {d.announcementDate ? (
+                                <span className="num ml-1.5 font-normal text-muted-foreground">
+                                  · {formatDate(d.announcementDate)}
+                                </span>
+                              ) : null}
+                            </p>
+                            <p className="text-muted-foreground">
+                              {d.cashDividend > 0 ? `${d.cashDividend}% cash` : "cash -"}
+                              {d.cashDividend > 0 && d.bonusShare > 0 ? " + " : " · "}
+                              {d.bonusShare > 0 ? `${d.bonusShare}% bonus` : "bonus -"}
+                            </p>
+                          </div>
+                          {holding ? (
+                            <span className="num shrink-0 text-right font-medium">
+                              {d.cashDividend > 0 ? (
+                                <>
+                                  est.{" "}
+                                  {formatNpr(
+                                    (d.cashDividend / 100) *
+                                      resolveFaceValue(
+                                        overview?.faceValue,
+                                        overview?.sector,
+                                        upper,
+                                      ) *
+                                      holding.units,
+                                  )}
+                                </>
+                              ) : (
+                                "-"
+                              )}
+                              {d.bonusShare > 0 ? (
+                                <span className="block text-[0.65rem] font-normal text-muted-foreground">
+                                  +{formatQty((d.bonusShare / 100) * holding.units)} bonus
+                                </span>
+                              ) : null}
+                            </span>
+                          ) : (
+                            <span className="num shrink-0 text-right font-semibold">
+                              {d.totalDividend > 0 ? `${d.totalDividend}%` : "-"}
+                            </span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </Panel>
+                )
               ) : (
                 <p className="rounded-xl border border-border/60 bg-surface px-3 py-2.5 text-sm text-muted-foreground">
                   No dividend announcements in the feed for this scrip.
@@ -1165,9 +1342,6 @@ export function ScripSheet({
               ) : (myHistory.data?.items.length ?? 0) > 0 ? (
                 <>
                   <ScripHistoryTable items={myHistory.data?.items ?? []} />
-                  <p className="text-[0.68rem] text-muted-foreground">
-                    Your demat movement history for {upper}, straight from MeroShare (newest first).
-                  </p>
                 </>
               ) : (
                 <p className="rounded-xl border border-border/60 bg-surface px-3 py-6 text-center text-sm text-muted-foreground">

@@ -85,3 +85,45 @@ export function SwipeableCards({
     </div>
   );
 }
+
+/**
+ * Peeking swipe strip (the Market pattern): horizontal snap scroll with the
+ * next card peeking on phones, a plain grid on sm+. Children carry their own
+ * widths — wrap them in {@link SwipeItem} or pass equivalent classes.
+ */
+export function SwipeStrip({
+  children,
+  cols = "sm:grid-cols-2 xl:grid-cols-4",
+  className,
+}: {
+  children: ReactNode;
+  cols?: string;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1 [scrollbar-width:none] sm:grid sm:snap-none sm:overflow-x-visible sm:pb-0 [&::-webkit-scrollbar]:hidden",
+        cols,
+        className,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** Fixed-width peeking item for {@link SwipeStrip} on phones, fluid in grids. */
+export function SwipeItem({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("w-[15.5rem] shrink-0 snap-start sm:w-auto", className)}>
+      {children}
+    </div>
+  );
+}

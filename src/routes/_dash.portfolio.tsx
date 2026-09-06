@@ -403,7 +403,7 @@ function PortfolioPage() {
         />
       ) : (
         <Panel padding="none" className="overflow-hidden">
-          <Table>
+          <Table className="min-w-[760px]">
             <TableHeader>
               <TableRow className="bg-muted/40 hover:bg-muted/40">
                 <TableHead className="w-10 pl-4">SN</TableHead>

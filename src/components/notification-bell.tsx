@@ -11,6 +11,7 @@ import {
   Wallet,
   Flame,
   Clock,
+  Settings,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -89,7 +90,7 @@ function Row({
           </span>
         </span>
       </button>
-      <div className="mt-1 flex shrink-0 flex-col gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+      <div className="mt-1 flex shrink-0 flex-col gap-1 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
         <button
           type="button"
           aria-label="Remind me tomorrow"
@@ -182,21 +183,38 @@ export function NotificationBell() {
           ) : null}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 p-2 sm:w-96">
-        <div className="flex items-center justify-between px-2 py-1.5">
+      <PopoverContent
+        align="end"
+        className="w-screen max-w-[24rem] p-0 sm:w-96 sm:rounded-2xl sm:p-2"
+      >
+        <div className="flex items-center justify-between border-b border-border/60 px-4 py-3 sm:border-b-0 sm:px-3">
           <p className="font-display text-sm font-semibold">Notifications</p>
-          {unread.length > 0 ? (
+          <div className="flex items-center gap-2">
+            {unread.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => {
+                  markAllRead(all.map((n) => n.id));
+                  refresh();
+                  toast.success("Marked all as read");
+                }}
+                className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+              >
+                <CheckCheck className="size-3.5" /> Mark all read
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => {
-                markAllRead(all.map((n) => n.id));
-                refresh();
+                setOpen(false);
+                navigate({ to: "/settings" });
               }}
-              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+              className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              aria-label="Notification settings"
             >
-              <CheckCheck className="size-3.5" /> Mark all read
+              <Settings className="size-4" />
             </button>
-          ) : null}
+          </div>
         </div>
         {push === "default" ? (
           <button
@@ -249,10 +267,12 @@ export function NotificationBell() {
                 onDismiss={() => {
                   dismiss(item.id);
                   refresh();
+                  toast.success("Notification dismissed");
                 }}
                 onSnooze={() => {
                   snooze(item.id, Date.now() + SNOOZE_TOMORROW_MS);
                   refresh();
+                  toast.success("Snoozed until tomorrow");
                 }}
               />
             ))}

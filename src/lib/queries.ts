@@ -217,7 +217,9 @@ export const waccScripsQuery = () =>
   queryOptions({
     queryKey: ["wacc-scrips"],
     queryFn: () => getWaccScrips(),
-    staleTime: 30_000,
+    // Only changes when the user submits a WACC calculation (which
+    // invalidates this key), so a long stale time is safe.
+    staleTime: 5 * 60_000,
   });
 
 export const waccSearchQuery = (scrip: string | null) =>
@@ -225,21 +227,24 @@ export const waccSearchQuery = (scrip: string | null) =>
     queryKey: ["wacc-search", scrip],
     queryFn: () => getWaccPending({ data: { scrip: scrip ?? "" } }),
     enabled: Boolean(scrip),
-    staleTime: 15_000,
+    // Same: submissions invalidate ["wacc-search"] explicitly.
+    staleTime: 5 * 60_000,
   });
 
 export const waccReportQuery = () =>
   queryOptions({
     queryKey: ["wacc-report"],
     queryFn: () => getWaccReport(),
-    staleTime: 30_000,
+    staleTime: 60_000,
   });
 
 export const investmentSummaryQuery = () =>
   queryOptions({
     queryKey: ["investment-summary"],
     queryFn: () => getInvestmentSummary(),
-    staleTime: 60_000,
+    // Expensive (1 + N CDSC calls) and only changes on WACC submission,
+    // which invalidates this key — keep it fresh for 5 minutes.
+    staleTime: 5 * 60_000,
   });
 
 export const transactionsQuery = (symbol: string | null) =>

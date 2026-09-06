@@ -282,6 +282,52 @@ export const getWaccReport = createServerFn({ method: "POST" }).handler(
 );
 
 /**
+ * Parse the per-scrip `myPurchase/view/` response into a cost basis.
+ * CDSC's shape is undocumented and has drifted (dict with scalar totals vs
+ * summary-style row lists under various keys), so every known variant is
+ * tried defensively. Returns null when nothing usable is found.
+ */
+function extractViewBasis(res: JsonRecord): { units: number; cost: number; rate: number } | null {
+  const rec = res as Record<string, unknown>;
+  const listKeys = ["waccSummaryResponse", "waccResponse", "data", "object", "rows", "details"];
+  for (const key of listKeys) {
+    const arr = rec[key];
+    if (!Array.isArray(arr) || arr.length === 0) continue;
+    let units = 0;
+    let cost = 0;
+    let usable = false;
+    for (const r of arr) {
+      if (typeof r !== "object" || r === null) continue;
+      const row = r as Record<string, unknown>;
+      const q = Math.max(
+        0,
+        toNum(row["quantity"] ?? row["transactionQuantity"] ?? row["totalQuantity"]),
+      );
+      const c = Math.max(0, toNum(row["userCost"] ?? row["totalCost"]));
+      const p = toNum(
+        row["userPrice"] ?? row["rate"] ?? row["purchasePrice"] ?? row["averageBuyRate"],
+      );
+      if (q > 0 && (c > 0 || p > 0)) usable = true;
+      units += q;
+      cost += c > 0 ? c : q * p;
+    }
+    if (usable && (units > 0 || cost > 0)) {
+      return { units, cost, rate: units > 0 ? cost / units : 0 };
+    }
+  }
+  const cost = Math.max(0, toNum(rec["totalCost"] ?? rec["totalUserCost"] ?? rec["investment"]));
+  const units = Math.max(
+    0,
+    toNum(rec["totalQuantity"] ?? rec["totalUnits"] ?? rec["quantity"]),
+  );
+  const rate = toNum(rec["averageBuyRate"] ?? rec["waccRate"] ?? rec["rate"]);
+  if (cost > 0 || units > 0) {
+    return { units, cost, rate: rate > 0 ? rate : units > 0 ? cost / units : 0 };
+  }
+  return null;
+}
+
+/**
  * Account-wide cost basis: the `waccReport` (single call, CDSC-calculated)
  * seeded first, with per-scrip Purchase Source (`myPurchase/search/wacc/`)
  * filling only the gaps.
@@ -430,6 +476,32 @@ export const getInvestmentSummary = createServerFn({ method: "GET" }).handler(
             status: "missing",
           });
         }
+      });
+    }
+
+    // Last resort for still-missing scrips: `myPurchase/view/` returns one
+    // scrip's *calculated* WACC individually, even when the account-wide
+    // report is gated behind unfinished pending calculations and
+    // `search/wacc/` is blocked. This rescues users with partial WACC
+    // (e.g. 3 of 10 done) — their finished scrips surface real values.
+    const stillMissing = [...byScrip.entries()]
+      .filter(([, v]) => v.status === "missing")
+      .map(([k]) => k);
+    for (let i = 0; i < stillMissing.length; i += BATCH) {
+      const batch = stillMissing.slice(i, i + BATCH);
+      const settled = await Promise.allSettled(batch.map((s) => fetchWaccCalculated(auth, s)));
+      settled.forEach((result, idx) => {
+        if (result.status === "rejected") return;
+        const basis = extractViewBasis(result.value);
+        if (!basis) return;
+        const scrip = batch[idx] as string;
+        byScrip.set(scrip, {
+          scrip,
+          units: basis.units || held.get(scrip) || 0,
+          cost: basis.cost,
+          waccRate: basis.rate,
+          status: "calculated",
+        });
       });
     }
 
