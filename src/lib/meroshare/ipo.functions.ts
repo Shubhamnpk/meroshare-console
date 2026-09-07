@@ -120,6 +120,7 @@ const applySchema = z.object({
   appliedKitta: z.number().int().min(1).max(1000000),
   bankId: z.number().int().positive(),
   accountBranchId: z.number().int().positive(),
+  accountTypeId: z.number().int().nullable().optional(),
   accountNumber: z.string().trim().min(1).max(40),
   customerId: z.number().int().positive(),
   crnNumber: z.string().trim().min(1).max(40),

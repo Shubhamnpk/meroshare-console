@@ -13,6 +13,14 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ExportButton, csvRow } from "@/components/export-dialog";
 import {
   Select,
@@ -380,6 +388,8 @@ function ReportList({
   onSearch,
   sortKey,
   sortCycle,
+  onEdit,
+  onWithdraw,
 }: {
   items: ApplicationReportItem[];
   details: (JsonRecord | null)[];
@@ -388,7 +398,13 @@ function ReportList({
   onSearch: (value: string) => void;
   sortKey: SortKey;
   sortCycle: SortCycle;
+  onEdit?: ((item: ApplicationReportItem, detail: JsonRecord | null) => void) | undefined;
+  onWithdraw?: ((item: ApplicationReportItem, pin: string) => void) | undefined;
 }) {
+  const [withdrawTarget, setWithdrawTarget] = useState<{
+    item: ApplicationReportItem;
+    pin: string;
+  } | null>(null);
   const shown = useMemo(() => {
     const pairs = items.map((item, idx) => ({ item, detail: details[idx] ?? null }));
     const term = search.trim().toLowerCase();
@@ -464,7 +480,42 @@ function ReportList({
                   </AccordionTrigger>
                   <AccordionContent className="px-4">
                     {detail ? (
-                      <DetailGrid detail={detail} />
+                      <>
+                        <DetailGrid detail={detail} />
+                        {(() => {
+                          const outcome = deriveOutcome(detail);
+                          const editable =
+                            (outcome.kind === "pending" || outcome.kind === "blocked") &&
+                            Boolean(item.applicantFormId);
+                          if (!editable || (!onEdit && !onWithdraw)) return null;
+                          return (
+                            <div className="mt-3 flex flex-wrap gap-2 border-t border-border/60 pt-3">
+                              {onEdit ? (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => onEdit(item, detail)}
+                                >
+                                  Edit
+                                </Button>
+                              ) : null}
+                              {onWithdraw ? (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-destructive hover:text-destructive"
+                                  onClick={() => setWithdrawTarget({ item, pin: "" })}
+                                >
+                                  Withdraw
+                                </Button>
+                              ) : null}
+                              <span className="ml-auto text-[11px] text-muted-foreground">
+                                Editable while the issue is still open
+                              </span>
+                            </div>
+                          );
+                        })()}
+                      </>
                     ) : (
                       <p className="text-xs text-muted-foreground">Result not loaded.</p>
                     )}
@@ -473,13 +524,65 @@ function ReportList({
               );
             })}
           </Accordion>
+          <Dialog
+            open={Boolean(withdrawTarget)}
+            onOpenChange={(open) => {
+              if (!open) setWithdrawTarget(null);
+            }}
+          >
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Withdraw application</DialogTitle>
+              </DialogHeader>
+              <p className="text-sm text-muted-foreground">
+                Withdraw {withdrawTarget?.item.companyName} ({withdrawTarget?.item.scrip})? This
+                cannot be undone while the issue is open.
+              </p>
+              <div className="space-y-2">
+                <Label htmlFor="withdraw-pin">Transaction PIN</Label>
+                <Input
+                  id="withdraw-pin"
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={8}
+                  value={withdrawTarget?.pin ?? ""}
+                  onChange={(e) =>
+                    setWithdrawTarget((prev) => (prev ? { ...prev, pin: e.target.value } : null))
+                  }
+                  placeholder="4 digit PIN"
+                />
+              </div>
+              <DialogFooter>
+                <Button variant="ghost" onClick={() => setWithdrawTarget(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  disabled={!withdrawTarget || withdrawTarget.pin.length < 4}
+                  onClick={() => {
+                    if (!withdrawTarget || !onWithdraw) return;
+                    onWithdraw(withdrawTarget.item, withdrawTarget.pin);
+                    setWithdrawTarget(null);
+                  }}
+                >
+                  Withdraw
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </>
       )}
     </div>
   );
 }
 
-export function ApplicationReports() {
+export function ApplicationReports({
+  onEdit,
+  onWithdraw,
+}: {
+  onEdit?: ((item: ApplicationReportItem, detail: JsonRecord | null) => void) | undefined;
+  onWithdraw?: ((item: ApplicationReportItem, pin: string) => void) | undefined;
+} = {}) {
   const current = useQuery(applicationReportsQuery());
   const old = useQuery(oldApplicationReportsQuery());
   const [search, setSearch] = useState("");
@@ -577,6 +680,8 @@ export function ApplicationReports() {
               onSearch={setSearch}
               sortKey={sortKey}
               sortCycle={sortCycle}
+              onEdit={onEdit}
+              onWithdraw={onWithdraw}
             />
           )}
         </TabsContent>

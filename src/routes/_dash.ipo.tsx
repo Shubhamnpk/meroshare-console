@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Archive, CalendarRange, ClipboardList, Loader2, Rocket } from "lucide-react";
@@ -29,8 +29,13 @@ import {
   ipoArchiveQuery,
   mfPipelineByTypeQuery,
 } from "@/lib/queries";
-import { applyForIpo } from "@/lib/meroshare/ipo.functions";
-import { getBankDetail } from "@/lib/meroshare/account.functions";
+import {
+  applyForIpo,
+  deleteIpoApply,
+  editIpoApply,
+  getIssueDetail,
+} from "@/lib/meroshare/ipo.functions";
+import { getBankCustomers, getBankDetail, getBankRequest } from "@/lib/meroshare/account.functions";
 import {
   daysUntil,
   errorMessage,
@@ -450,20 +455,94 @@ function IpoPage() {
   const [active, setActive] = useState<ApplicableIssue | null>(null);
   const [bankId, setBankId] = useState<string>("");
   const [kitta, setKitta] = useState("10");
+  const [crn, setCrn] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+  const [accountBranchId, setAccountBranchId] = useState<number | null>(null);
+  const [accountTypeId, setAccountTypeId] = useState<number | null>(null);
+  const [customerId, setCustomerId] = useState<number | null>(null);
   const [pin, setPin] = useState("");
+  const [editFormId, setEditFormId] = useState<number | null>(null);
 
   const bankDetail = useQuery({
     queryKey: ["bank-detail", bankId],
     queryFn: () => getBankDetail({ data: { bankId: Number(bankId) } }),
     enabled: Boolean(bankId),
   });
+  const bankCustomers = useQuery({
+    queryKey: ["bank-customers", bankId],
+    queryFn: () => getBankCustomers({ data: { bankId: Number(bankId) } }),
+    enabled: Boolean(bankId),
+  });
+  const selectedBank = banks.data?.find((b) => String(b.id) === String(bankId));
+  const bankRequest = useQuery({
+    queryKey: ["bank-request", selectedBank?.code ?? ""],
+    queryFn: () => getBankRequest({ data: { bankCode: String(selectedBank?.code ?? "") } }),
+    enabled: Boolean(selectedBank?.code),
+  });
+  const issueDetail = useQuery({
+    queryKey: ["issue-detail", active?.companyShareId ?? 0],
+    queryFn: () =>
+      getIssueDetail({ data: { companyShareId: Number(active?.companyShareId ?? 0) } }),
+    enabled: Boolean(active?.companyShareId),
+  });
+
+  // Real site: picking a bank loads its customers, picking an account fills branch/customer/type.
+  const customers = (bankCustomers.data ?? []) as unknown as Array<Record<string, unknown>>;
+  useEffect(() => {
+    if (!bankId || editFormId) return;
+    if (customers.length === 0) return;
+    // Auto-pick the first account when only one exists, like the real site does.
+    if (customers.length === 1 && !accountNumber) {
+      const c = customers[0] as Record<string, unknown>;
+      const acc = c["accountNumber"] ? String(c["accountNumber"]) : "";
+      if (acc) {
+        setAccountNumber(acc);
+        setCustomerId(c["id"] != null ? Number(c["id"]) : null);
+        setAccountBranchId(
+          c["accountBranchId"] != null
+            ? Number(c["accountBranchId"])
+            : ((c["branchId"] as number) ?? null),
+        );
+        setAccountTypeId(c["accountTypeId"] != null ? Number(c["accountTypeId"]) : null);
+        const crnFromReq = bankRequest.data?.["crnNumber"]
+          ? String(bankRequest.data["crnNumber"])
+          : "";
+        if (crnFromReq && !crn) setCrn(crnFromReq);
+      }
+    }
+  }, [bankId, bankCustomers.data, bankRequest.data]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const onAccountChange = (acc: string) => {
+    setAccountNumber(acc);
+    const c = customers.find((x) => String(x["accountNumber"]) === acc) as
+      Record<string, unknown> | undefined;
+    if (c) {
+      setCustomerId(c["id"] != null ? Number(c["id"]) : null);
+      setAccountBranchId(
+        c["accountBranchId"] != null
+          ? Number(c["accountBranchId"])
+          : ((c["branchId"] as number) ?? null),
+      );
+      setAccountTypeId(c["accountTypeId"] != null ? Number(c["accountTypeId"]) : null);
+    }
+  };
+
+  const closeDialog = () => {
+    setActive(null);
+    setEditFormId(null);
+    setPin("");
+    setCrn("");
+    setAccountNumber("");
+    setAccountBranchId(null);
+    setAccountTypeId(null);
+    setCustomerId(null);
+  };
 
   const apply = useMutation({
     mutationFn: applyForIpo,
     onSuccess: () => {
       toast.success("Application submitted to MeroShare.");
-      setActive(null);
-      setPin("");
+      closeDialog();
       void queryClient.invalidateQueries({ queryKey: ["applicable-issues"] });
       void queryClient.invalidateQueries({ queryKey: ["application-reports"] });
       setTab("applications");
@@ -471,21 +550,122 @@ function IpoPage() {
     onError: (error) => toast.error(errorMessage(error, "Could not submit the application.")),
   });
 
+  const editApply = useMutation({
+    mutationFn: editIpoApply,
+    onSuccess: () => {
+      toast.success("Application updated.");
+      closeDialog();
+      void queryClient.invalidateQueries({ queryKey: ["application-reports"] });
+      void queryClient.invalidateQueries({ queryKey: ["applicable-issues"] });
+    },
+    onError: (error) => toast.error(errorMessage(error, "Could not update the application.")),
+  });
+
+  const withdraw = useMutation({
+    mutationFn: deleteIpoApply,
+    onSuccess: () => {
+      toast.success("Application withdrawn.");
+      void queryClient.invalidateQueries({ queryKey: ["application-reports"] });
+      void queryClient.invalidateQueries({ queryKey: ["applicable-issues"] });
+    },
+    onError: (error) => toast.error(errorMessage(error, "Could not withdraw the application.")),
+  });
+
   const submit = () => {
-    const detail = bankDetail.data;
-    if (!active || !detail) return;
-    apply.mutate({
-      data: {
-        companyShareId: active.companyShareId,
-        appliedKitta: Number(kitta),
-        bankId: Number(bankId),
-        accountBranchId: toNumber(detail.branchId),
-        accountNumber: String(detail.accountNumber ?? ""),
-        customerId: toNumber(detail.id),
-        crnNumber: String(detail.crnNumber ?? ""),
-        transactionPIN: pin,
-      },
-    });
+    if (!active || !bankId) {
+      toast.error("Select your ASBA bank.");
+      return;
+    }
+    if (!accountNumber.trim()) {
+      toast.error("Select your bank account number.");
+      return;
+    }
+    const crnValue = crn.trim();
+    const accValue = accountNumber.trim();
+    if (!accValue) {
+      toast.error("Select your bank account number.");
+      return;
+    }
+    if (!crnValue) {
+      toast.error("Enter your CRN number. You can find it on your bank cheque or ASBA form.");
+      return;
+    }
+    if (!customerId || !accountBranchId) {
+      toast.error(
+        "Pick your account number first. Branch and customer are filled from that account.",
+      );
+      return;
+    }
+    if (active.minUnit && Number(kitta) < active.minUnit) {
+      toast.error(`Minimum ${formatNumber(active.minUnit)} units required.`);
+      return;
+    }
+    if (active.maxUnit && Number(kitta) > active.maxUnit) {
+      toast.error(`Maximum ${formatNumber(active.maxUnit)} units allowed.`);
+      return;
+    }
+    if (Number(kitta) % 10 !== 0 && active.sharePerUnit === 100) {
+      // Divisible quantity is 10 for BENI, enforced server side
+    }
+    const payload: Record<string, unknown> = {
+      companyShareId: active.companyShareId,
+      appliedKitta: Number(kitta),
+      bankId: Number(bankId),
+      accountBranchId,
+      accountNumber: accValue,
+      customerId,
+      crnNumber: crnValue,
+      transactionPIN: pin,
+    };
+    if (accountTypeId != null) payload["accountTypeId"] = accountTypeId;
+    if (editFormId) {
+      editApply.mutate({ data: { ...payload, applicantFormId: editFormId } });
+    } else {
+      apply.mutate({ data: payload });
+    }
+  };
+
+  const openApply = (issue: ApplicableIssue) => {
+    setActive(issue);
+    setEditFormId(null);
+    setKitta(String(issue.minUnit ?? 10));
+    setCrn("");
+    setAccountNumber("");
+    setAccountBranchId(null);
+    setAccountTypeId(null);
+    setCustomerId(null);
+    setPin("");
+    if (!bankId && banks.data?.[0]) setBankId(String(banks.data[0].id));
+  };
+
+  const openEdit = (opts: {
+    companyShareId: number;
+    companyName?: string | undefined;
+    scrip?: string | undefined;
+    applicantFormId: number;
+    appliedKitta?: number | undefined;
+    bankId?: number | undefined;
+    accountNumber?: string | undefined;
+    crnNumber?: string | undefined;
+  }) => {
+    const fake: ApplicableIssue = {
+      companyShareId: opts.companyShareId,
+      ...(opts.companyName ? { companyName: opts.companyName } : {}),
+      ...(opts.scrip ? { scrip: opts.scrip } : {}),
+    };
+    setActive(fake as ApplicableIssue);
+    setEditFormId(opts.applicantFormId);
+    if (opts.appliedKitta) setKitta(String(opts.appliedKitta));
+    if (opts.bankId) setBankId(String(opts.bankId));
+    if (opts.accountNumber) setAccountNumber(String(opts.accountNumber));
+    if (opts.crnNumber) setCrn(String(opts.crnNumber));
+    // Branch and customer will be re-resolved when the bank's customers load.
+    // If the stored account still exists, onAccountChange will fill them.
+    setAccountBranchId(null);
+    setAccountTypeId(null);
+    setCustomerId(null);
+    setPin("");
+    setTab("applications");
   };
 
   const list = issues.data ?? [];
@@ -607,7 +787,31 @@ function IpoPage() {
         </TabsContent>
 
         <TabsContent value="applications" className="mt-4">
-          <ApplicationReports />
+          <ApplicationReports
+            onEdit={(item, detail) =>
+              openEdit({
+                companyShareId: item.companyShareId,
+                companyName: item.companyName,
+                scrip: item.scrip,
+                applicantFormId: item.applicantFormId ?? 0,
+                appliedKitta: detail ? Number(detail["appliedKitta"] ?? 10) : 10,
+                bankId: detail ? Number(detail["bankId"] ?? 0) || undefined : undefined,
+                accountNumber: detail
+                  ? String(detail["accountNumber"] ?? "") || undefined
+                  : undefined,
+                crnNumber: detail ? String(detail["crnNumber"] ?? "") || undefined : undefined,
+              })
+            }
+            onWithdraw={(item, pinValue) =>
+              withdraw.mutate({
+                data: {
+                  applicantFormId: item.applicantFormId ?? 0,
+                  companyShareId: item.companyShareId,
+                  transactionPIN: pinValue,
+                },
+              })
+            }
+          />
         </TabsContent>
 
         <TabsContent value="calendar" className="mt-4">
@@ -622,17 +826,99 @@ function IpoPage() {
       <Dialog
         open={Boolean(active)}
         onOpenChange={(open) => {
-          if (!open) setActive(null);
+          if (!open) closeDialog();
         }}
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{active?.companyName}</DialogTitle>
+            <DialogTitle>
+              {editFormId ? "Edit application" : "Apply for issue"} · {active?.companyName}
+            </DialogTitle>
+            {active ? (
+              <div className="space-y-2">
+                <div className="rounded-xl border border-border/60 bg-muted/20 px-3 py-2 text-xs">
+                  <p className="num truncate text-muted-foreground">
+                    {active.scrip ? `${active.scrip} · ` : ""}
+                    {active.shareTypeName ?? ""} {active.shareGroupName ?? ""}
+                  </p>
+                  <p className="num mt-1 flex flex-wrap gap-x-3 gap-y-1 text-muted-foreground">
+                    {active.issueOpenDate ? (
+                      <span>Opens {formatDate(active.issueOpenDate)}</span>
+                    ) : null}
+                    {active.issueCloseDate ? (
+                      <span>Closes {formatDate(active.issueCloseDate)}</span>
+                    ) : null}
+                    {active.sharePerUnit ? (
+                      <span>Rs {formatNumber(active.sharePerUnit)}/unit</span>
+                    ) : null}
+                    {active.minUnit || active.maxUnit ? (
+                      <span>
+                        {formatNumber(active.minUnit)} – {formatNumber(active.maxUnit)} units
+                      </span>
+                    ) : null}
+                  </p>
+                  {active.issueCloseDate ? (
+                    <p className="mt-1">
+                      <CountdownChip target={active.issueCloseDate} />
+                    </p>
+                  ) : null}
+                </div>
+                {issueDetail.data ? (
+                  <div className="rounded-xl border border-border/60 bg-surface px-3 py-2 text-xs">
+                    <p className="font-semibold">Issue details</p>
+                    <dl className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 text-muted-foreground">
+                      {(() => {
+                        const d = issueDetail.data as Record<string, unknown>;
+                        const rows: [string, string][] = [];
+                        const pick = (keys: string[]) => {
+                          for (const k of keys) {
+                            const v = d[k];
+                            if (v !== null && v !== undefined && String(v).trim() !== "")
+                              return String(v);
+                          }
+                          return "";
+                        };
+                        const mgr = pick([
+                          "issueManagerName",
+                          "assignedToClientName",
+                          "issueManager",
+                        ]);
+                        const type = pick(["shareTypeName", "shareGroupName", "issueType"]);
+                        const open = pick(["issueOpenDate", "minIssueOpenDate"]);
+                        const close = pick(["issueCloseDate", "maxIssueCloseDate"]);
+                        if (mgr) rows.push(["Issue manager", mgr]);
+                        if (type) rows.push(["Type", type]);
+                        if (open) rows.push(["Opens", formatDate(open)]);
+                        if (close) rows.push(["Closes", formatDate(close)]);
+                        const extra = pick(["remarks", "description", "companyName"]);
+                        if (extra && extra !== active.companyName) rows.push(["Note", extra]);
+                        return rows.map(([k, v]) => (
+                          <div key={k} className="flex justify-between gap-2">
+                            <dt>{k}</dt>
+                            <dd className="truncate text-right font-medium text-foreground">{v}</dd>
+                          </div>
+                        ));
+                      })()}
+                    </dl>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>Bank</Label>
-              <Select value={bankId} onValueChange={setBankId}>
+              <Label>ASBA bank *</Label>
+              <Select
+                value={bankId}
+                onValueChange={(v) => {
+                  setBankId(v);
+                  setAccountNumber("");
+                  setCrn("");
+                  setAccountBranchId(null);
+                  setAccountTypeId(null);
+                  setCustomerId(null);
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select your ASBA bank" />
                 </SelectTrigger>
@@ -644,26 +930,104 @@ function IpoPage() {
                   ))}
                 </SelectContent>
               </Select>
-              {bankDetail.isLoading ? (
+              {bankCustomers.isLoading || bankRequest.isLoading ? (
                 <SkeletonLines rows={2} className="pt-1" />
-              ) : bankDetail.data ? (
-                <p className="num text-xs text-muted-foreground">
-                  A/C {String(bankDetail.data.accountNumber ?? "")} · CRN{" "}
-                  {String(bankDetail.data.crnNumber ?? "")}
-                </p>
+              ) : customers.length > 0 ? (
+                <div className="rounded-lg border border-border/60 bg-surface px-3 py-2 text-xs">
+                  <p className="num text-muted-foreground">
+                    {(() => {
+                      const c = customers.find((x) => String(x["accountNumber"]) === accountNumber);
+                      const name =
+                        (c?.["branchName"] as string) ||
+                        (c?.["branch"] as string) ||
+                        (bankRequest.data?.["branch"] as string) ||
+                        "";
+                      return name ? `Branch ${name}` : "Pick an account to see branch";
+                    })()}
+                    {customerId ? ` · Customer ID ${customerId}` : ""}
+                  </p>
+                  {!customerId && accountNumber ? (
+                    <p className="text-[11px] leading-snug text-amber-600">
+                      Pick the account that matches your ASBA account. Branch and customer are
+                      filled from that choice.
+                    </p>
+                  ) : null}
+                </div>
+              ) : bankDetail.data || bankRequest.data ? (
+                <div className="rounded-lg border border-border/60 bg-surface px-3 py-2 text-xs">
+                  <p className="num text-muted-foreground">
+                    Branch{" "}
+                    {String(
+                      bankDetail.data?.branchName ??
+                        (bankDetail.data as Record<string, unknown>)?.["branchID"] ??
+                        "-",
+                    )}
+                  </p>
+                </div>
               ) : null}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="kitta">Applied units</Label>
+              <Label htmlFor="accountNumber">Bank account number *</Label>
+              {customers.length > 0 ? (
+                <Select value={accountNumber} onValueChange={onAccountChange}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select account" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {customers.map((c) => {
+                      const acc = String(c["accountNumber"] ?? "");
+                      const type = c["accountType"] ? ` - ${c["accountType"]}` : "";
+                      return (
+                        <SelectItem key={acc} value={acc}>
+                          {acc}
+                          {type}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  id="accountNumber"
+                  value={accountNumber}
+                  onChange={(e) => setAccountNumber(e.target.value)}
+                  placeholder="Enter account number"
+                />
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="crn">CRN number *</Label>
+              <Input
+                id="crn"
+                value={crn}
+                onChange={(e) => setCrn(e.target.value)}
+                placeholder={
+                  bankDetail.data?.crnNumber
+                    ? String(bankDetail.data.crnNumber)
+                    : "Enter CRN from your bank"
+                }
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Your 15-digit CRN from your bank cheque or ASBA form.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="kitta">Applied units *</Label>
               <Input
                 id="kitta"
                 inputMode="numeric"
                 value={kitta}
-                onChange={(e) => setKitta(e.target.value)}
+                onChange={(e) => setKitta(e.target.value.replace(/[^0-9]/g, ""))}
               />
+              {active?.minUnit || active?.maxUnit ? (
+                <p className="text-[11px] text-muted-foreground">
+                  Allowed: {formatNumber(active?.minUnit)} – {formatNumber(active?.maxUnit)} units
+                  {active?.sharePerUnit ? ` · Rs ${formatNumber(active?.sharePerUnit)}/unit` : ""}
+                </p>
+              ) : null}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="pin">Transaction PIN</Label>
+              <Label htmlFor="pin">Transaction PIN *</Label>
               <Input
                 id="pin"
                 type="password"
@@ -671,21 +1035,40 @@ function IpoPage() {
                 maxLength={8}
                 value={pin}
                 onChange={(e) => setPin(e.target.value)}
+                placeholder="4 digit PIN"
               />
             </div>
+            {editFormId ? (
+              <p className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-muted-foreground">
+                You are editing your existing application. You can change units, bank, account and
+                CRN while the issue is still open. CDSC may block edits close to the closing time.
+              </p>
+            ) : null}
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setActive(null)}>
+            <Button variant="ghost" onClick={closeDialog}>
               Cancel
             </Button>
             <Button
               onClick={submit}
-              disabled={apply.isPending || !bankDetail.data || pin.length < 4}
+              disabled={
+                apply.isPending ||
+                editApply.isPending ||
+                bankCustomers.isLoading ||
+                !bankId ||
+                !accountNumber.trim() ||
+                !crn.trim() ||
+                !kitta.trim() ||
+                Number(kitta) < 1 ||
+                pin.length < 4
+              }
             >
-              {apply.isPending ? (
+              {apply.isPending || editApply.isPending ? (
                 <>
                   <Loader2 className="size-4 animate-spin" /> Submitting…
                 </>
+              ) : editFormId ? (
+                "Update application"
               ) : (
                 "Confirm application"
               )}

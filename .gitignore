@@ -45,3 +45,7 @@ docs/meroshare-api.html
 Thumbs.db
 desktop.ini
 
+meroshare-playwright.mjs
+meroshare-playwright2.mjs
+pnpm-workspace.yaml
+pnpm-lock.yaml

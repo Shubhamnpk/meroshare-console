@@ -213,6 +213,7 @@ export interface ApplyIpoInput {
   appliedKitta: number;
   bankId: number;
   accountBranchId: number;
+  accountTypeId: number | null;
   accountNumber: string;
   customerId: number;
   crnNumber: string;
@@ -223,22 +224,25 @@ export async function submitIpoApplication(
   auth: AuthContext,
   input: ApplyIpoInput,
 ): Promise<JsonRecord> {
+  const payload: Record<string, unknown> = {
+    accountBranchId: input.accountBranchId,
+    accountNumber: input.accountNumber,
+    appliedKitta: input.appliedKitta,
+    bankId: input.bankId,
+    boid: auth.boid,
+    companyShareId: input.companyShareId,
+    crnNumber: input.crnNumber,
+    customerId: input.customerId,
+    demat: auth.demat,
+    shareCriteriaId: null,
+    transactionPIN: input.transactionPIN,
+  };
+  if (input.accountTypeId != null) payload.accountTypeId = input.accountTypeId;
   return cdscRequest<JsonRecord>(CDSC_URLS.applyShare, {
     method: "POST",
     retry: false,
     token: auth.token,
-    body: {
-      accountBranchId: input.accountBranchId,
-      accountNumber: input.accountNumber,
-      appliedKitta: String(input.appliedKitta),
-      bankId: input.bankId,
-      boid: auth.boid,
-      companyShareId: String(input.companyShareId),
-      crnNumber: input.crnNumber,
-      customerId: input.customerId,
-      demat: auth.demat,
-      transactionPIN: input.transactionPIN,
-    },
+    body: payload,
   });
 }
 
@@ -246,23 +250,26 @@ export async function editIpoApplication(
   auth: AuthContext,
   input: ApplyIpoInput & { applicantFormId: number },
 ): Promise<JsonRecord> {
+  const payload: Record<string, unknown> = {
+    applicantFormId: input.applicantFormId,
+    accountBranchId: input.accountBranchId,
+    accountNumber: input.accountNumber,
+    appliedKitta: input.appliedKitta,
+    bankId: input.bankId,
+    boid: auth.boid,
+    companyShareId: input.companyShareId,
+    crnNumber: input.crnNumber,
+    customerId: input.customerId,
+    demat: auth.demat,
+    shareCriteriaId: null,
+    transactionPIN: input.transactionPIN,
+  };
+  if (input.accountTypeId != null) payload.accountTypeId = input.accountTypeId;
   return cdscRequest<JsonRecord>(CDSC_URLS.applyShare, {
     method: "PUT",
     retry: false,
     token: auth.token,
-    body: {
-      applicantFormId: input.applicantFormId,
-      accountBranchId: input.accountBranchId,
-      accountNumber: input.accountNumber,
-      appliedKitta: String(input.appliedKitta),
-      bankId: input.bankId,
-      boid: auth.boid,
-      companyShareId: String(input.companyShareId),
-      crnNumber: input.crnNumber,
-      customerId: input.customerId,
-      demat: auth.demat,
-      transactionPIN: input.transactionPIN,
-    },
+    body: payload,
   });
 }
 

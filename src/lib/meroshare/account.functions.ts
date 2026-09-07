@@ -48,6 +48,17 @@ export const getBankDetail = createServerFn({ method: "POST" })
     return fetchBankDetail(auth, data.bankId);
   });
 
+export const getBankCustomers = createServerFn({ method: "POST" })
+  .validator((input: unknown) => z.object({ bankId: z.number().int().positive() }).parse(input))
+  .handler(async ({ data }): Promise<JsonRecord[]> => {
+    const auth = await requireAuth();
+    if (auth.demo) return [DEMO_BANK_DETAIL as unknown as JsonRecord];
+    const raw = await fetchBankDetail(auth, data.bankId);
+    if (Array.isArray(raw)) return raw as unknown as JsonRecord[];
+    if (raw && typeof raw === "object") return [raw as unknown as JsonRecord];
+    return [];
+  });
+
 /**
  * ASBA bank request detail (CRN, branch, KYC state) used to prefill the apply
  * form. Falls back to an empty record when the bank has no linked request.
