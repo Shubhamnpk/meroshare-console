@@ -7,7 +7,15 @@
 import { daysUntil, formatDate } from "./format";
 import type { ApplicableIssue } from "./meroshare/types";
 
-export type NotificationKind = "ipo-open" | "ipo-closing" | "ipo-upcoming" | "password" | "demat";
+export type NotificationKind =
+  | "ipo-open"
+  | "ipo-closing"
+  | "ipo-upcoming"
+  | "password"
+  | "demat"
+  | "dividend"
+  | "holding-news"
+  | "market-news";
 
 export interface AppNotification {
   id: string;
@@ -16,7 +24,18 @@ export interface AppNotification {
   body: string;
   href: string;
   urgent?: boolean;
+  /** Epoch ms of the underlying event; newest first within the same priority. */
+  at?: number;
 }
+
+export type NotificationCategory = "ipo" | "dividends" | "holdings" | "broadcasts";
+
+export const NOTIFICATION_CATEGORIES: { key: NotificationCategory; title: string; hint: string }[] = [
+  { key: "ipo", title: "IPO alerts", hint: "New, open and closing issues." },
+  { key: "dividends", title: "Dividend announcements", hint: "New dividends from the last month." },
+  { key: "holdings", title: "My holdings news", hint: "News about shares you hold or watchlist, last 7 days." },
+  { key: "broadcasts", title: "Market broadcasts", hint: "Exchange-wide notices, last 7 days." },
+];
 
 // ---------------------------------------------------------------------------
 // Unified notification storage (ms-notif.v1)
@@ -33,6 +52,7 @@ interface NotifState {
   snooze: Record<string, number>;
   popups: boolean;
   push: boolean;
+  cats: Record<NotificationCategory, boolean>;
 }
 
 const DEFAULT_STATE: NotifState = {
@@ -42,14 +62,16 @@ const DEFAULT_STATE: NotifState = {
   snooze: {},
   popups: true,
   push: false,
+  cats: { ipo: true, dividends: true, holdings: true, broadcasts: true },
 };
 
 function load(): NotifState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { ...DEFAULT_STATE };
+    if (!raw) return { ...DEFAULT_STATE, cats: { ...DEFAULT_STATE.cats } };
     const parsed = JSON.parse(raw) as Partial<NotifState>;
     const now = Date.now();
+    const cats = { ...DEFAULT_STATE.cats, ...(parsed.cats ?? {}) };
     return {
       read: parsed.read ?? {},
       dismissed: Array.isArray(parsed.dismissed) ? parsed.dismissed : [],
@@ -57,9 +79,10 @@ function load(): NotifState {
       snooze: pruneSnooze(parsed.snooze ?? {}, now),
       popups: parsed.popups !== false,
       push: parsed.push === true,
+      cats,
     };
   } catch {
-    return { ...DEFAULT_STATE };
+    return { ...DEFAULT_STATE, cats: { ...DEFAULT_STATE.cats } };
   }
 }
 
@@ -238,6 +261,20 @@ export const SNOOZE_TOMORROW_MS = 24 * 60 * 60_000;
 export const SNOOZE_WEEK_MS = 7 * 24 * 60 * 60_000;
 
 // ---------------------------------------------------------------------------
+// Per-category preferences (each can be turned off)
+// ---------------------------------------------------------------------------
+
+export function isCategoryEnabled(cat: NotificationCategory): boolean {
+  return load().cats[cat] !== false;
+}
+
+export function setCategoryEnabled(cat: NotificationCategory, on: boolean): void {
+  const state = load();
+  state.cats[cat] = on;
+  save(state);
+}
+
+// ---------------------------------------------------------------------------
 // Toasted tracking
 // ---------------------------------------------------------------------------
 
@@ -318,13 +355,29 @@ export function sameCompany(a: string, b: string): boolean {
 }
 
 function statusGroup(issue: ApplicableIssue): "open" | "upcoming" | "closed" {
-  const status = String(issue.statusName ?? "").toLowerCase();
-  if (/open|active|apply/i.test(status)) return "open";
-  if (/upcoming|announced|coming/i.test(status)) return "upcoming";
-  if (/closed|expired|over/i.test(status)) return "closed";
   const closes = daysUntil(issue.issueCloseDate);
+  if (closes !== null && closes < 0) return "closed";
+  const opens = daysUntil(issue.issueOpenDate);
+  const status = String(issue.statusName ?? "").toLowerCase();
+  if (/closed|expired|over/i.test(status)) return "closed";
+  if (/upcoming|announced|coming/i.test(status)) return opens !== null && opens > 0 ? "upcoming" : "open";
+  if (/open|active|apply/i.test(status)) return "open";
   if (closes === null) return "open";
   return closes >= 0 ? "open" : "closed";
+}
+
+export const DIVIDEND_WINDOW_DAYS = 30;
+export const NEWS_WINDOW_DAYS = 7;
+
+function eventTime(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const raw = String(value).trim();
+  const t = new Date(raw.includes("T") ? raw : raw.replace(" ", "T")).getTime();
+  return Number.isNaN(t) ? null : t;
+}
+
+function daysSince(t: number): number {
+  return Math.floor((Date.now() - t) / 86_400_000);
 }
 
 export function buildNotifications(args: {
@@ -332,10 +385,19 @@ export function buildNotifications(args: {
   archiveUpcoming?: { company: string; units?: string | null; dateRange?: string | null }[];
   passwordExpiryDate?: string | null;
   dematExpiryDate?: string | null;
+  dividends?: { symbol: string; bonusShare?: number; cashDividend?: number; announcementDate?: string | null; fiscalYear?: string | null }[];
+  messages?: { id: number; symbol?: string | null; title: string; body?: string | null; publishedAt?: string | null }[];
+  holdings?: string[];
+  watchlist?: string[];
 }): AppNotification[] {
   const out: AppNotification[] = [];
+  const cats = load().cats;
+  const held = new Set((args.holdings ?? []).map((s) => s.trim().toUpperCase()).filter(Boolean));
+  const watched = new Set((args.watchlist ?? []).map((s) => s.trim().toUpperCase()).filter(Boolean));
+  const followed = new Set([...held, ...watched]);
 
-  for (const issue of args.issues) {
+  if (cats.ipo) {
+    for (const issue of args.issues) {
     const group = statusGroup(issue);
     const name = issueName(issue);
     if (group === "upcoming") {
@@ -368,10 +430,12 @@ export function buildNotifications(args: {
       }
     }
   }
+  }
 
   // Archive announcements CDSC doesn't list yet (deduped by company).
   const listed = args.issues.map((i) => issueName(i));
   for (const row of args.archiveUpcoming ?? []) {
+    if (!cats.ipo) continue;
     if (!row.company || listed.some((name) => sameCompany(name, row.company))) continue;
     out.push({
       id: `ipo-upcoming-arch-${row.company.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
@@ -408,10 +472,78 @@ export function buildNotifications(args: {
     });
   }
 
+  // New dividend announcements from the last month, followed scrips only.
+  // Exact symbol match against holdings + watchlist; nothing else notifies.
+  if (cats.dividends) {
+    for (const div of args.dividends ?? []) {
+      const symbol = String(div.symbol ?? "").trim().toUpperCase();
+      if (!symbol || !followed.has(symbol)) continue;
+      const at = eventTime(div.announcementDate);
+      if (at === null || daysSince(at) > DIVIDEND_WINDOW_DAYS) continue;
+      const mine = held.has(symbol);
+      const parts: string[] = [];
+      if (Number(div.bonusShare) > 0) parts.push(`${div.bonusShare}% bonus`);
+      if (Number(div.cashDividend) > 0) parts.push(`${div.cashDividend}% cash`);
+      const ago = daysSince(at);
+      out.push({
+        id: `div-${symbol}-${String(div.fiscalYear ?? div.announcementDate ?? "")}`,
+        kind: "dividend",
+        title: `${symbol} announces dividend`,
+        body: [
+          parts.length > 0 ? parts.join(" + ") : "Dividend declared",
+          div.fiscalYear ? `FY ${div.fiscalYear}` : null,
+          mine ? "you hold this" : "in your watchlist",
+          ago === 0 ? "today" : ago === 1 ? "yesterday" : `${ago}d ago`,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        href: mine ? "/portfolio" : "/market",
+        urgent: mine,
+        at,
+      });
+    }
+  }
+
+  // Exchange news from the last 7 days, holdings + watchlist only (plus
+  // symbol-less market broadcasts). Anything else is noise by design.
+  // Today's items sort first; anything older than the window is dropped.
+  if (cats.holdings || cats.broadcasts) {
+    for (const msg of args.messages ?? []) {
+      const at = eventTime(msg.publishedAt);
+      if (at === null || daysSince(at) > NEWS_WINDOW_DAYS) continue;
+      const symbol = String(msg.symbol ?? "").trim().toUpperCase();
+      if (symbol !== "" && !followed.has(symbol)) continue;
+      const mine = symbol !== "" && held.has(symbol);
+      const broadcast = symbol === "";
+      if (mine && !cats.holdings) continue;
+      if (broadcast && !cats.broadcasts) continue;
+      if (!mine && !broadcast && !cats.holdings) continue;
+      const kind = mine ? "holding-news" : "market-news";
+      const snippet = String(msg.body ?? "").trim();
+      out.push({
+        id: `news-${msg.id}`,
+        kind,
+        title: mine ? `${symbol}: ${msg.title}` : msg.title,
+        body: snippet.length > 120 ? `${snippet.slice(0, 117)}...` : snippet || "Exchange notice",
+        href: "/market",
+        urgent: mine && daysSince(at) === 0,
+        at,
+      });
+    }
+  }
+
   // Snoozed items stay hidden until their time passes, then repeat.
   const visible = out.filter((n) => snoozedUntil(n.id) == null);
-  // Urgent first, then IPO activity.
-  const weight = (n: AppNotification) =>
-    n.urgent ? 0 : n.kind === "ipo-closing" ? 1 : n.kind === "ipo-open" ? 2 : 3;
-  return visible.sort((a, b) => weight(a) - weight(b));
+  // Urgent first, then IPO alerts on priority, then today's items, then newest.
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const weight = (n: AppNotification) => {
+    if (n.urgent) return 0;
+    if (n.kind === "ipo-closing") return 1;
+    if (n.kind === "ipo-open") return 2;
+    if (n.kind === "ipo-upcoming") return 3;
+    if ((n.at ?? 0) >= todayStart.getTime()) return 4;
+    return 5;
+  };
+  return visible.sort((a, b) => weight(a) - weight(b) || (b.at ?? 0) - (a.at ?? 0));
 }

@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { useSettings } from "@/lib/settings";
 import { updatePassword, updatePin } from "@/lib/meroshare/account.functions";
 import { errorMessage } from "@/lib/format";
@@ -144,6 +145,7 @@ export function PinDialog() {
   const { pinOpen, closePin } = useSettings();
   const [oldPin, setOldPin] = useState("");
   const [newPin, setNewPin] = useState("");
+  const digitsOnly = (v: string) => v.replace(/\D/g, "").slice(0, 4);
 
   const mutation = useMutation({
     mutationFn: updatePin,
@@ -175,20 +177,28 @@ export function PinDialog() {
             mutation.mutate({ data: { oldPin, newPin } });
           }}
         >
-          <SecretField
-            id="pin-old"
-            label="Current PIN"
-            value={oldPin}
-            onChange={setOldPin}
-            placeholder="4 to 8 digits"
-          />
-          <SecretField
-            id="pin-new"
-            label="New 4-digit PIN"
-            value={newPin}
-            onChange={(v) => setNewPin(v.replace(/\D/g, "").slice(0, 4))}
-            placeholder="••••"
-          />
+          <div className="space-y-1.5">
+            <Label>Current PIN</Label>
+            <InputOTP maxLength={4} value={oldPin} onChange={(v) => setOldPin(digitsOnly(v))}>
+              <InputOTPGroup>
+                <InputOTPSlot index={0} />
+                <InputOTPSlot index={1} />
+                <InputOTPSlot index={2} />
+                <InputOTPSlot index={3} />
+              </InputOTPGroup>
+            </InputOTP>
+          </div>
+          <div className="space-y-1.5">
+            <Label>New PIN</Label>
+            <InputOTP maxLength={4} value={newPin} onChange={(v) => setNewPin(digitsOnly(v))}>
+              <InputOTPGroup>
+                <InputOTPSlot index={0} />
+                <InputOTPSlot index={1} />
+                <InputOTPSlot index={2} />
+                <InputOTPSlot index={3} />
+              </InputOTPGroup>
+            </InputOTP>
+          </div>
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <ShieldCheck className="size-3.5" />
             Use a number you won't forget. There is no recovery without your DP.

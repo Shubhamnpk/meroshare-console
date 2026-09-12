@@ -328,12 +328,15 @@ export function PointBreakdown({
   point,
   formatLabel,
   onPickScrip,
+  costOf,
 }: {
   point: PortfolioHistoryPoint;
   formatLabel: (time: number) => string;
   onPickScrip: (scrip: string) => void;
+  /** Optional est. cost basis per scrip; when given, Cost/Profit columns appear. */
+  costOf?: ((symbol: string) => { rate: number; pending: boolean } | undefined) | undefined;
 }) {
-  type Key = "symbol" | "close" | "units" | "value";
+  type Key = "symbol" | "close" | "units" | "value" | "cost" | "profit";
   const { sort, toggle } = useSort<Key>(
     { key: "value", dir: "desc" },
     {
@@ -341,10 +344,21 @@ export function PointBreakdown({
       close: "number",
       units: "number",
       value: "number",
+      cost: "number",
+      profit: "number",
     },
   );
+  const enriched = useMemo(
+    () =>
+      point.breakdown.map((b) => {
+        const entry = costOf?.(b.symbol.toUpperCase());
+        const cost = entry ? b.units * entry.rate : null;
+        return { ...b, cost, profit: cost === null ? null : b.value - cost, pending: entry?.pending ?? false };
+      }),
+    [point, costOf],
+  );
   const rows = useMemo(() => {
-    const getter = (b: (typeof point.breakdown)[number]): string | number => {
+    const getter = (b: (typeof enriched)[number]): string | number => {
       switch (sort.key) {
         case "symbol":
           return b.symbol;
@@ -352,17 +366,32 @@ export function PointBreakdown({
           return b.close;
         case "units":
           return b.units;
+        case "cost":
+          return b.cost ?? Number.NEGATIVE_INFINITY;
+        case "profit":
+          return b.profit ?? Number.NEGATIVE_INFINITY;
         default:
           return b.value;
       }
     };
-    return sortBy([...point.breakdown], getter, sort.dir);
-  }, [point, sort]);
+    return sortBy([...enriched], getter, sort.dir);
+  }, [enriched, sort]);
+  const showCost = costOf !== undefined;
+  const totalCost = rows.reduce((sum, b) => sum + (b.cost ?? 0), 0);
+  const totalProfit = rows.reduce((sum, b) => sum + (b.profit ?? 0), 0);
   return (
     <div className="overflow-hidden rounded-xl border border-border/60 bg-surface">
       <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 px-3 py-2">
         <h4 className="text-xs font-semibold">Held on {formatLabel(point.time)}</h4>
         <span className="num text-xs text-muted-foreground">
+          {showCost ? (
+            <>
+              <span className={cn("font-semibold", totalProfit >= 0 ? "text-gain" : "text-loss")}>
+                {totalProfit >= 0 ? "+" : "-"}{formatNpr(Math.abs(totalProfit))}
+              </span>{" "}
+              profit ·{" "}
+            </>
+          ) : null}
           {formatNpr(point.value)} across {rows.length} scrip{rows.length === 1 ? "" : "s"}
         </span>
       </header>
@@ -398,6 +427,24 @@ export function PointBreakdown({
               onClick={() => toggle("value")}
               align="right"
             />
+            {showCost ? (
+              <SortableTh
+                label="Cost"
+                active={sort.key === "cost"}
+                dir={sort.dir}
+                onClick={() => toggle("cost")}
+                align="right"
+              />
+            ) : null}
+            {showCost ? (
+              <SortableTh
+                label="Profit"
+                active={sort.key === "profit"}
+                dir={sort.dir}
+                onClick={() => toggle("profit")}
+                align="right"
+              />
+            ) : null}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -414,7 +461,24 @@ export function PointBreakdown({
               </TableCell>
               <TableCell className="num text-right">{formatNpr(b.close)}</TableCell>
               <TableCell className="num text-right">{formatQty(b.units)}</TableCell>
-              <TableCell className="num pr-3 text-right">{formatNpr(b.value)}</TableCell>
+              <TableCell className="num text-right">{formatNpr(b.value)}</TableCell>
+              {showCost ? (
+                <TableCell className="num text-right">
+                  {b.cost === null ? (
+                    "-"
+                  ) : (
+                    <>
+                      {formatNpr(b.cost)}
+                      {b.pending ? <span className="text-muted-foreground"> *</span> : null}
+                    </>
+                  )}
+                </TableCell>
+              ) : null}
+              {showCost ? (
+                <TableCell className={cn("num pr-3 text-right", b.profit !== null && (b.profit >= 0 ? "text-gain" : "text-loss"))}>
+                  {b.profit === null ? "-" : formatNpr(b.profit)}
+                </TableCell>
+              ) : null}
             </TableRow>
           ))}
         </TableBody>
@@ -425,12 +489,25 @@ export function PointBreakdown({
             <TableCell className="num text-right font-semibold">
               {formatQty(rows.reduce((sum, b) => sum + b.units, 0))}
             </TableCell>
-            <TableCell className="num pr-3 text-right font-semibold">
+            <TableCell className={cn("num text-right font-semibold", !showCost && "pr-3")}>
               {formatNpr(point.value)}
             </TableCell>
+            {showCost ? (
+              <TableCell className="num text-right font-semibold">{formatNpr(totalCost)}</TableCell>
+            ) : null}
+            {showCost ? (
+              <TableCell className={cn("num pr-3 text-right font-semibold", totalProfit >= 0 ? "text-gain" : "text-loss")}>
+                {formatNpr(totalProfit)}
+              </TableCell>
+            ) : null}
           </TableRow>
         </TableFooter>
       </Table>
+      {showCost && rows.some((b) => b.pending) ? (
+        <p className="border-t border-border/60 px-3 py-1.5 text-[11px] text-muted-foreground">
+          * pending WACC: cost estimated from qty x rate, like the portfolio summary.
+        </p>
+      ) : null}
     </div>
   );
 }

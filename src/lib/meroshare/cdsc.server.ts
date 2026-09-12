@@ -41,6 +41,19 @@ export const CDSC_URLS = {
   waccCalculated: `${CDSC_BASE}/api/myPurchase/view/`,
   waccSubmit: `${CDSC_BASE}/api/myPurchase/upload/`,
   waccReport: `${CDSC_BASE}/api/myPurchase/waccReport/`,
+  edisTransferActive: `${CDSC_BASE}/api/EDIS/transfer/active/`,
+  edisTransferDetail: (id: number | string) => `${CDSC_BASE}/api/EDIS/transfer/detail/${id}`,
+  edisTransferCheck: `${CDSC_BASE}/api/EDIS/transfer/check/`,
+  edisTransferSubmit: `${CDSC_BASE}/api/EDIS/transfer/`,
+  edisNodel: `${CDSC_BASE}/api/EDIS/nodel/`,
+  edisReportSearch: `${CDSC_BASE}/api/EDIS/report/search/`,
+  edisMigratedReport: `${CDSC_BASE}/api/EDIS/migrated/report/search/`,
+  edisStatus: `${CDSC_BASE}/api/EDIS/statusName/`,
+  edisDisclaimer: `${CDSC_BASE}/api/EDIS/disclaimer/`,
+  edisCheckWacc: `${CDSC_BASE}/api/EDIS/check/`,
+  edisPoolAccountCheck: `${CDSC_BASE}/api/EDIS/accountType/check/`,
+  edisTransferCsv: `${CDSC_BASE}/api/meroShareView/report/transfer/csv`,
+  edisMigratedTransferCsv: `${CDSC_BASE}/api/meroShareView/report/migrated/transfer/csv`,
 } as const;
 
 const BASE_HEADERS: Record<string, string> = {

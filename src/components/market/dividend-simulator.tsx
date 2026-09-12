@@ -317,7 +317,7 @@ export function DividendSimulator({
     <div className="space-y-3 rounded-2xl border border-primary/25 bg-card p-4">
       <div className="flex items-center justify-between gap-2">
         <p className="flex items-center gap-2 font-display text-sm font-semibold">
-          <Calculator className="size-4 text-primary" /> What-if simulator — {symbol}
+          <Calculator className="size-4 text-primary" /> What-if simulator: {symbol}
         </p>
         <button
           type="button"

@@ -71,6 +71,16 @@ function clean(value: unknown): string {
   return v;
 }
 
+function titleLabel(item: ActivityLogItem): string {
+  const raw = clean(item.description) || clean(item.activityType) || "Activity";
+  return raw
+    .replace(/,?\s*ISIN:\s*[A-Z0-9]+/gi, "")
+    .replace(/,?\s*BOID:\s*\d+/gi, "")
+    .replace(/\s*,\s*,/g, ",")
+    .replace(/,\s*$/g, "")
+    .trim();
+}
+
 function browserLabel(item: ActivityLogItem): string {
   const name = clean(item.browserName);
   const version = clean(item.broswerVersion);
@@ -258,7 +268,7 @@ function ActivityPage() {
   const { sort, toggle } = useSort<"activity" | "device" | "location" | "date">(
     {
       key: "date",
-      dir: "desc",
+      dir: "default",
     },
     { activity: "text", device: "text", location: "text", date: "number" },
   );
@@ -290,7 +300,7 @@ function ActivityPage() {
   }, [all, search, locations]);
 
   const sorted = useMemo(() => {
-    const getter = (item: ActivityLogItem): string => {
+    const getter = (item: ActivityLogItem): string | number => {
       const ip = clean(item.ipAddress);
       const loc = ip ? locations[ip] : undefined;
       switch (sort.key) {
@@ -300,8 +310,11 @@ function ActivityPage() {
           return `${browserLabel(item)} ${osLabel(item)}`;
         case "location":
           return loc && !loc.private ? `${loc.label} ${ip}` : ip;
-        default:
-          return String(item.recordedDate ?? "");
+        default: {
+          const raw = String(item.recordedDate ?? "");
+          const d = new Date(raw.includes("T") ? raw : raw.replace(" ", "T"));
+          return Number.isNaN(d.getTime()) ? 0 : d.getTime();
+        }
       }
     };
     return sortBy(items, getter, sort.dir);
@@ -596,18 +609,19 @@ function ActivityPage() {
       >
         {selected && selectedMeta ? (
           <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
-            <DialogHeader>
-              <div className="flex items-center gap-3">
+            <DialogHeader className="pr-8">
+              <div className="flex items-center gap-3 pr-6">
                 <span
                   className={`inline-flex size-10 shrink-0 items-center justify-center rounded-full ${selectedMeta.chip}`}
                 >
                   <selectedMeta.Icon className="size-5" />
                 </span>
-                <div className="min-w-0">
-                  <DialogTitle className="flex items-center gap-2 truncate">
-                    <span className="truncate">
-                      {String(selected.description ?? selected.activityType ?? "Activity")}
-                    </span>
+                <div className="min-w-0 flex-1 overflow-hidden">
+                  <DialogTitle
+                    className="flex min-w-0 items-center gap-2 overflow-hidden text-left"
+                    title={titleLabel(selected)}
+                  >
+                    <span className="min-w-0 flex-1 truncate">{titleLabel(selected)}</span>
                     {selectedLoc?.flag ? (
                       <CountryFlag
                         code={selectedLoc.countryCode}

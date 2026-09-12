@@ -46,7 +46,28 @@ import {
   getScripFullHistory,
   getScreenerData,
 } from "./nepse/market.functions";
+import {
+  getEdisTransferActive,
+  getEdisTransferDetail,
+  getEdisNodel,
+  getEdisDisclaimer,
+  checkEdisPoolAccountFn,
+  checkEdisWaccLeftFn,
+} from "./meroshare/edis.functions";
 import type { ChartRange, PortfolioGranularity } from "./nepse/types";
+import { brokerVaultStatus, listBrokerConnections } from "./brokers/brokers.functions";
+import {
+  getBrokerBanks,
+  getBrokerDepth,
+  getBrokerFundTransactions,
+  getBrokerFunds,
+  getBrokerHoldings,
+  getBrokerOrderBook,
+  getBrokerAmoList,
+  getBrokerQuote,
+  getBrokerTradeBook,
+} from "./brokers/brokers.functions";
+import type { BrokerId } from "./brokers/types";
 import type { MfPipelineType } from "./mutual-funds/types";
 import {
   getMfApprovalList,
@@ -189,6 +210,145 @@ export const sessionQuery = () =>
     queryKey: ["session"],
     queryFn: () => getCurrentUser(),
     staleTime: 60_000,
+  });
+
+export const brokerConnectionsQuery = () =>
+  queryOptions({
+    queryKey: ["broker-connections"],
+    queryFn: () => listBrokerConnections(),
+    staleTime: 30_000,
+    retry: false,
+  });
+
+export const brokerVaultStatusQuery = () =>
+  queryOptions({
+    queryKey: ["broker-vault-status"],
+    queryFn: () => brokerVaultStatus(),
+    staleTime: 60_000,
+    retry: false,
+  });
+
+export const brokerQuoteQuery = (brokerId: BrokerId | null, symbol: string | null) =>
+  queryOptions({
+    queryKey: ["broker-quote", brokerId, symbol],
+    queryFn: () => getBrokerQuote({ data: { brokerId: brokerId!, symbol: symbol! } }),
+    enabled: Boolean(brokerId && symbol),
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+    retry: false,
+  });
+
+export const brokerDepthQuery = (brokerId: BrokerId | null, symbol: string | null) =>
+  queryOptions({
+    queryKey: ["broker-depth", brokerId, symbol],
+    queryFn: () => getBrokerDepth({ data: { brokerId: brokerId!, symbol: symbol! } }),
+    enabled: Boolean(brokerId && symbol),
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+    retry: false,
+  });
+
+export const brokerHoldingsQuery = (brokerId: BrokerId | null) =>
+  queryOptions({
+    queryKey: ["broker-holdings", brokerId],
+    queryFn: () => getBrokerHoldings({ data: { brokerId: brokerId! } }),
+    enabled: Boolean(brokerId),
+    staleTime: 60_000,
+    retry: false,
+  });
+
+export interface BrokerRange {
+  fromDate?: string | undefined;
+  toDate?: string | undefined;
+}
+
+export const brokerOrderBookQuery = (brokerId: BrokerId | null, range?: BrokerRange) =>
+  queryOptions({
+    queryKey: ["broker-order-book", brokerId, range?.fromDate ?? "", range?.toDate ?? ""],
+    queryFn: () =>
+      getBrokerOrderBook({
+        data: { brokerId: brokerId!, fromDate: range?.fromDate, toDate: range?.toDate },
+      }),
+    enabled: Boolean(brokerId),
+    staleTime: 20_000,
+    retry: false,
+  });
+
+export const brokerTradeBookQuery = (brokerId: BrokerId | null, range?: BrokerRange) =>
+  queryOptions({
+    queryKey: ["broker-trade-book", brokerId, range?.fromDate ?? "", range?.toDate ?? ""],
+    queryFn: () =>
+      getBrokerTradeBook({
+        data: { brokerId: brokerId!, fromDate: range?.fromDate, toDate: range?.toDate },
+      }),
+    enabled: Boolean(brokerId),
+    staleTime: 30_000,
+    retry: false,
+  });
+
+export const brokerAmoListQuery = (brokerId: BrokerId | null) =>
+  queryOptions({
+    queryKey: ["broker-amo-list", brokerId],
+    queryFn: () => getBrokerAmoList({ data: { brokerId: brokerId! } }),
+    enabled: Boolean(brokerId),
+    staleTime: 20_000,
+    retry: false,
+  });
+
+export const brokerFundsQuery = (brokerId: BrokerId | null) =>
+  queryOptions({
+    queryKey: ["broker-funds", brokerId],
+    queryFn: () => getBrokerFunds({ data: { brokerId: brokerId! } }),
+    enabled: Boolean(brokerId),
+    staleTime: 60_000,
+    retry: false,
+  });
+
+export const brokerBanksQuery = (brokerId: BrokerId | null) =>
+  queryOptions({
+    queryKey: ["broker-banks", brokerId],
+    queryFn: () => getBrokerBanks({ data: { brokerId: brokerId! } }),
+    enabled: Boolean(brokerId),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+
+export interface FundTxnFilters {
+  search?: string | undefined;
+  transactionType?: string | undefined;
+  status?: string | undefined;
+  fromDate?: string | undefined;
+  toDate?: string | undefined;
+  page?: number | undefined;
+}
+
+export const brokerFundTxnsQuery = (brokerId: BrokerId | null, filters?: FundTxnFilters) =>
+  queryOptions({
+    queryKey: [
+      "broker-fund-txns",
+      brokerId,
+      filters?.search ?? "",
+      filters?.transactionType ?? "",
+      filters?.status ?? "",
+      filters?.fromDate ?? "",
+      filters?.toDate ?? "",
+      filters?.page ?? 1,
+    ],
+    queryFn: () =>
+      getBrokerFundTransactions({
+        data: {
+          brokerId: brokerId!,
+          ...(filters?.search ? { search: filters.search } : {}),
+          ...(filters?.transactionType ? { transactionType: filters.transactionType } : {}),
+          ...(filters?.status ? { status: filters.status } : {}),
+          ...(filters?.fromDate ? { fromDate: filters.fromDate } : {}),
+          ...(filters?.toDate ? { toDate: filters.toDate } : {}),
+          page: filters?.page ?? 1,
+        },
+      }),
+    enabled: Boolean(brokerId),
+    staleTime: 30_000,
+    retry: false,
   });
 
 export const ownDetailQuery = () =>
@@ -533,4 +693,57 @@ export const floorSheetTrailQuery = (
       }),
     enabled: Boolean(date) && Boolean(filter.brokerCode || filter.symbol || filter.contractId),
     staleTime: 60_000,
+  });
+
+// ---------------------------------------------------------------------------
+// EDIS queries
+// ---------------------------------------------------------------------------
+
+export const edisTransferActiveQuery = (page = 1, size = 50) =>
+  queryOptions({
+    queryKey: ["edis-transfer-active", page, size],
+    queryFn: () => getEdisTransferActive({ data: { page, size } }),
+    staleTime: 60_000,
+    retry: false,
+  });
+
+export const edisTransferDetailQuery = (transferId: number | null) =>
+  queryOptions({
+    queryKey: ["edis-transfer-detail", transferId],
+    queryFn: () => getEdisTransferDetail({ data: { transferId: transferId! } }),
+    enabled: transferId != null && transferId > 0,
+    staleTime: 60_000,
+    retry: false,
+  });
+
+export const edisNodelQuery = (page = 1, size = 50) =>
+  queryOptions({
+    queryKey: ["edis-nodel", page, size],
+    queryFn: () => getEdisNodel({ data: { page, size } }),
+    staleTime: 60_000,
+    retry: false,
+  });
+
+export const edisDisclaimerQuery = () =>
+  queryOptions({
+    queryKey: ["edis-disclaimer"],
+    queryFn: () => getEdisDisclaimer(),
+    staleTime: 10 * 60_000,
+    retry: false,
+  });
+
+export const edisPoolAccountQuery = () =>
+  queryOptions({
+    queryKey: ["edis-pool-account"],
+    queryFn: () => checkEdisPoolAccountFn(),
+    staleTime: 10 * 60_000,
+    retry: false,
+  });
+
+export const edisWaccLeftQuery = () =>
+  queryOptions({
+    queryKey: ["edis-wacc-left"],
+    queryFn: () => checkEdisWaccLeftFn(),
+    staleTime: 10 * 60_000,
+    retry: false,
   });

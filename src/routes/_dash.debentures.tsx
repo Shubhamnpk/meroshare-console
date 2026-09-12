@@ -30,7 +30,7 @@ export const Route = createFileRoute("/_dash/debentures")({
       { title: "Debentures | MeroShare Investor Console" },
       {
         name: "description",
-        content: "Compare Nepali debentures by coupon, issuer and size — fixed income explorer.",
+        content: "Compare Nepali debentures by coupon, issuer and size. Fixed income explorer.",
       },
       { property: "og:title", content: "Debentures | MeroShare Investor Console" },
     ],
@@ -368,7 +368,7 @@ function DebenturesPage() {
                 })}
               </div>
               <p className="text-[0.68rem] text-muted-foreground">
-                Simple annual interest before tax — actual payout schedules vary by issue.
+                Simple annual interest before tax. Actual payout schedules vary by issue.
               </p>
             </section>
           ) : null}
@@ -531,7 +531,7 @@ function DebenturesPage() {
             </div>
           )}
           <p className="text-[11px] text-muted-foreground">
-            Issue records from SEBON public data — indicative only, not investment advice. Coupons
+            Issue records from SEBON public data. Indicative only, not investment advice. Coupons
             are annual rates before tax; payout frequency varies by issue.
           </p>
         </>

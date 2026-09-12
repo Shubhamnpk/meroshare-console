@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Plus } from "lucide-react";
 import {
   AreaSeries,
   CandlestickSeries,
@@ -90,6 +91,7 @@ export function TerminalChart({
   height,
   onHover,
   onSelectBar,
+  onCreateOrder,
 }: {
   bars: ChartBar[];
   intraday: PricePoint[];
@@ -103,16 +105,24 @@ export function TerminalChart({
   onHover?: (info: HoverInfo | null) => void;
   /** Fired when a bar is clicked (bar date) or empty space is clicked (null). */
   onSelectBar?: ((date: string | null) => void) | undefined;
+  /** Fired from the hover "+" menu to draft a limit order at a chart price. */
+  onCreateOrder?: ((order: { price: number; side: "BUY" | "SELL" }) => void) | undefined;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const hoverRef = useRef(onHover);
   hoverRef.current = onHover;
   const selectRef = useRef(onSelectBar);
   selectRef.current = onSelectBar;
+  const createRef = useRef(onCreateOrder);
+  createRef.current = onCreateOrder;
   const apiRef = useRef<IChartApi | null>(null);
+  const seriesRef = useRef<ISeriesApi<"Candlestick" | "Line" | "Area"> | null>(null);
+  const [orderAt, setOrderAt] = useState<{ y: number; price: number } | null>(null);
+  const [orderMenu, setOrderMenu] = useState(false);
 
   /** Drag-to-measure: armed by double-tap/double-click, active while dragging. */
   const [measure, setMeasure] = useState<{ from: Time; to: Time } | null>(null);
+  const [tip, setTip] = useState<{ x: number; y: number; bar: Bar } | null>(null);
   const anchorRef = useRef<Time | null>(null);
   const pointerDownRef = useRef(false);
   const draggingRef = useRef(false);
@@ -218,6 +228,7 @@ export function TerminalChart({
       });
       series.setData(points);
       mainSeries = series;
+      seriesRef.current = series;
     } else if (style === "candles") {
       const series = chart.addSeries(CandlestickSeries, {
         upColor: UP,
@@ -237,10 +248,12 @@ export function TerminalChart({
         })),
       );
       mainSeries = series;
+      seriesRef.current = series;
     } else if (style === "line") {
       const series = chart.addSeries(LineSeries, { color: "#2563eb", lineWidth: 2 });
       series.setData(bars.map((b) => ({ time: b.date as Time, value: b.close })));
       mainSeries = series;
+      seriesRef.current = series;
     } else {
       const series = chart.addSeries(AreaSeries, {
         lineColor: "#2563eb",
@@ -250,6 +263,7 @@ export function TerminalChart({
       });
       series.setData(bars.map((b) => ({ time: b.date as Time, value: b.close })));
       mainSeries = series;
+      seriesRef.current = series;
     }
 
     const indicatorBars: Bar[] = bars.map((b) => ({
@@ -431,14 +445,15 @@ export function TerminalChart({
     const byDate = new Map(bars.map((b) => [b.date, b]));
     const onClick = (param: MouseEventParams) => {
       const emit = selectRef.current;
+      // Clicking empty space (no time) clears the selection and tooltip.
+      if (!param.time) {
+        setTip(null);
+        emit?.(null);
+        return;
+      }
       if (!emit) return;
       // Skip while a drag-to-measure gesture is in progress.
       if (draggingRef.current) return;
-      // Clicking empty space (no time) clears the selection.
-      if (!param.time) {
-        emit(null);
-        return;
-      }
       const direct = byDate.get(String(param.time));
       // Fall back to the nearest bar by logical index in case the event
       // time format ever differs from the stored bar dates.
@@ -448,6 +463,8 @@ export function TerminalChart({
           ? bars[Math.min(bars.length - 1, Math.max(0, Math.round(logical)))]
           : undefined;
       const bar = direct ?? nearest;
+      // Pin the floating tooltip at the tapped candle (touch has no hover).
+      if (bar && param.point) setTip({ x: param.point.x, y: param.point.y, bar });
       emit(bar ? bar.date : null);
     };
     chart.subscribeClick(onClick);
@@ -457,10 +474,33 @@ export function TerminalChart({
         setMeasure({ from: anchorRef.current, to: param.time });
       }
       const emit = hoverRef.current;
-      if (!emit) return;
-      if (!param.time || !param.point) {
-        emit(null);
+      if (!emit && !createRef.current) return;
+      const point = param.point ?? null;
+      if (!param.time || !point) {
+        emit?.(null);
+        setTip(null);
+        setOrderAt(null);
+        setOrderMenu(false);
         return;
+      }
+      // Hover price for the "+" quick-order button (any series, any scale).
+      if (createRef.current && seriesRef.current) {
+        try {
+          const raw = seriesRef.current.coordinateToPrice(point.y);
+          const price = typeof raw === "number" ? Math.round(raw * 100) / 100 : 0;
+          if (price > 0) {
+            setOrderAt((prev) =>
+              prev && Math.abs(prev.y - point.y) < 3 && prev.price === price
+                ? prev
+                : { y: point.y, price },
+            );
+          } else {
+            setOrderAt(null);
+            setOrderMenu(false);
+          }
+        } catch {
+          // ignore out-of-scale coordinates
+        }
       }
       if (isIntraday) {
         const value = mainSeries ? param.seriesData.get(mainSeries) : undefined;
@@ -475,7 +515,7 @@ export function TerminalChart({
         const hh = nepalDate.getUTCHours().toString().padStart(2, "0");
         const mi = nepalDate.getUTCMinutes().toString().padStart(2, "0");
         const ss = nepalDate.getUTCSeconds().toString().padStart(2, "0");
-        emit({
+        emit?.({
           date: `${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}`,
           open: first,
           high: price,
@@ -488,10 +528,14 @@ export function TerminalChart({
       }
       const bar = byDate.get(String(param.time));
       if (!bar) {
-        emit(null);
+        emit?.(null);
+        setTip(null);
         return;
       }
-      emit({
+      setTip((prev) =>
+        prev && prev.bar.date === bar.date && Math.abs(prev.x - point.x) < 2 ? prev : { x: point.x, y: point.y, bar },
+      );
+      emit?.({
         date: bar.date,
         open: bar.open,
         high: bar.high,
@@ -523,6 +567,36 @@ export function TerminalChart({
     height,
     isIntraday,
   ]);
+
+  // "+" quick-order follows the mouse anywhere over the chart body (the
+  // crosshair alone only carries a time over data points). While its menu
+  // is open the button locks in place instead of chasing the cursor.
+  const trackOrderAt = (clientY: number) => {
+    if (orderMenu) return;
+    if (!createRef.current || !seriesRef.current) return;
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const y = clientY - rect.top;
+    if (y < 0 || y > rect.height) {
+      setOrderAt(null);
+      setOrderMenu(false);
+      return;
+    }
+    try {
+      const raw = seriesRef.current.coordinateToPrice(y);
+      const price = typeof raw === "number" ? Math.round(raw * 100) / 100 : 0;
+      if (price > 0) {
+        setOrderAt((prev) =>
+          prev && Math.abs(prev.y - y) < 3 && prev.price === price ? prev : { y, price },
+        );
+      } else {
+        setOrderAt(null);
+        setOrderMenu(false);
+      }
+    } catch {
+      // ignore out-of-scale coordinates
+    }
+  };
 
   // Highlight band between the anchor and the current drag point.
   let measureOverlay: ReactNode = null;
@@ -566,6 +640,11 @@ export function TerminalChart({
     <div
       className="relative w-full select-none"
       style={{ height }}
+      onMouseMove={(e) => trackOrderAt(e.clientY)}
+      onMouseLeave={() => {
+        setOrderAt(null);
+        setOrderMenu(false);
+      }}
       onPointerDown={() => {
         pointerDownRef.current = true;
       }}
@@ -578,6 +657,83 @@ export function TerminalChart({
     >
       <div ref={containerRef} className="h-full w-full" />
       {measureOverlay}
+      {orderAt && !measure && createRef.current ? (
+        <>
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 z-[5] border-t border-dashed border-primary/60"
+            style={{ top: orderAt.y }}
+          />
+          <div className="absolute right-0 z-10" style={{ top: Math.max(orderAt.y - 14, 4) }}>
+            <button
+              type="button"
+              aria-label={`Create order at ${orderAt.price}`}
+              title={`Create order at ${orderAt.price}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setOrderMenu((v) => !v);
+              }}
+              className="num flex items-center gap-1.5 rounded-full border border-primary/50 bg-card/95 py-1 pl-2.5 pr-1 text-[0.68rem] font-bold text-primary shadow-lg backdrop-blur transition-colors hover:border-primary hover:bg-primary/10"
+            >
+              <span>
+                {orderAt.price.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+              </span>
+              <span className="flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                <Plus className="size-3.5" />
+              </span>
+            </button>
+          {orderMenu ? (
+            <div className="absolute right-8 top-0 w-44 overflow-hidden rounded-xl border border-border/70 bg-card shadow-xl">
+              {(
+                [
+                  { side: "BUY", cls: "text-gain" },
+                  { side: "SELL", cls: "text-destructive" },
+                ] as const
+              ).map(({ side, cls }) => (
+                <button
+                  key={side}
+                  type="button"
+                  onClick={() => {
+                    createRef.current?.({ price: orderAt.price, side });
+                    setOrderMenu(false);
+                  }}
+                  className="flex w-full items-center justify-between px-3 py-2 text-xs font-semibold transition-colors hover:bg-muted/60"
+                >
+                  <span className={cls}>{side} limit</span>
+                  <span className="num text-muted-foreground">
+                    @ {orderAt.price.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+          </div>
+        </>
+      ) : null}
+      {tip && !measure
+        ? (() => {
+            const width = containerRef.current?.offsetWidth ?? 0;
+            const left = width > 0 ? Math.min(Math.max(tip.x, 84), width - 84) : tip.x;
+            return (
+              <div
+                className="num pointer-events-none absolute z-10 whitespace-nowrap rounded-lg border border-border/70 bg-card/95 px-2.5 py-1.5 text-[0.68rem] leading-relaxed shadow-lg backdrop-blur"
+                style={{ left, top: Math.max(tip.y - 10, 4), transform: "translate(-50%, -100%)" }}
+              >
+                <p className="font-semibold text-foreground">{tip.bar.date.slice(0, 10)}</p>
+                <p className="text-muted-foreground">
+                  O {tip.bar.open.toLocaleString("en-IN", { maximumFractionDigits: 2 })} · H{" "}
+                  {tip.bar.high.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                </p>
+                <p className="text-muted-foreground">
+                  L {tip.bar.low.toLocaleString("en-IN", { maximumFractionDigits: 2 })} · C{" "}
+                  <span className="font-semibold text-foreground">
+                    {tip.bar.close.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                  </span>
+                </p>
+              </div>
+            );
+          })()
+        : null}
     </div>
   );
 }

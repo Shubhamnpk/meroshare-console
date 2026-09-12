@@ -15,9 +15,12 @@ import { Route as ReleasesRouteImport } from './routes/releases'
 import { Route as DashActivityRouteImport } from './routes/_dash.activity'
 import { Route as DashAnalyticsRouteImport } from './routes/_dash.analytics'
 import { Route as DashBestSharesRouteImport } from './routes/_dash.best-shares'
+import { Route as DashBrokerRouteImport } from './routes/_dash.broker'
 import { Route as DashBrokersRouteImport } from './routes/_dash.brokers'
+import { Route as DashCalendarRouteImport } from './routes/_dash.calendar'
 import { Route as DashDashboardRouteImport } from './routes/_dash.dashboard'
 import { Route as DashDebenturesRouteImport } from './routes/_dash.debentures'
+import { Route as DashEdisRouteImport } from './routes/_dash.edis'
 import { Route as DashIpoRouteImport } from './routes/_dash.ipo'
 import { Route as DashIpoPipelineRouteImport } from './routes/_dash.ipo-pipeline'
 import { Route as DashMarketRouteImport } from './routes/_dash.market'
@@ -61,9 +64,19 @@ const DashBestSharesRoute = DashBestSharesRouteImport.update({
   path: '/best-shares',
   getParentRoute: () => DashRoute,
 } as any)
+const DashBrokerRoute = DashBrokerRouteImport.update({
+  id: '/broker',
+  path: '/broker',
+  getParentRoute: () => DashRoute,
+} as any)
 const DashBrokersRoute = DashBrokersRouteImport.update({
   id: '/brokers',
   path: '/brokers',
+  getParentRoute: () => DashRoute,
+} as any)
+const DashCalendarRoute = DashCalendarRouteImport.update({
+  id: '/calendar',
+  path: '/calendar',
   getParentRoute: () => DashRoute,
 } as any)
 const DashDashboardRoute = DashDashboardRouteImport.update({
@@ -74,6 +87,11 @@ const DashDashboardRoute = DashDashboardRouteImport.update({
 const DashDebenturesRoute = DashDebenturesRouteImport.update({
   id: '/debentures',
   path: '/debentures',
+  getParentRoute: () => DashRoute,
+} as any)
+const DashEdisRoute = DashEdisRouteImport.update({
+  id: '/edis',
+  path: '/edis',
   getParentRoute: () => DashRoute,
 } as any)
 const DashIpoRoute = DashIpoRouteImport.update({
@@ -148,9 +166,12 @@ export interface FileRoutesByFullPath {
   '/activity': typeof DashActivityRoute
   '/analytics': typeof DashAnalyticsRoute
   '/best-shares': typeof DashBestSharesRoute
+  '/broker': typeof DashBrokerRoute
   '/brokers': typeof DashBrokersRoute
+  '/calendar': typeof DashCalendarRoute
   '/dashboard': typeof DashDashboardRoute
   '/debentures': typeof DashDebenturesRoute
+  '/edis': typeof DashEdisRoute
   '/ipo': typeof DashIpoRoute
   '/ipo-pipeline': typeof DashIpoPipelineRoute
   '/market': typeof DashMarketRoute
@@ -171,9 +192,12 @@ export interface FileRoutesByTo {
   '/activity': typeof DashActivityRoute
   '/analytics': typeof DashAnalyticsRoute
   '/best-shares': typeof DashBestSharesRoute
+  '/broker': typeof DashBrokerRoute
   '/brokers': typeof DashBrokersRoute
+  '/calendar': typeof DashCalendarRoute
   '/dashboard': typeof DashDashboardRoute
   '/debentures': typeof DashDebenturesRoute
+  '/edis': typeof DashEdisRoute
   '/ipo': typeof DashIpoRoute
   '/ipo-pipeline': typeof DashIpoPipelineRoute
   '/market': typeof DashMarketRoute
@@ -196,9 +220,12 @@ export interface FileRoutesById {
   '/_dash/activity': typeof DashActivityRoute
   '/_dash/analytics': typeof DashAnalyticsRoute
   '/_dash/best-shares': typeof DashBestSharesRoute
+  '/_dash/broker': typeof DashBrokerRoute
   '/_dash/brokers': typeof DashBrokersRoute
+  '/_dash/calendar': typeof DashCalendarRoute
   '/_dash/dashboard': typeof DashDashboardRoute
   '/_dash/debentures': typeof DashDebenturesRoute
+  '/_dash/edis': typeof DashEdisRoute
   '/_dash/ipo': typeof DashIpoRoute
   '/_dash/ipo-pipeline': typeof DashIpoPipelineRoute
   '/_dash/market': typeof DashMarketRoute
@@ -221,9 +248,12 @@ export interface FileRouteTypes {
     | '/activity'
     | '/analytics'
     | '/best-shares'
+    | '/broker'
     | '/brokers'
+    | '/calendar'
     | '/dashboard'
     | '/debentures'
+    | '/edis'
     | '/ipo'
     | '/ipo-pipeline'
     | '/market'
@@ -244,9 +274,12 @@ export interface FileRouteTypes {
     | '/activity'
     | '/analytics'
     | '/best-shares'
+    | '/broker'
     | '/brokers'
+    | '/calendar'
     | '/dashboard'
     | '/debentures'
+    | '/edis'
     | '/ipo'
     | '/ipo-pipeline'
     | '/market'
@@ -268,9 +301,12 @@ export interface FileRouteTypes {
     | '/_dash/activity'
     | '/_dash/analytics'
     | '/_dash/best-shares'
+    | '/_dash/broker'
     | '/_dash/brokers'
+    | '/_dash/calendar'
     | '/_dash/dashboard'
     | '/_dash/debentures'
+    | '/_dash/edis'
     | '/_dash/ipo'
     | '/_dash/ipo-pipeline'
     | '/_dash/market'
@@ -337,11 +373,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashBestSharesRouteImport
       parentRoute: typeof DashRoute
     }
+    '/_dash/broker': {
+      id: '/_dash/broker'
+      path: '/broker'
+      fullPath: '/broker'
+      preLoaderRoute: typeof DashBrokerRouteImport
+      parentRoute: typeof DashRoute
+    }
     '/_dash/brokers': {
       id: '/_dash/brokers'
       path: '/brokers'
       fullPath: '/brokers'
       preLoaderRoute: typeof DashBrokersRouteImport
+      parentRoute: typeof DashRoute
+    }
+    '/_dash/calendar': {
+      id: '/_dash/calendar'
+      path: '/calendar'
+      fullPath: '/calendar'
+      preLoaderRoute: typeof DashCalendarRouteImport
       parentRoute: typeof DashRoute
     }
     '/_dash/dashboard': {
@@ -356,6 +406,13 @@ declare module '@tanstack/react-router' {
       path: '/debentures'
       fullPath: '/debentures'
       preLoaderRoute: typeof DashDebenturesRouteImport
+      parentRoute: typeof DashRoute
+    }
+    '/_dash/edis': {
+      id: '/_dash/edis'
+      path: '/edis'
+      fullPath: '/edis'
+      preLoaderRoute: typeof DashEdisRouteImport
       parentRoute: typeof DashRoute
     }
     '/_dash/ipo': {
@@ -456,9 +513,12 @@ interface DashRouteChildren {
   DashActivityRoute: typeof DashActivityRoute
   DashAnalyticsRoute: typeof DashAnalyticsRoute
   DashBestSharesRoute: typeof DashBestSharesRoute
+  DashBrokerRoute: typeof DashBrokerRoute
   DashBrokersRoute: typeof DashBrokersRoute
+  DashCalendarRoute: typeof DashCalendarRoute
   DashDashboardRoute: typeof DashDashboardRoute
   DashDebenturesRoute: typeof DashDebenturesRoute
+  DashEdisRoute: typeof DashEdisRoute
   DashIpoRoute: typeof DashIpoRoute
   DashIpoPipelineRoute: typeof DashIpoPipelineRoute
   DashMarketRoute: typeof DashMarketRoute
@@ -477,9 +537,12 @@ const DashRouteChildren: DashRouteChildren = {
   DashActivityRoute: DashActivityRoute,
   DashAnalyticsRoute: DashAnalyticsRoute,
   DashBestSharesRoute: DashBestSharesRoute,
+  DashBrokerRoute: DashBrokerRoute,
   DashBrokersRoute: DashBrokersRoute,
+  DashCalendarRoute: DashCalendarRoute,
   DashDashboardRoute: DashDashboardRoute,
   DashDebenturesRoute: DashDebenturesRoute,
+  DashEdisRoute: DashEdisRoute,
   DashIpoRoute: DashIpoRoute,
   DashIpoPipelineRoute: DashIpoPipelineRoute,
   DashMarketRoute: DashMarketRoute,

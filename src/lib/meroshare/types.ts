@@ -280,3 +280,53 @@ export interface AccountProfile {
     expiresAt: number | null;
   };
 }
+
+// ---------------------------------------------------------------------------
+// EDIS (Electronic Delivery Instruction System) types
+// ---------------------------------------------------------------------------
+
+export interface EdisTransferItem {
+  id?: number;
+  settleDate?: string;
+  scriptCode?: string;
+  quantity?: number;
+  statusName?: string;
+  boid?: string;
+  requestDate?: string;
+  transferType?: string;
+  clientName?: string;
+  [key: string]: JsonValue;
+}
+
+export interface EdisNodelItem {
+  id?: number;
+  scriptCode?: string;
+  quantity?: number;
+  contractId?: string;
+  settleDate?: string;
+  tradeDate?: string;
+  brokerCode?: string;
+  buyerBoid?: string;
+  sellerBoid?: string;
+  [key: string]: JsonValue;
+}
+
+export interface EdisTransferDetail {
+  id?: number;
+  scriptCode?: string;
+  quantity?: number;
+  settleDate?: string;
+  statusName?: string;
+  boid?: string;
+  requestDate?: string;
+  transferType?: string;
+  clientName?: string;
+  contractDetails?: JsonRecord;
+  [key: string]: JsonValue;
+}
+
+export interface EdisStatusItem {
+  name?: string;
+  code?: string;
+  [key: string]: JsonValue;
+}

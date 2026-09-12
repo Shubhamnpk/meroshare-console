@@ -917,7 +917,7 @@ export function BrokerLeaderboard({
 
       {search ? (
         <p className="text-center text-[11px] text-muted-foreground">
-          Showing {filtered.length} of {brokers.length}. Rankings stay fixed — search never
+          Showing {filtered.length} of {brokers.length}. Rankings stay fixed. Search never
           re-orders the leaderboard.
         </p>
       ) : null}

@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ArrowUpRight,
   Briefcase,
+  CalendarDays,
   ChartLine,
   RefreshCw,
   Rocket,
@@ -25,14 +26,16 @@ import { Sparkline } from "@/components/market/sparkline";
 import {
   applicableIssuesQuery,
   currentIssuesQuery,
+  dividendsQuery,
   enrichedPortfolioQuery,
   indexGraphQuery,
   investmentSummaryQuery,
   ipoArchiveQuery,
   marketSnapshotQuery,
 } from "@/lib/queries";
-import { sameCompany } from "@/lib/notifications";
 import { formatDate, formatNpr, formatPercent, formatQty } from "@/lib/format";
+import { parseFeedDate } from "@/lib/nepali-dates";
+import { upcomingMerged } from "@/lib/ipo/status";
 import { ogImage, canonicalLink } from "@/lib/seo";
 import { cn } from "@/lib/utils";
 import type { EnrichedHolding } from "@/lib/nepse/types";
@@ -111,6 +114,7 @@ function MoverCard({
 }
 
 function DashboardPage() {
+  const now = new Date();
   const portfolio = useQuery(enrichedPortfolioQuery());
   const issues = useQuery(applicableIssuesQuery());
   const calendar = useQuery(currentIssuesQuery());
@@ -118,6 +122,7 @@ function DashboardPage() {
   const market = useQuery(marketSnapshotQuery());
   const nepseGraph = useQuery(indexGraphQuery("NEPSE"));
   const investment = useQuery(investmentSummaryQuery());
+  const dividends = useQuery(dividendsQuery());
   const [picked, setPicked] = useState<string | null>(null);
   const [watchlistOpen, setWatchlistOpen] = useState(false);
   const watchlist = useWatchlist();
@@ -137,15 +142,27 @@ function DashboardPage() {
 
   const openIssues = (issues.data ?? []).slice(0, 4);
 
-  // Upcoming below open: CDSC-announced plus archive announcements, deduped.
+  // Next book closures among holdings, for the dividend calendar shortcut.
+  const upcomingClosures = (() => {
+    const held = new Set(holdings.map((h) => h.scrip.toUpperCase()));
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    return (dividends.data ?? [])
+      .map((d) => {
+        const symbol = String(d.symbol ?? "").trim().toUpperCase();
+        const date = parseFeedDate(d.bookCloseDate);
+        return { symbol, date, bonus: Number(d.bonusShare ?? 0) || 0, cash: Number(d.cashDividend ?? 0) || 0 };
+      })
+      .filter((r) => r.symbol !== "" && held.has(r.symbol) && r.date && r.date.getTime() >= today)
+      .sort((a, b) => (a.date as Date).getTime() - (b.date as Date).getTime())
+      .slice(0, 3);
+  })();
+
+  // Upcoming below open: same grouping as /ipo calendar so closed never shows as upcoming.
   const upcomingIssues = (() => {
-    const openNames = openIssues.map((i) => i.companyName || i.scrip || "");
-    const cdscUpcoming = (calendar.data ?? []).filter((i) =>
-      /upcoming|announced|coming/i.test(String(i.statusName ?? "")),
-    );
-    const names = [...openNames, ...cdscUpcoming.map((i) => i.companyName || i.scrip || "")];
-    const archived = (archive.data?.upcoming ?? []).filter(
-      (row) => !names.some((name) => sameCompany(name, row.company)),
+    const { cdscUpcoming, archUpcoming } = upcomingMerged(
+      openIssues,
+      calendar.data ?? [],
+      archive.data?.upcoming ?? [],
     );
     return [
       ...cdscUpcoming.map((i) => ({
@@ -153,7 +170,7 @@ function DashboardPage() {
         title: i.companyName || i.scrip || "",
         sub: `${i.scrip ?? ""} · opens ${formatDate(i.issueOpenDate)}`.trim(),
       })),
-      ...archived.map((row, n) => ({
+      ...archUpcoming.map((row, n) => ({
         key: `arch-${row.company}-${n}`,
         title: row.company,
         sub: [row.units ? `${row.units} units` : null, row.dateRange ?? null]
@@ -171,7 +188,8 @@ function DashboardPage() {
     issues.isFetching ||
     market.isFetching ||
     nepseGraph.isFetching ||
-    investment.isFetching;
+    investment.isFetching ||
+    dividends.isFetching;
 
   const statCards = [
     <StatCard
@@ -242,6 +260,7 @@ function DashboardPage() {
     void market.refetch();
     void nepseGraph.refetch();
     void investment.refetch();
+    void dividends.refetch();
   };
 
   return (
@@ -423,10 +442,54 @@ function DashboardPage() {
       )}
 
       <Panel as="section">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="flex items-center gap-2 font-display text-base font-semibold">
+            <CalendarDays className="size-4 text-primary" /> Dividend calendar
+          </h2>
+          <Link
+            to="/calendar"
+            className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+          >
+            Open calendar <ArrowUpRight className="size-3" />
+          </Link>
+        </div>
+        {dividends.isLoading ? (
+          <SkeletonCards count={1} />
+        ) : upcomingClosures.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No upcoming book closures for your holdings. Announced dividends land here.
+          </p>
+        ) : (
+          <ul className="grid gap-2 md:grid-cols-3">
+            {upcomingClosures.map((c) => (
+              <li key={`${c.symbol}-${(c.date as Date).getTime()}`} className="min-w-0">
+                <Link
+                  to="/calendar"
+                  search={{ symbol: c.symbol }}
+                  title={`${c.symbol} dividends in calendar`}
+                  className="block rounded-xl border border-border/60 bg-surface p-3 transition-colors hover:border-primary/40"
+                >
+                  <p className="truncate text-sm font-semibold">{c.symbol}</p>
+                  <p className="num mt-0.5 truncate text-xs text-muted-foreground">
+                    {[c.bonus > 0 ? `${c.bonus}% bonus` : null, c.cash > 0 ? `${c.cash}% cash` : null]
+                      .filter(Boolean)
+                      .join(" + ") || "Dividend"}
+                    {" · closes "}
+                    {formatDate(c.date)}
+                  </p>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Panel>
+
+      <Panel as="section">
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="font-display text-base font-semibold">Issues</h2>
           <Link
             to="/ipo"
+            search={{ tab: "apply" }}
             className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
           >
             Apply <ArrowUpRight className="size-3" />
@@ -445,29 +508,33 @@ function DashboardPage() {
         ) : (
           <ul className="grid gap-2 md:grid-cols-2">
             {openIssues.map((issue) => (
-              <li
-                key={issue.companyShareId}
-                className="min-w-0 rounded-xl border border-border/60 bg-surface p-3"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold" title={issue.companyName ?? ""}>
-                      {issue.companyName}
-                    </p>
-                    <p
-                      className="num truncate text-xs text-muted-foreground"
-                      title={`${issue.scrip ?? ""} · ${issue.shareTypeName ?? ""} ${issue.shareGroupName ?? ""}`}
-                    >
-                      {issue.scrip} · {issue.shareTypeName} {issue.shareGroupName}
-                    </p>
+              <li key={issue.companyShareId} className="min-w-0">
+                <Link
+                  to="/ipo"
+                  search={{ tab: "apply" }}
+                  title={`${issue.companyName ?? issue.scrip ?? ""} - apply on IPO page`}
+                  className="block rounded-xl border border-border/60 bg-surface p-3 transition-colors hover:border-primary/40"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold" title={issue.companyName ?? ""}>
+                        {issue.companyName}
+                      </p>
+                      <p
+                        className="num truncate text-xs text-muted-foreground"
+                        title={`${issue.scrip ?? ""} · ${issue.shareTypeName ?? ""} ${issue.shareGroupName ?? ""}`}
+                      >
+                        {issue.scrip} · {issue.shareTypeName} {issue.shareGroupName}
+                      </p>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[0.68rem] font-semibold text-primary">
+                      {issue.statusName ?? "Open"}
+                    </span>
                   </div>
-                  <span className="shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[0.68rem] font-semibold text-primary">
-                    {issue.statusName ?? "Open"}
-                  </span>
-                </div>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Closes {formatDate(issue.issueCloseDate)}
-                </p>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Closes {formatDate(issue.issueCloseDate)}
+                  </p>
+                </Link>
               </li>
             ))}
             {upcomingIssues.map((item) => (

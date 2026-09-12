@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Search, Star, Trash2 } from "lucide-react";
+import { CalendarDays, Search, Star, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   Sheet,
@@ -66,6 +67,14 @@ export function WatchlistPanel({
                 </span>
               ) : null}
             </SheetTitle>
+            <Link
+              to="/calendar"
+              aria-label="Open dividend calendar"
+              title="Open dividend calendar"
+              className="inline-flex size-8 items-center justify-center rounded-xl border border-border/70 text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+            >
+              <CalendarDays className="size-4" />
+            </Link>
           </div>
           <SheetDescription className="text-xs">
             Stored privately on this device only.

@@ -47,6 +47,8 @@ export interface Prefs {
   terminal: TerminalState;
   // Watchlist
   watchlist: string[];
+  // Beta features (opt-in via Settings → Advanced)
+  edisBeta: boolean;
 }
 
 export interface PrefsApi extends Prefs {
@@ -66,6 +68,8 @@ export interface PrefsApi extends Prefs {
   toggleWatchlist: (symbol: string) => void;
   removeFromWatchlist: (symbol: string) => void;
   hasInWatchlist: (symbol: string) => boolean;
+  // Beta features
+  setEdisBeta: (on: boolean) => void;
   // Modal helpers
   openPassword: () => void;
   closePassword: () => void;
@@ -105,6 +109,7 @@ export const DEFAULT_PREFS: Prefs = {
   sidebarCollapsed: false,
   terminal: DEFAULT_TERMINAL,
   watchlist: [],
+  edisBeta: false,
 };
 
 function readJson<T>(key: string): T | null {
@@ -327,6 +332,7 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
       toggleWatchlist,
       removeFromWatchlist,
       hasInWatchlist,
+      setEdisBeta: (edisBeta) => setPrefs((s) => ({ ...s, edisBeta })),
       openPassword: () => setPasswordOpen(true),
       closePassword: () => setPasswordOpen(false),
       openPin: () => setPinOpen(true),

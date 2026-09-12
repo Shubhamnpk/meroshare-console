@@ -48,9 +48,11 @@ import {
   chartTimeLabel,
 } from "@/components/market/chart-modal";
 import { useDocViewer } from "@/components/ui/use-doc-viewer";
+import { OrderTicket } from "@/components/brokers/order-ticket";
 import { Panel } from "@/components/ui/panel";
 import {
   dividendsQuery,
+  brokerConnectionsQuery,
   enrichedPortfolioQuery,
   exchangeMessagesQuery,
   investmentSummaryQuery,
@@ -648,6 +650,8 @@ export function ScripSheet({
   const news = useQuery(exchangeMessagesQuery(Boolean(symbol)));
   const watchlist = useWatchlist();
   const navigate = useNavigate();
+  const brokerConn = useQuery(brokerConnectionsQuery());
+  const brokerOn = (brokerConn.data?.length ?? 0) > 0;
   const [tab, setTab] = useState("overview");
   const [rangeKey, setRangeKey] = useState<string>("1D");
   const [chartOpen, setChartOpen] = useState(false);
@@ -657,6 +661,7 @@ export function ScripSheet({
   useEffect(() => {
     setRangeKey("1D");
     setDividendSimOpen(false);
+    setTab("overview");
   }, [symbol]);
 
   const upper = symbol?.toUpperCase() ?? "";
@@ -832,13 +837,42 @@ export function ScripSheet({
       <SheetContent side="right" className="w-full overflow-y-auto p-0 sm:max-w-xl">
         <SheetHeader className="px-4 pb-0 pt-6 text-left">
           <div className="flex items-start justify-between gap-3 pr-8">
-            <div className="min-w-0">
-              <SheetTitle className="font-display text-xl">{upper || "Scrip"}</SheetTitle>
+            <div className="flex min-w-0 items-start gap-2.5">
+              <span
+                aria-hidden
+                className="num flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-sm font-bold text-primary"
+              >
+                {(upper || "?").charAt(0)}
+              </span>
+              <div className="min-w-0 pb-1">
+                <span className="flex items-center gap-2">
+                <SheetTitle className="font-display text-xl">{upper || "Scrip"}</SheetTitle>
+                {price ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      watchlist.toggle(upper);
+                      toast.success(watched ? "Removed from watchlist" : "Added to watchlist");
+                    }}
+                    aria-label={watched ? "Remove from watchlist" : "Add to watchlist"}
+                    title={watched ? "Remove from watchlist" : "Add to watchlist"}
+                    className={cn(
+                      "inline-flex size-7 shrink-0 items-center justify-center rounded-lg border transition-colors",
+                      watched
+                        ? "border-primary/50 bg-primary/15 text-primary"
+                        : "border-border/70 text-muted-foreground hover:border-primary/40 hover:text-primary",
+                    )}
+                  >
+                    {watched ? <StarOff className="size-3.5" /> : <Star className="size-3.5" />}
+                  </button>
+                ) : null}
+              </span>
               {price || overview ? (
                 <SheetDescription className="truncate text-left">
                   {overview?.name ?? price?.name}
                 </SheetDescription>
               ) : null}
+              </div>
             </div>
             {price ? (
               <div className="shrink-0 text-right">
@@ -851,39 +885,22 @@ export function ScripSheet({
               </div>
             ) : null}
           </div>
-          <div className="mb-1 flex items-center justify-between gap-2 pb-2 pr-8">
-            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-              {overview?.sector ? (
-                <span className="rounded-full bg-muted px-2 py-0.5 text-[0.65rem] font-medium text-muted-foreground">
-                  {overview.sector}
-                </span>
-              ) : null}
-              {overview?.instrumentType ? (
-                <span className="rounded-full bg-muted px-2 py-0.5 text-[0.65rem] font-medium text-muted-foreground">
-                  {overview.instrumentType}
-                </span>
-              ) : null}
+          {overview?.sector || overview?.instrumentType ? (
+            <div className="mb-1 flex items-center gap-2 pb-2 pr-8">
+              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                {overview?.sector ? (
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-[0.65rem] font-medium text-muted-foreground">
+                    {overview.sector}
+                  </span>
+                ) : null}
+                {overview?.instrumentType ? (
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-[0.65rem] font-medium text-muted-foreground">
+                    {overview.instrumentType}
+                  </span>
+                ) : null}
+              </div>
             </div>
-            {price ? (
-              <button
-                type="button"
-                onClick={() => {
-                  watchlist.toggle(upper);
-                  toast.success(watched ? "Removed from watchlist" : "Added to watchlist");
-                }}
-                aria-label={watched ? "Remove from watchlist" : "Add to watchlist"}
-                title={watched ? "Remove from watchlist" : "Add to watchlist"}
-                className={cn(
-                  "inline-flex size-8 shrink-0 items-center justify-center rounded-xl border transition-colors",
-                  watched
-                    ? "border-primary/50 bg-primary/15 text-primary"
-                    : "border-border/70 text-muted-foreground hover:border-primary/40 hover:text-primary",
-                )}
-              >
-                {watched ? <StarOff className="size-4" /> : <Star className="size-4" />}
-              </button>
-            ) : null}
-          </div>
+          ) : null}
         </SheetHeader>
         <div className="space-y-5 px-4 pb-8">
           {!price ? (
@@ -895,6 +912,7 @@ export function ScripSheet({
           <Tabs value={tab} onValueChange={setTab}>
             <TabsList className="w-full justify-start">
               <TabsTrigger value="overview">Overview</TabsTrigger>
+              {brokerOn ? <TabsTrigger value="trade">Trade</TabsTrigger> : null}
               {financials.data ? <TabsTrigger value="financials">Financials</TabsTrigger> : null}
               {dividend || yearlyDividends.length > 0 ? (
                 <TabsTrigger value="dividend">Dividend</TabsTrigger>
@@ -902,6 +920,16 @@ export function ScripSheet({
               {holding ? <TabsTrigger value="history">History</TabsTrigger> : null}
               {newsItems.length > 0 ? <TabsTrigger value="news">News</TabsTrigger> : null}
             </TabsList>
+
+            {brokerOn ? (
+              <TabsContent value="trade" className="space-y-4">
+                <OrderTicket symbol={upper} />
+                <p className="text-[0.7rem] leading-relaxed text-muted-foreground">
+                  Live broker quote, market depth and order placement for {upper}. Orders placed
+                  here are real.
+                </p>
+              </TabsContent>
+            ) : null}
 
             <TabsContent value="overview" className="space-y-4">
               {waccEntry && toNumber(waccEntry.averageBuyRate) > 0 && price?.ltp ? (
@@ -1040,7 +1068,11 @@ export function ScripSheet({
                           high={dayRange.high}
                           value={dayRange.value}
                           format={(v) => formatNpr(v)}
-                          tone={price?.percentChange != null && price.percentChange < 0 ? "loss" : "gain"}
+                          tone={
+                            price?.percentChange != null && price.percentChange < 0
+                              ? "loss"
+                              : "gain"
+                          }
                         />
                       </div>
                     ) : null}
@@ -1054,7 +1086,11 @@ export function ScripSheet({
                           high={yearRange.high}
                           value={yearRange.value}
                           format={(v) => formatNpr(v, { compact: true })}
-                          tone={price?.percentChange != null && price.percentChange < 0 ? "loss" : "gain"}
+                          tone={
+                            price?.percentChange != null && price.percentChange < 0
+                              ? "loss"
+                              : "gain"
+                          }
                         />
                       </div>
                     ) : null}

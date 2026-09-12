@@ -31,6 +31,7 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
+    "setup:secrets": "node scripts/setup-secrets.mjs",
     "lint": "eslint .",
     "format": "prettier --write ."
   },

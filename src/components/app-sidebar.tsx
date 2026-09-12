@@ -1,5 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import {
+  ArrowLeftRight,
   BarChart3,
   Blocks,
   Briefcase,
@@ -11,10 +13,13 @@ import {
   LayoutDashboard,
   LineChart,
   Rocket,
+  Send,
   Settings,
   UserRound,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useSettings } from "@/lib/settings";
+import { brokerConnectionsQuery } from "@/lib/queries";
 
 export type NavItem = { to: string; label: string; icon: typeof LayoutDashboard };
 
@@ -31,6 +36,11 @@ export const PRIMARY_NAV: NavItem[] = [
 export const IPO_NAV: NavItem[] = [
   { to: "/ipo", label: "IPO", icon: Rocket },
   { to: "/wacc", label: "Purchase Source", icon: Coins },
+  { to: "/edis", label: "EDIS Transfer", icon: Send },
+];
+
+export const TRADE_NAV: NavItem[] = [
+  { to: "/broker", label: "Broker Account", icon: ArrowLeftRight },
 ];
 
 export const ACCOUNT_NAV: NavItem[] = [
@@ -163,12 +173,19 @@ export function AppSidebar({
   onToggleCollapsed: () => void;
 }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const { edisBeta } = useSettings();
+  const connections = useQuery(brokerConnectionsQuery());
+  const brokerLinked = (connections.data?.length ?? 0) > 0;
 
   const handleClick = (e: React.MouseEvent) => {
     const tag = (e.target as HTMLElement).tagName;
     if (tag === "A" || tag === "BUTTON" || (e.target as HTMLElement).closest("a, button")) return;
     onToggleCollapsed();
   };
+
+  // EDIS is beta-gated; broker trading hides until a broker is linked.
+  const ipoNav = IPO_NAV.filter((item) => item.to !== "/edis" || edisBeta);
+  const tradeNav = TRADE_NAV.filter(() => brokerLinked);
 
   return (
     <aside
@@ -182,7 +199,10 @@ export function AppSidebar({
       <Brand collapsed={collapsed} onToggle={onToggleCollapsed} />
       <nav className="flex-1 overflow-y-auto px-2 pb-4">
         <NavGroup title="Overview" items={PRIMARY_NAV} pathname={pathname} collapsed={collapsed} />
-        <NavGroup title="Issues" items={IPO_NAV} pathname={pathname} collapsed={collapsed} />
+        {tradeNav.length > 0 ? (
+          <NavGroup title="Trading" items={tradeNav} pathname={pathname} collapsed={collapsed} />
+        ) : null}
+        <NavGroup title="Issues" items={ipoNav} pathname={pathname} collapsed={collapsed} />
         <NavGroup title="Account" items={ACCOUNT_NAV} pathname={pathname} collapsed={collapsed} />
       </nav>
       {/* Hover grip indicator on the right edge */}

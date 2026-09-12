@@ -49,3 +49,7 @@ meroshare-playwright.mjs
 meroshare-playwright2.mjs
 pnpm-workspace.yaml
 pnpm-lock.yaml
+docs/
+
+# TMS exploration scratch scripts (one-off probes, not part of the build)
+tms-tmp/

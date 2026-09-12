@@ -1102,14 +1102,16 @@ export async function getScripFullHistory(symbol: string): Promise<DailyBar[]> {
 export async function getChartSeries(symbol: string, range: ChartRange): Promise<ChartSeries> {
   const upper = symbol.toUpperCase();
   const months = RANGE_MONTHS[range];
-  const needsArchive = months > 11;
 
   const [history, intradayRaw, archive, live] = await Promise.all([
     bitnepalJson<Rec[]>(`/securities/${encodeURIComponent(upper)}/history`, TTL.medium),
     range === "1D"
       ? bitnepalJson<Rec[]>(`/securities/${encodeURIComponent(upper)}/graph`, TTL.fast)
       : Promise.resolve({ data: null as Rec[] | null, stale: false }),
-    needsArchive ? getArchiveBars(upper, months) : Promise.resolve<DailyBar[]>([]),
+    // YONEPSE archive doubles as the fallback: short ranges (1W/1M) use the
+    // last 1-2 monthly files when the main history feed is unavailable.
+    // Archive bars are overlaid first so reported bars always win.
+    range === "1D" ? Promise.resolve<DailyBar[]>([]) : getArchiveBars(upper, months),
     getLivePrices(),
   ]);
 

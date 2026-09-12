@@ -9,6 +9,10 @@ import type {
   BankDetail,
   BankListItem,
   Capital,
+  EdisNodelItem,
+  EdisStatusItem,
+  EdisTransferDetail,
+  EdisTransferItem,
   MyShareItem,
   OwnDetail,
   Paged,
@@ -457,6 +461,118 @@ export async function logoutCdsc(auth: AuthContext) {
   } catch {
     // logging out locally is what matters
   }
+}
+
+// ---------------------------------------------------------------------------
+// EDIS (Electronic Delivery Instruction System)
+// ---------------------------------------------------------------------------
+
+export async function fetchEdisTransferActive(
+  auth: AuthContext,
+  input: { page?: number; size?: number } = {},
+): Promise<Paged<EdisTransferItem>> {
+  return cdscRequest<Paged<EdisTransferItem>>(CDSC_URLS.edisTransferActive, {
+    method: "POST",
+    token: auth.token,
+    body: {
+      filterFieldParams: [
+        { key: "requestStatus.name", value: "", alias: "Status" },
+        {
+          key: "contractObligationMap.obligation.settleId",
+          value: undefined,
+          alias: "Settlement Id",
+        },
+        { key: "contractObligationMap.obligation.scriptCode", value: undefined, alias: "Scrip" },
+        { key: "contractObligationMap.obligation.clientBoid", value: undefined, alias: "BOID" },
+        { key: "contractObligationMap.obligation.sellClient", value: "", alias: "Client Code" },
+      ],
+      page: input.page ?? 1,
+      size: input.size ?? 50,
+      searchRoleViewConstants: "VIEW_EDIS_TRANSFER",
+      filterDateParams: [
+        { key: "settlementDate", value: "", condition: "", alias: "" },
+        { key: "settlementDate", value: "", condition: "", alias: "" },
+      ],
+    },
+  });
+}
+
+export async function fetchEdisTransferDetail(
+  auth: AuthContext,
+  transferId: number,
+): Promise<EdisTransferDetail> {
+  return cdscRequest<EdisTransferDetail>(CDSC_URLS.edisTransferDetail(transferId), {
+    token: auth.token,
+  });
+}
+
+export async function checkEdisTransfer(
+  auth: AuthContext,
+  requests: Array<Record<string, unknown>>,
+): Promise<JsonRecord[]> {
+  return cdscRequest<JsonRecord[]>(CDSC_URLS.edisTransferCheck, {
+    method: "POST",
+    retry: false,
+    token: auth.token,
+    body: requests,
+  });
+}
+
+export async function submitEdisTransfer(
+  auth: AuthContext,
+  requests: Array<Record<string, unknown>>,
+): Promise<JsonRecord> {
+  return cdscRequest<JsonRecord>(CDSC_URLS.edisTransferSubmit, {
+    method: "POST",
+    retry: false,
+    token: auth.token,
+    body: requests,
+  });
+}
+
+export async function fetchEdisNodel(
+  auth: AuthContext,
+  input: { page?: number; size?: number } = {},
+): Promise<Paged<EdisNodelItem>> {
+  return cdscRequest<Paged<EdisNodelItem>>(CDSC_URLS.edisNodel, {
+    method: "POST",
+    token: auth.token,
+    body: {
+      filterFieldParams: [
+        { key: "requestStatus.name", value: "", alias: "Status" },
+        { key: "contractObligationMap.obligation.scriptCode", value: undefined, alias: "Scrip" },
+        { key: "contractObligationMap.obligation.clientBoid", value: undefined, alias: "BOID" },
+      ],
+      page: input.page ?? 1,
+      size: input.size ?? 50,
+      searchRoleViewConstants: "VIEW_EDIS_TRANSFER",
+      filterDateParams: [
+        { key: "settlementDate", value: "", condition: "", alias: "" },
+        { key: "settlementDate", value: "", condition: "", alias: "" },
+      ],
+    },
+  });
+}
+
+export async function fetchEdisStatuses(auth: AuthContext): Promise<EdisStatusItem[]> {
+  return cdscRequest<EdisStatusItem[]>(CDSC_URLS.edisStatus, { token: auth.token });
+}
+
+export async function fetchEdisDisclaimer(auth: AuthContext): Promise<string> {
+  const res = await cdscRequest<JsonRecord>(CDSC_URLS.edisDisclaimer, { token: auth.token });
+  return String(res["fieldValue"] ?? "");
+}
+
+export async function checkEdisPoolAccount(auth: AuthContext): Promise<boolean> {
+  const res = await cdscRequest<JsonRecord>(CDSC_URLS.edisPoolAccountCheck, {
+    token: auth.token,
+  });
+  return res["isPoolAccount"] === true;
+}
+
+export async function checkEdisWaccLeft(auth: AuthContext): Promise<boolean> {
+  const res = await cdscRequest<JsonRecord>(CDSC_URLS.edisCheckWacc, { token: auth.token });
+  return res["fieldValue"] === "true";
 }
 
 export { readSession, requireAuth };

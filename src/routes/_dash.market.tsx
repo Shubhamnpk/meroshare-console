@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Activity, ChartCandlestick, Maximize2, RefreshCw, Search, Star } from "lucide-react";
+import { Activity, CalendarDays, ChartCandlestick, Maximize2, RefreshCw, Search, Star } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
@@ -365,6 +365,9 @@ function MarketPage() {
           </Button>
           <Button variant="outline" size="sm" onClick={() => void navigate({ to: "/terminal" })}>
             <ChartCandlestick /> Terminal
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => void navigate({ to: "/calendar" })}>
+            <CalendarDays /> Calendar
           </Button>
           <Button
             variant="outline"

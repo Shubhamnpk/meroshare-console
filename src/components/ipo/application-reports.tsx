@@ -45,7 +45,7 @@ import { formatDateTime, formatQty, toNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { ApplicationReportItem, JsonRecord, JsonValue } from "@/lib/meroshare/types";
 
-type Outcome = { kind: "allotted" | "not-allotted" | "blocked" | "pending"; label: string };
+type Outcome = { kind: "allotted" | "not-allotted" | "blocked" | "applied" | "pending"; label: string };
 
 function str(value: unknown): string | null {
   return typeof value === "string" && value.trim() !== "" ? value : null;
@@ -56,8 +56,12 @@ function str(value: unknown): string | null {
  * Status is authoritative ("Alloted" / "Not Alloted" / "Allotted" / "Not
  * Allotted" / "Rejected"); Stage/Remark/Reason only fill in blocked / released
  * / pending states. Note "Not Alloted" must not match the allotted branch.
+ *
+ * Phase-aware: while the issue is still open, a blocked amount still reads
+ * "Applied" (the bank hold is a sub-status); "Amount blocked" becomes the
+ * headline only after close, until allotment or release.
  */
-function deriveOutcome(d: JsonRecord): Outcome {
+function deriveOutcome(d: JsonRecord, issueClosed = true): Outcome {
   const rk = toNumber(d["receivedKitta"]);
   const status = (str(d["statusName"]) ?? "").toUpperCase().replace(/\s+/g, " ").trim();
   const stage = (str(d["stageName"]) ?? "").toUpperCase();
@@ -73,6 +77,7 @@ function deriveOutcome(d: JsonRecord): Outcome {
     return { kind: "not-allotted", label: "Not allotted" };
   }
   if (/\bBLOCKED\b|BLOCK AMOUNT/.test(hay) && !/RELEASED/.test(hay)) {
+    if (!issueClosed) return { kind: "applied", label: "Applied" };
     return { kind: "blocked", label: "Amount blocked" };
   }
   if (/AMOUNT RELEASED/.test(hay)) {
@@ -82,8 +87,10 @@ function deriveOutcome(d: JsonRecord): Outcome {
     return { kind: "not-allotted", label: "Not allotted" };
   }
   if (/PENDING|RESULT NOT PUBLISHED/.test(hay)) {
+    if (!issueClosed) return { kind: "applied", label: "Applied" };
     return { kind: "pending", label: "Pending" };
   }
+  if (!issueClosed) return { kind: "applied", label: "Applied" };
   return { kind: "pending", label: "Pending result" };
 }
 
@@ -91,6 +98,7 @@ const outcomeStyles: Record<Outcome["kind"], string> = {
   allotted: "bg-gain/15 text-gain",
   "not-allotted": "bg-loss/15 text-loss",
   blocked: "bg-warning/15 text-warning",
+  applied: "bg-primary/15 text-primary",
   pending: "bg-muted text-muted-foreground",
 };
 
@@ -129,8 +137,8 @@ function Chip({ label, value, valueClass }: { label: string; value: string; valu
 
 function Summary({ details }: { details: (JsonRecord | null)[] }) {
   const valid = details.filter((d): d is JsonRecord => d !== null);
-  const outcomes = valid.map(deriveOutcome);
-  const counts = { allotted: 0, "not-allotted": 0, blocked: 0, pending: 0 };
+  const outcomes = valid.map((d) => deriveOutcome(d, detailClosed(d).closed));
+  const counts = { allotted: 0, "not-allotted": 0, blocked: 0, applied: 0, pending: 0 };
   for (const o of outcomes) counts[o.kind] += 1;
   const kittaApplied = valid.reduce((s, d) => s + Math.max(0, toNumber(d["appliedKitta"])), 0);
   const kittaAllotted = valid.reduce((s, d) => s + Math.max(0, toNumber(d["receivedKitta"])), 0);
@@ -140,6 +148,9 @@ function Summary({ details }: { details: (JsonRecord | null)[] }) {
       <Chip label="Allotted" value={String(counts.allotted)} valueClass="text-gain" />
       <Chip label="Not allotted" value={String(counts["not-allotted"])} valueClass="text-loss" />
       <Chip label="Amount blocked" value={String(counts.blocked)} valueClass="text-warning" />
+      {counts.applied > 0 ? (
+        <Chip label="In progress" value={String(counts.applied)} valueClass="text-primary" />
+      ) : null}
       <Chip label="Awaiting result" value={String(counts.pending)} />
       <Chip label="Kitta applied" value={formatQty(kittaApplied)} />
       <Chip label="Kitta allotted" value={formatQty(kittaAllotted)} valueClass="text-gain" />
@@ -237,8 +248,25 @@ function DetailGrid({ detail }: { detail: JsonRecord }) {
   );
 }
 
-function matches(item: ApplicationReportItem, detail: JsonRecord | null, term: string): boolean {
-  const haystack = [
+/**
+ * True when the application detail itself carries a close date that already
+ * passed (e.g. "Max Issue Close Date"). Null-safe: unknown means not closed,
+ * CDSC stays the final enforcer.
+ */
+function detailClosed(detail: JsonRecord | null): { closed: boolean; label: string } {
+  if (!detail) return { closed: false, label: "" };
+  for (const key of ["maxIssueCloseDate", "issueCloseDate", "minIssueCloseDate", "closeDate"]) {
+    const v = detail[key];
+    if (typeof v !== "string" || v.trim() === "") continue;
+    const t = new Date(v.includes("T") ? v : v.replace(" ", "T")).getTime();
+    if (Number.isNaN(t)) continue;
+    if (t < Date.now()) return { closed: true, label: v };
+    return { closed: false, label: "" };
+  }
+  return { closed: false, label: "" };
+}
+
+function matches(item: ApplicationReportItem, detail: JsonRecord | null, term: string): boolean {  const haystack = [
     item.companyName,
     item.scrip,
     item.statusName,
@@ -453,7 +481,7 @@ function ReportList({
           >
             {shown.items.map((item, idx) => {
               const detail = shown.details[idx] ?? null;
-              const outcome = detail ? deriveOutcome(detail) : null;
+              const outcome = detail ? deriveOutcome(detail, detailClosed(detail).closed) : null;
               return (
                 <AccordionItem
                   key={`${item.companyShareId}-${item.applicantFormId ?? 0}`}
@@ -480,45 +508,47 @@ function ReportList({
                   </AccordionTrigger>
                   <AccordionContent className="px-4">
                     {detail ? (
-                      <>
-                        <DetailGrid detail={detail} />
-                        {(() => {
-                          const outcome = deriveOutcome(detail);
-                          const editable =
-                            (outcome.kind === "pending" || outcome.kind === "blocked") &&
-                            Boolean(item.applicantFormId);
-                          if (!editable || (!onEdit && !onWithdraw)) return null;
-                          return (
-                            <div className="mt-3 flex flex-wrap gap-2 border-t border-border/60 pt-3">
-                              {onEdit ? (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => onEdit(item, detail)}
-                                >
-                                  Edit
-                                </Button>
-                              ) : null}
-                              {onWithdraw ? (
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="text-destructive hover:text-destructive"
-                                  onClick={() => setWithdrawTarget({ item, pin: "" })}
-                                >
-                                  Withdraw
-                                </Button>
-                              ) : null}
-                              <span className="ml-auto text-[11px] text-muted-foreground">
-                                Editable while the issue is still open
-                              </span>
-                            </div>
-                          );
-                        })()}
-                      </>
+                      <DetailGrid detail={detail} />
                     ) : (
                       <p className="text-xs text-muted-foreground">Result not loaded.</p>
                     )}
+                    {(() => {
+                      if (!item.applicantFormId || (!onEdit && !onWithdraw)) return null;
+                      const { closed } = detailClosed(detail);
+                      if (closed) {
+                        return (
+                          <p className="mt-3 border-t border-border/60 pt-3 text-[11px] text-muted-foreground">
+                            Issue closed. Applications can no longer be edited or withdrawn.
+                          </p>
+                        );
+                      }
+                      return (
+                        <div className="mt-3 flex flex-wrap gap-2 border-t border-border/60 pt-3">
+                          {onEdit ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => onEdit(item, detail)}
+                            >
+                              Edit
+                            </Button>
+                          ) : null}
+                          {onWithdraw ? (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => setWithdrawTarget({ item, pin: "" })}
+                            >
+                              Withdraw
+                            </Button>
+                          ) : null}
+                          <span className="ml-auto text-[11px] text-muted-foreground">
+                            Editable while the issue is still open · amount re-blocks on update
+                          </span>
+                        </div>
+                      );
+                    })()}
                   </AccordionContent>
                 </AccordionItem>
               );

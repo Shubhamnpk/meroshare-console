@@ -1,6 +1,6 @@
 ﻿import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Bell,
   BellRing,
@@ -14,6 +14,7 @@ import {
   Eye,
   EyeOff,
   Fingerprint,
+  FlaskConical,
   Github,
   Hash,
   Info,
@@ -22,15 +23,23 @@ import {
   Monitor,
   Moon,
   Palette,
+  Plug,
   RefreshCw,
   Shield,
   Sparkles,
   Sun,
   Target,
+  Trash2,
   UserRound,
   X,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -58,18 +67,30 @@ import {
 import { cn } from "@/lib/utils";
 import { errorMessage, formatDate } from "@/lib/format";
 import {
+  NOTIFICATION_CATEGORIES,
   arePopupsEnabled,
   clearSnoozed,
+  isCategoryEnabled,
   isPushEnabled,
   pushState,
   requestPushPermission,
+  setCategoryEnabled,
   setPopupsEnabled,
   setPushEnabled,
   snoozedCount,
+  type NotificationCategory,
   type PushState,
 } from "@/lib/notifications";
-import { sessionQuery } from "@/lib/queries";
+import { sessionQuery, brokerConnectionsQuery, brokerVaultStatusQuery } from "@/lib/queries";
 import { getCapitals, login } from "@/lib/meroshare/auth.functions";
+import {
+  listBrokerConnections,
+  removeBrokerConnection,
+  retestBrokerConnection,
+  saveBrokerConnection,
+  testBrokerConnection,
+} from "@/lib/brokers/brokers.functions";
+import { BROKERS, type BrokerId, type BrokerTestResult } from "@/lib/brokers/types";
 import {
   disableBiometrics,
   enrollBiometric,
@@ -83,6 +104,11 @@ import { clearVault, hasVault, writeVault } from "@/lib/secure-vault";
 import { ogImage, canonicalLink } from "@/lib/seo";
 
 export const Route = createFileRoute("/_dash/settings")({
+  validateSearch: (search: Record<string, unknown>): { tab?: TabId | undefined } => {
+    const raw = typeof search["tab"] === "string" ? (search["tab"] as string) : "";
+    const ids = ["appearance", "security", "general", "advanced", "about"] as const;
+    return (ids as readonly string[]).includes(raw) ? { tab: raw as TabId } : {};
+  },
   head: () => ({
     meta: [
       { title: "Settings & Preferences | MeroShare Console" },
@@ -431,11 +457,23 @@ function BiometricCard() {
           </Button>
         </div>
       ) : null}
-      <p className="mt-2 text-[0.7rem] leading-relaxed text-muted-foreground/80">
-        A convenience lock for this device only. Saved sign-ins are encrypted with a key your
-        fingerprint unlocks, nothing readable ever leaves the device. Your MeroShare session still
-        expires normally and sign-in always needs your password the first time.
-      </p>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              className="mt-2 inline-flex w-fit items-center gap-1.5 text-[0.7rem] font-medium text-muted-foreground/80 transition-colors hover:text-foreground"
+            >
+              <Info className="size-3.5" /> How device lock works
+            </button>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-xs text-xs leading-relaxed">
+            A convenience lock for this device only. Saved sign-ins are encrypted with a key your
+            fingerprint unlocks, nothing readable ever leaves the device. Your MeroShare session
+            still expires normally and sign-in always needs your password the first time.
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
 
       <Dialog
         open={modalOpen}
@@ -557,17 +595,430 @@ function BiometricCard() {
   );
 }
 
+function ClearCacheCard() {
+  const queryClient = useQueryClient();
+  const [done, setDone] = useState(false);
+  return (
+    <Panel padding="lg" shadow className="space-y-4">
+      <SectionHeader
+        icon={Trash2}
+        title="Clear cache"
+        subtitle="Drop fetched market and account data held on this device, then reload fresh."
+      />
+      <div className="flex items-center justify-between gap-4 rounded-xl border border-border/60 bg-background p-4">
+        <div className="space-y-0.5">
+          <p className="text-sm font-semibold">{done ? "Cache cleared" : "Clear all caches"}</p>
+          <p className="text-xs text-muted-foreground">
+            {done
+              ? "Reloading with fresh data…"
+              : "Safe: your login, vault, preferences, watchlist and notification history stay."}
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={done}
+          onClick={() => {
+            try {
+              queryClient.clear();
+            } catch {
+              // ignore
+            }
+            try {
+              localStorage.removeItem("ms-cache.v1");
+            } catch {
+              // ignore
+            }
+            setDone(true);
+            setTimeout(() => window.location.reload(), 600);
+          }}
+          className="shrink-0"
+        >
+          {done ? "Clearing…" : "Clear cache"}
+        </Button>
+      </div>
+    </Panel>
+  );
+}
+
+function EdisBetaCard() {
+  const { edisBeta, setEdisBeta } = useSettings();
+  return (
+    <Panel padding="lg" shadow className="space-y-4">
+      <SectionHeader
+        icon={FlaskConical}
+        title="EDIS transfers (beta)"
+        subtitle="Electronic share delivery. Unfinished: enable only if you want to try it."
+        badge={edisBeta ? "Enabled" : undefined}
+      />
+      <div className="flex items-center justify-between gap-4 rounded-xl border border-border/60 bg-background p-4">
+        <div className="space-y-0.5">
+          <p className="text-sm font-semibold">Show EDIS in the app</p>
+          <p className="text-xs text-muted-foreground">
+            Adds the EDIS Transfer page to navigation. Off by default while in beta.
+          </p>
+        </div>
+        <Switch
+          checked={edisBeta}
+          onCheckedChange={setEdisBeta}
+          aria-label="edis-beta"
+        />
+      </div>
+    </Panel>
+  );
+}
+
+function BrokerConnectionsCard() {
+  const queryClient = useQueryClient();
+  const connections = useQuery(brokerConnectionsQuery());
+  const vaultStatus = useQuery(brokerVaultStatusQuery());
+  const vaultReady = vaultStatus.data?.configured ?? null;
+  const [dialogFor, setDialogFor] = useState<BrokerId | null>(null);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [testResult, setTestResult] = useState<BrokerTestResult | null>(null);
+
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ["broker-connections"] });
+
+  const testMutation = useMutation({
+    mutationFn: (input: { brokerId: BrokerId; username: string; password: string }) =>
+      testBrokerConnection({ data: input }),
+    onSuccess: (r) => setTestResult(r),
+    onError: (err) =>
+      setTestResult({
+        ok: false,
+        brokerId: dialogFor ?? "naasa-x",
+        displayName: null,
+        clientCodeHint: null,
+        holdingSymbols: [],
+        steps: [],
+        error: errorMessage(err, "Test login failed."),
+      }),
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: (input: { brokerId: BrokerId; username: string; password: string }) =>
+      saveBrokerConnection({ data: input }),
+    onSuccess: () => {
+      setPassword("");
+      setTestResult(null);
+      setDialogFor(null);
+      void refresh();
+    },
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: (brokerId: BrokerId) => removeBrokerConnection({ data: { brokerId } }),
+    onSuccess: () => void refresh(),
+  });
+
+  const retestMutation = useMutation({
+    mutationFn: (brokerId: BrokerId) => retestBrokerConnection({ data: { brokerId } }),
+    onSuccess: () => void refresh(),
+  });
+
+  const openDialog = (brokerId: BrokerId) => {
+    setDialogFor(brokerId);
+    setEmail("");
+    setPassword("");
+    setShowPassword(false);
+    setTestResult(null);
+    saveMutation.reset();
+  };
+
+  const connected = (id: BrokerId) => connections.data?.find((c) => c.brokerId === id) ?? null;
+  const connectedCount = connections.data?.length ?? 0;
+  const busy = testMutation.isPending || saveMutation.isPending;
+
+  return (
+    <Panel padding="lg" shadow className="space-y-5">
+      <SectionHeader
+        icon={Plug}
+        title="Broker connections"
+        subtitle="Optional plug-in: link a broker terminal for live trading data."
+        badge={connectedCount > 0 ? `${connectedCount} connected` : "Optional"}
+      />
+
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              className="inline-flex w-fit items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <Info className="size-3.5" /> How broker linking works
+            </button>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-xs text-xs leading-relaxed">
+            Entirely optional. MeroShare sign-in keeps working exactly as before. A linked broker
+            lets this app sign you into the broker terminal itself, so portfolio, orders and market
+            data can come from your real trading account. Credentials are encrypted with a dedicated
+            server key, stored httpOnly, and never shown back, not even here. Connecting proves the
+            password with one live test login first.
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+
+      {vaultReady === false ? (
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3.5 text-xs leading-relaxed">
+          <p className="font-semibold">Broker linking is disabled on this server</p>
+          <p className="mt-1 text-muted-foreground">
+            The server has no <span className="num font-medium">BROKER_VAULT_SECRET</span> set, so
+            saving is turned off (testing still works). If you run it locally, restart the dev
+            server so it picks up <span className="num">.env.local</span>; on hosted deploys, add
+            the variable in the dashboard and redeploy.
+          </p>
+        </div>
+      ) : null}
+
+      <div className="space-y-3">
+        {BROKERS.map((broker) => {
+          const link = connected(broker.id);
+          return (
+            <div key={broker.id} className="rounded-xl border border-border/60 bg-background p-4">
+              <div className="flex items-center justify-between gap-4">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <Plug className="size-4 text-primary" />
+                    <p className="text-sm font-semibold">{broker.name}</p>
+                    {link ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-gain/10 px-2 py-0.5 text-[0.68rem] font-medium text-gain">
+                        <Check className="size-3" /> Connected
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="text-xs text-muted-foreground">{broker.tagline}</p>
+                  <p className="text-[0.7rem] text-muted-foreground/80">
+                    {broker.capabilities.join(" · ")}
+                  </p>
+                </div>
+                {link ? (
+                  <div className="flex shrink-0 gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={retestMutation.isPending}
+                      onClick={() => retestMutation.mutate(broker.id)}
+                    >
+                      {retestMutation.isPending ? "Testing…" : "Retest"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={removeMutation.isPending}
+                      onClick={() => removeMutation.mutate(broker.id)}
+                    >
+                      Disconnect
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    size="sm"
+                    className="shrink-0"
+                    disabled={vaultReady === false}
+                    onClick={() => openDialog(broker.id)}
+                  >
+                    Connect
+                  </Button>
+                )}
+              </div>
+              {link ? (
+                <div className="mt-2.5 grid gap-1 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs sm:grid-cols-3">
+                  <div>
+                    <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
+                      Broker user
+                    </p>
+                    <p className="truncate font-medium">{link.displayName ?? link.username}</p>
+                  </div>
+                  <div>
+                    <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
+                      Login email
+                    </p>
+                    <p className="num truncate font-medium">{link.username}</p>
+                  </div>
+                  <div>
+                    <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
+                      Last tested
+                    </p>
+                    <p className="font-medium">{formatDate(link.lastTestedAt)}</p>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+
+      {retestMutation.isError ? (
+        <p className="text-xs text-destructive">
+          {errorMessage(
+            retestMutation.error,
+            "Retest failed. The saved password may have changed.",
+          )}
+        </p>
+      ) : null}
+      {retestMutation.isSuccess ? (
+        <p className="text-xs font-medium text-gain">Saved connection still signs in cleanly.</p>
+      ) : null}
+
+      <p className="text-[0.7rem] leading-relaxed text-muted-foreground/80">
+        More brokers plug in here later, each one ships its own tested login worker, and nothing is
+        stored until a live test proves it works.
+      </p>
+
+      <Dialog
+        open={dialogFor !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDialogFor(null);
+            setPassword("");
+            setTestResult(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plug className="size-5 text-primary" /> Connect Naasa X
+            </DialogTitle>
+            <DialogDescription>
+              Signs into your broker once, right now, to prove the details work, then saves them
+              encrypted.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="broker-email">Broker login email</Label>
+              <Input
+                id="broker-email"
+                type="email"
+                autoComplete="username"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                maxLength={128}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="broker-password">Broker password</Label>
+              <div className="relative">
+                <Input
+                  id="broker-password"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="pr-10"
+                  maxLength={128}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
+            </div>
+
+            {testResult ? (
+              <div
+                className={
+                  testResult.ok
+                    ? "rounded-xl border border-gain/30 bg-gain/10 p-3 text-xs"
+                    : "rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-xs"
+                }
+              >
+                {testResult.ok ? (
+                  <div className="space-y-1">
+                    <p className="font-semibold text-gain">
+                      Signed in as {testResult.displayName ?? "broker user"}
+                      {testResult.clientCodeHint ? ` (${testResult.clientCodeHint})` : ""}.
+                    </p>
+                    <p className="text-muted-foreground">
+                      {testResult.holdingSymbols.length > 0
+                        ? `Holdings seen: ${testResult.holdingSymbols.slice(0, 8).join(", ")}${testResult.holdingSymbols.length > 8 ? "…" : ""}`
+                        : "No holdings on this account right now."}{" "}
+                      Safe to save.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    <p className="font-semibold text-destructive">
+                      {testResult.error ?? "Test login failed."}
+                    </p>
+                    {testResult.hint ? (
+                      <p className="text-muted-foreground">{testResult.hint}</p>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            ) : null}
+            {saveMutation.isError ? (
+              <p className="text-xs text-destructive">
+                {errorMessage(saveMutation.error, "Could not save the connection.")}
+              </p>
+            ) : null}
+
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1"
+                disabled={busy || !email || !password || !dialogFor}
+                onClick={() =>
+                  dialogFor &&
+                  testMutation.mutate({ brokerId: dialogFor, username: email, password })
+                }
+              >
+                {testMutation.isPending ? "Testing…" : "Test login"}
+              </Button>
+              <Button
+                size="sm"
+                className="flex-1"
+                disabled={busy || !email || !password || !dialogFor}
+                onClick={() =>
+                  dialogFor &&
+                  saveMutation.mutate({ brokerId: dialogFor, username: email, password })
+                }
+              >
+                {saveMutation.isPending ? "Connecting…" : "connect"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </Panel>
+  );
+}
+
 function NotificationCard() {
   const [push, setPush] = useState<PushState>(() => pushState());
   const [pushOn, setPushOn] = useState(() => isPushEnabled());
   const [popupsOn, setPopupsOn] = useState(() => arePopupsEnabled());
   const [snoozed, setSnoozed] = useState(() => snoozedCount());
+  const [cats, setCats] = useState<Record<NotificationCategory, boolean>>(() => ({
+    ipo: isCategoryEnabled("ipo"),
+    dividends: isCategoryEnabled("dividends"),
+    holdings: isCategoryEnabled("holdings"),
+    broadcasts: isCategoryEnabled("broadcasts"),
+  }));
 
   const refresh = () => {
     setPush(pushState());
     setPushOn(isPushEnabled());
     setPopupsOn(arePopupsEnabled());
     setSnoozed(snoozedCount());
+    setCats({
+      ipo: isCategoryEnabled("ipo"),
+      dividends: isCategoryEnabled("dividends"),
+      holdings: isCategoryEnabled("holdings"),
+      broadcasts: isCategoryEnabled("broadcasts"),
+    });
   };
 
   const pushDescription =
@@ -586,7 +1037,7 @@ function NotificationCard() {
       <SectionHeader
         icon={Bell}
         title="Notifications"
-        subtitle="IPO closings, password and DEMAT expiry warnings."
+        subtitle="IPO alerts, dividends, holdings news, broadcasts and expiry warnings."
         badge={push === "granted" && pushOn ? "Alerts on" : undefined}
       />
 
@@ -640,6 +1091,32 @@ function NotificationCard() {
             }}
             aria-label="popup-alerts"
           />
+        </div>
+
+        {/* Per-category toggles */}
+        <div className="rounded-xl border border-border/60 bg-background p-4">
+          <p className="text-sm font-semibold">What notifies you</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Turn off any category you don't want. Today's items always sort first.
+          </p>
+          <div className="mt-3 space-y-1">
+            {NOTIFICATION_CATEGORIES.map((c) => (
+              <div key={c.key} className="flex items-center justify-between gap-4 py-2">
+                <div className="space-y-0.5">
+                  <p className="text-sm font-medium">{c.title}</p>
+                  <p className="text-xs text-muted-foreground">{c.hint}</p>
+                </div>
+                <Switch
+                  checked={cats[c.key]}
+                  onCheckedChange={(v) => {
+                    setCategoryEnabled(c.key, v);
+                    refresh();
+                  }}
+                  aria-label={`${c.key}-alerts`}
+                />
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Snoozed reminders */}
@@ -711,8 +1188,9 @@ function RememberedRow() {
 const TABS = [
   { id: "appearance", label: "Appearance", hint: "Theme and accent color", icon: Palette },
   { id: "security", label: "Security", hint: "Password, PIN and fingerprint", icon: Lock },
-  { id: "general", label: "General", hint: "Sync, notifications and install", icon: Database },
-  { id: "about", label: "About", hint: "Version and project info", icon: Info },
+  { id: "general", label: "General", hint: "Sync and notifications", icon: Database },
+  { id: "advanced", label: "Advanced", hint: "Broker connections and labs", icon: Plug },
+  { id: "about", label: "About", hint: "Version, install and project info", icon: Info },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -768,7 +1246,11 @@ function SettingsPage() {
   const intervalOptions = [1, 5, 10, 30];
 
   const isMobile = useIsMobile();
-  const [activeTab, setActiveTab] = useState<TabId | null>(null);
+  const linkedTab = Route.useSearch({ select: (s) => s.tab });
+  const [activeTab, setActiveTab] = useState<TabId | null>(linkedTab ?? null);
+  useEffect(() => {
+    if (linkedTab) setActiveTab(linkedTab);
+  }, [linkedTab]);
   const current: TabId = activeTab ?? "appearance";
   const activeMeta = TABS.find((t) => t.id === current) ?? TABS[0]!;
 
@@ -1059,9 +1541,13 @@ function SettingsPage() {
                 </div>
               </Panel>
             </div>
-            <div className={current === "general" ? "space-y-6" : "hidden"}>
-              {/* App Install Card */}
-              <InstallCard />
+            <div className={current === "advanced" ? "space-y-6" : "hidden"}>
+              {/* Broker plug-ins (opt-in) */}
+              <BrokerConnectionsCard />
+              {/* EDIS beta (opt-in) */}
+              <EdisBetaCard />
+              {/* Manual cache clear */}
+              <ClearCacheCard />
             </div>
             <div className={current === "about" ? "space-y-6" : "hidden"}>
               {/* About & System Info */}
@@ -1171,6 +1657,7 @@ function SettingsPage() {
                   )}
                 </div>
               </Panel>
+              <InstallCard />
             </div>
           </div>
         </div>

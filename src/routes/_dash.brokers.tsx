@@ -49,7 +49,7 @@ export const Route = createFileRoute("/_dash/brokers")({
       {
         property: "og:description",
         content:
-          "NEPSE broker directory and daily floor sheet analytics — who traded what, with whom, and when.",
+          "NEPSE broker directory and daily floor sheet analytics. Who traded what, with whom, and when.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },

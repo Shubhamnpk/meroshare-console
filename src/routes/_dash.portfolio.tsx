@@ -211,7 +211,7 @@ function PortfolioPage() {
         case "unrealized":
           return plOf(h);
         case "percentChange":
-          return h.percentChange;
+          return h.dayChange;
         case "weight":
           return weightOf(h);
       }

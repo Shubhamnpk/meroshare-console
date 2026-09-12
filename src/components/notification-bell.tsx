@@ -11,12 +11,23 @@ import {
   Wallet,
   Flame,
   Clock,
+  Gift,
+  Megaphone,
+  Newspaper,
   Settings,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { currentIssuesQuery, ipoArchiveQuery, ownDetailQuery, sessionQuery } from "@/lib/queries";
+import {
+  currentIssuesQuery,
+  dividendsQuery,
+  exchangeMessagesQuery,
+  holdingSymbolsQuery,
+  ipoArchiveQuery,
+  ownDetailQuery,
+  sessionQuery,
+} from "@/lib/queries";
 import {
   SNOOZE_TOMORROW_MS,
   arePopupsEnabled,
@@ -37,6 +48,7 @@ import {
   type PushState,
 } from "@/lib/notifications";
 import { cn } from "@/lib/utils";
+import { useWatchlist } from "@/lib/watchlist";
 
 const KIND_ICON = {
   "ipo-open": PiggyBank,
@@ -44,6 +56,9 @@ const KIND_ICON = {
   "ipo-upcoming": PiggyBank,
   password: KeyRound,
   demat: Wallet,
+  dividend: Gift,
+  "holding-news": Newspaper,
+  "market-news": Megaphone,
 } as const;
 
 function Row({
@@ -122,6 +137,10 @@ export function NotificationBell() {
   const archive = useQuery(ipoArchiveQuery());
   const session = useQuery(sessionQuery());
   const own = useQuery(ownDetailQuery());
+  const dividends = useQuery(dividendsQuery());
+  const messages = useQuery(exchangeMessagesQuery());
+  const holdings = useQuery(holdingSymbolsQuery());
+  const { symbols: watchlisted } = useWatchlist();
 
   const all = useMemo(
     () =>
@@ -130,9 +149,13 @@ export function NotificationBell() {
         archiveUpcoming: archive.data?.upcoming ?? [],
         passwordExpiryDate: session.data?.passwordExpiryDate ?? null,
         dematExpiryDate: (own.data as { dematExpiryDate?: string } | null)?.dematExpiryDate ?? null,
+        dividends: dividends.data ?? [],
+        messages: messages.data ?? [],
+        holdings: holdings.data ?? [],
+        watchlist: watchlisted,
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [issues.data, archive.data, session.data, own.data, tick],
+    [issues.data, archive.data, session.data, own.data, dividends.data, messages.data, holdings.data, watchlisted, tick],
   );
   const unread = all.filter((n) => !isRead(n.id));
 
@@ -254,7 +277,7 @@ export function NotificationBell() {
           <p className="px-2 py-6 text-center text-xs text-muted-foreground">Checking…</p>
         ) : all.length === 0 ? (
           <p className="px-2 py-6 text-center text-xs text-muted-foreground">
-            All caught up. New IPOs, closing dates and expiry warnings land here.
+            All caught up. IPOs, dividends, holdings news and expiry warnings land here.
           </p>
         ) : (
           <div className="max-h-80 space-y-0.5 overflow-y-auto">

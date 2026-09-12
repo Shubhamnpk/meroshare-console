@@ -720,7 +720,7 @@ function WaccPage() {
             purchasePrice: Math.round(basisEntry.waccRate * 100) / 100,
             userPrice: Math.round(basisEntry.waccRate * 100) / 100,
             userCost: basisEntry.cost,
-            remarks: "Aggregated total — transaction rows unavailable",
+            remarks: "Aggregated total. Transaction rows unavailable",
           },
         ]
       : [];

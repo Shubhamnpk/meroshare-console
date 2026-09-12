@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Archive, CalendarRange, CheckCircle2, ClipboardList, Rocket } from "lucide-react";
+import { Archive, ArrowUpRight, CalendarRange, CheckCircle2, ClipboardList, Rocket } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -21,6 +21,8 @@ import {
   formatDate,
   formatNpr,
   formatNumber,
+  formatQty,
+  toNumber,
 } from "@/lib/format";
 import type { ApplicableIssue } from "@/lib/meroshare/types";
 import type { IpoArchiveRow } from "@/lib/nepse/types";
@@ -30,6 +32,7 @@ import { ApplicationReports } from "@/components/ipo/application-reports";
 import { IpoDetailSheet, type IpoSheetEdit, type IpoSheetIssue } from "@/components/ipo/ipo-detail-sheet";
 import { cn } from "@/lib/utils";
 import { ogImage, canonicalLink } from "@/lib/seo";
+import { parseBsRange, statusGroup, upcomingMerged } from "@/lib/ipo/status";
 
 export const Route = createFileRoute("/_dash/ipo")({
   validateSearch: (search: Record<string, unknown>): { tab?: string | undefined } => ({
@@ -53,16 +56,6 @@ export const Route = createFileRoute("/_dash/ipo")({
   }),
   component: IpoPage,
 });
-
-function statusGroup(issue: ApplicableIssue): "open" | "upcoming" | "closed" {
-  const status = String(issue.statusName ?? "").toLowerCase();
-  if (/open|active|apply/i.test(status)) return "open";
-  if (/upcoming|announced|coming/i.test(status)) return "upcoming";
-  if (/closed|expired|over/i.test(status)) return "closed";
-  const closes = daysUntil(issue.issueCloseDate);
-  if (closes === null) return "open";
-  return closes >= 0 ? "open" : "closed";
-}
 
 function CountdownChip({ target }: { target: string | undefined }) {
   const days = daysUntil(target);
@@ -90,21 +83,6 @@ function CountdownChip({ target }: { target: string | undefined }) {
       {days} days left
     </span>
   );
-}
-
-/** Split announced-but-not-open issues from both sources, deduped by company. */
-function upcomingMerged(
-  open: ApplicableIssue[],
-  calendarList: ApplicableIssue[],
-  archived: IpoArchiveRow[],
-) {
-  const listedNames = [...open, ...calendarList].map((i) => i.companyName || i.scrip || "");
-  const cdscUpcoming = calendarList.filter((i) => statusGroup(i) === "upcoming");
-  const known = [...listedNames, ...cdscUpcoming.map((i) => i.companyName || i.scrip || "")];
-  const archUpcoming = archived.filter(
-    (row) => !known.some((name) => sameCompany(name, row.company)),
-  );
-  return { cdscUpcoming, archUpcoming };
 }
 
 function UpcomingSection({
@@ -143,30 +121,48 @@ function UpcomingSection({
             </p>
           </li>
         ))}
-        {archUpcoming.map((row, i) => (
-          <li
-            key={`arch-${row.company}-${i}`}
-            className="rounded-xl border border-border/60 bg-surface p-3"
-          >
-            <p className="truncate text-sm font-semibold" title={row.company}>
-              {row.company}
-            </p>
-            <p className="num mt-1 truncate text-xs text-muted-foreground">
-              {row.units ? `${row.units} units` : "Units TBA"}
-              {row.dateRange ? ` · ${row.dateRange}` : ""}
-            </p>
-            {row.url ? (
-              <a
-                href={row.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-2 inline-block text-xs font-medium text-primary hover:underline"
-              >
-                Announcement
-              </a>
-            ) : null}
-          </li>
-        ))}
+        {archUpcoming.map((row, i) => {
+          const range = row.dateRange ? parseBsRange(row.dateRange) : null;
+          const today = new Date(new Date().toDateString()).getTime();
+          const live = range ? today >= range.start.getTime() && today <= range.end.getTime() : null;
+          const units = row.units ? toNumber(row.units) : 0;
+          return (
+            <li
+              key={`arch-${row.company}-${i}`}
+              className="rounded-xl border border-border/60 bg-surface p-3"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <p className="min-w-0 truncate text-sm font-semibold" title={row.company}>
+                  {row.company}
+                </p>
+                {live === null ? null : live ? (
+                  <span className="num shrink-0 rounded-full bg-gain/15 px-2 py-0.5 text-[0.68rem] font-semibold text-gain">
+                    Open now
+                  </span>
+                ) : (
+                  <span className="num shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[0.68rem] font-semibold text-primary">
+                    Opens {formatDate(range!.start)}
+                  </span>
+                )}
+              </div>
+              <p className="num mt-1 truncate text-xs text-muted-foreground">
+                {units > 0 ? `${formatQty(units)} units` : "Units TBA"}
+                {row.dateRange ? ` · ${row.dateRange}` : ""}
+              </p>
+              {row.url ? (
+                <a
+                  href={row.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Read the issue announcement on merolagani (opens in a new tab)"
+                  className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                >
+                  View announcement <ArrowUpRight className="size-3" />
+                </a>
+              ) : null}
+            </li>
+          );
+        })}
       </ul>
     </section>
   );
@@ -185,7 +181,8 @@ function CalendarView() {
 
   // CDSC rarely lists anything as upcoming and only carries open issues -
   // fill both gaps with archive announcements it doesn't carry yet.
-  const { archUpcoming: archiveUpcoming } = upcomingMerged(
+  // Ended upcoming rows resurface under Recently closed.
+  const { archUpcoming: archiveUpcoming, archClosed: archiveClosed } = upcomingMerged(
     list,
     list,
     archive.data?.upcoming ?? [],
@@ -195,7 +192,7 @@ function CalendarView() {
     .filter((row) => !listedNames.some((name) => sameCompany(name, row.company)))
     .slice(0, 10);
 
-  const hasArchive = archiveUpcoming.length > 0 || archivePast.length > 0;
+  const hasArchive = archiveUpcoming.length > 0 || archivePast.length > 0 || archiveClosed.length > 0;
 
   return (
     <div className="space-y-5">
@@ -251,7 +248,7 @@ function CalendarView() {
 
           <section className="space-y-2">
             <h2 className="font-display text-base font-semibold">Recently closed</h2>
-            {groups.closed.length === 0 && archivePast.length === 0 && !archive.isLoading ? (
+            {groups.closed.length === 0 && archivePast.length === 0 && archiveClosed.length === 0 && !archive.isLoading ? (
               <p className="rounded-xl border border-border/60 bg-surface px-3 py-2.5 text-sm text-muted-foreground">
                 Nothing closed recently.
               </p>
@@ -269,6 +266,21 @@ function CalendarView() {
                     </p>
                   </li>
                 ))}
+                {archiveClosed.map((row, i) => {
+                  const units = row.units ? toNumber(row.units) : 0;
+                  return (
+                    <li
+                      key={`arch-closed-${row.company}-${i}`}
+                      className="rounded-xl border border-border/60 bg-surface p-3 opacity-80"
+                    >
+                      <p className="truncate text-sm font-semibold">{row.company}</p>
+                      <p className="num mt-1 text-xs text-muted-foreground">
+                        {units > 0 ? `${formatQty(units)} units` : ""}
+                        {row.dateRange ? ` · ${row.dateRange}` : ""}
+                      </p>
+                    </li>
+                  );
+                })}
                 {archivePast.map((row, i) => (
                   <li
                     key={`arch-past-${row.company}-${i}`}
