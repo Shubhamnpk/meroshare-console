@@ -3,8 +3,7 @@
 // so every call is proxied through the app server.
 import { SessionExpiredError } from "./session.server";
 
-export const CDSC_BASE = "https://webbackend.cdsc.com.np";
-export const IPO_RESULT_BASE = "https://iporesult.cdsc.com.np";
+export const CDSC_BASE = process.env["CDSC_BASE_URL"];
 
 export const CDSC_URLS = {
   login: `${CDSC_BASE}/api/meroShare/auth/`,
@@ -56,12 +55,14 @@ export const CDSC_URLS = {
   edisMigratedTransferCsv: `${CDSC_BASE}/api/meroShareView/report/migrated/transfer/csv`,
 } as const;
 
+const CDSC_ORIGIN = process.env["CDSC_ORIGIN_URL"];
+
 const BASE_HEADERS: Record<string, string> = {
   Accept: "application/json, text/plain, */*",
   "Content-Type": "application/json",
   Connection: "keep-alive",
-  Origin: "https://meroshare.cdsc.com.np",
-  Referer: "https://meroshare.cdsc.com.np/",
+  Origin: CDSC_ORIGIN,
+  Referer: `${CDSC_ORIGIN}/`,
   "User-Agent":
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
 };

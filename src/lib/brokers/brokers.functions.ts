@@ -21,6 +21,7 @@ import {
   type FundTransaction,
   type FundTransactionPage,
   type FundTransactionQuery,
+  type ModifyOrderRequest,
   type PlaceOrderRequest,
   type PlaceOrderResult,
   type WithdrawRequest,
@@ -30,22 +31,26 @@ import { listConnections, loadCredentials, removeConnection, saveConnection } fr
 import {
   BrokerSessionError,
   cancelNaasaOrder,
+  deleteNaasaWatchlist,
   dropNaasaSession,
   dropWalletSession,
   exchangeTradeflowToken,
   getNaasaDepth,
   getNaasaHoldings,
+  getNaasaMarketWatch,
   getNaasaOrderBook,
   getNaasaQuote,
   getNaasaSession,
   getNaasaTokens,
   getNaasaTradeBook,
-  getNaasaAmoList,
+  getNaasaWatchlists,
   getTradeflowBanks,
   getTradeflowFunds,
   getTradeflowTxns,
   getWalletAccessToken,
+  modifyNaasaOrder,
   requestTradeflowWithdraw,
+  saveNaasaWatchlist,
   cancelNaasaAmo,
   placeNaasaAmo,
   placeNaasaOrder,
@@ -361,6 +366,48 @@ export const placeBrokerOrder = createServerFn({ method: "POST" })
     });
   });
 
+const modifyInput = z.object({
+  brokerId: z.enum(["naasa-x"]),
+  tranId: z.string().min(1).max(64),
+  orderId: z.string().min(1).max(64),
+  orderStatus: z.string().min(1).max(32),
+  remainingQty: z.number().positive().max(100000),
+  side: z.enum(["BUY", "SELL"]),
+  symbol: z.string().trim().min(3).max(24),
+  quantity: z.number().int().min(1).max(100000),
+  price: z.number().min(0).max(100000),
+  orderType: z.enum(["LMT", "MKT"]),
+  validity: z.enum(["DAY", "GTD", "GTC", "IOC", "FOK"]),
+  validTill: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  confirmed: z.literal(true, {
+    errorMap: () => ({ message: "Modifying needs explicit confirmation." }),
+  }),
+});
+
+/** Modifies a REAL order at the broker. Refuses without confirmed: true. */
+export const modifyBrokerOrder = createServerFn({ method: "POST" })
+  .validator((input: unknown): ModifyOrderRequest => modifyInput.parse(input) as ModifyOrderRequest)
+  .handler(async ({ data }): Promise<PlaceOrderResult> => {
+    return withBrokerSession(data.brokerId, async (session) => {
+      return modifyNaasaOrder(session, {
+        side: data.side,
+        symbol: data.symbol,
+        quantity: data.quantity,
+        price: data.price,
+        orderType: data.orderType,
+        validity: data.validity,
+        validTill: data.validTill,
+        tranId: data.tranId,
+        orderId: data.orderId,
+        orderStatus: data.orderStatus,
+        remainingQty: data.remainingQty,
+      });
+    });
+  });
+
 const placeAmoInput = z.object({
   brokerId: z.enum(["naasa-x"]),
   side: z.enum(["BUY", "SELL"]),
@@ -447,14 +494,19 @@ export const getBrokerTradeBook = createServerFn({ method: "GET" })
         ...(data.fromDate ? { fromDate: data.fromDate } : {}),
         ...(data.toDate ? { toDate: data.toDate } : {}),
       });
-      // eslint-disable-next-line no-console
+
       console.error("[tradebook] keys", rows.length > 0 ? Object.keys(rows[0] ?? {}) : []);
       return rows.map((r) => {
         const sideRaw = String(r["B/S"] ?? r["BuySellType"] ?? "").toUpperCase();
         // Date/time keys vary by report: prefer explicit fields, else split a
         // combined datetime ("2026-09-12T14:30:00" or "... 14:30:00").
         const rawDate =
-          r["Date"] ?? r["TradeDate"] ?? r["BusinessDate"] ?? r["TransactionDate"] ?? r["DateTime"] ?? "";
+          r["Date"] ??
+          r["TradeDate"] ??
+          r["BusinessDate"] ??
+          r["TransactionDate"] ??
+          r["DateTime"] ??
+          "";
         const rawTime =
           r["Time"] ?? r["TradeTime"] ?? r["TransactionTime"] ?? r["LastTradeTime"] ?? "";
         let date = String(rawDate ?? "");
@@ -723,4 +775,42 @@ export const requestBrokerWithdraw = createServerFn({ method: "POST" })
       requestTradeflowWithdraw(bearer, data.amount, data.isQuickRefund ?? false),
     );
     return result;
+  });
+
+export const getBrokerWatchlists = createServerFn({ method: "GET" })
+  .validator((input: unknown) => z.object({ brokerId: z.enum(["naasa-x"]) }).parse(input))
+  .handler(async ({ data }) => {
+    return withBrokerSession(data.brokerId, async (s) => getNaasaWatchlists(s));
+  });
+
+export const getBrokerWatchlistSymbols = createServerFn({ method: "GET" })
+  .validator((input: unknown) =>
+    z.object({ brokerId: z.enum(["naasa-x"]), template: z.string().min(1).max(64) }).parse(input),
+  )
+  .handler(async ({ data }) => {
+    return withBrokerSession(data.brokerId, async (s) => getNaasaMarketWatch(s, data.template));
+  });
+
+export const saveBrokerWatchlist = createServerFn({ method: "POST" })
+  .validator((input: unknown) =>
+    z
+      .object({
+        brokerId: z.enum(["naasa-x"]),
+        template: z.string().min(1).max(64),
+        symbols: z.array(z.string().trim().min(2).max(24)).max(200),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data }) => {
+    return withBrokerSession(data.brokerId, async (s) =>
+      saveNaasaWatchlist(s, data.template, data.symbols),
+    );
+  });
+
+export const deleteBrokerWatchlist = createServerFn({ method: "POST" })
+  .validator((input: unknown) =>
+    z.object({ brokerId: z.enum(["naasa-x"]), template: z.string().min(1).max(64) }).parse(input),
+  )
+  .handler(async ({ data }) => {
+    return withBrokerSession(data.brokerId, async (s) => deleteNaasaWatchlist(s, data.template));
   });

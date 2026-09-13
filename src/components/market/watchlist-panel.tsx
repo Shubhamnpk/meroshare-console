@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { CalendarDays, Search, Star, Trash2 } from "lucide-react";
+import { ArrowLeftRight, CalendarDays, Search, Star, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import {
   Sheet,
   SheetContent,
@@ -13,9 +14,12 @@ import {
 } from "@/components/ui/sheet";
 import { EmptyBlock } from "@/components/states";
 import { DeltaPill } from "@/components/stat-card";
-import { marketSnapshotQuery } from "@/lib/queries";
+import { brokerWatchlistsQuery, marketSnapshotQuery } from "@/lib/queries";
+import { saveBrokerWatchlist } from "@/lib/brokers/brokers.functions";
+import { errorMessage } from "@/lib/format";
 import { formatNpr, formatPercent } from "@/lib/format";
 import { useWatchlist } from "@/lib/watchlist";
+import { useWatchlist as usePrefsWatchlist } from "@/lib/prefs";
 
 /**
  * Watchlist as a side panel, shared by Market, Dashboard and Terminal.
@@ -31,8 +35,81 @@ export function WatchlistPanel({
   onPick: (symbol: string) => void;
 }) {
   const watchlist = useWatchlist();
+  // Also read prefs-watchlist for union (both hooks point to same store, but keep both for compat)
+  const prefsWatchlist = usePrefsWatchlist();
+  const queryClient = useQueryClient();
   const snapshot = useQuery(marketSnapshotQuery());
   const [term, setTerm] = useState("");
+
+  // Broker watchlist sync — reuses existing watchlist, no new panel.
+  // If a broker is linked, its symbols merge into local on open (and can be pushed back).
+  const brokerConns = useQuery({
+    queryKey: ["broker-connections"],
+    queryFn: async () => {
+      const { listBrokerConnections } = await import("@/lib/brokers/brokers.functions");
+      return listBrokerConnections();
+    },
+    staleTime: 30_000,
+    retry: false,
+  });
+  const brokerId = (brokerConns.data?.[0]?.brokerId ?? null) as
+    import("@/lib/brokers/types").BrokerId | null;
+  const brokerWatchlists = useQuery({
+    ...brokerWatchlistsQuery(brokerId),
+    enabled: Boolean(brokerId) && open,
+  });
+  const brokerSymbols = useMemo(() => {
+    const templates = brokerWatchlists.data ?? [];
+    return [...new Set(templates.flatMap((t) => t.symbols))];
+  }, [brokerWatchlists.data]);
+  const brokerSet = useMemo(() => new Set(brokerSymbols), [brokerSymbols]);
+  const onlyBroker = useMemo(
+    () => brokerSymbols.filter((s) => !prefsWatchlist.symbols.includes(s)),
+    [brokerSymbols, prefsWatchlist.symbols],
+  );
+  const onlyLocal = useMemo(
+    () => prefsWatchlist.symbols.filter((s) => !brokerSet.has(s)),
+    [prefsWatchlist.symbols, brokerSet],
+  );
+
+  // Auto-pull: when panel opens and broker has new scrips not in local, merge them in (union, no overwrite)
+  useEffect(() => {
+    if (!open || !brokerId || onlyBroker.length === 0) return;
+    // One-shot per open: pull broker → local
+    let added = 0;
+    for (const s of onlyBroker) {
+      if (!prefsWatchlist.has(s)) {
+        prefsWatchlist.toggle(s);
+        added++;
+      }
+    }
+    if (added > 0)
+      toast.success(`Synced ${added} scrip${added === 1 ? "" : "s"} from broker watchlist.`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, brokerId, brokerSymbols.join(",")]);
+
+  const pushLocalToBroker = useMutation({
+    mutationFn: async () => {
+      const templates = brokerWatchlists.data ?? [];
+      const target = templates.find((t) => /default/i.test(t.name)) ?? templates[0];
+      const template = target?.name ?? "Default";
+      const merged = [
+        ...new Set(
+          [...(target?.symbols ?? []), ...prefsWatchlist.symbols].map((s) => s.toUpperCase()),
+        ),
+      ];
+      const res = await saveBrokerWatchlist({
+        data: { brokerId: brokerId!, template, symbols: merged },
+      });
+      if (!res.ok) throw new Error(res.message);
+      return res.message;
+    },
+    onSuccess: (msg) => {
+      toast.success(msg);
+      void queryClient.invalidateQueries({ queryKey: ["broker-watchlists"] });
+    },
+    onError: (err) => toast.error(errorMessage(err, "Push failed.")),
+  });
 
   const prices = snapshot.data?.prices ?? [];
   const rows = useMemo(
@@ -116,6 +193,61 @@ export function WatchlistPanel({
             </ul>
           ) : null}
         </div>
+
+        {brokerId ? (
+          <div className="border-b border-border/60 bg-muted/20 px-4 py-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <p className="flex items-center gap-1.5 text-xs font-semibold">
+                <ArrowLeftRight className="size-3.5 text-primary" /> Broker watchlist
+                {brokerWatchlists.isPending ? (
+                  <span className="font-normal text-muted-foreground">· loading…</span>
+                ) : brokerSymbols.length > 0 ? (
+                  <span className="font-normal text-muted-foreground">
+                    · {brokerSymbols.length}
+                  </span>
+                ) : null}
+              </p>
+              <span className="text-[0.66rem] text-muted-foreground">
+                {onlyBroker.length === 0 && onlyLocal.length === 0
+                  ? "in sync"
+                  : `Δ ${onlyLocal.length + onlyBroker.length}`}
+              </span>
+            </div>
+            {brokerSymbols.length > 0 ? (
+              <p className="mt-1 flex flex-wrap gap-1">
+                {brokerSymbols.slice(0, 12).map((s) => (
+                  <span
+                    key={s}
+                    className="rounded-full bg-background px-2 py-0.5 text-[0.66rem] font-medium border border-border/60"
+                  >
+                    {s}
+                  </span>
+                ))}
+                {brokerSymbols.length > 12 ? (
+                  <span className="text-[0.66rem] text-muted-foreground">
+                    +{brokerSymbols.length - 12}
+                  </span>
+                ) : null}
+              </p>
+            ) : null}
+            <div className="mt-2 flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs flex-1"
+                disabled={pushLocalToBroker.isPending || onlyLocal.length === 0}
+                onClick={() => pushLocalToBroker.mutate()}
+              >
+                {pushLocalToBroker.isPending
+                  ? "Pushing…"
+                  : `Push local → broker${onlyLocal.length ? ` (${onlyLocal.length})` : ""}`}
+              </Button>
+            </div>
+            <p className="mt-1 text-[0.66rem] text-muted-foreground">
+              Auto-pulled on open · push is union, never drops.
+            </p>
+          </div>
+        ) : null}
 
         <div className="flex-1 overflow-y-auto px-4 py-3">
           {rows.length === 0 ? (

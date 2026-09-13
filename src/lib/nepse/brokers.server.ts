@@ -23,7 +23,7 @@ const TTL = {
   daily: 6 * 60 * 60_000,
 } as const;
 
-const YONEPSE_BASE = "https://shubhamnpk.github.io/yonepse";
+const YONEPSE_BASE = process.env["YONEPSE_BASE_URL"];
 
 type Rec = Record<string, unknown>;
 

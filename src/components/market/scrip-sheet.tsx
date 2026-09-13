@@ -61,6 +61,7 @@ import {
   scripFinancialsQuery,
   scripFullHistoryQuery,
   transactionsQuery,
+  udfHistoryQuery,
   waccReportQuery,
 } from "@/lib/queries";
 import { formatDate, formatNpr, formatPercent, formatQty, toNumber } from "@/lib/format";
@@ -743,7 +744,26 @@ export function ScripSheet({
     [fullHistory.data],
   );
   const dailyPoints = rangeKey === "All" && fullPoints.length >= 2 ? fullPoints : historyPoints;
-  const intradayPoints: PricePoint[] = useMemo(() => detail.data?.intraday ?? [], [detail.data]);
+  const udf = useQuery({
+    ...udfHistoryQuery(
+      upper || null,
+      rangeKey === "All" ? null : (rangeKey as import("@/lib/charts/udf").ChartRange),
+    ),
+    enabled: brokerOn && Boolean(symbol) && rangeKey === "1D",
+  });
+  const udfIntraday: PricePoint[] = useMemo(() => {
+    const pts = udf.data?.points ?? [];
+    return pts.map((p) => ({ time: p.time, value: p.value }));
+  }, [udf.data?.points]);
+  const useUdf =
+    brokerOn &&
+    rangeKey === "1D" &&
+    udfIntraday.length > 0 &&
+    (detail.data?.intraday ?? []).length === 0;
+  const intradayPoints: PricePoint[] = useMemo(
+    () => (useUdf ? udfIntraday : (detail.data?.intraday ?? [])),
+    [useUdf, udfIntraday, detail.data],
+  );
 
   const ranges = useMemo(() => {
     const built = buildScripRanges(intradayPoints, dailyPoints);
@@ -846,32 +866,32 @@ export function ScripSheet({
               </span>
               <div className="min-w-0 pb-1">
                 <span className="flex items-center gap-2">
-                <SheetTitle className="font-display text-xl">{upper || "Scrip"}</SheetTitle>
-                {price ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      watchlist.toggle(upper);
-                      toast.success(watched ? "Removed from watchlist" : "Added to watchlist");
-                    }}
-                    aria-label={watched ? "Remove from watchlist" : "Add to watchlist"}
-                    title={watched ? "Remove from watchlist" : "Add to watchlist"}
-                    className={cn(
-                      "inline-flex size-7 shrink-0 items-center justify-center rounded-lg border transition-colors",
-                      watched
-                        ? "border-primary/50 bg-primary/15 text-primary"
-                        : "border-border/70 text-muted-foreground hover:border-primary/40 hover:text-primary",
-                    )}
-                  >
-                    {watched ? <StarOff className="size-3.5" /> : <Star className="size-3.5" />}
-                  </button>
+                  <SheetTitle className="font-display text-xl">{upper || "Scrip"}</SheetTitle>
+                  {price ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        watchlist.toggle(upper);
+                        toast.success(watched ? "Removed from watchlist" : "Added to watchlist");
+                      }}
+                      aria-label={watched ? "Remove from watchlist" : "Add to watchlist"}
+                      title={watched ? "Remove from watchlist" : "Add to watchlist"}
+                      className={cn(
+                        "inline-flex size-7 shrink-0 items-center justify-center rounded-lg border transition-colors",
+                        watched
+                          ? "border-primary/50 bg-primary/15 text-primary"
+                          : "border-border/70 text-muted-foreground hover:border-primary/40 hover:text-primary",
+                      )}
+                    >
+                      {watched ? <StarOff className="size-3.5" /> : <Star className="size-3.5" />}
+                    </button>
+                  ) : null}
+                </span>
+                {price || overview ? (
+                  <SheetDescription className="truncate text-left">
+                    {overview?.name ?? price?.name}
+                  </SheetDescription>
                 ) : null}
-              </span>
-              {price || overview ? (
-                <SheetDescription className="truncate text-left">
-                  {overview?.name ?? price?.name}
-                </SheetDescription>
-              ) : null}
               </div>
             </div>
             {price ? (
@@ -971,10 +991,13 @@ export function ScripSheet({
                       </button>
                       <button
                         type="button"
-                        onClick={() => setChartOpen(true)}
+                        onClick={() => {
+                          onOpenChange(false);
+                          void navigate({ to: "/terminal", search: { symbol: upper } });
+                        }}
                         className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
                       >
-                        <Maximize2 className="size-3.5" /> Enlarge
+                        <Maximize2 className="size-3.5" /> Terminal
                       </button>
                     </div>
                   ) : null}
@@ -1028,7 +1051,7 @@ export function ScripSheet({
                     </div>
                     <p className="mt-2 text-[0.68rem] text-muted-foreground">
                       {activeRange?.key === "1D"
-                        ? `Today's intraday session (${intradayPoints.length} ticks). `
+                        ? `Today's intraday session (${intradayPoints.length} ticks)${useUdf ? " · Source: UDF · NEPSE" : ""}. `
                         : activeRange?.key === "All"
                           ? `Whole LTP history from the YONEPSE archive${fullSince ? ` since ${fullSince.toLocaleDateString("en-GB", { month: "short", year: "numeric" })}` : ""} (${formatQty(fullPoints.length)} closes). `
                           : `Daily closes from the YONEPSE LTP archive, ${activeRange?.label ?? ""}. `}

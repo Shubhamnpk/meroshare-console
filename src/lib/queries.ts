@@ -66,7 +66,10 @@ import {
   getBrokerAmoList,
   getBrokerQuote,
   getBrokerTradeBook,
+  getBrokerWatchlists,
+  getBrokerWatchlistSymbols,
 } from "./brokers/brokers.functions";
+import { getUdfHistory } from "./charts/udf.functions";
 import type { BrokerId } from "./brokers/types";
 import type { MfPipelineType } from "./mutual-funds/types";
 import {
@@ -310,6 +313,41 @@ export const brokerBanksQuery = (brokerId: BrokerId | null) =>
     queryFn: () => getBrokerBanks({ data: { brokerId: brokerId! } }),
     enabled: Boolean(brokerId),
     staleTime: 5 * 60_000,
+    retry: false,
+  });
+
+export const brokerWatchlistsQuery = (brokerId: BrokerId | null) =>
+  queryOptions({
+    queryKey: ["broker-watchlists", brokerId],
+    queryFn: () => getBrokerWatchlists({ data: { brokerId: brokerId! } }),
+    enabled: Boolean(brokerId),
+    staleTime: 30_000,
+    retry: false,
+  });
+
+export const brokerWatchlistSymbolsQuery = (brokerId: BrokerId | null, template: string | null) =>
+  queryOptions({
+    queryKey: ["broker-watchlist-symbols", brokerId, template],
+    queryFn: () =>
+      getBrokerWatchlistSymbols({ data: { brokerId: brokerId!, template: template! } }),
+    enabled: Boolean(brokerId && template),
+    staleTime: 30_000,
+    retry: false,
+  });
+
+export const udfHistoryQuery = (
+  symbol: string | null,
+  range: import("./charts/udf").ChartRange | null,
+  intradayRes?: import("./charts/udf").UdfResolution | null,
+) =>
+  queryOptions({
+    queryKey: ["udf-history", symbol, range, intradayRes ?? ""],
+    queryFn: () =>
+      getUdfHistory({ data: { symbol: symbol!, range: range!, intradayRes: intradayRes ?? null } }),
+    enabled: Boolean(symbol && range),
+    staleTime: range === "1D" ? 15_000 : 60_000,
+    refetchInterval: range === "1D" ? 15_000 : false,
+    refetchIntervalInBackground: range === "1D",
     retry: false,
   });
 

@@ -1,0 +1,662 @@
+[
+  {
+    "id": 1287,
+    "code": "19000",
+    "name": "AAKASH CAPITAL LIMITED"
+  },
+  {
+    "id": 1315,
+    "code": "20600",
+    "name": "AAKASHBHAIRAB SECURITIES LIMITED"
+  },
+  {
+    "id": 128,
+    "code": "13200",
+    "name": "ABC SECURITIES PRIVATE LIMITED"
+  },
+  {
+    "id": 129,
+    "code": "12300",
+    "name": "AGRAWAL SECURITIES PRIVATE LIMITED"
+  },
+  {
+    "id": 130,
+    "code": "17200",
+    "name": "AGRICULTURAL DEVELOPMENT BANK LIMITED"
+  },
+  {
+    "id": 2155,
+    "code": "22300",
+    "name": "APPLE SECURITIES PVT. LTD."
+  },
+  {
+    "id": 2136,
+    "code": "21800",
+    "name": "ARUN SECURITIES PVT. LTD."
+  },
+  {
+    "id": 131,
+    "code": "11900",
+    "name": "ARYATARA INVESTMENT AND SECURITIES PRIVATE LIMITED"
+  },
+  {
+    "id": 132,
+    "code": "15600",
+    "name": "ASHUTOSH BROKERAGE AND SECURITIES PRIVATE LIMITED"
+  },
+  {
+    "id": 201,
+    "code": "17500",
+    "name": "ASIAN CAPITAL LIMITED"
+  },
+  {
+    "id": 133,
+    "code": "14700",
+    "name": "ASIAN SECURITIES PRIVATE LIMITED"
+  },
+  {
+    "id": 2170,
+    "code": "23200",
+    "name": "BENI SECURITIES PVT. LTD."
+  },
+  {
+    "id": 1298,
+    "code": "19100",
+    "name": "BHOLE GANESH SECURITIES LIMITED."
+  },
+  {
+    "id": 135,
+    "code": "15000",
+    "name": "BHRIKUTI STOCK BROKING COMPANY PRIVATE LIMITED"
+  },
+  {
+    "id": 1314,
+    "code": "20700",
+    "name": "BLUE CHIP SECURITIES LIMITED"
+  },
+  {
+    "id": 1318,
+    "code": "20900",
+    "name": "CAPITAL HUB PVT. LTD."
+  },
+  {
+    "id": 1292,
+    "code": "19500",
+    "name": "CAPITAL MAX SECURITIES LIMITED"
+  },
+  {
+    "id": 137,
+    "code": "11700",
+    "name": "CITIZENS BANK INTERNATIONAL LIMITED"
+  },
+  {
+    "id": 139,
+    "code": "13300",
+    "name": "CREATIVE SECURITIES PRIVATE LIMITED"
+  },
+  {
+    "id": 140,
+    "code": "13400",
+    "name": "CRYSTAL KANCHANJUNGHA SECURITIES PVT. LTD"
+  },
+  {
+    "id": 141,
+    "code": "12000",
+    "name": "DAKSHINKALI INVESTMENT AND SECURITIES PRIVATE LIMITED"
+  },
+  {
+    "id": 142,
+    "code": "14500",
+    "name": "DEEVYAA  SECURITIES & STOCK HOUSE PRIVATE LIMITED"
+  },
+  {
+    "id": 143,
+    "code": "11300",
+    "name": "DIPSHIKHA DHITOPATRA KAROBAR COMPANY (P.) LTD."
+  },
+  {
+    "id": 144,
+    "code": "14900",
+    "name": "DYNAMIC MONEY MANAGERS SECURITIES PRIVATE LIMITED"
+  },
+  {
+    "id": 1311,
+    "code": "20300",
+    "name": "ELITE MERCHANT CAPITAL LIMITED"
+  },
+  {
+    "id": 1305,
+    "code": "19800",
+    "name": "ELITE STOCK HOUSE LIMITED"
+  },
+  {
+    "id": 145,
+    "code": "10800",
+    "name": "EVEREST BANK LTD."
+  },
+  {
+    "id": 153,
+    "code": "17600",
+    "name": "GARIMA CAPITAL LIMITED"
+  },
+  {
+    "id": 2137,
+    "code": "21900",
+    "name": "GARIMA SECURITIES LIMITED"
+  },
+  {
+    "id": 134,
+    "code": "11100",
+    "name": "GLOBAL IME BANK LIMITED"
+  },
+  {
+    "id": 151,
+    "code": "12200",
+    "name": "GLOBAL IME BANK LIMITED"
+  },
+  {
+    "id": 146,
+    "code": "11200",
+    "name": "GLOBAL IME CAPITAL LIMITED"
+  },
+  {
+    "id": 147,
+    "code": "16200",
+    "name": "GUHESWORI MERCHANT BANKING & FINANCE LIMITED"
+  },
+  {
+    "id": 681,
+    "code": "18000",
+    "name": "GURKHAS FINANCE LIMITED"
+  },
+  {
+    "id": 1317,
+    "code": "20500",
+    "name": "HATEMALO FINANCIAL SERVICES PRIVATE LIMITED"
+  },
+  {
+    "id": 2164,
+    "code": "22900",
+    "name": "HIMALAYA SECURITIES BANKER LIMITED"
+  },
+  {
+    "id": 1297,
+    "code": "19600",
+    "name": "HIMALAYAN BROKERAGE COMPANY LIMITED"
+  },
+  {
+    "id": 138,
+    "code": "10100",
+    "name": "HIMALAYAN CAPITAL LIMITED"
+  },
+  {
+    "id": 148,
+    "code": "17700",
+    "name": "HIMALAYAN CAPITAL LIMITED"
+  },
+  {
+    "id": 2162,
+    "code": "22800",
+    "name": "HIMALAYAN INVESTMENT BANKER LIMITED"
+  },
+  {
+    "id": 149,
+    "code": "17400",
+    "name": "ICFC FINANCE LIMITED"
+  },
+  {
+    "id": 150,
+    "code": "13100",
+    "name": "IMPERIAL SECURITIES COMPANY LIMITED"
+  },
+  {
+    "id": 1308,
+    "code": "20000",
+    "name": "INDEX SECURITIES LIMITED"
+  },
+  {
+    "id": 1316,
+    "code": "20800",
+    "name": "INDIRA SECURITIES PVT. LTD."
+  },
+  {
+    "id": 1306,
+    "code": "19900",
+    "name": "INFINITY SECURITIES LIMITED"
+  },
+  {
+    "id": 2167,
+    "code": "23100",
+    "name": "INVESTMENT MANAGEMENT NEPAL PVT. LTD."
+  },
+  {
+    "id": 2169,
+    "code": "23300",
+    "name": "JF SECURITIES COMPANY PVT. LTD."
+  },
+  {
+    "id": 402,
+    "code": "17900",
+    "name": "JYOTI BIKASH BANK LIMITED"
+  },
+  {
+    "id": 2140,
+    "code": "22000",
+    "name": "K.B.L. SECURITIES LIMITED."
+  },
+  {
+    "id": 1309,
+    "code": "20100",
+    "name": "KALASH STOCK MARKET PVT. LTD."
+  },
+  {
+    "id": 1271,
+    "code": "18700",
+    "name": "KALIKA SECURITIES PVT. LTD."
+  },
+  {
+    "id": 1182,
+    "code": "18200",
+    "name": "KAMANA SEWA BIKAS BANK LIMITED."
+  },
+  {
+    "id": 154,
+    "code": "14300",
+    "name": "KOHINOOR INVESTMENT & SECURITIES PRIVATE LIMITED"
+  },
+  {
+    "id": 156,
+    "code": "15200",
+    "name": "KUMARI BANK LIMITED"
+  },
+  {
+    "id": 168,
+    "code": "16300",
+    "name": "KUMARI BANK LIMITED"
+  },
+  {
+    "id": 195,
+    "code": "12400",
+    "name": "LAXMI SUNRISE CAPITAL LIMITED"
+  },
+  {
+    "id": 157,
+    "code": "10700",
+    "name": "LAXMI SUNRISE CAPITAL LIMITED"
+  },
+  {
+    "id": 158,
+    "code": "13800",
+    "name": "LINCH STOCK MARKET  LIMITED"
+  },
+  {
+    "id": 159,
+    "code": "16100",
+    "name": "MACHHAPUCHCHHRE BANK LIMITED"
+  },
+  {
+    "id": 155,
+    "code": "14100",
+    "name": "MACHHAPUCHCHHRE CAPITAL LIMITED"
+  },
+  {
+    "id": 1327,
+    "code": "21400",
+    "name": "MACHHAPUCHCHHRE SECURITIES LTD."
+  },
+  {
+    "id": 2156,
+    "code": "22200",
+    "name": "MAGNET SECURITIES AND INVESTMENT COMPANY PVT. LTD."
+  },
+  {
+    "id": 160,
+    "code": "16700",
+    "name": "MAHALAXMI BIKAS BANK LIMITED"
+  },
+  {
+    "id": 1281,
+    "code": "18900",
+    "name": "MANJUSHREE FINANCE LIMITED"
+  },
+  {
+    "id": 161,
+    "code": "13600",
+    "name": "MARKET SECURITIES EXCHANGE COMPANY PVT. LTD"
+  },
+  {
+    "id": 1329,
+    "code": "21600",
+    "name": "MILKY WAY SHARE BROKER COMPANY LTD."
+  },
+  {
+    "id": 1295,
+    "code": "19700",
+    "name": "MIYO SECURITIES PRIVATE LIMITED"
+  },
+  {
+    "id": 1325,
+    "code": "21100",
+    "name": "MONEY WORLD SHARE EXCHANGE PVT. LTD."
+  },
+  {
+    "id": 199,
+    "code": "12500",
+    "name": "MUKTINATH CAPITAL LIMITED"
+  },
+  {
+    "id": 163,
+    "code": "15900",
+    "name": "NAASA SECURITIES COMPANY LTD"
+  },
+  {
+    "id": 198,
+    "code": "16800",
+    "name": "NABIL BANK LIMITED"
+  },
+  {
+    "id": 166,
+    "code": "15100",
+    "name": "NABIL BANK LIMITED"
+  },
+  {
+    "id": 164,
+    "code": "10400",
+    "name": "NABIL INVESTMENT BANKING LTD."
+  },
+  {
+    "id": 1320,
+    "code": "20400",
+    "name": "NAGARIK STOCK DEALER COMPANY LIMITED"
+  },
+  {
+    "id": 2171,
+    "code": "23400",
+    "name": "NATIONAL CAPITAL LIMITED"
+  },
+  {
+    "id": 167,
+    "code": "15700",
+    "name": "NEPAL BANK LIMITED"
+  },
+  {
+    "id": 169,
+    "code": "15500",
+    "name": "NEPAL DP LIMITED"
+  },
+  {
+    "id": 2182,
+    "code": "23500",
+    "name": "NEPAL INVESTMENT AND SECURITIES TRADING PVT. LTD."
+  },
+  {
+    "id": 165,
+    "code": "16400",
+    "name": "NEPAL LIFE CAPITAL LIMITED"
+  },
+  {
+    "id": 170,
+    "code": "15300",
+    "name": "NEPAL SBI BANK LIMITED"
+  },
+  {
+    "id": 171,
+    "code": "11500",
+    "name": "NEPAL STOCK HOUSE PRIVATE LIMITED"
+  },
+  {
+    "id": 174,
+    "code": "13700",
+    "name": "NIC ASIA BANK LIMITED"
+  },
+  {
+    "id": 173,
+    "code": "10600",
+    "name": "NIMB ACE CAPITAL LIMITED"
+  },
+  {
+    "id": 172,
+    "code": "10200",
+    "name": "NIMB ACE CAPITAL LIMITED"
+  },
+  {
+    "id": 162,
+    "code": "17300",
+    "name": "NIMB ACE CAPITAL LIMITED"
+  },
+  {
+    "id": 175,
+    "code": "11000",
+    "name": "NMB CAPITAL LIMITED"
+  },
+  {
+    "id": 176,
+    "code": "11800",
+    "name": "ONLINE SECURITIES LIMITED"
+  },
+  {
+    "id": 1324,
+    "code": "21200",
+    "name": "OPAL SECURITIES INVESTMENT PVT. LTD."
+  },
+  {
+    "id": 177,
+    "code": "17000",
+    "name": "OXFORD SECURITIES PVT. LTD."
+  },
+  {
+    "id": 1328,
+    "code": "21300",
+    "name": "PAHI INVESTMENT PVT. LTD."
+  },
+  {
+    "id": 178,
+    "code": "13900",
+    "name": "PRABHU BANK LIMITED"
+  },
+  {
+    "id": 136,
+    "code": "16000",
+    "name": "PRABHU BANK LIMITED"
+  },
+  {
+    "id": 179,
+    "code": "12600",
+    "name": "PRABHU CAPITAL LIMITED"
+  },
+  {
+    "id": 2161,
+    "code": "22600",
+    "name": "PRAGYAN SECURITIES PVT. LTD."
+  },
+  {
+    "id": 180,
+    "code": "14800",
+    "name": "PREMIER SECURITIES COMPANY LIMITED"
+  },
+  {
+    "id": 152,
+    "code": "15400",
+    "name": "PRIME COMMERCIAL BANK LIMITED"
+  },
+  {
+    "id": 181,
+    "code": "16900",
+    "name": "PRIME COMMERCIAL BANK LIMITED"
+  },
+  {
+    "id": 182,
+    "code": "12800",
+    "name": "PRIMO SECURITIES PRIVATE LIMITED"
+  },
+  {
+    "id": 1270,
+    "code": "18600",
+    "name": "PROGRESSIVE FINANCE LIMITED"
+  },
+  {
+    "id": 1293,
+    "code": "19400",
+    "name": "PROPERTY WIZARD LIMITED"
+  },
+  {
+    "id": 183,
+    "code": "16600",
+    "name": "PROVIDENT MERCHANT BANKING LIMITED"
+  },
+  {
+    "id": 2165,
+    "code": "23000",
+    "name": "R.B.B. SECURITIES COMPANY LTD."
+  },
+  {
+    "id": 184,
+    "code": "16500",
+    "name": "RBB MERCHANT BANKING LIMITED"
+  },
+  {
+    "id": 2142,
+    "code": "22100",
+    "name": "ROADSHOW SECURITIES LTD."
+  },
+  {
+    "id": 1326,
+    "code": "21500",
+    "name": "S.P.S.A. SECURITIES LTD."
+  },
+  {
+    "id": 2134,
+    "code": "21700",
+    "name": "SAJILO BROKER LIMITED"
+  },
+  {
+    "id": 1080,
+    "code": "18100",
+    "name": "SAMPANNA CAPITAL AND ADVISORY NEPAL LIMITED"
+  },
+  {
+    "id": 185,
+    "code": "14400",
+    "name": "SANI SECURITIES COMPANY LIMITED"
+  },
+  {
+    "id": 186,
+    "code": "15800",
+    "name": "SANIMA BANK LTD"
+  },
+  {
+    "id": 2157,
+    "code": "22400",
+    "name": "SANIMA SECURITIES LIMITED"
+  },
+  {
+    "id": 187,
+    "code": "11600",
+    "name": "SECURED SECURITIES LIMITED"
+  },
+  {
+    "id": 188,
+    "code": "12700",
+    "name": "SEWA SECURITIES PRIVATE LIMITED"
+  },
+  {
+    "id": 1189,
+    "code": "18400",
+    "name": "SHANGRI-LA DEVELOPMENT BANK LIMITED"
+  },
+  {
+    "id": 1294,
+    "code": "19200",
+    "name": "SHAREPRO SECURITIES PVT.LTD."
+  },
+  {
+    "id": 1196,
+    "code": "18500",
+    "name": "SHINE RESUNGA DEVELOPMENT BANK LIMITED"
+  },
+  {
+    "id": 1274,
+    "code": "18800",
+    "name": "SHREE INVESTMENT AND FINANCE CO. LTD."
+  },
+  {
+    "id": 189,
+    "code": "12900",
+    "name": "SHREE KRISHNA SECURITIES LIMITED"
+  },
+  {
+    "id": 1310,
+    "code": "20200",
+    "name": "SHUBHAKAMANA SECURITIES PVT. LTD."
+  },
+  {
+    "id": 190,
+    "code": "10900",
+    "name": "SIDDHARTHA CAPITAL LIMITED"
+  },
+  {
+    "id": 191,
+    "code": "14600",
+    "name": "SIPLA SECURITIES PRIVATE LIMITED"
+  },
+  {
+    "id": 192,
+    "code": "13000",
+    "name": "SOUTH ASIAN BULLS PRIVATE LIMITED"
+  },
+  {
+    "id": 193,
+    "code": "14000",
+    "name": "SRI HARI SECURITIES PVT. LTD."
+  },
+  {
+    "id": 1319,
+    "code": "21000",
+    "name": "STOXKARTS SECURITIES LIMITED"
+  },
+  {
+    "id": 194,
+    "code": "14200",
+    "name": "SUMERU  SECURITIES  PRIVATE  LIMITED"
+  },
+  {
+    "id": 1296,
+    "code": "19300",
+    "name": "SUN SECURITIES PVT. LTD."
+  },
+  {
+    "id": 370,
+    "code": "17800",
+    "name": "SUNDHARA SECURITIES LIMITED"
+  },
+  {
+    "id": 2158,
+    "code": "22500",
+    "name": "SUNLIFE CAPITAL LIMITED"
+  },
+  {
+    "id": 1186,
+    "code": "18300",
+    "name": "SWARNALAXMI SECURITIES PVT. LTD."
+  },
+  {
+    "id": 2163,
+    "code": "22700",
+    "name": "TRADEMOW SECURITIES PVT. LTD."
+  },
+  {
+    "id": 196,
+    "code": "11400",
+    "name": "TRISHAKTI SECURITIES PUBLIC LIMITED"
+  },
+  {
+    "id": 197,
+    "code": "17100",
+    "name": "TRISHUL SECURITIES & INVESTMENT LIMITED"
+  },
+  {
+    "id": 200,
+    "code": "13500",
+    "name": "VISION SECURITIES PVT. LTD"
+  }
+]

@@ -33,8 +33,8 @@ import { monthKeyFromEpoch, monthStartEpoch, unitsHeldAt, type UnitSnapshot } fr
 import { vendoredSectorMap } from "./sectors";
 import { canonicalSymbol, matchSymbols } from "./aliases";
 
-const BITNEPAL_BASE = "https://nepse.bitnepal.net/api/v1";
-const YONEPSE_BASE = "https://shubhamnpk.github.io/yonepse";
+const NEPSE_API = process.env["NEPSE_API_URL"];
+const YONEPSE_BASE = process.env["YONEPSE_BASE_URL"];
 
 export const FEED_ATTRIBUTION =
   "Live NEPSE mirror + community YONEPSE feed (indicative, unofficial data).";
@@ -103,7 +103,7 @@ async function bitnepalJson<T>(
   ttlMs: number,
 ): Promise<{ data: T | null; stale: boolean }> {
   const { data, stale } = await feedJson<{ success: boolean; data: T | null }>(
-    `${BITNEPAL_BASE}${path}`,
+    `${NEPSE_API}${path}`,
     ttlMs,
   );
   return { data: data?.data ?? null, stale };

@@ -94,7 +94,6 @@ import { BROKERS, type BrokerId, type BrokerTestResult } from "@/lib/brokers/typ
 import {
   disableBiometrics,
   enrollBiometric,
-  enrollBiometricDetailed,
   getEnrollment,
   isPlatformAuthenticatorAvailable,
   isWebAuthnSupported,
@@ -255,8 +254,6 @@ function BiometricCard() {
   const [vaultSaved, setVaultSaved] = useState(false);
   const [supported, setSupported] = useState<boolean | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const [prfVerdict, setPrfVerdict] = useState<boolean | null>(null);
-  const [prfBlocked, setPrfBlocked] = useState(false);
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -286,14 +283,9 @@ function BiometricCard() {
   const dpName =
     capitals.data?.find((c) => c.id === capitalId)?.name ?? (capitalId ? `DP #${capitalId}` : "-");
 
-  // The device confirmed it cannot store encrypted sign-ins (passkey still
-  // works for app unlock). Shown instead of the password form.
-  const showBlocked = prfBlocked || (enrollment !== null && prfVerdict === false && !vaultSaved);
-
   const openModal = () => {
     setError(null);
     setStatus(null);
-    setPrfBlocked(false);
     setModalOpen(true);
   };
 
@@ -302,17 +294,12 @@ function BiometricCard() {
     setPassword("");
     setStatus(null);
     setError(null);
-    setPrfBlocked(false);
-  };
-
-  const onEnable = () => {
-    openModal();
   };
 
   const doDemoEnroll = async () => {
     setBusy(true);
     setError(null);
-    setStatus("Waiting for your fingerprint…");
+    setStatus("Waiting for your fingerprint or PIN…");
     try {
       const created = await enrollBiometric(username);
       setEnrollment(created);
@@ -320,23 +307,6 @@ function BiometricCard() {
     } catch (err) {
       setStatus(null);
       setError(err instanceof Error ? err.message : "Could not set up biometrics.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const doSaveVault = async (creds: { capitalId: number; username: string; password: string }) => {
-    setBusy(true);
-    setError(null);
-    setStatus("Step 2 of 2: touch your fingerprint again to encrypt the sign-in…");
-    try {
-      await writeVault(creds);
-      setVaultSaved(true);
-      return true;
-    } catch (err) {
-      setStatus(null);
-      setError(err instanceof Error ? err.message : "Could not save the sign-in.");
-      return false;
     } finally {
       setBusy(false);
     }
@@ -353,7 +323,6 @@ function BiometricCard() {
     setError(null);
     setStatus("Verifying password…");
     try {
-      // Re-signing in proves the password is correct before biometrics are enrolled.
       await login({ data: creds });
     } catch (err) {
       setBusy(false);
@@ -362,24 +331,13 @@ function BiometricCard() {
       return;
     }
     setBusy(false);
-    // The passkey may already exist (retry after a cancelled save) - only step 2 then.
     if (!getEnrollment()) {
       setBusy(true);
       setError(null);
-      setStatus("Step 1 of 2: touch your fingerprint to create the passkey…");
+      setStatus("Touch your fingerprint, face, or enter your PIN…");
       try {
-        const result = await enrollBiometricDetailed(username);
-        setEnrollment(result.enrollment);
-        setPrfVerdict(result.prfEnabled);
-        if (result.prfEnabled === false) {
-          // Definitive: this device cannot store encrypted sign-ins. Stop
-          // before asking anything else - the passkey still unlocks the app.
-          setBusy(false);
-          setStatus(null);
-          setPassword("");
-          setPrfBlocked(true);
-          return;
-        }
+        const created = await enrollBiometric(username);
+        setEnrollment(created);
       } catch (err) {
         setBusy(false);
         setStatus(null);
@@ -388,11 +346,21 @@ function BiometricCard() {
       }
       setBusy(false);
     }
-    const saved = await doSaveVault(creds);
-    if (!saved) return;
+    setBusy(true);
+    setError(null);
+    setStatus("Saving sign-in for fingerprint login…");
+    try {
+      await writeVault(creds);
+      setVaultSaved(true);
+    } catch (err) {
+      setBusy(false);
+      setStatus(null);
+      setError(err instanceof Error ? err.message : "Could not save sign-in.");
+      return;
+    }
+    setBusy(false);
     setPassword("");
     closeModal();
-    setStatus("Fingerprint sign-in is ready, try it on the sign-in page.");
   };
 
   const onDisable = () => {
@@ -402,7 +370,6 @@ function BiometricCard() {
     setVaultSaved(false);
     setPassword("");
     setError(null);
-    setPrfVerdict(null);
   };
 
   const onRemoveVault = () => {
@@ -421,7 +388,7 @@ function BiometricCard() {
           <p className="text-xs text-muted-foreground">
             {enrollment
               ? `On since ${formatDate(enrollment.createdAt)}. Unlocks the app on this device.`
-              : "Use fingerprint or face to unlock the app on this device."}
+              : "Use fingerprint, face, or PIN to unlock the app on this device."}
           </p>
         </div>
         {enrollment ? (
@@ -436,7 +403,7 @@ function BiometricCard() {
             </Button>
           </div>
         ) : (
-          <Button size="sm" onClick={onEnable} disabled={busy} className="shrink-0">
+          <Button size="sm" onClick={openModal} disabled={busy} className="shrink-0">
             {busy ? "Setting up…" : "Enable"}
           </Button>
         )}
@@ -445,7 +412,7 @@ function BiometricCard() {
       {enrollment && vaultSaved ? (
         <div className="mt-2.5 flex items-center justify-between gap-4 rounded-lg border border-gain/30 bg-gain/10 px-3 py-2">
           <p className="text-xs font-medium text-gain">
-            Fingerprint sign-in is saved, DP, username and password, encrypted on this device.
+            Fingerprint sign-in is saved. Your DP, username and password are stored on this device.
           </p>
           <Button
             variant="ghost"
@@ -468,9 +435,9 @@ function BiometricCard() {
             </button>
           </TooltipTrigger>
           <TooltipContent className="max-w-xs text-xs leading-relaxed">
-            A convenience lock for this device only. Saved sign-ins are encrypted with a key your
-            fingerprint unlocks, nothing readable ever leaves the device. Your MeroShare session
-            still expires normally and sign-in always needs your password the first time.
+            A convenience lock for this device only. Uses your device&apos;s fingerprint, face,
+            or PIN. When enabled, one-tap sign-in saves your credentials on this device so your
+            fingerprint signs you in next time. Your MeroShare session still expires normally.
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -487,62 +454,34 @@ function BiometricCard() {
               <Fingerprint className="size-5 text-primary" /> Fingerprint setup
             </DialogTitle>
             <DialogDescription>
-              Checked on this device only. Your fingerprint never leaves it.
+              Uses your device&apos;s biometrics or screen lock PIN. Checked on this device only.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-1.5 rounded-xl border border-border/60 bg-muted/30 p-3">
-            <CheckRow label="Fingerprint / face unlock" state={supported} />
-            <CheckRow
-              label="Encrypted sign-in storage"
-              state={prfVerdict}
-              pendingText="Checked during setup"
-            />
+            <CheckRow label="Biometrics / device PIN" state={supported} />
           </div>
 
           {supported === false ? (
             <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3.5 text-xs leading-relaxed">
               <p className="font-semibold text-destructive">Not available on this device</p>
               <p className="mt-1 text-muted-foreground">
-                Fingerprint unlock needs a phone or laptop with fingerprint or face unlock set up,
-                used over HTTPS or the installed app, with a screen lock turned on.
+                Fingerprint unlock needs a phone or laptop with fingerprint, face, or screen lock
+                PIN set up, used over HTTPS or the installed app.
               </p>
               <Button size="sm" className="mt-3" onClick={closeModal}>
                 Got it
               </Button>
             </div>
-          ) : showBlocked ? (
-            <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3.5 text-xs leading-relaxed">
-              <p className="font-semibold">Passkey created, but with a limit</p>
-              <p className="mt-1 text-muted-foreground">
-                This device cannot store encrypted sign-ins, so fingerprint login won&apos;t work
-                here. The passkey still unlocks the app on this device.
-              </p>
-              <div className="mt-3 flex gap-2">
-                <Button size="sm" onClick={closeModal}>
-                  Keep for app unlock
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    onDisable();
-                    closeModal();
-                  }}
-                >
-                  Remove passkey
-                </Button>
-              </div>
-            </div>
           ) : isDemo ? (
             <div className="space-y-3">
               <p className="text-xs leading-relaxed text-muted-foreground">
-                Demo mode has no MeroShare password, this creates the passkey for app unlock only.
+                Demo mode has no MeroShare password, this creates the device lock only.
               </p>
               {status ? <p className="text-xs text-muted-foreground">{status}</p> : null}
               {error ? <p className="text-xs text-destructive">{error}</p> : null}
               <Button size="sm" disabled={busy} onClick={() => void doDemoEnroll()}>
-                {busy ? "Waiting for fingerprint…" : "Create passkey"}
+                {busy ? "Waiting…" : "Create device lock"}
               </Button>
             </div>
           ) : (

@@ -6,9 +6,11 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
+import { fetchServerWatchlist, pushWatchlist } from "@/lib/meroshare/watchlist.functions";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -296,28 +298,63 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
     return () => mq.removeEventListener("change", onChange);
   }, [prefs.theme]);
 
-  // Watchlist helpers
-  const toggleWatchlist = useCallback((symbol: string) => {
-    const upper = symbol.toUpperCase();
-    setPrefs((s) => ({
-      ...s,
-      watchlist: s.watchlist.includes(upper)
-        ? s.watchlist.filter((x) => x !== upper)
-        : [...s.watchlist, upper],
-    }));
+  // Fire-and-forget push to server; errors are silent (local state is always
+  // authoritative, server sync is best-effort).
+  const syncWatchlist = useCallback((symbols: string[]) => {
+    pushWatchlist({ data: { symbols } }).catch(() => {});
   }, []);
 
-  const removeFromWatchlist = useCallback((symbol: string) => {
-    setPrefs((s) => ({
-      ...s,
-      watchlist: s.watchlist.filter((x) => x !== symbol.toUpperCase()),
-    }));
-  }, []);
+  // Watchlist helpers — every mutation also pushes to the session cookie.
+  const toggleWatchlist = useCallback(
+    (symbol: string) => {
+      const upper = symbol.toUpperCase();
+      setPrefs((s) => {
+        const next = s.watchlist.includes(upper)
+          ? s.watchlist.filter((x) => x !== upper)
+          : [...s.watchlist, upper];
+        syncWatchlist(next);
+        return { ...s, watchlist: next };
+      });
+    },
+    [syncWatchlist],
+  );
+
+  const removeFromWatchlist = useCallback(
+    (symbol: string) => {
+      setPrefs((s) => {
+        const next = s.watchlist.filter((x) => x !== symbol.toUpperCase());
+        syncWatchlist(next);
+        return { ...s, watchlist: next };
+      });
+    },
+    [syncWatchlist],
+  );
 
   const hasInWatchlist = useCallback(
     (symbol: string) => prefs.watchlist.includes(symbol.toUpperCase()),
     [prefs.watchlist],
   );
+
+  // On mount, pull the server watchlist and union-merge with local.
+  const didSync = useRef(false);
+  useEffect(() => {
+    if (didSync.current) return;
+    didSync.current = true;
+    fetchServerWatchlist()
+      .then((serverSymbols) => {
+        if (!serverSymbols.length) return;
+        setPrefs((s) => {
+          const merged = [...new Set([...s.watchlist, ...serverSymbols])].slice(0, 50);
+          if (merged.length === s.watchlist.length) return s;
+          // Push the merged list back so the server stays in sync.
+          syncWatchlist(merged);
+          return { ...s, watchlist: merged };
+        });
+      })
+      .catch(() => {
+        // Not logged in or network error — local prefs are fine.
+      });
+  }, [syncWatchlist]);
 
   const api = useMemo<Omit<PrefsApi, "passwordOpen" | "pinOpen">>(
     () => ({

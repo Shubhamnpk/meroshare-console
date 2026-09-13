@@ -115,6 +115,10 @@ export function OrderTicket({
     () => (amoList.data ?? []).filter((o) => o.scrip === symbol),
     [amoList.data, symbol],
   );
+  const otherAmoOrders = useMemo(
+    () => (amoList.data ?? []).filter((o) => o.scrip !== symbol),
+    [amoList.data, symbol],
+  );
 
   const qty = Math.floor(Number(quantity));
   const px = Number(price);
@@ -167,7 +171,6 @@ export function OrderTicket({
         void queryClient.invalidateQueries({ queryKey: ["broker-order-book"] });
         void queryClient.invalidateQueries({ queryKey: ["broker-amo-list"] });
       } else {
-        // eslint-disable-next-line no-console
         console.error("[order-ticket] broker rejected order", {
           symbol,
           side,
@@ -185,7 +188,7 @@ export function OrderTicket({
     },
     onError: (err) => {
       const message = errorMessage(err, "Order failed.");
-      // eslint-disable-next-line no-console
+
       console.error("[order-ticket] order request failed", {
         symbol,
         side,
@@ -223,27 +226,27 @@ export function OrderTicket({
                 AMO
               </span>
             ) : null}
-          {quote.data ? (
-            <div className="text-right">
-              <p className="num text-base font-semibold">{formatNpr(quote.data.ltp ?? 0)}</p>
-              <DeltaPill value={quote.data.changePercent ?? 0}>
-                {quote.data.changePercent !== null
-                  ? `${quote.data.changePercent.toFixed(2)}%`
-                  : "-"}
-              </DeltaPill>
-            </div>
-          ) : (
-            <p
-              className="text-xs text-muted-foreground"
-              title={quote.error ? errorMessage(quote.error, "") : ""}
-            >
-              {quote.isPending
-                ? "Live quote…"
-                : quote.isError
-                  ? `Quote failed: ${errorMessage(quote.error, "unknown")}`
-                  : "Quote unavailable"}
-            </p>
-          )}
+            {quote.data ? (
+              <div className="text-right">
+                <p className="num text-base font-semibold">{formatNpr(quote.data.ltp ?? 0)}</p>
+                <DeltaPill value={quote.data.changePercent ?? 0}>
+                  {quote.data.changePercent !== null
+                    ? `${quote.data.changePercent.toFixed(2)}%`
+                    : "-"}
+                </DeltaPill>
+              </div>
+            ) : (
+              <p
+                className="text-xs text-muted-foreground"
+                title={quote.error ? errorMessage(quote.error, "") : ""}
+              >
+                {quote.isPending
+                  ? "Live quote…"
+                  : quote.isError
+                    ? `Quote failed: ${errorMessage(quote.error, "unknown")}`
+                    : "Quote unavailable"}
+              </p>
+            )}
           </div>
         </div>
 
@@ -401,7 +404,11 @@ export function OrderTicket({
           disabled={!validQty || !validPx || shortfall > 0 || amoOddLot || place.isPending}
           onClick={() => setConfirmOpen(true)}
         >
-          {place.isPending ? "Sending…" : amo ? `Review ${side} order (AMO)` : `Review ${side} order`}
+          {place.isPending
+            ? "Sending…"
+            : amo
+              ? `Review ${side} order (AMO)`
+              : `Review ${side} order`}
         </Button>
         {amo ? (
           <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
@@ -453,6 +460,37 @@ export function OrderTicket({
                 </span>
               </div>
             ))}
+          </div>
+        ) : null}
+
+        {otherAmoOrders.length > 0 ? (
+          <div className="mt-3 rounded-xl border border-border/60 p-2.5">
+            <p className="px-1 pb-1.5 text-xs font-semibold text-muted-foreground">
+              Today&apos;s other AMO orders · {otherAmoOrders.length}
+            </p>
+            {otherAmoOrders.slice(0, 5).map((o, i) => (
+              <div
+                key={o.alertName || `${o.scrip}-${o.side}-${o.price}-${o.quantity}-${i}`}
+                className="flex items-center justify-between px-1 py-1 text-xs"
+              >
+                <span>
+                  <span className="font-semibold">{o.scrip}</span>{" "}
+                  <span
+                    className={cn("font-bold", o.side === "BUY" ? "text-gain" : "text-destructive")}
+                  >
+                    {o.side} {o.quantity.toLocaleString("en-IN")}
+                  </span>
+                </span>
+                <span className="num text-muted-foreground">
+                  @ {o.price !== null ? o.price.toLocaleString("en-IN") : "-"}
+                </span>
+              </div>
+            ))}
+            {otherAmoOrders.length > 5 ? (
+              <p className="px-1 pt-1 text-[0.7rem] text-muted-foreground">
+                +{otherAmoOrders.length - 5} more — see Broker → Orders for the full list.
+              </p>
+            ) : null}
           </div>
         ) : null}
 

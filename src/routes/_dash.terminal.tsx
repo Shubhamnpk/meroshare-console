@@ -32,11 +32,14 @@ import { OrderTicket } from "@/components/brokers/order-ticket";
 import {
   brokerConnectionsQuery,
   brokerOrderBookQuery,
+  brokerQuoteQuery,
+  brokerWatchlistsQuery,
   chartSeriesQuery,
   enrichedPortfolioQuery,
   investmentSummaryQuery,
   marketSnapshotQuery,
   portfolioHistoryQuery,
+  udfHistoryQuery,
 } from "@/lib/queries";
 import { cancelBrokerOrder } from "@/lib/brokers/brokers.functions";
 import type { BrokerId } from "@/lib/brokers/types";
@@ -157,7 +160,11 @@ function TerminalPage() {
   const [basis, setBasis] = useState<"value" | "profit">("value");
   const [query, setQuery] = useState("");
   const [hover, setHover] = useState<HoverInfo | null>(null);
-  const [ticketPrice, setTicketPrice] = useState<{ price: number; side?: "BUY" | "SELL"; nonce: number } | null>(null);
+  const [ticketPrice, setTicketPrice] = useState<{
+    price: number;
+    side?: "BUY" | "SELL";
+    nonce: number;
+  } | null>(null);
   const brokerConns = useQuery(brokerConnectionsQuery());
   const brokerLinked = (brokerConns.data?.length ?? 0) > 0;
   const termBrokerId = (brokerConns.data?.[0]?.brokerId ?? null) as BrokerId | null;
@@ -220,6 +227,23 @@ function TerminalPage() {
     ...chartSeriesQuery(state.symbol, state.range),
     enabled: mode === "scrip" && Boolean(state.symbol),
   });
+  const [intradayRes, setIntradayRes] = useState<import("@/lib/charts/udf").UdfResolution>("1");
+  const udf = useQuery({
+    ...udfHistoryQuery(
+      state.symbol,
+      state.range as import("@/lib/charts/udf").ChartRange,
+      state.range === "1D" ? intradayRes : null,
+    ),
+    enabled: mode === "scrip" && Boolean(state.symbol) && state.range === "1D",
+  });
+  // Live tick for crazy 1m: when broker linked, poll broker quote every 5s and patch last candle
+  const liveTick = useQuery({
+    ...brokerQuoteQuery(termBrokerId, state.range === "1D" ? state.symbol : null),
+    enabled: brokerLinked && mode === "scrip" && state.range === "1D" && Boolean(state.symbol),
+    refetchInterval: brokerLinked && state.range === "1D" ? 5000 : false,
+    refetchIntervalInBackground: true,
+    staleTime: 3000,
+  } as never);
   const compare = useQuery({
     ...chartSeriesQuery(compareSymbol, state.range),
     enabled: mode === "scrip" && compareSymbol.length > 0,
@@ -429,6 +453,46 @@ function TerminalPage() {
         pinned: true,
       }
     : hover;
+  // UDF fallback: when the mirror has no 1D intraday but UDF does, use it.
+  // Live 1m patch: broker LTP ticks (5s poll) update the last 1m candle crazy-fast.
+  const udfIntradayRaw = useMemo(() => {
+    const pts = udf.data?.points ?? [];
+    return pts.map((p) => ({
+      time: new Date(p.time * 1000).toISOString().slice(0, 10),
+      value: p.value,
+    }));
+  }, [udf.data?.points]);
+  const udfBarsRaw = useMemo(() => {
+    const bars = udf.data?.bars ?? [];
+    return bars.map((b) => ({
+      date: new Date(b.time * 1000).toISOString().slice(0, 10),
+      open: b.open,
+      high: b.high,
+      low: b.low,
+      close: b.close,
+      volume: b.volume,
+    }));
+  }, [udf.data?.bars]);
+  const tickLtp = (liveTick as unknown as { data?: { ltp?: number | null } })?.data?.ltp ?? null;
+  const udfIntraday = useMemo(() => {
+    if (tickLtp === null || udfIntradayRaw.length === 0) return udfIntradayRaw;
+    const last = udfIntradayRaw[udfIntradayRaw.length - 1]!;
+    return [...udfIntradayRaw.slice(0, -1), { ...last, value: tickLtp }];
+  }, [udfIntradayRaw, tickLtp]);
+  const udfBars = useMemo(() => {
+    if (tickLtp === null || udfBarsRaw.length === 0) return udfBarsRaw;
+    const last = udfBarsRaw[udfBarsRaw.length - 1]!;
+    return [
+      ...udfBarsRaw.slice(0, -1),
+      {
+        ...last,
+        close: tickLtp,
+        high: Math.max(last.high, tickLtp),
+        low: Math.min(last.low, tickLtp),
+      },
+    ];
+  }, [udfBarsRaw, tickLtp]);
+
   // Stable empty fallbacks: fresh `[]` literals here would also rebuild the
   // chart on every render (they are effect deps of TerminalChart).
   const showProfit = mode === "portfolio" && basis === "profit";
@@ -436,10 +500,26 @@ function TerminalPage() {
   // be a flat zero line, so fall back to value with an explanation.
   const costMissing = showProfit && !investment.isPending && costByScrip.size === 0;
   const effectiveProfit = showProfit && !costMissing;
-  const activeBars = mode === "portfolio" ? (effectiveProfit ? profitInfo.bars : netWorthBars) : (series.data?.bars ?? NO_BARS);
-  const intraday = mode === "portfolio" ? NO_POINTS : (series.data?.intraday ?? NO_POINTS);
+  const mirrorBars = series.data?.bars ?? NO_BARS;
+  const mirrorIntraday = series.data?.intraday ?? NO_POINTS;
+  const hasMirror = mirrorBars.length > 0 || mirrorIntraday.length > 0;
+  const useUdf = mode === "scrip" && state.range === "1D" && !hasMirror && udfBars.length > 0;
+  const activeBars =
+    mode === "portfolio"
+      ? effectiveProfit
+        ? profitInfo.bars
+        : netWorthBars
+      : useUdf
+        ? (udfBars as ChartBar[])
+        : mirrorBars;
+  const intraday =
+    mode === "portfolio" ? NO_POINTS : useUdf ? (udfIntraday as PricePoint[]) : mirrorIntraday;
   const isIntraday = activeBars.length === 0 && intraday.length > 0;
-  const loading = mode === "portfolio" ? netWorth.isPending : series.isPending;
+  const loading =
+    mode === "portfolio"
+      ? netWorth.isPending
+      : series.isPending || (useUdf ? false : udf.isPending && state.range === "1D" && !hasMirror);
+  const udfBadge = useUdf ? " · UDF" : "";
   const chartHeight = expanded ? 720 : 480;
 
   // Memoized: a fresh object identity here would tear down and rebuild
@@ -580,7 +660,11 @@ function TerminalPage() {
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-3 py-3">
           <div>
             <p className="font-display text-lg font-semibold">
-              {mode === "portfolio" ? (effectiveProfit ? "Portfolio profit (est.)" : "Portfolio net worth") : state.symbol}
+              {mode === "portfolio"
+                ? effectiveProfit
+                  ? "Portfolio profit (est.)"
+                  : "Portfolio net worth"
+                : state.symbol}
             </p>
             <p className="text-xs text-muted-foreground">
               {mode === "portfolio"
@@ -619,6 +703,28 @@ function TerminalPage() {
               </button>
             ))}
           </div>
+          {state.range === "1D" && mode === "scrip" ? (
+            <>
+              <span className="hidden h-4 w-px bg-border sm:block" />
+              <div className="flex gap-1">
+                {(["1", "5", "15", "60"] as const).map((res) => (
+                  <button
+                    key={res}
+                    type="button"
+                    onClick={() => setIntradayRes(res)}
+                    className={cn(
+                      "rounded-lg px-2 py-1 text-xs font-medium transition-colors",
+                      intradayRes === res
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground hover:bg-muted/80",
+                    )}
+                  >
+                    {res === "1" ? "1m" : res === "5" ? "5m" : res === "15" ? "15m" : "1h"}
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : null}
 
           <span className="hidden h-4 w-px bg-border sm:block" />
 
@@ -754,8 +860,8 @@ function TerminalPage() {
             {profitInfo.estimated.length > 0 ? (
               <>
                 Est. cost for pending WACC ({profitInfo.estimated.slice(0, 4).join(", ")}
-                {profitInfo.estimated.length > 4 ? ` +${profitInfo.estimated.length - 4} more` : ""})
-                {profitInfo.excluded.length > 0 ? " · " : "."}
+                {profitInfo.estimated.length > 4 ? ` +${profitInfo.estimated.length - 4} more` : ""}
+                ){profitInfo.excluded.length > 0 ? " · " : "."}
               </>
             ) : null}
             {profitInfo.excluded.length > 0 ? (
@@ -791,6 +897,11 @@ function TerminalPage() {
                 shown as an indexed % line against {state.symbol}
               </span>
             )}
+            {udfBadge ? (
+              <span className="ml-auto rounded-full bg-primary/10 px-2 py-0.5 text-[0.68rem] font-semibold text-primary">
+                Source: UDF · NEPSE
+              </span>
+            ) : null}
           </div>
         )}
 
@@ -850,7 +961,9 @@ function TerminalPage() {
                   ? ({ price, side }) => {
                       setTicketPrice({ price, side, nonce: Date.now() });
                       requestAnimationFrame(() =>
-                        document.getElementById("order-ticket")?.scrollIntoView({ behavior: "smooth", block: "start" }),
+                        document
+                          .getElementById("order-ticket")
+                          ?.scrollIntoView({ behavior: "smooth", block: "start" }),
                       );
                     }
                   : undefined
@@ -890,7 +1003,9 @@ function TerminalPage() {
                 onClick={() => {
                   setTicketPrice({ price: spot!.close, nonce: Date.now() });
                   requestAnimationFrame(() =>
-                    document.getElementById("order-ticket")?.scrollIntoView({ behavior: "smooth", block: "start" }),
+                    document
+                      .getElementById("order-ticket")
+                      ?.scrollIntoView({ behavior: "smooth", block: "start" }),
                   );
                 }}
                 className="ml-auto inline-flex items-center gap-1 rounded-lg bg-primary/15 px-2 py-1 font-semibold text-primary transition-colors hover:bg-primary/25"
@@ -943,11 +1058,7 @@ function TerminalPage() {
       )}
 
       {mode === "scrip" && (
-        <OrderTicket
-          key={state.symbol}
-          symbol={state.symbol}
-          limitPrice={ticketPrice}
-        />
+        <OrderTicket key={state.symbol} symbol={state.symbol} limitPrice={ticketPrice} />
       )}
 
       {mode === "scrip" && brokerLinked ? (
@@ -956,10 +1067,7 @@ function TerminalPage() {
             <p className="text-sm font-semibold">
               Today&apos;s orders · {(todayOrders.data ?? []).length}
             </p>
-            <Link
-              to="/broker"
-              className="text-xs font-medium text-primary hover:underline"
-            >
+            <Link to="/broker" className="text-xs font-medium text-primary hover:underline">
               Full order book
             </Link>
           </div>
@@ -987,10 +1095,17 @@ function TerminalPage() {
                       title={`Load ${o.symbol} on the chart`}
                     >
                       <span className="text-sm">
-                        <span className={cn("font-bold", o.side === "BUY" ? "text-gain" : "text-destructive")}>
+                        <span
+                          className={cn(
+                            "font-bold",
+                            o.side === "BUY" ? "text-gain" : "text-destructive",
+                          )}
+                        >
                           {o.side}
                         </span>{" "}
-                        <span className="num font-semibold">{o.quantity.toLocaleString("en-IN")}</span>{" "}
+                        <span className="num font-semibold">
+                          {o.quantity.toLocaleString("en-IN")}
+                        </span>{" "}
                         <span className="font-semibold">{o.symbol}</span>{" "}
                         <span className="num text-muted-foreground">
                           @ {o.price !== null ? o.price.toLocaleString("en-IN") : "MKT"}

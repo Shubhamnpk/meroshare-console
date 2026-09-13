@@ -228,3 +228,31 @@ export interface PlaceOrderResult {
   message: string;
   tranId: string | null;
 }
+
+export interface ModifyOrderRequest {
+  brokerId: BrokerId;
+  tranId: string;
+  orderId: string;
+  orderStatus: string;
+  remainingQty: number;
+  side: "BUY" | "SELL";
+  symbol: string;
+  quantity: number;
+  price: number;
+  orderType: "LMT" | "MKT";
+  validity: "DAY" | "GTD" | "GTC" | "IOC" | "FOK";
+  validTill?: string | undefined;
+  /** Explicit user confirmation — the server refuses without it. */
+  confirmed: true;
+}
+
+export interface BrokerWatchlist {
+  name: string;
+  symbols: string[];
+  isDefault: boolean;
+  systemTag: string;
+}
+
+export interface BrokerWatchlists {
+  templates: BrokerWatchlist[];
+}
