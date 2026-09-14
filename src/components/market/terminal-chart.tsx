@@ -127,9 +127,28 @@ export function TerminalChart({
   const pointerDownRef = useRef(false);
   const draggingRef = useRef(false);
 
-  const isIntraday = bars.length === 0 && intraday.length > 0;
+  const sanitizedBars = useMemo(() => {
+    const filtered = bars.filter((b) => Number.isFinite(b.open) && Number.isFinite(b.high) && Number.isFinite(b.low) && Number.isFinite(b.close));
+    // lightweight-charts requires asc ordered unique time — dedup by date
+    const byDate = new Map<string, typeof filtered[number]>();
+    for (const b of filtered) byDate.set(b.date, b);
+    return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+  }, [bars]);
+  const sanitizedIntraday = useMemo(() => {
+    const filtered = intraday.filter((p) => Number.isFinite(p.value) && Number.isFinite(Number(p.time)));
+    const byTime = new Map<number, typeof filtered[number]>();
+    for (const p of filtered) {
+      const t = Number(p.time);
+      byTime.set(t, p);
+    }
+    return [...byTime.values()].sort((a, b) => Number(a.time) - Number(b.time));
+  }, [intraday]);
+  const isIntraday = sanitizedBars.length === 0 && sanitizedIntraday.length > 0;
 
-  const barByDate = useMemo(() => new Map(bars.map((b) => [b.date, b] as const)), [bars]);
+  const barByDate = useMemo(() => new Map(sanitizedBars.map((b) => [b.date, b] as const)), [sanitizedBars]);
+
+  const [chartError, setChartError] = useState<string | null>(null);
+  useEffect(() => { setChartError(null); }, [sanitizedBars, sanitizedIntraday, style, light]);
 
   const endMeasure = () => {
     // A plain double-click (no drag yet) keeps the anchor armed; releasing after
@@ -153,7 +172,8 @@ export function TerminalChart({
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    const colors = palette(light);
+    try {
+      const colors = palette(light);
 
     const chart: IChartApi = createChart(container, {
       autoSize: true,
@@ -215,7 +235,7 @@ export function TerminalChart({
     let mainSeries: ISeriesApi<"Candlestick" | "Line" | "Area"> | null = null;
 
     if (isIntraday) {
-      const points = intraday.map((p) => ({ time: p.time as UTCTimestamp, value: p.value }));
+      const points = sanitizedIntraday.map((p) => ({ time: p.time as UTCTimestamp, value: p.value }));
       const first = points[0]?.value ?? 0;
       const last = points[points.length - 1]?.value ?? 0;
       const colour = last >= first ? UP : DOWN;
@@ -239,7 +259,7 @@ export function TerminalChart({
         wickDownColor: DOWN,
       });
       series.setData(
-        bars.map((b) => ({
+        sanitizedBars.map((b) => ({
           time: b.date as Time,
           open: b.open,
           high: b.high,
@@ -251,7 +271,7 @@ export function TerminalChart({
       seriesRef.current = series;
     } else if (style === "line") {
       const series = chart.addSeries(LineSeries, { color: "#2563eb", lineWidth: 2 });
-      series.setData(bars.map((b) => ({ time: b.date as Time, value: b.close })));
+      series.setData(sanitizedBars.map((b) => ({ time: b.date as Time, value: b.close })));
       mainSeries = series;
       seriesRef.current = series;
     } else {
@@ -261,12 +281,12 @@ export function TerminalChart({
         bottomColor: "#2563eb05",
         lineWidth: 2,
       });
-      series.setData(bars.map((b) => ({ time: b.date as Time, value: b.close })));
+      series.setData(sanitizedBars.map((b) => ({ time: b.date as Time, value: b.close })));
       mainSeries = series;
       seriesRef.current = series;
     }
 
-    const indicatorBars: Bar[] = bars.map((b) => ({
+    const indicatorBars: Bar[] = sanitizedBars.map((b) => ({
       date: b.date,
       open: b.open,
       high: b.high,
@@ -355,19 +375,19 @@ export function TerminalChart({
         pane,
       );
       if (isIntraday) {
-        const hasVolume = intraday.some((p) => (p.volume ?? 0) > 0);
+        const hasVolume = sanitizedIntraday.some((p) => (p.volume ?? 0) > 0);
         if (hasVolume) {
           volumeSeries.setData(
-            intraday.map((p) => ({
+            sanitizedIntraday.map((p) => ({
               time: p.time as UTCTimestamp,
               value: p.volume ?? 0,
-              color: p.value >= (intraday[0]?.value ?? 0) ? `${UP}66` : `${DOWN}66`,
+              color: p.value >= (sanitizedIntraday[0]?.value ?? 0) ? `${UP}66` : `${DOWN}66`,
             })),
           );
         }
       } else {
         volumeSeries.setData(
-          bars.map((b) => ({
+          sanitizedBars.map((b) => ({
             time: b.date as Time,
             value: b.volume,
             color: b.close >= b.open ? `${UP}66` : `${DOWN}66`,
@@ -555,9 +575,14 @@ export function TerminalChart({
       chart.remove();
       apiRef.current = null;
     };
+    } catch (err) {
+      console.error("[terminal-chart] render failed", err);
+      setChartError(err instanceof Error ? err.message : "Chart failed to render");
+      return;
+    }
   }, [
-    bars,
-    intraday,
+    sanitizedBars,
+    sanitizedIntraday,
     style,
     indicators,
     compare,
@@ -634,6 +659,15 @@ export function TerminalChart({
         </>
       );
     }
+  }
+
+  if (chartError) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-2 px-4 text-center text-sm text-muted-foreground" style={{ height }}>
+        <p>Chart unavailable for this symbol.</p>
+        <p className="max-w-md text-xs">{chartError}</p>
+      </div>
+    );
   }
 
   return (

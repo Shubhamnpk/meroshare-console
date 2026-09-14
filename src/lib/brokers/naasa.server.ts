@@ -558,11 +558,33 @@ export async function getNaasaDepth(
   symbol: string,
 ): Promise<{ errorCode: number; message: string; rows: Record<string, unknown>[] }> {
   const sym = symbol.trim().toUpperCase();
+  // Try plain SYM first (docs), fallback to NEPSE.SYM if empty — some envs need prefix
+  for (const tickers of [sym, `NEPSE.${sym}`, `25.1!${sym}`]) {
+    const params = new URLSearchParams({ Tickers: tickers, Exchange: "NEPSE" });
+    const json = await naasaJson<unknown>(session, `/api/feed/Services.GetMDepth?${params}`);
+    const root = (json ?? {}) as Record<string, unknown>;
+    const result = (root["Result"] ?? root) as Record<string, unknown>;
+    const { errorCode, rows } = unwrapBrokerData(json);
+    const message =
+      (typeof result["Message"] === "string" ? (result["Message"] as string) : "") ||
+      (typeof root["Message"] === "string" ? (root["Message"] as string) : "");
+    if (rows.length > 0 || errorCode === 0) {
+      if (tickers !== sym) console.error(`[brokers] depth ${sym} fallback Tickers=${tickers} ec=${errorCode} rows=${rows.length}`);
+      return { errorCode, message, rows };
+    }
+    // ec -100 = No data available (off-hours) — don't try other tickers, return as is
+    if (errorCode === -100) {
+      console.error(`[brokers] depth ${sym} Tickers=${tickers} ec=-100 msg=${message} rawKeys=${Object.keys(result).join(",")}`);
+      return { errorCode, message, rows };
+    }
+    console.error(`[brokers] depth ${sym} Tickers=${tickers} ec=${errorCode} rows=0 raw=${JSON.stringify(json).slice(0,300)}`);
+  }
+  // final attempt already logged
   const params = new URLSearchParams({ Tickers: sym, Exchange: "NEPSE" });
   const json = await naasaJson<unknown>(session, `/api/feed/Services.GetMDepth?${params}`);
   const root = (json ?? {}) as Record<string, unknown>;
   const { errorCode, rows } = unwrapBrokerData(json);
-  const message = typeof root["Message"] === "string" ? (root["Message"] as string) : "";
+  const message = typeof (root["Result"] as Record<string, unknown> | undefined)?.["Message"] === "string" ? ((root["Result"] as Record<string, unknown>)["Message"] as string) : (typeof root["Message"] === "string" ? (root["Message"] as string) : "");
   return { errorCode, message, rows };
 }
 
@@ -654,11 +676,6 @@ async function fetchReportTable(
         body: v.body(c.from, c.to),
       });
       const rows = toReportRows(json?.data?.reportTable);
-      if (rows.length > 0 || !logHit) {
-        console.error(
-          `[brokers] report ${reportType} [${v.label}] ${c.from}..${c.to}: ${rows.length} rows`,
-        );
-      }
       if (rows.length > 0) {
         winnerCache.set(reportType, variants.indexOf(v));
         for (const r of rows) {
@@ -679,12 +696,8 @@ async function fetchReportTable(
       body: { reportType, fromDate: "", toDate: "" },
     });
     const rows = toReportRows(json?.data?.reportTable);
-    console.error(`[brokers] report ${reportType} [undated]: ${rows.length} rows`);
     merged.push(...rows);
   }
-  console.error(
-    `[brokers] report ${reportType}: ${merged.length} merged rows from ${chunks.length} window(s)`,
-  );
   return merged;
 }
 

@@ -36,6 +36,7 @@ import {
   brokerWatchlistsQuery,
   chartSeriesQuery,
   enrichedPortfolioQuery,
+  indexGraphQuery,
   investmentSummaryQuery,
   marketSnapshotQuery,
   portfolioHistoryQuery,
@@ -43,6 +44,7 @@ import {
 } from "@/lib/queries";
 import { cancelBrokerOrder } from "@/lib/brokers/brokers.functions";
 import type { BrokerId } from "@/lib/brokers/types";
+import { useBrokerMarketWs } from "@/hooks/use-broker-ws";
 import type { ChartBar, ChartRange, PricePoint } from "@/lib/nepse/types";
 import { errorMessage, formatNpr, formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -79,6 +81,8 @@ export const Route = createFileRoute("/_dash/terminal")({
 });
 
 const RANGES: ChartRange[] = ["1D", "1W", "1M", "3M", "6M", "1Y", "3Y", "5Y", "MAX"];
+const INDEX_SYMBOLS = ["NEPSE", "SENSITIVE", "FLOAT", "SENFLOAT"] as const;
+
 const STYLES: { key: ChartStyle; label: string }[] = [
   { key: "candles", label: "Candles" },
   { key: "line", label: "Line" },
@@ -170,6 +174,8 @@ function TerminalPage() {
   const termBrokerId = (brokerConns.data?.[0]?.brokerId ?? null) as BrokerId | null;
   const [armedOrder, setArmedOrder] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const isIndexEarly = (INDEX_SYMBOLS as readonly string[]).includes(state.symbol);
+  useBrokerMarketWs(termBrokerId, isIndexEarly ? null : state.symbol);
   /** Pinned candle in scrip mode (click); hover readout falls back to it. */
   const [pinned, setPinned] = useState<ChartBar | null>(null);
   const [expanded, setExpanded] = useState(false);
@@ -234,13 +240,17 @@ function TerminalPage() {
       state.range as import("@/lib/charts/udf").ChartRange,
       state.range === "1D" ? intradayRes : null,
     ),
-    enabled: mode === "scrip" && Boolean(state.symbol) && state.range === "1D",
+    enabled: mode === "scrip" && Boolean(state.symbol) && state.range === "1D" && !isIndexEarly,
+  });
+  const indexHistory = useQuery({
+    ...indexGraphQuery(state.symbol),
+    enabled: mode === "scrip" && isIndexEarly,
   });
   // Live tick for crazy 1m: when broker linked, poll broker quote every 5s and patch last candle
   const liveTick = useQuery({
-    ...brokerQuoteQuery(termBrokerId, state.range === "1D" ? state.symbol : null),
-    enabled: brokerLinked && mode === "scrip" && state.range === "1D" && Boolean(state.symbol),
-    refetchInterval: brokerLinked && state.range === "1D" ? 5000 : false,
+    ...brokerQuoteQuery(termBrokerId, state.range === "1D" && !isIndexEarly ? state.symbol : null),
+    enabled: brokerLinked && mode === "scrip" && state.range === "1D" && Boolean(state.symbol) && !isIndexEarly,
+    refetchInterval: brokerLinked && state.range === "1D" && !isIndexEarly ? 5000 : false,
     refetchIntervalInBackground: true,
     staleTime: 3000,
   } as never);
@@ -284,8 +294,9 @@ function TerminalPage() {
 
   const quickSymbols = useMemo(() => {
     const owned = holdings.map((h) => h.scrip);
-    return [...new Set([...owned, ...watchSymbols])].slice(0, 12);
+    return [...new Set(["NEPSE", ...owned, ...watchSymbols])].slice(0, 12);
   }, [holdings, watchSymbols]);
+  const isIndex = isIndexEarly;
 
   // Cost basis for profit mode, mirroring the portfolio investment summary:
   // CDSC-calculated WACC where present, pending rows estimated from qty x
@@ -500,25 +511,63 @@ function TerminalPage() {
   // be a flat zero line, so fall back to value with an explanation.
   const costMissing = showProfit && !investment.isPending && costByScrip.size === 0;
   const effectiveProfit = showProfit && !costMissing;
+  const indexBars: ChartBar[] = useMemo(() => {
+    const pts = (indexHistory.data ?? []) as import("@/lib/nepse/types").PricePoint[];
+    if (!isIndexEarly || pts.length === 0) return NO_BARS;
+    // Filter by range window like portfolio
+    const windowDays =
+      state.range === "1D" || state.range === "1W"
+        ? 7
+        : state.range === "1M"
+          ? 31
+          : state.range === "3M"
+            ? 93
+            : state.range === "6M"
+              ? 186
+              : state.range === "1Y"
+                ? 366
+                : null;
+    const cutoff = windowDays === null ? 0 : Date.now() / 1000 - windowDays * 86400;
+    const filtered = pts.filter((p) => p.time >= cutoff);
+    // Dedup by date (index history can have duplicate days) and ensure asc order
+    const byDate = new Map<string, (typeof filtered)[number]>();
+    for (const p of filtered) {
+      const d = new Date(p.time * 1000).toISOString().slice(0, 10);
+      byDate.set(d, p);
+    }
+    return [...byDate.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, p]) => ({
+        date,
+        open: p.value,
+        high: p.value,
+        low: p.value,
+        close: p.value,
+        volume: 0,
+      }));
+  }, [indexHistory.data, isIndexEarly, state.range]);
   const mirrorBars = series.data?.bars ?? NO_BARS;
   const mirrorIntraday = series.data?.intraday ?? NO_POINTS;
   const hasMirror = mirrorBars.length > 0 || mirrorIntraday.length > 0;
-  const useUdf = mode === "scrip" && state.range === "1D" && !hasMirror && udfBars.length > 0;
+  const useUdf = mode === "scrip" && state.range === "1D" && !hasMirror && (udfBars.length > 0 || udfIntraday.length > 0) && !isIndexEarly;
   const activeBars =
     mode === "portfolio"
       ? effectiveProfit
         ? profitInfo.bars
         : netWorthBars
-      : useUdf
-        ? (udfBars as ChartBar[])
-        : mirrorBars;
-  const intraday =
-    mode === "portfolio" ? NO_POINTS : useUdf ? (udfIntraday as PricePoint[]) : mirrorIntraday;
+      : isIndexEarly
+        ? indexBars
+        : useUdf
+          ? (udfBars as ChartBar[])
+          : mirrorBars;
+  const intraday = mode === "portfolio" ? NO_POINTS : isIndexEarly ? NO_POINTS : useUdf ? (udfIntraday as PricePoint[]) : mirrorIntraday;
   const isIntraday = activeBars.length === 0 && intraday.length > 0;
   const loading =
     mode === "portfolio"
       ? netWorth.isPending
-      : series.isPending || (useUdf ? false : udf.isPending && state.range === "1D" && !hasMirror);
+      : isIndexEarly
+        ? indexHistory.isPending
+        : series.isPending || (useUdf ? false : udf.isPending && state.range === "1D" && !hasMirror);
   const udfBadge = useUdf ? " · UDF" : "";
   const chartHeight = expanded ? 720 : 480;
 
@@ -1057,7 +1106,7 @@ function TerminalPage() {
         </div>
       )}
 
-      {mode === "scrip" && (
+      {mode === "scrip" && !isIndex && (
         <OrderTicket key={state.symbol} symbol={state.symbol} limitPrice={ticketPrice} />
       )}
 

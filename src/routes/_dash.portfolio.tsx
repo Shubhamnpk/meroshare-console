@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
 import { ErrorBlock, LoadingBlock, EmptyBlock } from "@/components/states";
 import { DeltaPill } from "@/components/stat-card";
@@ -231,7 +233,21 @@ function PortfolioPage() {
             NEPSE prices. Click any scrip for its full detail.
           </p>
         </div>
-        <ExportButton
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              void q.refetch();
+              void investment.refetch();
+            }}
+            disabled={q.isFetching || investment.isFetching}
+            className="gap-1.5"
+            aria-label="Refresh portfolio"
+          >
+            <RefreshCw className={`size-3.5 ${q.isFetching || investment.isFetching ? "animate-spin" : ""}`} /> Refresh
+          </Button>
+          <ExportButton
           disabled={items.length === 0}
           formats={[
             {
@@ -301,6 +317,7 @@ function PortfolioPage() {
             },
           ]}
         />
+        </div>
       </div>
 
       {q.data?.marketStale ? (

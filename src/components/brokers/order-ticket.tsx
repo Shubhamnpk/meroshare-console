@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowDownRight, ArrowUpRight } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,6 +28,7 @@ import { placeBrokerAmo, placeBrokerOrder } from "@/lib/brokers/brokers.function
 import type { BrokerId } from "@/lib/brokers/types";
 import { errorMessage, formatNpr } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useBrokerMarketWs } from "@/hooks/use-broker-ws";
 
 const VALIDITIES = ["DAY", "GTD", "GTC", "IOC", "FOK"] as const;
 
@@ -49,8 +50,9 @@ export function OrderTicket({
   const connections = useQuery(brokerConnectionsQuery());
   const brokerId = (connections.data?.[0]?.brokerId ?? null) as BrokerId | null;
 
-  const quote = useQuery({ ...brokerQuoteQuery(brokerId, symbol), refetchInterval: 20_000 });
-  const depth = useQuery({ ...brokerDepthQuery(brokerId, symbol), refetchInterval: 20_000 });
+  const { wsReady } = useBrokerMarketWs(brokerId, symbol);
+  const quote = useQuery({ ...brokerQuoteQuery(brokerId, symbol), refetchInterval: wsReady ? false : 20_000 });
+  const depth = useQuery({ ...brokerDepthQuery(brokerId, symbol), refetchInterval: wsReady ? false : 20_000 });
   const holdings = useQuery(brokerHoldingsQuery(brokerId));
   const book = useQuery(brokerOrderBookQuery(brokerId));
   const amoList = useQuery(brokerAmoListQuery(brokerId));
@@ -545,14 +547,31 @@ export function OrderTicket({
 
       {/* Depth */}
       <div className="rounded-2xl border border-border/60 bg-surface p-4 lg:col-span-2">
-        <p className="text-sm font-semibold">Market depth</p>
-        <p className="text-[0.7rem] text-muted-foreground">
-          {depth.isError
-            ? `Depth failed: ${errorMessage(depth.error, "unknown")}`
-            : depth.data && depth.data.errorCode !== 0
-              ? depth.data.message || "No depth right now. Streams during market hours."
-              : "Top of book, live from your broker."}
-        </p>
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className="text-sm font-semibold">Market depth</p>
+            <p className="text-[0.7rem] text-muted-foreground">
+              {depth.isError
+                ? `Depth failed: ${errorMessage(depth.error, "unknown")}`
+                : depth.data && depth.data.errorCode !== 0
+                  ? depth.data.message || "No depth right now. Streams during market hours."
+                  : "Top of book, live from your broker."}
+            </p>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7 shrink-0"
+            onClick={() => {
+              void quote.refetch();
+              void depth.refetch();
+            }}
+            disabled={quote.isFetching || depth.isFetching}
+            aria-label="Refresh quote and depth"
+          >
+            <RefreshCw className={`size-3.5 ${quote.isFetching || depth.isFetching ? "animate-spin" : ""}`} />
+          </Button>
+        </div>
         <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
           <div>
             <p className="mb-1 font-semibold text-gain">Bids</p>

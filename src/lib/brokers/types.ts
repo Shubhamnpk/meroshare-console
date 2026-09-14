@@ -112,6 +112,8 @@ export interface BrokerOrder {
   remainingQty: number;
   orderStatus: string;
   deliveryFlag: string;
+  date: string;
+  time: string;
 }
 
 export interface BrokerTrade {

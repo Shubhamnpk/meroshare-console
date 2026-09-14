@@ -1,13 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Document, Page, pdfjs } from "react-pdf";
-import "react-pdf/dist/Page/AnnotationLayer.css";
-import "react-pdf/dist/Page/TextLayer.css";
-import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { ZoomIn, ZoomOut, ExternalLink, Scan, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { usePreviewZoomPan } from "@/components/ui/document-preview-zoom";
-
-pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
 /** Render pages at this multiple of container width so zoom stays crisp. */
 const BASE_RENDER_SCALE = 2;
@@ -28,6 +23,8 @@ type DocumentPreviewProps = {
 };
 
 export function DocumentPreview({ url, sourceUrl }: DocumentPreviewProps) {
+  const [pdfReady, setPdfReady] = useState(false);
+  const [PdfComp, setPdfComp] = useState<{ Document: typeof import("react-pdf").Document; Page: typeof import("react-pdf").Page } | null>(null);
   const [pdfTotalPages, setPdfTotalPages] = useState(0);
   const [docType, setDocType] = useState<"pdf" | "image" | null>(null);
   const [containerSize, setContainerSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
@@ -36,6 +33,27 @@ export function DocumentPreview({ url, sourceUrl }: DocumentPreviewProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const aspectRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    // Client-only: pdf.js needs DOMMatrix/Canvas (not available during SSR)
+    if (typeof window !== "undefined") {
+      import("react-pdf").then(async (mod) => {
+        if (cancelled) return;
+        const { pdfjs } = mod;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (pdfjs as any).GlobalWorkerOptions.workerSrc = workerUrl;
+        // Load CSS only on client
+        await import("react-pdf/dist/Page/AnnotationLayer.css");
+        await import("react-pdf/dist/Page/TextLayer.css");
+        if (!cancelled) {
+          setPdfComp({ Document: mod.Document, Page: mod.Page });
+          setPdfReady(true);
+        }
+      });
+    }
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     setPdfTotalPages(0);
@@ -201,8 +219,10 @@ export function DocumentPreview({ url, sourceUrl }: DocumentPreviewProps) {
             />
           </div>
         </div>
+      ) : !pdfReady || !PdfComp ? (
+        <div className="py-10 text-center text-sm text-muted-foreground">Loading document...</div>
       ) : (
-        <Document
+        <PdfComp.Document
           className="h-full"
           file={url}
           onLoadSuccess={({ numPages }) => {
@@ -261,7 +281,7 @@ export function DocumentPreview({ url, sourceUrl }: DocumentPreviewProps) {
                               i + 1 === currentPdfPage ? "ring-2 ring-primary" : ""
                             }`}
                           >
-                            <Page
+                            <PdfComp.Page
                               pageNumber={i + 1}
                               width={96}
                               renderTextLayer={false}
@@ -299,7 +319,7 @@ export function DocumentPreview({ url, sourceUrl }: DocumentPreviewProps) {
                   <div className="flex flex-col gap-4">
                     {pdfTotalPages > 0 &&
                       Array.from({ length: pdfTotalPages }, (_, i) => (
-                        <Page
+                        <PdfComp.Page
                           key={`page_${i + 1}`}
                           pageNumber={i + 1}
                           {...(pdfRenderW > 0 ? { width: pdfRenderW } : {})}
@@ -316,7 +336,7 @@ export function DocumentPreview({ url, sourceUrl }: DocumentPreviewProps) {
               </div>
             </div>
           </div>
-        </Document>
+        </PdfComp.Document>
       )}
     </div>
   );

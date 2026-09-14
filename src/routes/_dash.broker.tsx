@@ -897,8 +897,14 @@ function BrokerPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={refreshAll} className="gap-1.5 text-xs">
-            <RefreshCw className="size-3.5" /> Refresh
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={refreshAll}
+            disabled={funds.isFetching || holdings.isFetching || orders.isFetching || trades.isFetching}
+            className="gap-1.5 text-xs"
+          >
+            <RefreshCw className={`size-3.5 ${funds.isFetching || holdings.isFetching || orders.isFetching || trades.isFetching ? "animate-spin" : ""}`} /> Refresh
           </Button>
           <Button
             variant="outline"
@@ -1109,6 +1115,8 @@ function BrokerPage() {
                             </p>
                             <p className="text-[0.7rem] text-muted-foreground">
                               {o.status} · {o.orderType} · {o.validity}
+                              {o.date ? ` · ${o.date}` : ""}
+                              {o.time ? ` ${o.time}` : ""}
                             </p>
                           </div>
                           {cancellable ? (
@@ -1297,7 +1305,9 @@ function BrokerPage() {
                             {t.price !== null ? t.price.toLocaleString("en-IN") : "-"}
                           </TableCell>
                           <TableCell className="num py-2 text-right font-semibold">{money(t.amount)}</TableCell>
-                          <TableCell className="whitespace-nowrap py-2 text-xs">{t.date || "-"}</TableCell>
+                          <TableCell className="whitespace-nowrap py-2 text-xs" title={`${t.date} ${t.time}`}>
+                            {t.date ? `${t.date}${t.time ? ` ${t.time}` : ""}` : "-"}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

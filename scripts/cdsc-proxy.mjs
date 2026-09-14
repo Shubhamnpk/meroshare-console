@@ -28,7 +28,13 @@ const server = http.createServer(async (req, res) => {
         "") || "";
     if (clientIp) {
       const prev = headers["x-forwarded-for"]?.toString() ?? "";
-      headers["x-forwarded-for"] = prev ? `${prev}, ${clientIp}` : clientIp;
+      const parts = prev
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      // Don't append twice — dedupes "ip, ip" chains CDSC would otherwise store.
+      if (!parts.includes(clientIp)) parts.push(clientIp);
+      headers["x-forwarded-for"] = parts.join(", ");
       headers["x-real-ip"] = clientIp;
       // Cloudflare-style
       if (!headers["cf-connecting-ip"]) headers["cf-connecting-ip"] = clientIp;

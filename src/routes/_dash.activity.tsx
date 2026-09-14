@@ -66,7 +66,15 @@ export const Route = createFileRoute("/_dash/activity")({
 
 function clean(value: unknown): string {
   if (typeof value !== "string") return "";
-  const v = value.trim();
+  // CDSC stores the full proxy chain "user, proxy1, egress" and proxies
+  // sometimes append twice ("user, user, egress"). Dedupe, keep only the
+  // originating user IP.
+  const parts = value
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const unique = [...new Set(parts)];
+  const v = unique[0] ?? "";
   if (!v || v === "—" || v === "-" || /^unknown$/i.test(v) || /^null$/i.test(v)) return "";
   return v;
 }
@@ -142,7 +150,7 @@ function activityCsv(items: ActivityLogItem[], locations: Record<string, IpLocat
       String(item.browserName ?? ""),
       String(item.broswerVersion ?? ""),
       String(item.osName ?? ""),
-      String(item.ipAddress ?? ""),
+      clean(item.ipAddress),
       loc?.city ?? "",
       loc?.region ?? "",
       loc?.country ?? "",

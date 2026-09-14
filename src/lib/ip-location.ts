@@ -135,7 +135,13 @@ async function fetchOne(ip: string, cache: Map<string, CacheEntry>): Promise<IpL
  * Failed or private lookups degrade to a label-only entry - never throws.
  */
 export function useIpLocations(ips: string[]) {
-  const unique = [...new Set(ips.map((ip) => ip.trim()).filter((ip) => ip && ip !== "—"))].sort();
+  const unique = [
+    ...new Set(
+      ips
+        .map((ip) => ip.split(",")[0]?.trim() ?? "")
+        .filter((ip) => ip && ip !== "—"),
+    ),
+  ].sort();
   const query = useQuery({
     queryKey: ["ip-locations", unique],
     enabled: unique.length > 0,
