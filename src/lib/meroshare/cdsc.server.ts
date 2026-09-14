@@ -91,7 +91,15 @@ async function parseBody(res: Response): Promise<unknown> {
   const text = await res.text();
   if (!text) return null;
   const contentType = res.headers.get("content-type") ?? "";
-  if (!contentType.includes("json") && /^\s*</.test(text)) {
+  // CDSC returns XML for auth failures (<?xml ...><message>Username or password invalid.</message>)
+  // Don't treat that as a WAF block - extract the message.
+  if (/^\s*<\?xml/i.test(text)) {
+    const m = text.match(/<message>([^<]+)<\/message>/i);
+    if (m?.[1]) return m[1].trim();
+    return text;
+  }
+  // Only treat HTML as WAF block, not XML.
+  if (!contentType.includes("json") && /^\s*<(?:!doctype|html|head)/i.test(text)) {
     throw new CdscError(
       "MeroShare returned a non-JSON response, possibly blocked by a security filter. Please try again.",
       403,
@@ -101,6 +109,14 @@ async function parseBody(res: Response): Promise<unknown> {
   try {
     return JSON.parse(text);
   } catch {
+    // Non-JSON text (e.g. WAF HTML without html tag) - detect block keywords.
+    if (/security filter|attention required|cf-challenge/i.test(text) && /<[^>]+>/.test(text)) {
+      throw new CdscError(
+        "MeroShare returned a non-JSON response, possibly blocked by a security filter. Please try again.",
+        403,
+        text.slice(0, 200),
+      );
+    }
     return text;
   }
 }
@@ -148,6 +164,10 @@ export async function cdscRequest<T = unknown>(
     const payload = await parseBody(res);
 
     if (res.status === 401 || res.status === 403) {
+      // Login failures are 401 with XML <message> - show that, don't treat as session expiry.
+      if (url.includes("/auth/")) {
+        throw new CdscError(messageFrom(payload, "Username or password invalid."), res.status, payload);
+      }
       throw new SessionExpiredError();
     }
 
@@ -188,6 +208,12 @@ export async function cdscRequestWithHeaders<T = unknown>(
   }
 
   const payload = await parseBody(res);
+  if (res.status === 401 || res.status === 403) {
+    if (url.includes("/auth/")) {
+      throw new CdscError(messageFrom(payload, "Username or password invalid."), res.status, payload);
+    }
+    throw new SessionExpiredError();
+  }
   if (!res.ok) {
     throw new CdscError(
       messageFrom(payload, `MeroShare request failed (${res.status})`),
