@@ -25,9 +25,12 @@ import {
   exchangeMessagesQuery,
   holdingSymbolsQuery,
   ipoArchiveQuery,
+  marketSnapshotQuery,
   ownDetailQuery,
   sessionQuery,
 } from "@/lib/queries";
+import { isAlertHit, usePriceAlerts } from "@/lib/price-alerts";
+import { formatNpr } from "@/lib/format";
 import {
   SNOOZE_TOMORROW_MS,
   arePopupsEnabled,
@@ -141,6 +144,33 @@ export function NotificationBell() {
   const messages = useQuery(exchangeMessagesQuery());
   const holdings = useQuery(holdingSymbolsQuery());
   const { symbols: watchlisted } = useWatchlist();
+  // Global price-alert watcher: the bell is mounted app-wide, so alerts fire
+  // on any page — not only while the broker panel is open.
+  const pa = usePriceAlerts();
+  const liveSnap = useQuery({ ...marketSnapshotQuery(), enabled: pa.alerts.length > 0 });
+
+  useEffect(() => {
+    if (!liveSnap.data) return;
+    const prices = new Map((liveSnap.data.prices ?? []).map((p) => [p.symbol, p.ltp]));
+    for (const a of pa.alerts) {
+      if (a.hitAt) continue;
+      const ltp = prices.get(a.symbol);
+      if (isAlertHit(a, ltp)) {
+        pa.markHit(a.id);
+        toast.warning(`${a.symbol} ${a.direction === "above" ? "≥" : "≤"} ${formatNpr(a.target)}`, {
+          description: `Live ${formatNpr(ltp ?? 0)} crossed your alert.`,
+          action: {
+            label: "Open chart",
+            onClick: () => {
+              setOpen(false);
+              navigate({ to: "/terminal", search: { symbol: a.symbol } });
+            },
+          },
+        });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveSnap.data, pa.alerts]);
 
   const all = useMemo(
     () =>
@@ -155,9 +185,23 @@ export function NotificationBell() {
         watchlist: watchlisted,
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [issues.data, archive.data, session.data, own.data, dividends.data, messages.data, holdings.data, watchlisted, tick],
+    [
+      issues.data,
+      archive.data,
+      session.data,
+      own.data,
+      dividends.data,
+      messages.data,
+      holdings.data,
+      watchlisted,
+      tick,
+    ],
   );
   const unread = all.filter((n) => !isRead(n.id));
+  const liveMap = useMemo(
+    () => new Map((liveSnap.data?.prices ?? []).map((p) => [p.symbol, p.ltp])),
+    [liveSnap.data],
+  );
 
   const refresh = () => {
     setTick((t) => t + 1);
@@ -272,6 +316,64 @@ export function NotificationBell() {
             Browser alerts are blocked. Allow notifications in your browser's site settings to get
             them on this device.
           </p>
+        ) : null}
+        {pa.alerts.length > 0 ? (
+          <div className="mb-1 border-b border-border/60 px-3 pb-2">
+            <p className="py-1 text-[0.68rem] font-semibold uppercase tracking-wide text-muted-foreground">
+              Price alerts · {pa.alerts.length}
+            </p>
+            <ul className="max-h-40 space-y-0.5 overflow-y-auto">
+              {pa.alerts.slice(0, 5).map((a) => {
+                const ltp = liveMap.get(a.symbol);
+                const hit = Boolean(a.hitAt) || isAlertHit(a, ltp);
+                return (
+                  <li
+                    key={a.id}
+                    className="flex items-center justify-between gap-2 rounded-lg px-1 py-1.5"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-1.5 text-xs font-medium">
+                        <span
+                          className={cn(
+                            "size-1.5 shrink-0 rounded-full",
+                            hit ? "bg-amber-500" : "bg-primary",
+                          )}
+                          aria-hidden
+                        />
+                        <span className="truncate">
+                          {a.symbol} {a.direction === "above" ? "≥" : "≤"}{" "}
+                          <span className="num">{a.target.toLocaleString("en-IN")}</span>
+                        </span>
+                      </span>
+                      <span className="num mt-0.5 block text-[0.68rem] text-muted-foreground">
+                        Live {ltp != null ? formatNpr(ltp) : "—"} ·{" "}
+                        {a.hitAt ? "fired" : hit ? "crossed" : "watching"}
+                      </span>
+                    </span>
+                    <span className="flex shrink-0 items-center gap-1">
+                      {a.hitAt ? (
+                        <button
+                          type="button"
+                          onClick={() => pa.reset(a.id)}
+                          className="rounded-md px-1.5 py-1 text-[0.68rem] font-semibold text-primary hover:underline"
+                        >
+                          Re-arm
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        aria-label={`Delete alert for ${a.symbol}`}
+                        onClick={() => pa.remove(a.id)}
+                        className="rounded-md p-1 text-muted-foreground hover:text-destructive"
+                      >
+                        <X className="size-3.5" />
+                      </button>
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         ) : null}
         {issues.isLoading ? (
           <p className="px-2 py-6 text-center text-xs text-muted-foreground">Checking…</p>

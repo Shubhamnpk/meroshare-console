@@ -11,6 +11,7 @@ import {
   getDividends,
   getExchangeMessages,
   getFaceValues as fetchFaceValues,
+  getIndexDailyBars as fetchIndexDailyBars,
   getIndexHistory,
   getIndices,
   getIpoArchive,
@@ -18,6 +19,7 @@ import {
   getMarketStatus,
   getMarketSummary,
   getPortfolioHistory,
+  getPortfolioIntraday as fetchPortfolioIntraday,
   getScripDetail as fetchScripDetail,
   getScripFinancials as fetchScripFinancials,
   getScripFullHistory as fetchScripFullHistory,
@@ -35,6 +37,7 @@ import {
 import { parseNptEpoch, type UnitSnapshot } from "./timeline";
 import type {
   BrokerRow,
+  ChartBar,
   ChartSeries,
   DailyBar,
   DividendRow,
@@ -47,6 +50,7 @@ import type {
   LivePrice,
   MarketSnapshot,
   PortfolioHistoryPoint,
+  PortfolioIntraday,
   PricePoint,
   SectorIndex,
   ScripDetail,
@@ -128,6 +132,43 @@ export const getIndexGraph = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<PricePoint[]> => {
     await requireAuth();
     return getIndexHistory(data.indexName);
+  });
+
+export const getIndexDailyHistory = createServerFn({ method: "POST" })
+  .validator((input: unknown) =>
+    z
+      .object({
+        indexName: z.string().trim().min(1).max(48),
+        days: z.number().int().min(0).max(4000),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data }): Promise<ChartBar[]> => {
+    await requireAuth();
+    return fetchIndexDailyBars(data.indexName, data.days);
+  });
+
+export const getPortfolioIntradaySeries = createServerFn({ method: "POST" })
+  .validator((input: unknown) =>
+    z
+      .object({
+        holdings: z
+          .array(
+            z.object({
+              scrip: z.string().trim().min(1).max(24),
+              units: z.number().min(0),
+              price: z.number().min(0),
+            }),
+          )
+          .max(200),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data }): Promise<PortfolioIntraday> => {
+    await requireAuth();
+    return fetchPortfolioIntraday(
+      data.holdings.map((h) => ({ symbol: h.scrip, units: h.units, price: h.price })),
+    );
   });
 
 export const getScripDetail = createServerFn({ method: "POST" })

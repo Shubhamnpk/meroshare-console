@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeftRight, CalendarDays, Search, Star, Trash2 } from "lucide-react";
+import { CalendarDays, Search, Star, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import {
   Sheet,
   SheetContent,
@@ -72,22 +71,6 @@ export function WatchlistPanel({
     [prefsWatchlist.symbols, brokerSet],
   );
 
-  // Auto-pull: when panel opens and broker has new scrips not in local, merge them in (union, no overwrite)
-  useEffect(() => {
-    if (!open || !brokerId || onlyBroker.length === 0) return;
-    // One-shot per open: pull broker → local
-    let added = 0;
-    for (const s of onlyBroker) {
-      if (!prefsWatchlist.has(s)) {
-        prefsWatchlist.toggle(s);
-        added++;
-      }
-    }
-    if (added > 0)
-      toast.success(`Synced ${added} scrip${added === 1 ? "" : "s"} from broker watchlist.`);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, brokerId, brokerSymbols.join(",")]);
-
   const pushLocalToBroker = useMutation({
     mutationFn: async () => {
       const templates = brokerWatchlists.data ?? [];
@@ -111,6 +94,31 @@ export function WatchlistPanel({
     onError: (err) => toast.error(errorMessage(err, "Push failed.")),
   });
 
+  // Fully automatic two-way sync, once per open: pull broker-only scrips
+  // into local and push local-only scrips back (union both ways, no buttons).
+  const autoSynced = useRef(false);
+  const brokerKey = brokerSymbols.join(",");
+  const localKey = prefsWatchlist.symbols.join(",");
+  useEffect(() => {
+    if (!open) {
+      autoSynced.current = false;
+      return;
+    }
+    if (!brokerId || brokerWatchlists.isPending || autoSynced.current) return;
+    autoSynced.current = true;
+    let added = 0;
+    for (const s of onlyBroker) {
+      if (!prefsWatchlist.has(s)) {
+        prefsWatchlist.toggle(s);
+        added++;
+      }
+    }
+    if (added > 0)
+      toast.success(`Synced ${added} scrip${added === 1 ? "" : "s"} from broker watchlist.`);
+    if (onlyLocal.length > 0 && !pushLocalToBroker.isPending) pushLocalToBroker.mutate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, brokerId, brokerWatchlists.isPending, brokerKey, localKey]);
+
   const prices = snapshot.data?.prices ?? [];
   const rows = useMemo(
     () =>
@@ -133,7 +141,7 @@ export function WatchlistPanel({
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="flex w-full flex-col p-0 sm:max-w-md">
-        <SheetHeader className="border-b border-border/60 px-4 py-3 text-left">
+        <SheetHeader className="border-b border-border/60 py-3 pl-4 pr-12 text-left">
           <div className="flex items-center justify-between gap-2">
             <SheetTitle className="flex items-center gap-2 font-display text-base font-semibold">
               <Star className="size-4 fill-warning text-warning" aria-hidden />
@@ -194,61 +202,6 @@ export function WatchlistPanel({
           ) : null}
         </div>
 
-        {brokerId ? (
-          <div className="border-b border-border/60 bg-muted/20 px-4 py-2.5">
-            <div className="flex items-center justify-between gap-2">
-              <p className="flex items-center gap-1.5 text-xs font-semibold">
-                <ArrowLeftRight className="size-3.5 text-primary" /> Broker watchlist
-                {brokerWatchlists.isPending ? (
-                  <span className="font-normal text-muted-foreground">· loading…</span>
-                ) : brokerSymbols.length > 0 ? (
-                  <span className="font-normal text-muted-foreground">
-                    · {brokerSymbols.length}
-                  </span>
-                ) : null}
-              </p>
-              <span className="text-[0.66rem] text-muted-foreground">
-                {onlyBroker.length === 0 && onlyLocal.length === 0
-                  ? "in sync"
-                  : `Δ ${onlyLocal.length + onlyBroker.length}`}
-              </span>
-            </div>
-            {brokerSymbols.length > 0 ? (
-              <p className="mt-1 flex flex-wrap gap-1">
-                {brokerSymbols.slice(0, 12).map((s) => (
-                  <span
-                    key={s}
-                    className="rounded-full bg-background px-2 py-0.5 text-[0.66rem] font-medium border border-border/60"
-                  >
-                    {s}
-                  </span>
-                ))}
-                {brokerSymbols.length > 12 ? (
-                  <span className="text-[0.66rem] text-muted-foreground">
-                    +{brokerSymbols.length - 12}
-                  </span>
-                ) : null}
-              </p>
-            ) : null}
-            <div className="mt-2 flex gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 text-xs flex-1"
-                disabled={pushLocalToBroker.isPending || onlyLocal.length === 0}
-                onClick={() => pushLocalToBroker.mutate()}
-              >
-                {pushLocalToBroker.isPending
-                  ? "Pushing…"
-                  : `Push local → broker${onlyLocal.length ? ` (${onlyLocal.length})` : ""}`}
-              </Button>
-            </div>
-            <p className="mt-1 text-[0.66rem] text-muted-foreground">
-              Auto-pulled on open · push is union, never drops.
-            </p>
-          </div>
-        ) : null}
-
         <div className="flex-1 overflow-y-auto px-4 py-3">
           {rows.length === 0 ? (
             <EmptyBlock
@@ -261,7 +214,7 @@ export function WatchlistPanel({
               {rows.map(({ symbol, price }) => (
                 <li
                   key={symbol}
-                  className="flex items-center gap-2 rounded-xl border border-border/60 bg-surface px-3 py-2.5"
+                  className="flex items-center gap-2 rounded-xl border border-border/60 bg-surface px-3 py-2.5 transition-colors hover:border-primary/30 hover:bg-accent/5"
                 >
                   <button
                     type="button"

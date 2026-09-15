@@ -6,15 +6,19 @@ import { z } from "zod";
 import {
   brokerMeta,
   type BrokerBank,
+  type BrokerCompanyInfo,
   type BrokerConnectionMeta,
   type BrokerDepth,
   type BrokerDepthRow,
   type BrokerFunds,
   type BrokerHolding,
   type BrokerId,
+  type BrokerMarketStatus,
   type BrokerOrder,
+  type BrokerOrderEvent,
   type BrokerQuote,
   type BrokerTestResult,
+  type BrokerTicket,
   type BrokerTrade,
   type CancelOrderRequest,
   type CancelOrderResult,
@@ -36,12 +40,16 @@ import {
   dropWalletSession,
   exchangeTradeflowToken,
   getNaasaAmoList,
+  getNaasaCompanyInfo,
   getNaasaDepth,
   getNaasaHoldings,
+  getNaasaMarketStatus,
   getNaasaMarketWatch,
   getNaasaOrderBook,
+  getNaasaOrderHistory,
   getNaasaQuote,
   getNaasaSession,
+  getNaasaTickets,
   getNaasaTokens,
   getNaasaTradeBook,
   getNaasaWatchlists,
@@ -882,6 +890,81 @@ export const deleteBrokerWatchlist = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     return withBrokerSession(data.brokerId, async (s) => deleteNaasaWatchlist(s, data.template));
+  });
+
+export const getBrokerOrderHistory = createServerFn({ method: "GET" })
+  .validator((input: unknown) =>
+    z
+      .object({ brokerId: z.enum(["naasa-x"]), orderId: z.string().trim().min(1).max(64) })
+      .parse(input),
+  )
+  .handler(async ({ data }): Promise<BrokerOrderEvent[]> => {
+    return withBrokerSession(data.brokerId, async (session) => {
+      const rows = await getNaasaOrderHistory(session, data.orderId);
+      return rows.map((r) => {
+        const rawDate =
+          r["Date"] ?? r["OrderDate"] ?? r["BusinessDate"] ?? r["EntryDate"] ?? r["DateTime"] ?? "";
+        const rawTime = r["Time"] ?? r["OrderTime"] ?? r["EntryTime"] ?? "";
+        return {
+          status: String(r["OrderStatus"] ?? r["Status"] ?? ""),
+          quantity: numOrNull(r["Quantity"]),
+          price: numOrNull(r["Price"]),
+          tradedQty: numOrNull(r["TradedQuantity"] ?? r["TradedQty"]),
+          remainingQty: numOrNull(r["RemainingQty"] ?? r["RemainingQuantity"]),
+          date: String(rawDate ?? ""),
+          time: String(rawTime ?? ""),
+          message: String(r["Message"] ?? r["Remarks"] ?? r["Remark"] ?? ""),
+        };
+      });
+    });
+  });
+
+export const getBrokerCompanyInfo = createServerFn({ method: "GET" })
+  .validator((input: unknown) =>
+    z
+      .object({ brokerId: z.enum(["naasa-x"]), symbol: z.string().trim().min(3).max(24) })
+      .parse(input),
+  )
+  .handler(async ({ data }): Promise<BrokerCompanyInfo | null> => {
+    return withBrokerSession(data.brokerId, async (session) => {
+      const r = await getNaasaCompanyInfo(session, data.symbol);
+      if (!r) return null;
+      const pick = (...keys: string[]): unknown => {
+        for (const k of keys) {
+          if (r[k] !== undefined && r[k] !== null && r[k] !== "") return r[k];
+        }
+        return null;
+      };
+      const str = (v: unknown): string | null => (typeof v === "string" && v.length > 0 ? v : null);
+      return {
+        symbol: data.symbol.trim().toUpperCase(),
+        companyName: str(pick("CompanyName", "companyName", "Security Name", "InstrumentName")),
+        isin: str(pick("ISIN", "isin")),
+        tickSize: numOrNull(pick("TickSize", "tickSize")),
+        marketLot: numOrNull(pick("MarketLot", "marketLot", "LotSize")),
+        maxOrderSize: numOrNull(pick("Max. Order Size", "MaxOrderSize", "maxOrderSize")),
+        dprLow: numOrNull(pick("DPR Low", "dprLow", "DprLow")),
+        dprHigh: numOrNull(pick("DPR High", "dprHigh", "DprHigh")),
+        preOpenDprLow: numOrNull(pick("PreOpen DPR Low", "preOpenDprLow")),
+        preOpenDprHigh: numOrNull(pick("PreOpen DPR High", "preOpenDprHigh")),
+        weekHigh52: numOrNull(pick("52WeekHigh", "weekHigh52")),
+        weekLow52: numOrNull(pick("52WeekLow", "weekLow52")),
+        listingDate: str(pick("ListingDate", "listingDate", "TradingStartDate")),
+        activeStatus: str(pick("ActiveStatus", "activeStatus")),
+      };
+    });
+  });
+
+export const getBrokerMarketStatus = createServerFn({ method: "GET" })
+  .validator((input: unknown) => z.object({ brokerId: z.enum(["naasa-x"]) }).parse(input))
+  .handler(async ({ data }): Promise<BrokerMarketStatus> => {
+    return withBrokerSession(data.brokerId, async (session) => getNaasaMarketStatus(session));
+  });
+
+export const getBrokerTickets = createServerFn({ method: "GET" })
+  .validator((input: unknown) => z.object({ brokerId: z.enum(["naasa-x"]) }).parse(input))
+  .handler(async ({ data }): Promise<BrokerTicket[]> => {
+    return withBrokerSession(data.brokerId, async (session) => getNaasaTickets(session));
   });
 
 export const getBrokerWsCredentials = createServerFn({ method: "GET" })

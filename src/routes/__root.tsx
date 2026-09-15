@@ -18,7 +18,7 @@ import { isSessionError } from "@/lib/format";
 import { isBiometricEnrolled } from "@/lib/biometric";
 import { SITE_URL, OG_IMAGE, SITE_NAME, canonicalLink } from "@/lib/seo";
 import { hasVault } from "@/lib/secure-vault";
-import { SettingsProvider } from "@/lib/settings";
+import { SettingsProvider, useSettings } from "@/lib/settings";
 import { initInstallCapture } from "@/lib/install";
 import { WatchlistProvider } from "@/lib/watchlist";
 
@@ -233,6 +233,11 @@ function SessionExpiryHandler() {
   return null;
 }
 
+function ThemedToaster() {
+  const { theme } = useSettings();
+  return <Toaster theme={theme} position="top-center" closeButton />;
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
@@ -256,7 +261,7 @@ function RootComponent() {
             <Outlet />
             <SessionExpiryHandler />
             <SecurityDialogs />
-            <Toaster position="top-center" richColors />
+            <ThemedToaster />
           </WatchlistProvider>
         </QueryClientProvider>
       </SettingsProvider>

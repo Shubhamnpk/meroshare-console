@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Plus } from "lucide-react";
+import { BellPlus, Plus } from "lucide-react";
 import {
   AreaSeries,
   CandlestickSeries,
@@ -91,7 +91,9 @@ export function TerminalChart({
   height,
   onHover,
   onSelectBar,
+  onSelectPoint,
   onCreateOrder,
+  onCreateAlert,
 }: {
   bars: ChartBar[];
   intraday: PricePoint[];
@@ -105,16 +107,24 @@ export function TerminalChart({
   onHover?: (info: HoverInfo | null) => void;
   /** Fired when a bar is clicked (bar date) or empty space is clicked (null). */
   onSelectBar?: ((date: string | null) => void) | undefined;
+  /** Fired when an intraday point is tapped (nearest point) or empty space is tapped (null). */
+  onSelectPoint?: ((point: PricePoint | null) => void) | undefined;
   /** Fired from the hover "+" menu to draft a limit order at a chart price. */
   onCreateOrder?: ((order: { price: number; side: "BUY" | "SELL" }) => void) | undefined;
+  /** Fired from the hover "+" menu ("Remind" row) to set a price alert. */
+  onCreateAlert?: ((price: number) => void) | undefined;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const hoverRef = useRef(onHover);
   hoverRef.current = onHover;
   const selectRef = useRef(onSelectBar);
   selectRef.current = onSelectBar;
+  const pointRef = useRef(onSelectPoint);
+  pointRef.current = onSelectPoint;
   const createRef = useRef(onCreateOrder);
   createRef.current = onCreateOrder;
+  const alertRef = useRef(onCreateAlert);
+  alertRef.current = onCreateAlert;
   const apiRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick" | "Line" | "Area"> | null>(null);
   const [orderAt, setOrderAt] = useState<{ y: number; price: number } | null>(null);
@@ -122,21 +132,28 @@ export function TerminalChart({
 
   /** Drag-to-measure: armed by double-tap/double-click, active while dragging. */
   const [measure, setMeasure] = useState<{ from: Time; to: Time } | null>(null);
-  const [tip, setTip] = useState<{ x: number; y: number; bar: Bar } | null>(null);
   const anchorRef = useRef<Time | null>(null);
   const pointerDownRef = useRef(false);
   const draggingRef = useRef(false);
 
   const sanitizedBars = useMemo(() => {
-    const filtered = bars.filter((b) => Number.isFinite(b.open) && Number.isFinite(b.high) && Number.isFinite(b.low) && Number.isFinite(b.close));
+    const filtered = bars.filter(
+      (b) =>
+        Number.isFinite(b.open) &&
+        Number.isFinite(b.high) &&
+        Number.isFinite(b.low) &&
+        Number.isFinite(b.close),
+    );
     // lightweight-charts requires asc ordered unique time — dedup by date
-    const byDate = new Map<string, typeof filtered[number]>();
+    const byDate = new Map<string, (typeof filtered)[number]>();
     for (const b of filtered) byDate.set(b.date, b);
     return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
   }, [bars]);
   const sanitizedIntraday = useMemo(() => {
-    const filtered = intraday.filter((p) => Number.isFinite(p.value) && Number.isFinite(Number(p.time)));
-    const byTime = new Map<number, typeof filtered[number]>();
+    const filtered = intraday.filter(
+      (p) => Number.isFinite(p.value) && Number.isFinite(Number(p.time)),
+    );
+    const byTime = new Map<number, (typeof filtered)[number]>();
     for (const p of filtered) {
       const t = Number(p.time);
       byTime.set(t, p);
@@ -145,10 +162,15 @@ export function TerminalChart({
   }, [intraday]);
   const isIntraday = sanitizedBars.length === 0 && sanitizedIntraday.length > 0;
 
-  const barByDate = useMemo(() => new Map(sanitizedBars.map((b) => [b.date, b] as const)), [sanitizedBars]);
+  const barByDate = useMemo(
+    () => new Map(sanitizedBars.map((b) => [b.date, b] as const)),
+    [sanitizedBars],
+  );
 
   const [chartError, setChartError] = useState<string | null>(null);
-  useEffect(() => { setChartError(null); }, [sanitizedBars, sanitizedIntraday, style, light]);
+  useEffect(() => {
+    setChartError(null);
+  }, [sanitizedBars, sanitizedIntraday, style, light]);
 
   const endMeasure = () => {
     // A plain double-click (no drag yet) keeps the anchor armed; releasing after
@@ -175,406 +197,423 @@ export function TerminalChart({
     try {
       const colors = palette(light);
 
-    const chart: IChartApi = createChart(container, {
-      autoSize: true,
-      layout: {
-        background: { type: ColorType.Solid, color: colors.background },
-        textColor: colors.text,
-        attributionLogo: false,
-        panes: { separatorColor: colors.border, separatorHoverColor: colors.border },
-      },
-      grid: {
-        vertLines: { color: colors.grid },
-        horzLines: { color: colors.grid },
-      },
-      rightPriceScale: { borderVisible: false, mode: logScale ? 1 : 0 },
-      timeScale: {
-        borderVisible: false,
-        timeVisible: isIntraday,
-        secondsVisible: false,
-        rightOffset: 0,
-        ...(isIntraday
-          ? {
-              tickMarkFormatter: (time: Time, tickMarkType: TickMarkType) => {
-                const timestamp = Number(time);
-                if (!Number.isFinite(timestamp)) return String(time);
-                // Convert UTC timestamp to Nepal time (UTC+5:45)
-                const nepalMs = timestamp * 1000 + 345 * 60 * 1000;
-                const d = new Date(nepalMs);
-                const h = d.getUTCHours();
-                const m = d.getUTCMinutes();
-                const ampm = h >= 12 ? "PM" : "AM";
-                const h12 = h % 12 || 12;
-                return `${h12}:${m.toString().padStart(2, "0")} ${ampm}`;
-              },
-            }
-          : {}),
-      },
-      crosshair: { mode: CrosshairMode.Normal },
-      localization: {
-        locale: "en-NP",
-        ...(isIntraday
-          ? {
-              timeFormatter: (time: Time) => {
-                const timestamp = Number(time);
-                if (!Number.isFinite(timestamp)) return String(time);
-                const nepalMs = timestamp * 1000 + 345 * 60 * 1000;
-                const d = new Date(nepalMs);
-                const h = d.getUTCHours();
-                const m = d.getUTCMinutes();
-                const ampm = h >= 12 ? "PM" : "AM";
-                const h12 = h % 12 || 12;
-                return `${h12}:${m.toString().padStart(2, "0")} ${ampm}`;
-              },
-            }
-          : {}),
-      },
-    });
-    apiRef.current = chart;
-
-    let mainSeries: ISeriesApi<"Candlestick" | "Line" | "Area"> | null = null;
-
-    if (isIntraday) {
-      const points = sanitizedIntraday.map((p) => ({ time: p.time as UTCTimestamp, value: p.value }));
-      const first = points[0]?.value ?? 0;
-      const last = points[points.length - 1]?.value ?? 0;
-      const colour = last >= first ? UP : DOWN;
-      const series = chart.addSeries(AreaSeries, {
-        lineColor: colour,
-        topColor: `${colour}55`,
-        bottomColor: `${colour}05`,
-        lineWidth: 2,
-        priceLineVisible: false,
+      const chart: IChartApi = createChart(container, {
+        autoSize: true,
+        layout: {
+          background: { type: ColorType.Solid, color: colors.background },
+          textColor: colors.text,
+          attributionLogo: false,
+          panes: { separatorColor: colors.border, separatorHoverColor: colors.border },
+        },
+        grid: {
+          vertLines: { color: colors.grid },
+          horzLines: { color: colors.grid },
+        },
+        rightPriceScale: { borderVisible: false, mode: logScale ? 1 : 0 },
+        timeScale: {
+          borderVisible: false,
+          timeVisible: isIntraday,
+          secondsVisible: false,
+          rightOffset: 0,
+          ...(isIntraday
+            ? {
+                tickMarkFormatter: (time: Time, tickMarkType: TickMarkType) => {
+                  const timestamp = Number(time);
+                  if (!Number.isFinite(timestamp)) return String(time);
+                  // Convert UTC timestamp to Nepal time (UTC+5:45)
+                  const nepalMs = timestamp * 1000 + 345 * 60 * 1000;
+                  const d = new Date(nepalMs);
+                  const h = d.getUTCHours();
+                  const m = d.getUTCMinutes();
+                  const ampm = h >= 12 ? "PM" : "AM";
+                  const h12 = h % 12 || 12;
+                  return `${h12}:${m.toString().padStart(2, "0")} ${ampm}`;
+                },
+              }
+            : {}),
+        },
+        crosshair: { mode: CrosshairMode.Normal },
+        localization: {
+          locale: "en-NP",
+          ...(isIntraday
+            ? {
+                timeFormatter: (time: Time) => {
+                  const timestamp = Number(time);
+                  if (!Number.isFinite(timestamp)) return String(time);
+                  const nepalMs = timestamp * 1000 + 345 * 60 * 1000;
+                  const d = new Date(nepalMs);
+                  const h = d.getUTCHours();
+                  const m = d.getUTCMinutes();
+                  const ampm = h >= 12 ? "PM" : "AM";
+                  const h12 = h % 12 || 12;
+                  return `${h12}:${m.toString().padStart(2, "0")} ${ampm}`;
+                },
+              }
+            : {}),
+        },
       });
-      series.setData(points);
-      mainSeries = series;
-      seriesRef.current = series;
-    } else if (style === "candles") {
-      const series = chart.addSeries(CandlestickSeries, {
-        upColor: UP,
-        downColor: DOWN,
-        borderUpColor: UP,
-        borderDownColor: DOWN,
-        wickUpColor: UP,
-        wickDownColor: DOWN,
-      });
-      series.setData(
-        sanitizedBars.map((b) => ({
-          time: b.date as Time,
-          open: b.open,
-          high: b.high,
-          low: b.low,
-          close: b.close,
-        })),
-      );
-      mainSeries = series;
-      seriesRef.current = series;
-    } else if (style === "line") {
-      const series = chart.addSeries(LineSeries, { color: "#2563eb", lineWidth: 2 });
-      series.setData(sanitizedBars.map((b) => ({ time: b.date as Time, value: b.close })));
-      mainSeries = series;
-      seriesRef.current = series;
-    } else {
-      const series = chart.addSeries(AreaSeries, {
-        lineColor: "#2563eb",
-        topColor: "#2563eb55",
-        bottomColor: "#2563eb05",
-        lineWidth: 2,
-      });
-      series.setData(sanitizedBars.map((b) => ({ time: b.date as Time, value: b.close })));
-      mainSeries = series;
-      seriesRef.current = series;
-    }
+      apiRef.current = chart;
 
-    const indicatorBars: Bar[] = sanitizedBars.map((b) => ({
-      date: b.date,
-      open: b.open,
-      high: b.high,
-      low: b.low,
-      close: b.close,
-      volume: b.volume,
-    }));
+      let mainSeries: ISeriesApi<"Candlestick" | "Line" | "Area"> | null = null;
 
-    if (!isIntraday) {
-      if (indicators.sma20) {
-        chart
-          .addSeries(LineSeries, {
-            color: "#f59e0b",
-            lineWidth: 1,
-            priceLineVisible: false,
-            lastValueVisible: false,
-          })
-          .setData(toLine(sma(indicatorBars, 20)));
-      }
-      if (indicators.sma50) {
-        chart
-          .addSeries(LineSeries, {
-            color: "#8b5cf6",
-            lineWidth: 1,
-            priceLineVisible: false,
-            lastValueVisible: false,
-          })
-          .setData(toLine(sma(indicatorBars, 50)));
-      }
-      if (indicators.ema20) {
-        chart
-          .addSeries(LineSeries, {
-            color: "#06b6d4",
-            lineWidth: 1,
-            priceLineVisible: false,
-            lastValueVisible: false,
-          })
-          .setData(toLine(ema(indicatorBars, 20)));
-      }
-      if (indicators.vwap) {
-        chart
-          .addSeries(LineSeries, {
-            color: "#ec4899",
-            lineWidth: 1,
-            priceLineVisible: false,
-            lastValueVisible: false,
-          })
-          .setData(toLine(vwap(indicatorBars)));
-      }
-      if (indicators.bollinger) {
-        const bands = bollinger(indicatorBars, 20, 2);
-        const opts = {
-          color: "rgba(148,163,184,0.75)",
-          lineWidth: 1 as const,
-          priceLineVisible: false,
-          lastValueVisible: false,
-        };
-        chart.addSeries(LineSeries, opts).setData(toLine(bands.upper));
-        chart.addSeries(LineSeries, opts).setData(toLine(bands.lower));
-        chart
-          .addSeries(LineSeries, { ...opts, lineStyle: LineStyle.Dotted })
-          .setData(toLine(bands.middle));
-      }
-    }
-
-    if (compare && compare.length > 1) {
-      const series = chart.addSeries(LineSeries, {
-        color: "#94a3b8",
-        lineWidth: 1,
-        priceScaleId: "compare",
-        priceLineVisible: false,
-        title: compareLabel ?? "Compare",
-      });
-      series.setData(toLine(compare));
-      chart.priceScale("compare").applyOptions({
-        scaleMargins: { top: 0.1, bottom: 0.3 },
-        visible: false,
-      });
-    }
-
-    let pane = 1;
-    if (indicators.volume) {
-      const volumeSeries = chart.addSeries(
-        HistogramSeries,
-        { priceFormat: { type: "volume" }, priceScaleId: "" },
-        pane,
-      );
       if (isIntraday) {
-        const hasVolume = sanitizedIntraday.some((p) => (p.volume ?? 0) > 0);
-        if (hasVolume) {
+        const points = sanitizedIntraday.map((p) => ({
+          time: p.time as UTCTimestamp,
+          value: p.value,
+        }));
+        const first = points[0]?.value ?? 0;
+        const last = points[points.length - 1]?.value ?? 0;
+        const colour = last >= first ? UP : DOWN;
+        const series = chart.addSeries(AreaSeries, {
+          lineColor: colour,
+          topColor: `${colour}55`,
+          bottomColor: `${colour}05`,
+          lineWidth: 2,
+          priceLineVisible: false,
+        });
+        series.setData(points);
+        mainSeries = series;
+        seriesRef.current = series;
+      } else if (style === "candles") {
+        const series = chart.addSeries(CandlestickSeries, {
+          upColor: UP,
+          downColor: DOWN,
+          borderUpColor: UP,
+          borderDownColor: DOWN,
+          wickUpColor: UP,
+          wickDownColor: DOWN,
+        });
+        series.setData(
+          sanitizedBars.map((b) => ({
+            time: b.date as Time,
+            open: b.open,
+            high: b.high,
+            low: b.low,
+            close: b.close,
+          })),
+        );
+        mainSeries = series;
+        seriesRef.current = series;
+      } else if (style === "line") {
+        const series = chart.addSeries(LineSeries, { color: "#2563eb", lineWidth: 2 });
+        series.setData(sanitizedBars.map((b) => ({ time: b.date as Time, value: b.close })));
+        mainSeries = series;
+        seriesRef.current = series;
+      } else {
+        const series = chart.addSeries(AreaSeries, {
+          lineColor: "#2563eb",
+          topColor: "#2563eb55",
+          bottomColor: "#2563eb05",
+          lineWidth: 2,
+        });
+        series.setData(sanitizedBars.map((b) => ({ time: b.date as Time, value: b.close })));
+        mainSeries = series;
+        seriesRef.current = series;
+      }
+
+      const indicatorBars: Bar[] = sanitizedBars.map((b) => ({
+        date: b.date,
+        open: b.open,
+        high: b.high,
+        low: b.low,
+        close: b.close,
+        volume: b.volume,
+      }));
+
+      if (!isIntraday) {
+        if (indicators.sma20) {
+          chart
+            .addSeries(LineSeries, {
+              color: "#f59e0b",
+              lineWidth: 1,
+              priceLineVisible: false,
+              lastValueVisible: false,
+            })
+            .setData(toLine(sma(indicatorBars, 20)));
+        }
+        if (indicators.sma50) {
+          chart
+            .addSeries(LineSeries, {
+              color: "#8b5cf6",
+              lineWidth: 1,
+              priceLineVisible: false,
+              lastValueVisible: false,
+            })
+            .setData(toLine(sma(indicatorBars, 50)));
+        }
+        if (indicators.ema20) {
+          chart
+            .addSeries(LineSeries, {
+              color: "#06b6d4",
+              lineWidth: 1,
+              priceLineVisible: false,
+              lastValueVisible: false,
+            })
+            .setData(toLine(ema(indicatorBars, 20)));
+        }
+        if (indicators.vwap) {
+          chart
+            .addSeries(LineSeries, {
+              color: "#ec4899",
+              lineWidth: 1,
+              priceLineVisible: false,
+              lastValueVisible: false,
+            })
+            .setData(toLine(vwap(indicatorBars)));
+        }
+        if (indicators.bollinger) {
+          const bands = bollinger(indicatorBars, 20, 2);
+          const opts = {
+            color: "rgba(148,163,184,0.75)",
+            lineWidth: 1 as const,
+            priceLineVisible: false,
+            lastValueVisible: false,
+          };
+          chart.addSeries(LineSeries, opts).setData(toLine(bands.upper));
+          chart.addSeries(LineSeries, opts).setData(toLine(bands.lower));
+          chart
+            .addSeries(LineSeries, { ...opts, lineStyle: LineStyle.Dotted })
+            .setData(toLine(bands.middle));
+        }
+      }
+
+      if (compare && compare.length > 1) {
+        const series = chart.addSeries(LineSeries, {
+          color: "#94a3b8",
+          lineWidth: 1,
+          priceScaleId: "compare",
+          priceLineVisible: false,
+          title: compareLabel ?? "Compare",
+        });
+        series.setData(toLine(compare));
+        chart.priceScale("compare").applyOptions({
+          scaleMargins: { top: 0.1, bottom: 0.3 },
+          visible: false,
+        });
+      }
+
+      let pane = 1;
+      if (indicators.volume) {
+        const volumeSeries = chart.addSeries(
+          HistogramSeries,
+          { priceFormat: { type: "volume" }, priceScaleId: "" },
+          pane,
+        );
+        if (isIntraday) {
+          const hasVolume = sanitizedIntraday.some((p) => (p.volume ?? 0) > 0);
+          if (hasVolume) {
+            volumeSeries.setData(
+              sanitizedIntraday.map((p) => ({
+                time: p.time as UTCTimestamp,
+                value: p.volume ?? 0,
+                color: p.value >= (sanitizedIntraday[0]?.value ?? 0) ? `${UP}66` : `${DOWN}66`,
+              })),
+            );
+          }
+        } else {
           volumeSeries.setData(
-            sanitizedIntraday.map((p) => ({
-              time: p.time as UTCTimestamp,
-              value: p.volume ?? 0,
-              color: p.value >= (sanitizedIntraday[0]?.value ?? 0) ? `${UP}66` : `${DOWN}66`,
+            sanitizedBars.map((b) => ({
+              time: b.date as Time,
+              value: b.volume,
+              color: b.close >= b.open ? `${UP}66` : `${DOWN}66`,
             })),
           );
         }
-      } else {
-        volumeSeries.setData(
-          sanitizedBars.map((b) => ({
-            time: b.date as Time,
-            value: b.volume,
-            color: b.close >= b.open ? `${UP}66` : `${DOWN}66`,
+        chart.panes()[pane]?.setHeight(Math.round(height * 0.16));
+        pane += 1;
+      }
+
+      if (!isIntraday && indicators.rsi) {
+        const series = chart.addSeries(
+          LineSeries,
+          { color: "#eab308", lineWidth: 1, priceLineVisible: false },
+          pane,
+        );
+        series.setData(toLine(rsi(indicatorBars, 14)));
+        series.createPriceLine({
+          price: 70,
+          color: DOWN,
+          lineWidth: 1,
+          lineStyle: LineStyle.Dotted,
+          axisLabelVisible: false,
+          title: "",
+        });
+        series.createPriceLine({
+          price: 30,
+          color: UP,
+          lineWidth: 1,
+          lineStyle: LineStyle.Dotted,
+          axisLabelVisible: false,
+          title: "",
+        });
+        chart.panes()[pane]?.setHeight(Math.round(height * 0.18));
+        pane += 1;
+      }
+
+      if (!isIntraday && indicators.macd) {
+        const series = macd(indicatorBars);
+        const hist = chart.addSeries(HistogramSeries, { priceScaleId: "" }, pane);
+        hist.setData(
+          series.histogram.map((p) => ({
+            time: p.date as Time,
+            value: p.value,
+            color: p.value >= 0 ? `${UP}88` : `${DOWN}88`,
           })),
         );
+        chart
+          .addSeries(LineSeries, { color: "#2563eb", lineWidth: 1, priceLineVisible: false }, pane)
+          .setData(toLine(series.macd));
+        chart
+          .addSeries(LineSeries, { color: "#f97316", lineWidth: 1, priceLineVisible: false }, pane)
+          .setData(toLine(series.signal));
+        chart.panes()[pane]?.setHeight(Math.round(height * 0.18));
+        pane += 1;
       }
-      chart.panes()[pane]?.setHeight(Math.round(height * 0.16));
-      pane += 1;
-    }
 
-    if (!isIntraday && indicators.rsi) {
-      const series = chart.addSeries(
-        LineSeries,
-        { color: "#eab308", lineWidth: 1, priceLineVisible: false },
-        pane,
-      );
-      series.setData(toLine(rsi(indicatorBars, 14)));
-      series.createPriceLine({
-        price: 70,
-        color: DOWN,
-        lineWidth: 1,
-        lineStyle: LineStyle.Dotted,
-        axisLabelVisible: false,
-        title: "",
-      });
-      series.createPriceLine({
-        price: 30,
-        color: UP,
-        lineWidth: 1,
-        lineStyle: LineStyle.Dotted,
-        axisLabelVisible: false,
-        title: "",
-      });
-      chart.panes()[pane]?.setHeight(Math.round(height * 0.18));
-      pane += 1;
-    }
-
-    if (!isIntraday && indicators.macd) {
-      const series = macd(indicatorBars);
-      const hist = chart.addSeries(HistogramSeries, { priceScaleId: "" }, pane);
-      hist.setData(
-        series.histogram.map((p) => ({
-          time: p.date as Time,
-          value: p.value,
-          color: p.value >= 0 ? `${UP}88` : `${DOWN}88`,
-        })),
-      );
-      chart
-        .addSeries(LineSeries, { color: "#2563eb", lineWidth: 1, priceLineVisible: false }, pane)
-        .setData(toLine(series.macd));
-      chart
-        .addSeries(LineSeries, { color: "#f97316", lineWidth: 1, priceLineVisible: false }, pane)
-        .setData(toLine(series.signal));
-      chart.panes()[pane]?.setHeight(Math.round(height * 0.18));
-      pane += 1;
-    }
-
-    // Double-tap/double-click arms the drag-to-measure anchor and freezes panning
-    // so the drag selects a range instead of scrolling the chart.
-    const onDblClick = (param: MouseEventParams) => {
-      if (!param.time) return;
-      anchorRef.current = param.time;
-      setMeasure(null);
-      chart.applyOptions({
-        handleScroll: {
-          mouseWheel: true,
-          pressedMouseMove: false,
-          horzTouchDrag: false,
-          vertTouchDrag: false,
-        },
-      });
-    };
-    chart.subscribeDblClick(onDblClick);
-
-    const byDate = new Map(bars.map((b) => [b.date, b]));
-    const onClick = (param: MouseEventParams) => {
-      const emit = selectRef.current;
-      // Clicking empty space (no time) clears the selection and tooltip.
-      if (!param.time) {
-        setTip(null);
-        emit?.(null);
-        return;
-      }
-      if (!emit) return;
-      // Skip while a drag-to-measure gesture is in progress.
-      if (draggingRef.current) return;
-      const direct = byDate.get(String(param.time));
-      // Fall back to the nearest bar by logical index in case the event
-      // time format ever differs from the stored bar dates.
-      const logical = param.logical;
-      const nearest =
-        !direct && typeof logical === "number" && Number.isFinite(logical) && bars.length > 0
-          ? bars[Math.min(bars.length - 1, Math.max(0, Math.round(logical)))]
-          : undefined;
-      const bar = direct ?? nearest;
-      // Pin the floating tooltip at the tapped candle (touch has no hover).
-      if (bar && param.point) setTip({ x: param.point.x, y: param.point.y, bar });
-      emit(bar ? bar.date : null);
-    };
-    chart.subscribeClick(onClick);
-    const handler = (param: MouseEventParams) => {
-      if (anchorRef.current && pointerDownRef.current && param.time) {
-        draggingRef.current = true;
-        setMeasure({ from: anchorRef.current, to: param.time });
-      }
-      const emit = hoverRef.current;
-      if (!emit && !createRef.current) return;
-      const point = param.point ?? null;
-      if (!param.time || !point) {
-        emit?.(null);
-        setTip(null);
-        setOrderAt(null);
-        setOrderMenu(false);
-        return;
-      }
-      // Hover price for the "+" quick-order button (any series, any scale).
-      if (createRef.current && seriesRef.current) {
-        try {
-          const raw = seriesRef.current.coordinateToPrice(point.y);
-          const price = typeof raw === "number" ? Math.round(raw * 100) / 100 : 0;
-          if (price > 0) {
-            setOrderAt((prev) =>
-              prev && Math.abs(prev.y - point.y) < 3 && prev.price === price
-                ? prev
-                : { y: point.y, price },
-            );
-          } else {
-            setOrderAt(null);
-            setOrderMenu(false);
-          }
-        } catch {
-          // ignore out-of-scale coordinates
-        }
-      }
-      if (isIntraday) {
-        const value = mainSeries ? param.seriesData.get(mainSeries) : undefined;
-        const price = value && "value" in value ? Number(value.value) : 0;
-        const first = intraday[0]?.value ?? price;
-        // Convert UTC timestamp to Nepal time (UTC+5:45)
-        const nepalMs = Number(param.time) * 1000 + 345 * 60 * 1000;
-        const nepalDate = new Date(nepalMs);
-        const yyyy = nepalDate.getUTCFullYear();
-        const mm = (nepalDate.getUTCMonth() + 1).toString().padStart(2, "0");
-        const dd = nepalDate.getUTCDate().toString().padStart(2, "0");
-        const hh = nepalDate.getUTCHours().toString().padStart(2, "0");
-        const mi = nepalDate.getUTCMinutes().toString().padStart(2, "0");
-        const ss = nepalDate.getUTCSeconds().toString().padStart(2, "0");
-        emit?.({
-          date: `${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}`,
-          open: first,
-          high: price,
-          low: price,
-          close: price,
-          volume: 0,
-          changePercent: first ? ((price - first) / first) * 100 : 0,
+      // Double-tap/double-click arms the drag-to-measure anchor and freezes panning
+      // so the drag selects a range instead of scrolling the chart.
+      const onDblClick = (param: MouseEventParams) => {
+        if (!param.time) return;
+        anchorRef.current = param.time;
+        setMeasure(null);
+        chart.applyOptions({
+          handleScroll: {
+            mouseWheel: true,
+            pressedMouseMove: false,
+            horzTouchDrag: false,
+            vertTouchDrag: false,
+          },
         });
-        return;
-      }
-      const bar = byDate.get(String(param.time));
-      if (!bar) {
-        emit?.(null);
-        setTip(null);
-        return;
-      }
-      setTip((prev) =>
-        prev && prev.bar.date === bar.date && Math.abs(prev.x - point.x) < 2 ? prev : { x: point.x, y: point.y, bar },
-      );
-      emit?.({
-        date: bar.date,
-        open: bar.open,
-        high: bar.high,
-        low: bar.low,
-        close: bar.close,
-        volume: bar.volume,
-        changePercent: bar.open ? ((bar.close - bar.open) / bar.open) * 100 : 0,
-      });
-    };
-    chart.subscribeCrosshairMove(handler);
-    chart.timeScale().fitContent();
+      };
+      chart.subscribeDblClick(onDblClick);
 
-    return () => {
-      chart.unsubscribeCrosshairMove(handler);
-      chart.unsubscribeDblClick(onDblClick);
-      chart.unsubscribeClick(onClick);
-      chart.remove();
-      apiRef.current = null;
-    };
+      const byDate = new Map(bars.map((b) => [b.date, b]));
+      const onClick = (param: MouseEventParams) => {
+        const emit = selectRef.current;
+        const emitPoint = pointRef.current;
+        // Clicking empty space (no time) clears the selection.
+        if (!param.time) {
+          emit?.(null);
+          emitPoint?.(null);
+          return;
+        }
+        // Intraday line: pin the nearest session point (bars don't exist here).
+        if (isIntraday) {
+          const pts = sanitizedIntraday;
+          let found: PricePoint | null = null;
+          if (typeof param.time === "number") {
+            let best = Number.POSITIVE_INFINITY;
+            for (const p of pts) {
+              const gap = Math.abs(Number(p.time) - param.time);
+              if (gap < best) {
+                best = gap;
+                found = p;
+              }
+            }
+          } else if (typeof param.logical === "number" && pts.length > 0) {
+            found = pts[Math.min(pts.length - 1, Math.max(0, Math.round(param.logical)))] ?? null;
+          }
+          emitPoint?.(found && param.point ? found : null);
+          emit?.(null);
+          return;
+        }
+        if (!emit) return;
+        // Skip while a drag-to-measure gesture is in progress.
+        if (draggingRef.current) return;
+        const direct = byDate.get(String(param.time));
+        // Fall back to the nearest bar by logical index in case the event
+        // time format ever differs from the stored bar dates.
+        const logical = param.logical;
+        const nearest =
+          !direct && typeof logical === "number" && Number.isFinite(logical) && bars.length > 0
+            ? bars[Math.min(bars.length - 1, Math.max(0, Math.round(logical)))]
+            : undefined;
+        const bar = direct ?? nearest;
+        emit(bar ? bar.date : null);
+      };
+      chart.subscribeClick(onClick);
+      const handler = (param: MouseEventParams) => {
+        if (anchorRef.current && pointerDownRef.current && param.time) {
+          draggingRef.current = true;
+          setMeasure({ from: anchorRef.current, to: param.time });
+        }
+        const emit = hoverRef.current;
+        if (!emit && !createRef.current && !alertRef.current) return;
+        const point = param.point ?? null;
+        if (!param.time || !point) {
+          emit?.(null);
+          setOrderAt(null);
+          setOrderMenu(false);
+          return;
+        }
+        // Hover price for the "+" quick-order button (any series, any scale).
+        if ((createRef.current || alertRef.current) && seriesRef.current) {
+          try {
+            const raw = seriesRef.current.coordinateToPrice(point.y);
+            const price = typeof raw === "number" ? Math.round(raw * 100) / 100 : 0;
+            if (price > 0) {
+              setOrderAt((prev) =>
+                prev && Math.abs(prev.y - point.y) < 3 && prev.price === price
+                  ? prev
+                  : { y: point.y, price },
+              );
+            } else {
+              setOrderAt(null);
+              setOrderMenu(false);
+            }
+          } catch {
+            // ignore out-of-scale coordinates
+          }
+        }
+        if (isIntraday) {
+          const value = mainSeries ? param.seriesData.get(mainSeries) : undefined;
+          const price = value && "value" in value ? Number(value.value) : 0;
+          const first = intraday[0]?.value ?? price;
+          // Convert UTC timestamp to Nepal time (UTC+5:45)
+          const nepalMs = Number(param.time) * 1000 + 345 * 60 * 1000;
+          const nepalDate = new Date(nepalMs);
+          const yyyy = nepalDate.getUTCFullYear();
+          const mm = (nepalDate.getUTCMonth() + 1).toString().padStart(2, "0");
+          const dd = nepalDate.getUTCDate().toString().padStart(2, "0");
+          const hh = nepalDate.getUTCHours().toString().padStart(2, "0");
+          const mi = nepalDate.getUTCMinutes().toString().padStart(2, "0");
+          const ss = nepalDate.getUTCSeconds().toString().padStart(2, "0");
+          emit?.({
+            date: `${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}`,
+            open: first,
+            high: price,
+            low: price,
+            close: price,
+            volume: 0,
+            changePercent: first ? ((price - first) / first) * 100 : 0,
+          });
+          return;
+        }
+        const bar = byDate.get(String(param.time));
+        if (!bar) {
+          emit?.(null);
+          return;
+        }
+        emit?.({
+          date: bar.date,
+          open: bar.open,
+          high: bar.high,
+          low: bar.low,
+          close: bar.close,
+          volume: bar.volume,
+          changePercent: bar.open ? ((bar.close - bar.open) / bar.open) * 100 : 0,
+        });
+      };
+      chart.subscribeCrosshairMove(handler);
+      chart.timeScale().fitContent();
+
+      return () => {
+        chart.unsubscribeCrosshairMove(handler);
+        chart.unsubscribeDblClick(onDblClick);
+        chart.unsubscribeClick(onClick);
+        chart.remove();
+        apiRef.current = null;
+      };
     } catch (err) {
       console.error("[terminal-chart] render failed", err);
       setChartError(err instanceof Error ? err.message : "Chart failed to render");
@@ -598,7 +637,7 @@ export function TerminalChart({
   // is open the button locks in place instead of chasing the cursor.
   const trackOrderAt = (clientY: number) => {
     if (orderMenu) return;
-    if (!createRef.current || !seriesRef.current) return;
+    if ((!createRef.current && !alertRef.current) || !seriesRef.current) return;
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
     const y = clientY - rect.top;
@@ -663,7 +702,10 @@ export function TerminalChart({
 
   if (chartError) {
     return (
-      <div className="flex flex-col items-center justify-center gap-2 px-4 text-center text-sm text-muted-foreground" style={{ height }}>
+      <div
+        className="flex flex-col items-center justify-center gap-2 px-4 text-center text-sm text-muted-foreground"
+        style={{ height }}
+      >
         <p>Chart unavailable for this symbol.</p>
         <p className="max-w-md text-xs">{chartError}</p>
       </div>
@@ -691,7 +733,7 @@ export function TerminalChart({
     >
       <div ref={containerRef} className="h-full w-full" />
       {measureOverlay}
-      {orderAt && !measure && createRef.current ? (
+      {orderAt && !measure && (createRef.current || alertRef.current) ? (
         <>
           <div
             aria-hidden
@@ -701,73 +743,66 @@ export function TerminalChart({
           <div className="absolute right-0 z-10" style={{ top: Math.max(orderAt.y - 14, 4) }}>
             <button
               type="button"
-              aria-label={`Create order at ${orderAt.price}`}
-              title={`Create order at ${orderAt.price}`}
+              aria-label={`Create order or alert at ${orderAt.price}`}
+              title={`Create order or alert at ${orderAt.price}`}
               onClick={(e) => {
                 e.stopPropagation();
                 setOrderMenu((v) => !v);
               }}
               className="num flex items-center gap-1.5 rounded-full border border-primary/50 bg-card/95 py-1 pl-2.5 pr-1 text-[0.68rem] font-bold text-primary shadow-lg backdrop-blur transition-colors hover:border-primary hover:bg-primary/10"
             >
-              <span>
-                {orderAt.price.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
-              </span>
+              <span>{orderAt.price.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</span>
               <span className="flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
                 <Plus className="size-3.5" />
               </span>
             </button>
-          {orderMenu ? (
-            <div className="absolute right-8 top-0 w-44 overflow-hidden rounded-xl border border-border/70 bg-card shadow-xl">
-              {(
-                [
-                  { side: "BUY", cls: "text-gain" },
-                  { side: "SELL", cls: "text-destructive" },
-                ] as const
-              ).map(({ side, cls }) => (
-                <button
-                  key={side}
-                  type="button"
-                  onClick={() => {
-                    createRef.current?.({ price: orderAt.price, side });
-                    setOrderMenu(false);
-                  }}
-                  className="flex w-full items-center justify-between px-3 py-2 text-xs font-semibold transition-colors hover:bg-muted/60"
-                >
-                  <span className={cls}>{side} limit</span>
-                  <span className="num text-muted-foreground">
-                    @ {orderAt.price.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
-                  </span>
-                </button>
-              ))}
-            </div>
-          ) : null}
+            {orderMenu ? (
+              <div className="absolute right-8 top-0 w-44 overflow-hidden rounded-xl border border-border/70 bg-card shadow-xl">
+                {createRef.current
+                  ? (
+                      [
+                        { side: "BUY", cls: "text-gain" },
+                        { side: "SELL", cls: "text-destructive" },
+                      ] as const
+                    ).map(({ side, cls }) => (
+                      <button
+                        key={side}
+                        type="button"
+                        onClick={() => {
+                          createRef.current?.({ price: orderAt.price, side });
+                          setOrderMenu(false);
+                        }}
+                        className="flex w-full items-center justify-between px-3 py-2 text-xs font-semibold transition-colors hover:bg-muted/60"
+                      >
+                        <span className={cls}>{side} limit</span>
+                        <span className="num text-muted-foreground">
+                          @ {orderAt.price.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                        </span>
+                      </button>
+                    ))
+                  : null}
+                {alertRef.current ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      alertRef.current?.(orderAt.price);
+                      setOrderMenu(false);
+                    }}
+                    className="flex w-full items-center justify-between border-t border-border/60 px-3 py-2 text-xs font-semibold transition-colors hover:bg-muted/60"
+                  >
+                    <span className="inline-flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+                      <BellPlus className="size-3.5" /> Remind
+                    </span>
+                    <span className="num text-muted-foreground">
+                      @ {orderAt.price.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                    </span>
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </>
       ) : null}
-      {tip && !measure
-        ? (() => {
-            const width = containerRef.current?.offsetWidth ?? 0;
-            const left = width > 0 ? Math.min(Math.max(tip.x, 84), width - 84) : tip.x;
-            return (
-              <div
-                className="num pointer-events-none absolute z-10 whitespace-nowrap rounded-lg border border-border/70 bg-card/95 px-2.5 py-1.5 text-[0.68rem] leading-relaxed shadow-lg backdrop-blur"
-                style={{ left, top: Math.max(tip.y - 10, 4), transform: "translate(-50%, -100%)" }}
-              >
-                <p className="font-semibold text-foreground">{tip.bar.date.slice(0, 10)}</p>
-                <p className="text-muted-foreground">
-                  O {tip.bar.open.toLocaleString("en-IN", { maximumFractionDigits: 2 })} · H{" "}
-                  {tip.bar.high.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
-                </p>
-                <p className="text-muted-foreground">
-                  L {tip.bar.low.toLocaleString("en-IN", { maximumFractionDigits: 2 })} · C{" "}
-                  <span className="font-semibold text-foreground">
-                    {tip.bar.close.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
-                  </span>
-                </p>
-              </div>
-            );
-          })()
-        : null}
     </div>
   );
 }

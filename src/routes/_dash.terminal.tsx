@@ -26,9 +26,11 @@ import {
   type IndicatorConfig,
 } from "@/components/market/terminal-chart";
 import { normalise, type LinePoint } from "@/lib/nepse/indicators";
+import { chartDayLabel, chartTimeLabel } from "@/components/market/chart-modal";
 import { PointBreakdown } from "@/components/portfolio/history-panel";
 import { WatchlistPanel } from "@/components/market/watchlist-panel";
 import { OrderTicket } from "@/components/brokers/order-ticket";
+import { PriceAlertDialog } from "@/components/brokers/price-alert-dialog";
 import {
   brokerConnectionsQuery,
   brokerOrderBookQuery,
@@ -36,18 +38,28 @@ import {
   brokerWatchlistsQuery,
   chartSeriesQuery,
   enrichedPortfolioQuery,
+  indexDailyQuery,
   indexGraphQuery,
   investmentSummaryQuery,
   marketSnapshotQuery,
   portfolioHistoryQuery,
+  portfolioIntradayQuery,
   udfHistoryQuery,
 } from "@/lib/queries";
 import { cancelBrokerOrder } from "@/lib/brokers/brokers.functions";
 import type { BrokerId } from "@/lib/brokers/types";
 import { useBrokerMarketWs } from "@/hooks/use-broker-ws";
-import type { ChartBar, ChartRange, PricePoint } from "@/lib/nepse/types";
+import type { ChartBar, ChartRange, PortfolioHistoryPoint, PricePoint } from "@/lib/nepse/types";
 import { errorMessage, formatNpr, formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useSettings, useWatchlist, type TerminalState } from "@/lib/prefs";
 import { ogImage, canonicalLink } from "@/lib/seo";
 
@@ -106,6 +118,50 @@ const DEFAULT_SYMBOL = "NABIL";
 const NO_BARS: ChartBar[] = [];
 const NO_POINTS: PricePoint[] = [];
 
+type BarAgg = "day" | "week" | "month" | "year";
+
+/** Sunday (week-start) key for a "YYYY-MM-DD" trading date. */
+function sundayKey(date: string): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return date;
+  d.setUTCDate(d.getUTCDate() - d.getUTCDay());
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Bucket daily candles into weekly/monthly/yearly candles: open = first open,
+ * high/low = extremes, close = last close, volume = summed. Buckets keep
+ * chronological order; weekly buckets are keyed by their Sunday.
+ */
+function aggregateBars(bars: ChartBar[], agg: BarAgg): ChartBar[] {
+  if (agg === "day" || bars.length === 0) return bars;
+  const buckets = new Map<string, ChartBar[]>();
+  for (const b of bars) {
+    const key =
+      agg === "week"
+        ? sundayKey(b.date)
+        : agg === "month"
+          ? b.date.slice(0, 7)
+          : b.date.slice(0, 4);
+    const arr = buckets.get(key);
+    if (arr) arr.push(b);
+    else buckets.set(key, [b]);
+  }
+  return [...buckets.values()].map((group) => {
+    const firstBar = group[0]!;
+    const lastBar = group[group.length - 1]!;
+    return {
+      date: firstBar.date,
+      open: firstBar.open,
+      high: Math.max(...group.map((g) => g.high)),
+      low: Math.min(...group.map((g) => g.low)),
+      close: lastBar.close,
+      volume: group.reduce((sum, g) => sum + g.volume, 0),
+      synthetic: false,
+    };
+  });
+}
+
 interface Stored {
   symbol: string;
   range: ChartRange;
@@ -162,6 +218,9 @@ function TerminalPage() {
 
   const [mode, setMode] = useState<"scrip" | "portfolio">("scrip");
   const [basis, setBasis] = useState<"value" | "profit">("value");
+  // Per-point resolution for daily candles (1M+ ranges): each candle covers
+  // one day, one week, one calendar month or one calendar year.
+  const [barAgg, setBarAgg] = useState<BarAgg>("day");
   const [query, setQuery] = useState("");
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const [ticketPrice, setTicketPrice] = useState<{
@@ -169,6 +228,7 @@ function TerminalPage() {
     side?: "BUY" | "SELL";
     nonce: number;
   } | null>(null);
+  const [alertAt, setAlertAt] = useState<number | null>(null);
   const brokerConns = useQuery(brokerConnectionsQuery());
   const brokerLinked = (brokerConns.data?.length ?? 0) > 0;
   const termBrokerId = (brokerConns.data?.[0]?.brokerId ?? null) as BrokerId | null;
@@ -178,6 +238,8 @@ function TerminalPage() {
   useBrokerMarketWs(termBrokerId, isIndexEarly ? null : state.symbol);
   /** Pinned candle in scrip mode (click); hover readout falls back to it. */
   const [pinned, setPinned] = useState<ChartBar | null>(null);
+  /** Pinned session point in intraday mode (click): shows price + time below. */
+  const [pinnedPoint, setPinnedPoint] = useState<PricePoint | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [compareSymbol, setCompareSymbol] = useState("");
   /** Pinned net-worth date (portfolio mode): shows that day's per-scrip prices below. */
@@ -185,6 +247,7 @@ function TerminalPage() {
   useEffect(() => {
     setSelectedDate(null);
     setPinned(null);
+    setPinnedPoint(null);
   }, [mode, state.range, state.symbol]);
 
   const watchSymbols = watchlist.symbols;
@@ -246,10 +309,35 @@ function TerminalPage() {
     ...indexGraphQuery(state.symbol),
     enabled: mode === "scrip" && isIndexEarly,
   });
+  // Daily index candles from the YONEPSE archive for 1M+ ranges (the session
+  // feed above only covers today). MAX (0) means the whole archive, uncapped.
+  const indexRangeDays =
+    state.range === "1M"
+      ? 31
+      : state.range === "3M"
+        ? 93
+        : state.range === "6M"
+          ? 186
+          : state.range === "1Y"
+            ? 366
+            : state.range === "3Y"
+              ? 1098
+              : state.range === "5Y"
+                ? 1826
+                : 0;
+  const indexDaily = useQuery({
+    ...indexDailyQuery(state.symbol, indexRangeDays),
+    enabled: mode === "scrip" && isIndexEarly && state.range !== "1D" && state.range !== "1W",
+  });
   // Live tick for crazy 1m: when broker linked, poll broker quote every 5s and patch last candle
   const liveTick = useQuery({
     ...brokerQuoteQuery(termBrokerId, state.range === "1D" && !isIndexEarly ? state.symbol : null),
-    enabled: brokerLinked && mode === "scrip" && state.range === "1D" && Boolean(state.symbol) && !isIndexEarly,
+    enabled:
+      brokerLinked &&
+      mode === "scrip" &&
+      state.range === "1D" &&
+      Boolean(state.symbol) &&
+      !isIndexEarly,
     refetchInterval: brokerLinked && state.range === "1D" && !isIndexEarly ? 5000 : false,
     refetchIntervalInBackground: true,
     staleTime: 3000,
@@ -281,6 +369,13 @@ function TerminalPage() {
       historyMonths,
       historyMonths > 24 ? "month" : "day",
       mode === "portfolio",
+    ),
+  );
+  // Live session line for portfolio 1D: today's ticks per holding, summed.
+  const worthIntraday = useQuery(
+    portfolioIntradayQuery(
+      holdings.map((h) => ({ scrip: h.scrip, units: h.units, price: h.ltp })),
+      mode === "portfolio" && state.range === "1D",
     ),
   );
 
@@ -436,6 +531,27 @@ function TerminalPage() {
     return best;
   }, [mode, selectedDate, netWorth.data]);
 
+  // Per-scrip prices at a tapped session point: each holding's last tick at
+  // or before that time (else its LTP), reusing the daily-breakdown table.
+  const pinnedIntradayPoint = useMemo((): PortfolioHistoryPoint | null => {
+    if (mode !== "portfolio" || !pinnedPoint) return null;
+    const ticks = worthIntraday.data?.ticks ?? {};
+    const t = Number(pinnedPoint.time);
+    const breakdown: PortfolioHistoryPoint["breakdown"] = [];
+    for (const h of holdings) {
+      if (h.units <= 0) continue;
+      let close = h.ltp;
+      for (const tick of ticks[h.scrip.toUpperCase()] ?? []) {
+        if (tick.time <= t) close = tick.value;
+        else break;
+      }
+      if (!(close > 0)) continue;
+      breakdown.push({ symbol: h.scrip, units: h.units, close, value: h.units * close });
+    }
+    if (breakdown.length === 0) return null;
+    return { time: t, value: breakdown.reduce((sum, b) => sum + b.value, 0), breakdown };
+  }, [mode, pinnedPoint, worthIntraday.data, holdings]);
+
   const compareLine: LinePoint[] | undefined = useMemo(() => {
     const bars = compare.data?.bars ?? [];
     const compareIntraday = compare.data?.intraday ?? [];
@@ -451,19 +567,9 @@ function TerminalPage() {
     return undefined;
   }, [compare.data?.bars, compare.data?.intraday]);
 
-  // Hover readout prefers the pinned candle; hover is live underneath.
-  const spot: (HoverInfo & { pinned?: boolean }) | null = pinned
-    ? {
-        date: pinned.date,
-        open: pinned.open,
-        high: pinned.high,
-        low: pinned.low,
-        close: pinned.close,
-        volume: pinned.volume,
-        changePercent: pinned.open ? ((pinned.close - pinned.open) / pinned.open) * 100 : 0,
-        pinned: true,
-      }
-    : hover;
+  // Hover readout: pinned candle first, then pinned session point, then live hover.
+  // Resolved below (after intradayFirst) so a pinned point can show session change.
+  let spot: (HoverInfo & { pinned?: boolean }) | null = null;
   // UDF fallback: when the mirror has no 1D intraday but UDF does, use it.
   // Live 1m patch: broker LTP ticks (5s poll) update the last 1m candle crazy-fast.
   const udfIntradayRaw = useMemo(() => {
@@ -514,6 +620,12 @@ function TerminalPage() {
   const indexBars: ChartBar[] = useMemo(() => {
     const pts = (indexHistory.data ?? []) as import("@/lib/nepse/types").PricePoint[];
     if (!isIndexEarly || pts.length === 0) return NO_BARS;
+    // 1D/1W render the live session as an intraday line (see indexIntraday):
+    // grouping session points by calendar date would crush them into one bar.
+    if (state.range === "1D" || state.range === "1W") return NO_BARS;
+    // Longer ranges: daily candles from the YONEPSE indices archive.
+    const daily = (indexDaily.data ?? []) as ChartBar[];
+    if (daily.length > 0) return [...daily].sort((a, b) => a.date.localeCompare(b.date));
     // Filter by range window like portfolio
     const windowDays =
       state.range === "1D" || state.range === "1W"
@@ -545,31 +657,78 @@ function TerminalPage() {
         close: p.value,
         volume: 0,
       }));
+  }, [indexDaily.data, indexHistory.data, isIndexEarly, state.range]);
+  // Index feed carries today's session only (no daily archive): on short
+  // ranges it becomes the intraday line instead of a single collapsed bar.
+  const indexIntraday = useMemo(() => {
+    if (!isIndexEarly || (state.range !== "1D" && state.range !== "1W")) return NO_POINTS;
+    const pts = ((indexHistory.data ?? []) as PricePoint[]).filter(
+      (p) => Number.isFinite(p.value) && p.value > 0 && Number.isFinite(Number(p.time)),
+    );
+    if (pts.length === 0) return NO_POINTS;
+    return [...pts].sort((a, b) => Number(a.time) - Number(b.time));
   }, [indexHistory.data, isIndexEarly, state.range]);
+  // Portfolio 1D: live session line (profit basis shifts it down by cost).
+  const portfolioIntraday = useMemo(() => {
+    if (mode !== "portfolio" || state.range !== "1D") return NO_POINTS;
+    const pts = ((worthIntraday.data?.points ?? []) as PricePoint[]).filter(
+      (p) => Number.isFinite(p.value) && p.value > 0 && Number.isFinite(Number(p.time)),
+    );
+    if (pts.length < 2) return NO_POINTS;
+    const sorted = [...pts].sort((a, b) => Number(a.time) - Number(b.time));
+    const cost = effectiveProfit ? (investment.data?.totalInvestment ?? 0) : 0;
+    return cost > 0 ? sorted.map((p) => ({ ...p, value: p.value - cost })) : sorted;
+  }, [worthIntraday.data, mode, state.range, effectiveProfit, investment.data]);
   const mirrorBars = series.data?.bars ?? NO_BARS;
   const mirrorIntraday = series.data?.intraday ?? NO_POINTS;
   const hasMirror = mirrorBars.length > 0 || mirrorIntraday.length > 0;
-  const useUdf = mode === "scrip" && state.range === "1D" && !hasMirror && (udfBars.length > 0 || udfIntraday.length > 0) && !isIndexEarly;
+  const useUdf =
+    mode === "scrip" &&
+    state.range === "1D" &&
+    !hasMirror &&
+    (udfBars.length > 0 || udfIntraday.length > 0) &&
+    !isIndexEarly;
   const activeBars =
     mode === "portfolio"
-      ? effectiveProfit
-        ? profitInfo.bars
-        : netWorthBars
+      ? state.range === "1D" && portfolioIntraday.length >= 2
+        ? NO_BARS
+        : effectiveProfit
+          ? profitInfo.bars
+          : netWorthBars
       : isIndexEarly
         ? indexBars
         : useUdf
           ? (udfBars as ChartBar[])
           : mirrorBars;
-  const intraday = mode === "portfolio" ? NO_POINTS : isIndexEarly ? NO_POINTS : useUdf ? (udfIntraday as PricePoint[]) : mirrorIntraday;
-  const isIntraday = activeBars.length === 0 && intraday.length > 0;
+  const intraday =
+    mode === "portfolio"
+      ? portfolioIntraday
+      : isIndexEarly
+        ? indexIntraday
+        : useUdf
+          ? (udfIntraday as PricePoint[])
+          : mirrorIntraday;
+  // Per-point resolution for daily candles on 1M+ ranges (day/week/month/year).
+  const showAgg = mode === "scrip" && state.range !== "1D" && state.range !== "1W";
+  const drawnBars = useMemo(
+    () => (showAgg ? aggregateBars(activeBars, barAgg) : activeBars),
+    [showAgg, activeBars, barAgg],
+  );
+  const isIntraday = drawnBars.length === 0 && intraday.length > 0;
   const loading =
     mode === "portfolio"
-      ? netWorth.isPending
+      ? netWorth.isPending || worthIntraday.isPending
       : isIndexEarly
-        ? indexHistory.isPending
-        : series.isPending || (useUdf ? false : udf.isPending && state.range === "1D" && !hasMirror);
+        ? state.range === "1D" || state.range === "1W"
+          ? indexHistory.isPending
+          : indexDaily.isPending
+        : series.isPending ||
+          (useUdf ? false : udf.isPending && state.range === "1D" && !hasMirror);
   const udfBadge = useUdf ? " · UDF" : "";
-  const chartHeight = expanded ? 720 : 480;
+  // Compact by default so the chart + controls fit the viewport without
+  // scrolling on laptop and phone screens; expand is opt-in extra height.
+  const isMobile = useIsMobile();
+  const chartHeight = expanded ? 640 : isMobile ? 320 : 400;
 
   // Memoized: a fresh object identity here would tear down and rebuild
   // the lightweight-charts instance on every render (e.g. each hover),
@@ -582,17 +741,46 @@ function TerminalPage() {
     [mode, state.indicators],
   );
 
-  const first = activeBars[0]?.close ?? 0;
-  const last = activeBars[activeBars.length - 1]?.close ?? 0;
+  const first = drawnBars[0]?.close ?? 0;
+  const last = drawnBars[drawnBars.length - 1]?.close ?? 0;
   const intradayFirst = intraday[0]?.value ?? 0;
   const intradayLast = intraday[intraday.length - 1]?.value ?? 0;
+  spot = pinned
+    ? {
+        date: pinned.date,
+        open: pinned.open,
+        high: pinned.high,
+        low: pinned.low,
+        close: pinned.close,
+        volume: pinned.volume,
+        changePercent: pinned.open ? ((pinned.close - pinned.open) / pinned.open) * 100 : 0,
+        pinned: true,
+      }
+    : pinnedPoint
+      ? {
+          date: `${chartDayLabel(Number(pinnedPoint.time))}, ${chartTimeLabel(Number(pinnedPoint.time))}`,
+          open: pinnedPoint.value,
+          high: pinnedPoint.value,
+          low: pinnedPoint.value,
+          close: pinnedPoint.value,
+          volume: 0,
+          changePercent: intradayFirst
+            ? ((pinnedPoint.value - intradayFirst) / intradayFirst) * 100
+            : 0,
+          pinned: true,
+        }
+      : hover;
   // Profit mode: percent is measured on invested cost, not on the first
   // profit point (which can sit near zero and explode the ratio).
   const costNow = investment.data?.totalInvestment ?? 0;
   const rangeReturn = isIntraday
-    ? intradayFirst > 0
-      ? ((intradayLast - intradayFirst) / intradayFirst) * 100
-      : 0
+    ? effectiveProfit
+      ? costNow > 0
+        ? ((intradayLast - intradayFirst) / costNow) * 100
+        : 0
+      : intradayFirst > 0
+        ? ((intradayLast - intradayFirst) / intradayFirst) * 100
+        : 0
     : effectiveProfit
       ? costNow > 0
         ? (last / costNow) * 100
@@ -623,9 +811,6 @@ function TerminalPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl font-semibold sm:text-3xl">Trading Terminal</h1>
-          <p className="mt-1 hidden text-sm text-muted-foreground sm:block">
-            Candles, indicators and your own net worth on one chart. Built on free NEPSE data.
-          </p>
         </div>
         <div className="flex items-center gap-1 rounded-full border border-border/60 bg-surface p-1">
           {(["scrip", "portfolio"] as const).map((m) => (
@@ -725,7 +910,14 @@ function TerminalPage() {
           </div>
           <div className="text-right">
             <p className="num text-lg font-semibold">
-              {formatNpr(hover?.close ?? (mode === "portfolio" ? last : (quote?.ltp ?? last)))}
+              {formatNpr(
+                hover?.close ??
+                  (mode === "portfolio"
+                    ? isIntraday
+                      ? intradayLast
+                      : last
+                    : (quote?.ltp ?? (isIntraday ? intradayLast : last))),
+              )}
             </p>
             <DeltaPill value={hover?.changePercent ?? rangeReturn}>
               {formatPercent(hover?.changePercent ?? rangeReturn)}{" "}
@@ -752,25 +944,46 @@ function TerminalPage() {
               </button>
             ))}
           </div>
-          {state.range === "1D" && mode === "scrip" ? (
+          {showAgg ? (
             <>
               <span className="hidden h-4 w-px bg-border sm:block" />
-              <div className="flex gap-1">
-                {(["1", "5", "15", "60"] as const).map((res) => (
-                  <button
-                    key={res}
-                    type="button"
-                    onClick={() => setIntradayRes(res)}
-                    className={cn(
-                      "rounded-lg px-2 py-1 text-xs font-medium transition-colors",
-                      intradayRes === res
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted text-muted-foreground hover:bg-muted/80",
-                    )}
-                  >
-                    {res === "1" ? "1m" : res === "5" ? "5m" : res === "15" ? "15m" : "1h"}
-                  </button>
-                ))}
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-muted-foreground">Per point</span>
+                <Select value={barAgg} onValueChange={(v) => setBarAgg(v as BarAgg)}>
+                  <SelectTrigger className="h-7 w-28 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="day">Daily</SelectItem>
+                    <SelectItem value="week">Weekly</SelectItem>
+                    <SelectItem value="month">Monthly</SelectItem>
+                    <SelectItem value="year">Yearly</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
+          ) : null}
+          {state.range === "1D" && mode === "scrip" && !isIndex ? (
+            <>
+              <span className="hidden h-4 w-px bg-border sm:block" />
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-muted-foreground">Interval</span>
+                <Select
+                  value={intradayRes}
+                  onValueChange={(v) =>
+                    setIntradayRes(v as import("@/lib/charts/udf").UdfResolution)
+                  }
+                >
+                  <SelectTrigger className="h-7 w-24 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">1m</SelectItem>
+                    <SelectItem value="5">5m</SelectItem>
+                    <SelectItem value="15">15m</SelectItem>
+                    <SelectItem value="60">1h</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </>
           ) : null}
@@ -962,7 +1175,7 @@ function TerminalPage() {
             >
               <Loader2 className="mr-2 size-4 animate-spin" /> Loading chart…
             </div>
-          ) : activeBars.length === 0 && intraday.length === 0 ? (
+          ) : drawnBars.length === 0 && intraday.length === 0 ? (
             <div
               className="flex flex-col items-center justify-center gap-2 px-4 text-center text-sm text-muted-foreground"
               style={{ height: chartHeight }}
@@ -970,7 +1183,11 @@ function TerminalPage() {
               <p>
                 {mode === "portfolio"
                   ? "No historical price coverage for your holdings yet."
-                  : "No chart data available for this scrip."}
+                  : isIndex
+                    ? state.range === "1D" || state.range === "1W"
+                      ? "No session data for this index right now."
+                      : "Index history is unavailable right now."
+                    : "No chart data available for this scrip."}
               </p>
               {(() => {
                 const err = mode === "portfolio" ? netWorth.error : series.error;
@@ -985,8 +1202,13 @@ function TerminalPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  if (mode === "portfolio") void netWorth.refetch();
-                  else void series.refetch();
+                  if (mode === "portfolio") {
+                    void netWorth.refetch();
+                    void worthIntraday.refetch();
+                  } else if (isIndex) {
+                    void indexHistory.refetch();
+                    void indexDaily.refetch();
+                  } else void series.refetch();
                 }}
               >
                 <RefreshCw className="size-3.5" /> Retry
@@ -995,7 +1217,7 @@ function TerminalPage() {
           ) : (
             <TerminalChart
               key={`${mode}-${state.symbol}-${state.range}-${state.style}-${light}-${expanded}`}
-              bars={activeBars}
+              bars={drawnBars}
               intraday={intraday}
               style={state.style}
               indicators={indicators}
@@ -1017,6 +1239,9 @@ function TerminalPage() {
                     }
                   : undefined
               }
+              onCreateAlert={
+                mode === "scrip" && !isIndex ? (price) => setAlertAt(price) : undefined
+              }
               onSelectBar={
                 mode === "portfolio"
                   ? (d) => setSelectedDate((cur) => (cur === d ? null : d))
@@ -1029,13 +1254,16 @@ function TerminalPage() {
                       setPinned((cur) => (cur && bar && cur.date === bar.date ? null : bar));
                     }
               }
+              onSelectPoint={(p) =>
+                setPinnedPoint((cur) => (cur && p && cur.time === p.time ? null : p))
+              }
             />
           )}
         </div>
 
-        {(hover || pinned) && (
+        {(hover || pinned || pinnedPoint) && (
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border/60 px-3 py-2 text-xs num text-muted-foreground">
-            <span>{spot!.date.slice(0, 10)}</span>
+            <span>{spot!.date.length > 10 ? spot!.date : spot!.date.slice(0, 10)}</span>
             <span>O {num(spot!.open)}</span>
             <span>H {num(spot!.high)}</span>
             <span>L {num(spot!.low)}</span>
@@ -1043,39 +1271,52 @@ function TerminalPage() {
             {spot!.volume > 0 && <span>Vol {spot!.volume.toLocaleString("en-IN")}</span>}
             {spot!.pinned ? (
               <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[0.68rem] font-semibold text-primary">
-                Pinned · click the candle again to release
+                Pinned · click again to release
               </span>
             ) : null}
-            {mode === "scrip" && brokerLinked && spot!.close > 0 ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setTicketPrice({ price: spot!.close, nonce: Date.now() });
-                  requestAnimationFrame(() =>
-                    document
-                      .getElementById("order-ticket")
-                      ?.scrollIntoView({ behavior: "smooth", block: "start" }),
-                  );
-                }}
-                className="ml-auto inline-flex items-center gap-1 rounded-lg bg-primary/15 px-2 py-1 font-semibold text-primary transition-colors hover:bg-primary/25"
-              >
-                Limit @ {num(spot!.close)}
-              </button>
+            {mode === "scrip" && !isIndex && spot!.close > 0 ? (
+              <span className="ml-auto inline-flex items-center gap-1.5">
+                {brokerLinked ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTicketPrice({ price: spot!.close, nonce: Date.now() });
+                      requestAnimationFrame(() =>
+                        document
+                          .getElementById("order-ticket")
+                          ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+                      );
+                    }}
+                    className="inline-flex items-center gap-1 rounded-lg bg-primary/15 px-2 py-1 font-semibold text-primary transition-colors hover:bg-primary/25"
+                  >
+                    Limit @ {num(spot!.close)}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => setAlertAt(spot!.close)}
+                  className="inline-flex items-center gap-1 rounded-lg bg-amber-500/15 px-2 py-1 font-semibold text-amber-600 transition-colors hover:bg-amber-500/25 dark:text-amber-400"
+                >
+                  Alert @ {num(spot!.close)}
+                </button>
+              </span>
             ) : null}
           </div>
         )}
       </div>
 
-      {mode === "portfolio" && selectedPoint && (
+      {mode === "portfolio" && (selectedPoint ?? pinnedIntradayPoint) && (
         <PointBreakdown
-          point={selectedPoint}
+          point={(selectedPoint ?? pinnedIntradayPoint)!}
           formatLabel={(t) =>
-            new Date(t * 1000).toLocaleDateString("en-GB", {
-              day: "2-digit",
-              month: "short",
-              year: "numeric",
-              timeZone: "Asia/Kathmandu",
-            })
+            pinnedIntradayPoint && !selectedPoint
+              ? `${chartDayLabel(t)}, ${chartTimeLabel(t)}`
+              : new Date(t * 1000).toLocaleDateString("en-GB", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                  timeZone: "Asia/Kathmandu",
+                })
           }
           onPickScrip={(s) => {
             setMode("scrip");
@@ -1109,6 +1350,17 @@ function TerminalPage() {
       {mode === "scrip" && !isIndex && (
         <OrderTicket key={state.symbol} symbol={state.symbol} limitPrice={ticketPrice} />
       )}
+
+      {mode === "scrip" && !isIndex && state.symbol ? (
+        <PriceAlertDialog
+          symbol={state.symbol}
+          defaultPrice={alertAt}
+          open={alertAt !== null}
+          onOpenChange={(o) => {
+            if (!o) setAlertAt(null);
+          }}
+        />
+      ) : null}
 
       {mode === "scrip" && brokerLinked ? (
         <div className="rounded-2xl border border-border/60 bg-surface">

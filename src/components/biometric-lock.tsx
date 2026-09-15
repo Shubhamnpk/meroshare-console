@@ -83,7 +83,12 @@ export function BiometricGate({ children }: { children: ReactNode }) {
           <Fingerprint className="size-8" />
         </div>
         <div>
-          <h1 className="font-display text-2xl font-semibold">Unlock MeroShare Console</h1>
+          <h1 className="flex items-center justify-center gap-2 font-display text-2xl font-semibold">
+            Unlock MeroShare Console
+            <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[0.68rem] font-semibold text-warning">
+              Beta
+            </span>
+          </h1>
           <p className="mt-1.5 text-sm text-muted-foreground">
             Use your fingerprint, face, or PIN to continue on this device.
           </p>

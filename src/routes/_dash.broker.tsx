@@ -32,7 +32,9 @@ import {
   brokerFundsQuery,
   brokerFundTxnsQuery,
   brokerHoldingsQuery,
+  brokerMarketStatusQuery,
   brokerOrderBookQuery,
+  brokerOrderHistoryQuery,
   brokerQuoteQuery,
   brokerTradeBookQuery,
   brokerWatchlistsQuery,
@@ -52,6 +54,8 @@ import type { BrokerId } from "@/lib/brokers/types";
 import { errorMessage, formatNpr, formatQty } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
+import { PriceAlertsPanel } from "@/components/brokers/price-alerts-panel";
+import { BrokerTicketsPanel } from "@/components/brokers/tickets-panel";
 import { ogImage, canonicalLink } from "@/lib/seo";
 
 export const Route = createFileRoute("/_dash/broker")({
@@ -560,9 +564,7 @@ function CollateralBreakdown({ funds }: { funds: import("@/lib/brokers/types").B
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm font-semibold">Collateral utilization</p>
-          <p className="text-xs text-muted-foreground">
-            How your {money(total)} is deployed
-          </p>
+          <p className="text-xs text-muted-foreground">How your {money(total)} is deployed</p>
         </div>
         <div className="text-right">
           <p className="num text-lg font-bold">{usedPct.toFixed(1)}%</p>
@@ -628,6 +630,102 @@ function CollateralBreakdown({ funds }: { funds: import("@/lib/brokers/types").B
   );
 }
 
+function MarketStatusPill({ brokerId }: { brokerId: BrokerId | null }) {
+  const status = useQuery(brokerMarketStatusQuery(brokerId));
+  if (!brokerId || status.isPending) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 px-2.5 py-0.5 text-[0.7rem] font-medium text-muted-foreground">
+        <span className="size-1.5 rounded-full bg-muted-foreground/40" />
+        Market status…
+      </span>
+    );
+  }
+  if (status.isError || !status.data) return null;
+  const open = status.data.isOpen;
+  return (
+    <span
+      title={open ? "Regular session open at the broker" : "Broker-reported session state"}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[0.7rem] font-semibold",
+        open
+          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+          : "border-border/60 bg-surface text-muted-foreground",
+      )}
+    >
+      <span className={cn("size-1.5 rounded-full", open ? "bg-emerald-500" : "bg-amber-500")} />
+      {status.data.status}
+    </span>
+  );
+}
+
+function OrderHistoryBox({ brokerId, orderId }: { brokerId: BrokerId; orderId: string }) {
+  const history = useQuery(brokerOrderHistoryQuery(brokerId, orderId));
+  if (history.isPending) {
+    return <p className="mt-2 text-[0.7rem] text-muted-foreground">Loading timeline…</p>;
+  }
+  if (history.isError) {
+    return (
+      <p className="mt-2 text-[0.7rem] text-muted-foreground">
+        Timeline unavailable.{" "}
+        <button
+          type="button"
+          className="font-semibold text-primary hover:underline"
+          onClick={() => void history.refetch()}
+        >
+          Retry
+        </button>
+      </p>
+    );
+  }
+  const events = history.data ?? [];
+  if (events.length === 0) {
+    return (
+      <p className="mt-2 text-[0.7rem] text-muted-foreground">
+        No lifecycle events returned for this order.
+      </p>
+    );
+  }
+  return (
+    <ol className="mt-2 space-y-0 border-t border-border/60 pt-2">
+      {events.map((e, i) => (
+        <li key={i} className="flex gap-2.5 text-[0.7rem]">
+          <span className="flex flex-col items-center" aria-hidden>
+            <span className="mt-1 size-1.5 shrink-0 rounded-full bg-primary" />
+            {i < events.length - 1 ? <span className="w-px flex-1 bg-border/70" /> : null}
+          </span>
+          <div className="min-w-0 flex-1 pb-2">
+            <p className="font-semibold">
+              {e.status || "Update"}
+              {e.price !== null && e.price !== undefined ? (
+                <span className="num font-normal text-muted-foreground">
+                  {` @ ${e.price.toLocaleString("en-IN")}`}
+                </span>
+              ) : null}
+            </p>
+            <p className="num text-muted-foreground">
+              {[
+                e.quantity !== null ? `qty ${e.quantity}` : null,
+                e.tradedQty !== null ? `filled ${e.tradedQty}` : null,
+                e.remainingQty !== null ? `left ${e.remainingQty}` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ") || "—"}
+              {[e.date, e.time].filter(Boolean).join(" ").trim()
+                ? ` · ${[e.date, e.time].filter(Boolean).join(" ")}`
+                : ""}
+            </p>
+            {e.message ? (
+              <p className="truncate text-muted-foreground" title={e.message}>
+                {e.message}
+              </p>
+            ) : null}
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 function BrokerPage() {
   const queryClient = useQueryClient();
   const connections = useQuery(brokerConnectionsQuery());
@@ -645,6 +743,7 @@ function BrokerPage() {
   const [txnStatus, setTxnStatus] = useState("");
   const [txnPage, setTxnPage] = useState(1);
   const [armedCancel, setArmedCancel] = useState<string | null>(null);
+  const [histKey, setHistKey] = useState<string | null>(null);
 
   const range = useMemo(() => rangeFor(preset, custom), [preset, custom]);
   const txnRange = useMemo(() => rangeFor(txnPreset, txnCustom), [txnPreset, txnCustom]);
@@ -669,10 +768,20 @@ function BrokerPage() {
     { symbol: "text", availableQty: "number", closePrice: "number", marketValue: "number" },
   );
 
-  type TradeSortKey = "id" | "orderNo" | "symbol" | "side" | "quantity" | "price" | "amount" | "date";
+  type TradeSortKey =
+    "id" | "orderNo" | "symbol" | "side" | "quantity" | "price" | "amount" | "date";
   const { sort: tradeSort, toggle: toggleTradeSort } = useSort<TradeSortKey>(
     { key: "date", dir: "desc" },
-    { id: "text", orderNo: "text", symbol: "text", side: "text", quantity: "number", price: "number", amount: "number", date: "text" },
+    {
+      id: "text",
+      orderNo: "text",
+      symbol: "text",
+      side: "text",
+      quantity: "number",
+      price: "number",
+      amount: "number",
+      date: "text",
+    },
   );
 
   const { sort: txnSort, toggle: toggleTxnSort } = useSort<TxnSortKey>(
@@ -798,11 +907,16 @@ function BrokerPage() {
     const filtered = !term ? rows : rows.filter((h) => h.symbol.toLowerCase().includes(term));
     const getter = (h: (typeof filtered)[number]): string | number => {
       switch (holdingSort.key) {
-        case "symbol": return h.symbol;
-        case "availableQty": return h.availableQty;
-        case "closePrice": return h.closePrice ?? 0;
-        case "marketValue": return h.marketValue;
-        default: return "";
+        case "symbol":
+          return h.symbol;
+        case "availableQty":
+          return h.availableQty;
+        case "closePrice":
+          return h.closePrice ?? 0;
+        case "marketValue":
+          return h.marketValue;
+        default:
+          return "";
       }
     };
     return sortBy(filtered, getter, holdingSort.dir);
@@ -895,16 +1009,24 @@ function BrokerPage() {
           <p className="mt-1 text-sm text-muted-foreground">
             {connection.displayName ?? connection.username} · {connection.username}
           </p>
+          <div className="mt-2">
+            <MarketStatusPill brokerId={brokerId} />
+          </div>
         </div>
         <div className="flex gap-2">
           <Button
             variant="outline"
             size="sm"
             onClick={refreshAll}
-            disabled={funds.isFetching || holdings.isFetching || orders.isFetching || trades.isFetching}
+            disabled={
+              funds.isFetching || holdings.isFetching || orders.isFetching || trades.isFetching
+            }
             className="gap-1.5 text-xs"
           >
-            <RefreshCw className={`size-3.5 ${funds.isFetching || holdings.isFetching || orders.isFetching || trades.isFetching ? "animate-spin" : ""}`} /> Refresh
+            <RefreshCw
+              className={`size-3.5 ${funds.isFetching || holdings.isFetching || orders.isFetching || trades.isFetching ? "animate-spin" : ""}`}
+            />{" "}
+            Refresh
           </Button>
           <Button
             variant="outline"
@@ -971,6 +1093,10 @@ function BrokerPage() {
 
           {f && !funds.isPending ? <CollateralBreakdown funds={f} /> : null}
 
+          <PriceAlertsPanel />
+
+          <BrokerTicketsPanel brokerId={brokerId} />
+
           <div className="rounded-2xl border border-border/60 bg-surface p-4">
             <p className="text-xs font-semibold">Orders vs trades: different things</p>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
@@ -1001,10 +1127,34 @@ function BrokerPage() {
               <Table>
                 <TableHeader className="sticky top-0 z-10 bg-surface">
                   <TableRow>
-                    <SortableTh label="Scrip" active={holdingSort.key === "symbol"} dir={holdingSort.dir} onClick={() => toggleHoldingSort("symbol")} kind="text" />
-                    <SortableTh label="Avail. qty" active={holdingSort.key === "availableQty"} dir={holdingSort.dir} onClick={() => toggleHoldingSort("availableQty")} align="right" />
-                    <SortableTh label="Close" active={holdingSort.key === "closePrice"} dir={holdingSort.dir} onClick={() => toggleHoldingSort("closePrice")} align="right" />
-                    <SortableTh label="Market value" active={holdingSort.key === "marketValue"} dir={holdingSort.dir} onClick={() => toggleHoldingSort("marketValue")} align="right" />
+                    <SortableTh
+                      label="Scrip"
+                      active={holdingSort.key === "symbol"}
+                      dir={holdingSort.dir}
+                      onClick={() => toggleHoldingSort("symbol")}
+                      kind="text"
+                    />
+                    <SortableTh
+                      label="Avail. qty"
+                      active={holdingSort.key === "availableQty"}
+                      dir={holdingSort.dir}
+                      onClick={() => toggleHoldingSort("availableQty")}
+                      align="right"
+                    />
+                    <SortableTh
+                      label="Close"
+                      active={holdingSort.key === "closePrice"}
+                      dir={holdingSort.dir}
+                      onClick={() => toggleHoldingSort("closePrice")}
+                      align="right"
+                    />
+                    <SortableTh
+                      label="Market value"
+                      active={holdingSort.key === "marketValue"}
+                      dir={holdingSort.dir}
+                      onClick={() => toggleHoldingSort("marketValue")}
+                      align="right"
+                    />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1017,7 +1167,9 @@ function BrokerPage() {
                       <TableCell className="num py-2 text-right">
                         {h.closePrice !== null ? money(h.closePrice) : "-"}
                       </TableCell>
-                      <TableCell className="num py-2 text-right font-semibold">{money(h.marketValue)}</TableCell>
+                      <TableCell className="num py-2 text-right font-semibold">
+                        {money(h.marketValue)}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -1173,7 +1325,22 @@ function BrokerPage() {
                               </Button>
                             </div>
                           ) : null}
+                          {o.orderId ? (
+                            <div className="flex shrink-0">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-xs text-muted-foreground"
+                                onClick={() => setHistKey((cur) => (cur === key ? null : cur))}
+                              >
+                                {histKey === key ? "Hide timeline" : "Timeline"}
+                              </Button>
+                            </div>
+                          ) : null}
                         </div>
+                        {histKey === key && o.orderId && brokerId ? (
+                          <OrderHistoryBox brokerId={brokerId} orderId={o.orderId} />
+                        ) : null}
                         {modifying && cancellable && o.side !== "UNKNOWN" ? (
                           <div className="mt-2 grid grid-cols-2 gap-2 border-t border-border/60 pt-2">
                             <div className="space-y-1">
@@ -1275,27 +1442,86 @@ function BrokerPage() {
                   <Table>
                     <TableHeader className="sticky top-0 z-10 bg-surface">
                       <TableRow>
-                        <SortableTh label="Trade ID" active={tradeSort.key === "id"} dir={tradeSort.dir} onClick={() => toggleTradeSort("id")} kind="text" />
-                        <SortableTh label="Order No" active={tradeSort.key === "orderNo"} dir={tradeSort.dir} onClick={() => toggleTradeSort("orderNo")} kind="text" />
-                        <SortableTh label="Scrip" active={tradeSort.key === "symbol"} dir={tradeSort.dir} onClick={() => toggleTradeSort("symbol")} kind="text" />
-                        <SortableTh label="Side" active={tradeSort.key === "side"} dir={tradeSort.dir} onClick={() => toggleTradeSort("side")} kind="text" />
-                        <SortableTh label="Qty" active={tradeSort.key === "quantity"} dir={tradeSort.dir} onClick={() => toggleTradeSort("quantity")} align="right" />
-                        <SortableTh label="Price" active={tradeSort.key === "price"} dir={tradeSort.dir} onClick={() => toggleTradeSort("price")} align="right" />
-                        <SortableTh label="Amount" active={tradeSort.key === "amount"} dir={tradeSort.dir} onClick={() => toggleTradeSort("amount")} align="right" />
-                        <SortableTh label="Date" active={tradeSort.key === "date"} dir={tradeSort.dir} onClick={() => toggleTradeSort("date")} kind="text" />
+                        <SortableTh
+                          label="Trade ID"
+                          active={tradeSort.key === "id"}
+                          dir={tradeSort.dir}
+                          onClick={() => toggleTradeSort("id")}
+                          kind="text"
+                        />
+                        <SortableTh
+                          label="Order No"
+                          active={tradeSort.key === "orderNo"}
+                          dir={tradeSort.dir}
+                          onClick={() => toggleTradeSort("orderNo")}
+                          kind="text"
+                        />
+                        <SortableTh
+                          label="Scrip"
+                          active={tradeSort.key === "symbol"}
+                          dir={tradeSort.dir}
+                          onClick={() => toggleTradeSort("symbol")}
+                          kind="text"
+                        />
+                        <SortableTh
+                          label="Side"
+                          active={tradeSort.key === "side"}
+                          dir={tradeSort.dir}
+                          onClick={() => toggleTradeSort("side")}
+                          kind="text"
+                        />
+                        <SortableTh
+                          label="Qty"
+                          active={tradeSort.key === "quantity"}
+                          dir={tradeSort.dir}
+                          onClick={() => toggleTradeSort("quantity")}
+                          align="right"
+                        />
+                        <SortableTh
+                          label="Price"
+                          active={tradeSort.key === "price"}
+                          dir={tradeSort.dir}
+                          onClick={() => toggleTradeSort("price")}
+                          align="right"
+                        />
+                        <SortableTh
+                          label="Amount"
+                          active={tradeSort.key === "amount"}
+                          dir={tradeSort.dir}
+                          onClick={() => toggleTradeSort("amount")}
+                          align="right"
+                        />
+                        <SortableTh
+                          label="Date"
+                          active={tradeSort.key === "date"}
+                          dir={tradeSort.dir}
+                          onClick={() => toggleTradeSort("date")}
+                          kind="text"
+                        />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {(trades.data ?? []).map((t, i) => (
                         <TableRow key={t.id || i}>
-                          <TableCell className="max-w-24 truncate py-2 text-xs text-muted-foreground" title={t.id}>
+                          <TableCell
+                            className="max-w-24 truncate py-2 text-xs text-muted-foreground"
+                            title={t.id}
+                          >
                             {t.id ? `${t.id.slice(0, 8)}…` : "-"}
                           </TableCell>
-                          <TableCell className="max-w-24 truncate py-2 text-xs text-muted-foreground" title={t.orderNo}>
+                          <TableCell
+                            className="max-w-24 truncate py-2 text-xs text-muted-foreground"
+                            title={t.orderNo}
+                          >
                             {t.orderNo || "-"}
                           </TableCell>
                           <TableCell className="py-2 font-semibold">{t.symbol}</TableCell>
-                          <TableCell className={cn("py-2 font-medium", t.side === "BUY" ? "text-gain" : "text-destructive")}>
+                          <TableCell
+                            className={cn(
+                              "py-2 font-medium",
+                              t.side === "BUY" ? "text-gain" : "text-destructive",
+                            )}
+                          >
                             {t.side}
                           </TableCell>
                           <TableCell className="num py-2 text-right">
@@ -1304,8 +1530,13 @@ function BrokerPage() {
                           <TableCell className="num py-2 text-right">
                             {t.price !== null ? t.price.toLocaleString("en-IN") : "-"}
                           </TableCell>
-                          <TableCell className="num py-2 text-right font-semibold">{money(t.amount)}</TableCell>
-                          <TableCell className="whitespace-nowrap py-2 text-xs" title={`${t.date} ${t.time}`}>
+                          <TableCell className="num py-2 text-right font-semibold">
+                            {money(t.amount)}
+                          </TableCell>
+                          <TableCell
+                            className="whitespace-nowrap py-2 text-xs"
+                            title={`${t.date} ${t.time}`}
+                          >
                             {t.date ? `${t.date}${t.time ? ` ${t.time}` : ""}` : "-"}
                           </TableCell>
                         </TableRow>
@@ -1446,25 +1677,62 @@ function BrokerPage() {
                 <Table>
                   <TableHeader className="sticky top-0 z-10 bg-surface">
                     <TableRow>
-                      <SortableTh label="Date" active={txnSort.key === "date"} dir={txnSort.dir} onClick={() => toggleTxnSort("date")} kind="text" />
-                      <SortableTh label="Type" active={txnSort.key === "type"} dir={txnSort.dir} onClick={() => toggleTxnSort("type")} kind="text" />
-                      <th className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Gateway</th>
-                      <SortableTh label="Amount" active={txnSort.key === "amount"} dir={txnSort.dir} onClick={() => toggleTxnSort("amount")} align="right" />
-                      <SortableTh label="Status" active={txnSort.key === "status"} dir={txnSort.dir} onClick={() => toggleTxnSort("status")} kind="text" />
-                      <th className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Reference</th>
+                      <SortableTh
+                        label="Date"
+                        active={txnSort.key === "date"}
+                        dir={txnSort.dir}
+                        onClick={() => toggleTxnSort("date")}
+                        kind="text"
+                      />
+                      <SortableTh
+                        label="Type"
+                        active={txnSort.key === "type"}
+                        dir={txnSort.dir}
+                        onClick={() => toggleTxnSort("type")}
+                        kind="text"
+                      />
+                      <th className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                        Gateway
+                      </th>
+                      <SortableTh
+                        label="Amount"
+                        active={txnSort.key === "amount"}
+                        dir={txnSort.dir}
+                        onClick={() => toggleTxnSort("amount")}
+                        align="right"
+                      />
+                      <SortableTh
+                        label="Status"
+                        active={txnSort.key === "status"}
+                        dir={txnSort.dir}
+                        onClick={() => toggleTxnSort("status")}
+                        kind="text"
+                      />
+                      <th className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                        Reference
+                      </th>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {sortedTxns.map((t, i) => (
                       <TableRow key={t.id || i}>
-                        <TableCell className="whitespace-nowrap py-2 text-xs">{t.date || "-"}</TableCell>
-                        <TableCell className="py-2 text-xs font-medium capitalize">{t.type || "-"}</TableCell>
-                        <TableCell className="py-2 text-xs text-muted-foreground">{t.gateway || "-"}</TableCell>
+                        <TableCell className="whitespace-nowrap py-2 text-xs">
+                          {t.date || "-"}
+                        </TableCell>
+                        <TableCell className="py-2 text-xs font-medium capitalize">
+                          {t.type || "-"}
+                        </TableCell>
+                        <TableCell className="py-2 text-xs text-muted-foreground">
+                          {t.gateway || "-"}
+                        </TableCell>
                         <TableCell className="num py-2 text-right font-semibold">
                           {t.amount !== null ? money(t.amount) : "-"}
                         </TableCell>
                         <TableCell className="py-2 text-xs">{t.status || "-"}</TableCell>
-                        <TableCell className="max-w-40 truncate py-2 text-xs text-muted-foreground" title={t.reference}>
+                        <TableCell
+                          className="max-w-40 truncate py-2 text-xs text-muted-foreground"
+                          title={t.reference}
+                        >
                           {t.reference || "-"}
                         </TableCell>
                       </TableRow>

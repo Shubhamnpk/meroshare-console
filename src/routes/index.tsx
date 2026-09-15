@@ -470,6 +470,9 @@ function LoginPage() {
                   ) : (
                     <>
                       <Fingerprint className="size-4" /> Sign in with fingerprint
+                      <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[0.68rem] font-semibold text-warning">
+                        Beta
+                      </span>
                     </>
                   )}
                 </Button>
@@ -566,7 +569,7 @@ function LoginPage() {
               </div>
             </div>
 
-            {bioEnrolled ? (
+            {bioEnrolled && getVaultOwner() !== username.trim() ? (
               <div className="flex items-start gap-2.5">
                 <Checkbox
                   id="save-bio"
@@ -577,6 +580,9 @@ function LoginPage() {
                 <div className="leading-snug">
                   <Label htmlFor="save-bio" className="cursor-pointer text-sm font-medium">
                     Save for fingerprint sign-in
+                    <span className="ml-1.5 rounded-full bg-warning/15 px-2 py-0.5 align-middle text-[0.68rem] font-semibold text-warning">
+                      Beta
+                    </span>
                   </Label>
                   <p className="text-xs text-muted-foreground">
                     Saves this sign-in on your device so your fingerprint signs you in next time.

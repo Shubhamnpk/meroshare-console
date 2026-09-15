@@ -23,6 +23,7 @@ import { ErrorBlock, LoadingBlock, EmptyBlock, SkeletonCards } from "@/component
 import { ScripSheet } from "@/components/market/scrip-sheet";
 import { ChartModal, chartTimeLabel } from "@/components/market/chart-modal";
 import { Sparkline } from "@/components/market/sparkline";
+import { RangeBar } from "@/components/market/range-bar";
 import {
   applicableIssuesQuery,
   currentIssuesQuery,
@@ -311,22 +312,40 @@ function DashboardPage() {
                   <span className="hidden sm:inline">· today</span>
                 </p>
                 {nepse ? (
-                  <p className="num mt-2 text-3xl font-semibold">
+                  <p className="num mt-2 flex flex-wrap items-center gap-2 text-3xl font-semibold">
                     {nepse.close != null ? nepse.close.toLocaleString("en-IN") : "-"}
+                    <DeltaPill value={nepse.percentChange}>
+                      {formatPercent(nepse.percentChange)}
+                    </DeltaPill>
                   </p>
                 ) : (
                   <p className="mt-2 text-sm text-muted-foreground">Loading…</p>
                 )}
-                {nepse ? (
-                  <div className="mt-1.5 flex items-center gap-2 text-xs text-muted-foreground">
-                    <DeltaPill value={nepse.percentChange}>
-                      {formatPercent(nepse.percentChange)}
-                    </DeltaPill>
-                    {nepse.fiftyTwoWeekHigh ? (
-                      <span className="num">
-                        52w {formatNpr(nepse.fiftyTwoWeekLow)}–{formatNpr(nepse.fiftyTwoWeekHigh)}
-                      </span>
-                    ) : null}
+                {nepse &&
+                nepse.close != null &&
+                (nepse.fiftyTwoWeekLow ?? 0) > 0 &&
+                (nepse.fiftyTwoWeekHigh ?? 0) > (nepse.fiftyTwoWeekLow ?? 0) ? (
+                  <div className="mt-2 max-w-72">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-muted-foreground">
+                        52-week range
+                      </p>
+                      <p className="flex items-center gap-1 text-[0.68rem] font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100">
+                        Click for the full chart <ArrowUpRight className="size-3" />
+                      </p>
+                    </div>
+                    <RangeBar
+                      low={nepse.fiftyTwoWeekLow ?? 0}
+                      high={nepse.fiftyTwoWeekHigh ?? 0}
+                      value={Math.min(
+                        Math.max(nepse.close, nepse.fiftyTwoWeekLow ?? 0),
+                        nepse.fiftyTwoWeekHigh ?? 0,
+                      )}
+                      format={(v) => formatNpr(v)}
+                      tone={nepse.percentChange < 0 ? "loss" : "gain"}
+                      showValueLabel={false}
+                      colorByPosition
+                    />
                   </div>
                 ) : null}
               </div>
@@ -336,9 +355,6 @@ function DashboardPage() {
                 </div>
               ) : null}
             </div>
-            <p className="mt-3 flex items-center gap-1 text-[0.68rem] font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100">
-              Click for the full chart <ArrowUpRight className="size-3" />
-            </p>
           </Panel>
 
           <Panel as="section">

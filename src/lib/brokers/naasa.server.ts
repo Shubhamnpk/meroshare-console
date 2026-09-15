@@ -1232,6 +1232,129 @@ export async function cancelNaasaOrder(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Order history, company info, market status, support tickets (read-only).
+// Shapes follow docs/xnasa-api-reference.md §§14-18; every parser below is
+// defensive because the broker double-encodes JSON and renames keys per env.
+// ---------------------------------------------------------------------------
+
+export interface NaasaTicket {
+  id: string;
+  status: "open" | "pending" | "resolved";
+  time: string;
+  description: string;
+  unread: boolean;
+}
+
+/** Per-order event trail (`POST /api/report/order-history { orderId }`). */
+export async function getNaasaOrderHistory(
+  session: NaasaSession,
+  orderId: string,
+): Promise<Record<string, unknown>[]> {
+  const id = orderId.trim().slice(0, 64);
+  if (!id) return [];
+  const json = await naasaJson<{ data?: { reportTable?: unknown } }>(
+    session,
+    "/api/report/order-history",
+    { method: "POST", body: { orderId: id } },
+  );
+  return toReportRows(json?.data?.reportTable);
+}
+
+/**
+ * Broker company snapshot (`GET /api/feed/Services.GetCompanyInformation`).
+ * Returns the single row object, whether the broker sends an array or a
+ * bare object. Null when the service reports an error (ErrorCode != 0).
+ */
+export async function getNaasaCompanyInfo(
+  session: NaasaSession,
+  symbol: string,
+): Promise<Record<string, unknown> | null> {
+  const sym = symbol.trim().toUpperCase();
+  if (!sym) return null;
+  const params = new URLSearchParams({ Exchange: "NEPSE", Scrip: sym });
+  const json = await naasaJson<unknown>(
+    session,
+    `/api/feed/Services.GetCompanyInformation?${params}`,
+  );
+  const { errorCode, rows } = unwrapBrokerData(json);
+  if (errorCode !== 0) return null;
+  if (rows.length > 0) return rows[0]!;
+  const root = (json ?? {}) as Record<string, unknown>;
+  const o = (root["Result"] ?? root) as Record<string, unknown>;
+  const data = o["data"] ?? o["Data"];
+  if (data && typeof data === "object" && !Array.isArray(data)) {
+    return data as Record<string, unknown>;
+  }
+  return null;
+}
+
+export interface NaasaMarketStatus {
+  status: string;
+  isOpen: boolean;
+}
+
+/** Broker market status (`GET /api/feed/Services.GetMarketStatus`). Read-only poll. */
+export async function getNaasaMarketStatus(session: NaasaSession): Promise<NaasaMarketStatus> {
+  const json = await naasaJson<unknown>(session, "/api/feed/Services.GetMarketStatus");
+  const { rows } = unwrapBrokerData(json);
+  let status = "";
+  if (rows.length > 0) {
+    const r = rows[0]!;
+    status = String(r["Status"] ?? r["status"] ?? r["MarketStatus"] ?? r["message"] ?? "");
+  }
+  if (!status) {
+    const root = (json ?? {}) as Record<string, unknown>;
+    const o = (root["Result"] ?? root) as Record<string, unknown>;
+    const data = o["data"] ?? o["Data"];
+    if (typeof data === "string") status = data;
+    else if (typeof o["Message"] === "string") status = o["Message"] as string;
+    else if (typeof root["Message"] === "string") status = root["Message"] as string;
+  }
+  const s = status.trim() || "Unknown";
+  return { status: s, isOpen: /regular market open/i.test(s) };
+}
+
+function normalizeTicketStatus(raw: unknown): NaasaTicket["status"] {
+  const t = String(raw ?? "").toLowerCase();
+  if (t.includes("resolv") || t.includes("clos")) return "resolved";
+  if (t.includes("pend")) return "pending";
+  return "open";
+}
+
+/** Support tickets (`POST /api/CI/GetTicketLogs {}`). Read-only. */
+export async function getNaasaTickets(session: NaasaSession): Promise<NaasaTicket[]> {
+  const json = await naasaJson<unknown>(session, "/api/CI/GetTicketLogs", {
+    method: "POST",
+    body: {},
+  });
+  const root = (json ?? {}) as Record<string, unknown>;
+  let list: unknown = root["tickets"] ?? root["Tickets"] ?? root["data"] ?? root["Data"] ?? json;
+  if (typeof list === "string") {
+    try {
+      list = JSON.parse(list) as unknown;
+    } catch {
+      list = [];
+    }
+  }
+  const rows = Array.isArray(list) ? (list as Record<string, unknown>[]) : [];
+  return rows
+    .map((r) => {
+      const unreadRaw = r["unread"] ?? r["Unread"] ?? r["isUnread"];
+      return {
+        id: String(r["id"] ?? r["Id"] ?? r["TicketId"] ?? ""),
+        status: normalizeTicketStatus(r["status"] ?? r["Status"]),
+        time: String(r["time"] ?? r["Time"] ?? r["createdAt"] ?? ""),
+        description: String(r["description"] ?? r["Description"] ?? r["subject"] ?? ""),
+        unread:
+          unreadRaw === true ||
+          String(unreadRaw ?? "").toLowerCase() === "true" ||
+          Number(unreadRaw) === 1,
+      };
+    })
+    .filter((t) => t.id !== "" || t.description !== "");
+}
+
 const TRADEFLOW = "https://api-tradeflow.naasasecurities.com.np/api/v1";
 /** KYC/bank records live on a sibling host (same realm, same Bearer). */
 const NEWKYC = "https://api-newkyc.naasasecurities.com.np/api/v1";

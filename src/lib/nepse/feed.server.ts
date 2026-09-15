@@ -22,6 +22,7 @@ import type {
   MoverRow,
   PortfolioGranularity,
   PortfolioHistoryPoint,
+  PortfolioIntraday,
   PricePoint,
   SectorIndex,
   ScripDetail,
@@ -199,7 +200,10 @@ export async function getLivePrices(): Promise<{ prices: LivePrice[]; stale: boo
           turnover: num(row["totalTradedValue"]) || num(row["turnover"]),
           trades: num(row["totalTrades"]) || num(row["trades"]),
           lastUpdated: str(row["lastUpdatedTime"]) ?? str(row["last_updated"]),
-          sector: sectors.get(symbol.toUpperCase()) ?? sectors.get(canonicalSymbol(symbol.toUpperCase())) ?? null,
+          sector:
+            sectors.get(symbol.toUpperCase()) ??
+            sectors.get(canonicalSymbol(symbol.toUpperCase())) ??
+            null,
           fiftyTwoWeekHigh: row["fiftyTwoWeekHigh"] == null ? null : num(row["fiftyTwoWeekHigh"]),
           fiftyTwoWeekLow: row["fiftyTwoWeekLow"] == null ? null : num(row["fiftyTwoWeekLow"]),
           assetType: str(row["asset_type"]),
@@ -421,9 +425,11 @@ export async function getPortfolioHistory(
     );
     const daily = await scoreDays(unitsBySymbol, dayWindow);
     if (daily.length === 0) {
-      // No daily archive at all yet, fall back to month-end points.
+      // No daily archive (missing manifest entries or failed fetches). Monthly
+      // files still carry every trading day, so build daily points from them
+      // instead of collapsing to one point per month-end.
       const monthWindow = availableMonths.filter((m) => m >= startKey && m >= tailMonthKey);
-      return scoreMonths(unitsBySymbol, monthWindow);
+      return (await scoreMonthDays(unitsBySymbol, monthWindow)).sort((a, b) => a.time - b.time);
     }
     const coverageStart = monthKeyFromEpoch(
       dayWindow[0] ? Date.parse(dayWindow[0] + "T00:00:00+05:45") / 1000 : tailStart,
@@ -687,6 +693,133 @@ export async function getIpoArchive(): Promise<{
     upcoming: ipoRows(upcoming.data ?? []).slice(0, 60),
     past: ipoRows(past.data ?? []).slice(0, 120),
   };
+}
+
+/** Terminal/RANGES index key → YONEPSE archive series key. Unknown keys pass through. */
+function yonepseIndexKey(indexName: string): string {
+  const upper = indexName.trim().toUpperCase();
+  if (upper === "NEPSE") return "NEPSE";
+  if (upper === "SENSITIVE" || upper === "SENSIND") return "SENSIND";
+  if (upper === "FLOAT" || upper === "FLOATIND") return "FLOATIND";
+  if (upper === "SENFLOAT" || upper === "SENSFLTIND") return "SENSFLTIND";
+  return upper;
+}
+
+/**
+ * Daily OHLC history for an index from the YONEPSE indices archive, oldest
+ * first. Monthly files carry every trading day as
+ * `[dateIndex, close, open, high, low, turnover, volume, trades]`, so any
+ * range (1M → MAX) gets real candles. `days` bounds the trailing window;
+ * 0 means everything (no cap). Bounded ranges are capped to 64 monthly
+ * files (~5 years) so a cold load stays fast.
+ */
+export async function getIndexDailyBars(indexName: string, days = 0): Promise<ChartBar[]> {
+  const key = yonepseIndexKey(indexName);
+  const { data: manifest } = await feedJson<Rec>(
+    `${YONEPSE_BASE}/data/indices/manifest.json`,
+    TTL.daily,
+  );
+  const availableMonths = [...((manifest?.["availableMonths"] ?? []) as string[])].sort();
+  const now = Math.floor(Date.now() / 1000);
+  const tailMonth = days > 0 ? monthKeyFromEpoch(now - days * 86400) : "0000-00";
+  let months = availableMonths.filter((m) => m >= tailMonth);
+  if (days > 0 && months.length > 64) months = months.slice(-64);
+  if (months.length === 0) return [];
+
+  const files = await Promise.all(
+    months.map(async (month) => {
+      const { data } = await feedJson<Rec>(
+        `${YONEPSE_BASE}/data/indices/monthly/${month}.json`,
+        TTL.daily,
+      );
+      const series = (data?.["series"] ?? {}) as Record<string, unknown>;
+      const rows = Array.isArray(series[key]) ? (series[key] as unknown[][]) : [];
+      return { dates: (data?.["dates"] ?? []) as string[], rows };
+    }),
+  );
+
+  const byDate = new Map<string, ChartBar>();
+  for (const { dates, rows } of files) {
+    for (const row of rows) {
+      const idx = num(row?.[0]);
+      const date = Number.isInteger(idx) ? dates[idx] : undefined;
+      if (!date) continue;
+      const close = num(row?.[1]);
+      if (close <= 0) continue;
+      // Columns: [dateIndex, close, open, high, low, turnover, volume, trades].
+      byDate.set(date, {
+        date,
+        close,
+        open: num(row?.[2]) || close,
+        high: num(row?.[3]) || close,
+        low: num(row?.[4]) || close,
+        volume: num(row?.[6]),
+        synthetic: false,
+      });
+    }
+  }
+  return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/**
+ * Today's live session value for a set of holdings: each scrip's intraday
+ * graph (units held are constant through the session) summed per timestamp,
+ * forward-filled from the current LTP so scrips join the line when their
+ * first tick prints. Ascending; empty when nothing printed yet.
+ */
+export async function getPortfolioIntraday(
+  holdings: { symbol: string; units: number; price: number }[],
+): Promise<PortfolioIntraday> {
+  const empty: PortfolioIntraday = { points: [], ticks: {} };
+  const wanted = holdings.filter((h) => h.units > 0 && h.price > 0);
+  if (wanted.length === 0) return empty;
+
+  const per = await Promise.all(
+    wanted.map(async (h) => {
+      const upper = h.symbol.toUpperCase();
+      const { data } = await bitnepalJson<Rec[]>(
+        `/securities/${encodeURIComponent(canonicalSymbol(upper))}/graph`,
+        TTL.fast,
+      );
+      const byTime = new Map<number, number>();
+      for (const row of data ?? []) {
+        const time = num(row?.["time"]);
+        const value = num(row?.["contractRate"]);
+        if (time > 0 && value > 0) byTime.set(time, value);
+      }
+      return {
+        symbol: upper,
+        units: h.units,
+        fallback: h.price,
+        ticks: [...byTime.entries()].sort((a, b) => a[0] - b[0]),
+      };
+    }),
+  );
+
+  const times = [...new Set(per.flatMap((p) => p.ticks.map(([t]) => t)))].sort((a, b) => a - b);
+  if (times.length < 2) return empty;
+
+  // Union times ascend, so each scrip's cursor only moves forward: after the
+  // loop it holds the last tick at or before `time` (or the LTP fallback).
+  const cursor = new Array<number>(per.length).fill(0);
+  const points = times.map((time) => {
+    let value = 0;
+    per.forEach((p, i) => {
+      let price = p.fallback;
+      while (cursor[i]! < p.ticks.length && p.ticks[cursor[i]!]![0] <= time) {
+        price = p.ticks[cursor[i]!]![1];
+        cursor[i]! += 1;
+      }
+      value += p.units * price;
+    });
+    return { time, value };
+  });
+
+  const ticks: PortfolioIntraday["ticks"] = {};
+  for (const p of per) {
+    if (p.ticks.length > 0) ticks[p.symbol] = p.ticks.map(([time, value]) => ({ time, value }));
+  }
+  return { points, ticks };
 }
 
 /** Index value history for a mini-chart, e.g. "NEPSE" or "Sensitive". Points are [unixSeconds, value]. */

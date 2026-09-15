@@ -206,13 +206,13 @@ export function ChartModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-3xl overflow-y-auto sm:max-w-3xl">
+      <DialogContent className="max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-3xl overflow-y-auto p-4 sm:max-w-3xl sm:p-6">
         <DialogHeader className="pr-8 text-left">
           <DialogTitle className="font-display">{title}</DialogTitle>
           <DialogDescription>{subtitle}</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           {ranges.length > 1 ? (
             <div className="flex flex-wrap items-center gap-1.5">
               {ranges.map((range) => (

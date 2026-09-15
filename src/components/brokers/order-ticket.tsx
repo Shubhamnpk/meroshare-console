@@ -412,12 +412,6 @@ export function OrderTicket({
               ? `Review ${side} order (AMO)`
               : `Review ${side} order`}
         </Button>
-        {amo ? (
-          <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-            Market is closed. This queues as an after-market order for the next session.
-          </p>
-        ) : null}
-
         {openOrders.length > 0 ? (
           <div className="mt-3 rounded-xl border border-border/60 p-2.5">
             <p className="px-1 pb-1.5 text-xs font-semibold text-muted-foreground">

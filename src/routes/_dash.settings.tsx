@@ -384,6 +384,9 @@ function BiometricCard() {
           <div className="flex items-center gap-2">
             <Fingerprint className="size-4 text-primary" />
             <p className="text-sm font-semibold">Fingerprint unlock</p>
+            <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[0.68rem] font-semibold text-warning">
+              Beta
+            </span>
           </div>
           <p className="text-xs text-muted-foreground">
             {enrollment
@@ -452,6 +455,9 @@ function BiometricCard() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Fingerprint className="size-5 text-primary" /> Fingerprint setup
+              <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[0.68rem] font-semibold text-warning">
+                Beta
+              </span>
             </DialogTitle>
             <DialogDescription>
               Uses your device&apos;s biometrics or screen lock PIN. Checked on this device only.
@@ -1204,10 +1210,6 @@ function SettingsPage() {
               {APP_VERSION}
             </Badge>
           </div>
-          <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
-            Manage console appearance, automated data refresh rates, security actions, and release
-            info.
-          </p>
         </div>
 
         <div className="flex items-center gap-2">

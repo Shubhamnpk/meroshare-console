@@ -234,6 +234,76 @@ function PortfolioPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <ExportButton
+            disabled={items.length === 0}
+            formats={[
+              {
+                title: "CSV",
+                description: "Spreadsheet-friendly rows of every holding",
+                filename: "portfolio",
+                extension: "csv",
+                build: () => portfolioCsv(items, totals, costOf),
+              },
+              {
+                title: "JSON",
+                description: "Raw holdings with live prices and sector data",
+                filename: "portfolio",
+                extension: "json",
+                build: () => JSON.stringify({ holdings: items, totals }, null, 2),
+              },
+              {
+                title: "PDF",
+                description: "Formatted holdings table for printing or sharing",
+                filename: "portfolio",
+                extension: "pdf",
+                build: () => "",
+                pdf: () => ({
+                  title: "Portfolio holdings at live prices",
+                  head: [
+                    "SN",
+                    "Scrip",
+                    "Description",
+                    "Units",
+                    "LTP",
+                    "Value",
+                    "Avg buy",
+                    "P/L",
+                    "Day %",
+                  ],
+                  body: items.map((h, i) => {
+                    const c = costOf(h.scrip);
+                    const pl = c && c.cost > 0 ? h.value - c.cost : null;
+                    return [
+                      i + 1,
+                      h.scrip,
+                      h.description,
+                      formatQty(h.units),
+                      h.ltp.toFixed(2),
+                      h.value.toFixed(2),
+                      c && c.waccRate > 0 ? c.waccRate.toFixed(2) : "-",
+                      pl == null ? "-" : `${pl >= 0 ? "+" : ""}${pl.toFixed(2)}`,
+                      `${h.percentChange >= 0 ? "+" : ""}${h.percentChange.toFixed(2)}%`,
+                    ];
+                  }),
+                  foot: [
+                    "",
+                    "Total",
+                    `${holdings.length} scrips · ${liveCount} at live prices`,
+                    formatQty(totals.units),
+                    "",
+                    totals.value.toFixed(2),
+                    investment.data && investment.data.avgWacc > 0
+                      ? investment.data.avgWacc.toFixed(2)
+                      : "-",
+                    totalInvestment > 0
+                      ? `${unrealizedPL >= 0 ? "+" : ""}${unrealizedPL.toFixed(2)}`
+                      : "-",
+                    `${totals.dayPct >= 0 ? "+" : ""}${totals.dayPct.toFixed(2)}%`,
+                  ],
+                }),
+              },
+            ]}
+          />
           <Button
             variant="outline"
             size="sm"
@@ -245,78 +315,11 @@ function PortfolioPage() {
             className="gap-1.5"
             aria-label="Refresh portfolio"
           >
-            <RefreshCw className={`size-3.5 ${q.isFetching || investment.isFetching ? "animate-spin" : ""}`} /> Refresh
+            <RefreshCw
+              className={`size-3.5 ${q.isFetching || investment.isFetching ? "animate-spin" : ""}`}
+            />{" "}
+            Refresh
           </Button>
-          <ExportButton
-          disabled={items.length === 0}
-          formats={[
-            {
-              title: "CSV",
-              description: "Spreadsheet-friendly rows of every holding",
-              filename: "portfolio",
-              extension: "csv",
-              build: () => portfolioCsv(items, totals, costOf),
-            },
-            {
-              title: "JSON",
-              description: "Raw holdings with live prices and sector data",
-              filename: "portfolio",
-              extension: "json",
-              build: () => JSON.stringify({ holdings: items, totals }, null, 2),
-            },
-            {
-              title: "PDF",
-              description: "Formatted holdings table for printing or sharing",
-              filename: "portfolio",
-              extension: "pdf",
-              build: () => "",
-              pdf: () => ({
-                title: "Portfolio holdings at live prices",
-                head: [
-                  "SN",
-                  "Scrip",
-                  "Description",
-                  "Units",
-                  "LTP",
-                  "Value",
-                  "Avg buy",
-                  "P/L",
-                  "Day %",
-                ],
-                body: items.map((h, i) => {
-                  const c = costOf(h.scrip);
-                  const pl = c && c.cost > 0 ? h.value - c.cost : null;
-                  return [
-                    i + 1,
-                    h.scrip,
-                    h.description,
-                    formatQty(h.units),
-                    h.ltp.toFixed(2),
-                    h.value.toFixed(2),
-                    c && c.waccRate > 0 ? c.waccRate.toFixed(2) : "-",
-                    pl == null ? "-" : `${pl >= 0 ? "+" : ""}${pl.toFixed(2)}`,
-                    `${h.percentChange >= 0 ? "+" : ""}${h.percentChange.toFixed(2)}%`,
-                  ];
-                }),
-                foot: [
-                  "",
-                  "Total",
-                  `${holdings.length} scrips · ${liveCount} at live prices`,
-                  formatQty(totals.units),
-                  "",
-                  totals.value.toFixed(2),
-                  investment.data && investment.data.avgWacc > 0
-                    ? investment.data.avgWacc.toFixed(2)
-                    : "-",
-                  totalInvestment > 0
-                    ? `${unrealizedPL >= 0 ? "+" : ""}${unrealizedPL.toFixed(2)}`
-                    : "-",
-                  `${totals.dayPct >= 0 ? "+" : ""}${totals.dayPct.toFixed(2)}%`,
-                ],
-              }),
-            },
-          ]}
-        />
         </div>
       </div>
 

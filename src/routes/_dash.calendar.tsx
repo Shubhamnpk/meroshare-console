@@ -98,7 +98,7 @@ function MonthGrid({
         {WEEKDAYS_SHORT.map((d) => (
           <p
             key={d}
-            className="px-1 py-2 text-center text-[0.68rem] font-semibold uppercase tracking-wider text-muted-foreground"
+            className="px-1 py-1.5 text-center text-[0.65rem] font-semibold uppercase tracking-wider text-muted-foreground sm:py-2 sm:text-[0.68rem]"
           >
             {d}
           </p>
@@ -117,7 +117,7 @@ function MonthGrid({
               type="button"
               onClick={() => onSelect(c.date)}
               className={cn(
-                "flex min-h-[76px] flex-col items-stretch gap-1 border-b border-r border-border/40 p-1.5 text-left transition-colors last:border-r-0 hover:bg-muted/40 sm:min-h-[104px] sm:p-2",
+                "flex min-h-[62px] flex-col items-stretch gap-1 border-b border-r border-border/40 p-1 text-left transition-colors last:border-r-0 hover:bg-muted/40 sm:min-h-[92px] sm:p-2",
                 !c.inMonth && "bg-muted/20 opacity-50",
                 selected && "bg-primary/10 hover:bg-primary/15",
               )}
@@ -169,11 +169,11 @@ function CalendarPage() {
   const focusSymbol = (symbolParam ?? "").trim().toUpperCase();
   const [view, setView] = useState<"ad" | "bs">("ad");
   const [adCursor, setAdCursor] = useState({ y: now.getFullYear(), m: now.getMonth() });
-  const [bsCursor, setBsCursor] = useState<BsDate>(
-    bsNow ?? { y: 2083, m: 5, d: 1 },
-  );
+  const [bsCursor, setBsCursor] = useState<BsDate>(bsNow ?? { y: 2083, m: 5, d: 1 });
   const [selected, setSelected] = useState<Date>(now);
   const [scope, setScope] = useState<"mine" | "all">("mine");
+  // Bottom panels: side-by-side on desktop, tabbed on mobile to avoid scrolling.
+  const [panel, setPanel] = useState<"day" | "upcoming">("day");
   const navigate = Route.useNavigate();
 
   const dividends = useQuery(dividendsQuery());
@@ -186,7 +186,9 @@ function CalendarPage() {
   const events = useMemo(() => {
     const map = new Map<string, CalEvent[]>();
     for (const div of dividends.data ?? []) {
-      const symbol = String(div.symbol ?? "").trim().toUpperCase();
+      const symbol = String(div.symbol ?? "")
+        .trim()
+        .toUpperCase();
       if (!symbol) continue;
       if (focusSymbol && symbol !== focusSymbol) continue;
       const mine = held.has(symbol);
@@ -218,7 +220,10 @@ function CalendarPage() {
     const out: CalEvent[] = [];
     for (const list of events.values())
       for (const e of list) {
-        if (e.kind === "bookclose" && e.date.getTime() >= new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime())
+        if (
+          e.kind === "bookclose" &&
+          e.date.getTime() >= new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+        )
           out.push(e);
       }
     return out.sort((a, b) => a.date.getTime() - b.date.getTime()).slice(0, 5);
@@ -231,7 +236,13 @@ function CalendarPage() {
     const startOffset = first.getDay();
     const daysInMonth = new Date(adCursor.y, adCursor.m + 1, 0).getDate();
     const total = Math.ceil((startOffset + daysInMonth) / 7) * 7;
-    const cells: { key: string; primary: number; secondary: string | null; inMonth: boolean; date: Date }[] = [];
+    const cells: {
+      key: string;
+      primary: number;
+      secondary: string | null;
+      inMonth: boolean;
+      date: Date;
+    }[] = [];
     for (let i = 0; i < total; i++) {
       const date = new Date(adCursor.y, adCursor.m, 1 - startOffset + i);
       const bs = adToBs(date);
@@ -251,7 +262,13 @@ function CalendarPage() {
     const len = bsMonthLength(bsCursor.y, bsCursor.m) ?? 30;
     const firstAd = bsToAd(bsCursor.y, bsCursor.m, 1);
     const startOffset = firstAd ? firstAd.getDay() : 0;
-    const cells: { key: string; primary: number; secondary: string | null; inMonth: boolean; date: Date }[] = [];
+    const cells: {
+      key: string;
+      primary: number;
+      secondary: string | null;
+      inMonth: boolean;
+      date: Date;
+    }[] = [];
     const total = Math.ceil((startOffset + len) / 7) * 7;
     for (let i = 0; i < total; i++) {
       const bsDay = i - startOffset + 1;
@@ -328,9 +345,6 @@ function CalendarPage() {
         <h1 className="flex items-center gap-2 font-display text-2xl font-semibold sm:text-3xl">
           <CalendarDays className="size-6 text-primary" /> Calendar
         </h1>
-        <p className="mt-1 hidden text-sm text-muted-foreground sm:block">
-          Dividend announcements and book closures for your holdings, in AD and Bikram Sambat.
-        </p>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -342,7 +356,9 @@ function CalendarPage() {
               onClick={() => setView(v)}
               className={cn(
                 "rounded-full px-3 py-1 text-xs font-semibold transition-colors",
-                view === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+                view === v
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground",
               )}
             >
               {v === "ad" ? "AD" : "BS (Nepali)"}
@@ -357,7 +373,9 @@ function CalendarPage() {
               onClick={() => setScope(v)}
               className={cn(
                 "rounded-full px-3 py-1 text-xs font-semibold transition-colors",
-                scope === v ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground",
+                scope === v
+                  ? "bg-primary/15 text-primary"
+                  : "text-muted-foreground hover:text-foreground",
               )}
             >
               {v === "mine" ? "My holdings" : "All scrips"}
@@ -391,124 +409,172 @@ function CalendarPage() {
       <div>
         <h2 className="font-display text-xl font-semibold">
           {view === "ad" ? adTitle : bsTitle}
-          {view === "bs" ? <span className="ml-2 text-sm font-normal text-muted-foreground">{bsTitleNe}</span> : null}
+          {view === "bs" ? (
+            <span className="ml-2 text-sm font-normal text-muted-foreground">{bsTitleNe}</span>
+          ) : null}
         </h2>
         <p className="num mt-0.5 text-xs text-muted-foreground">{view === "ad" ? adSub : bsSub}</p>
       </div>
 
-      <MonthGrid
-        cells={view === "ad" ? adCells : bsCells}
-        selectedKey={selectedKey}
-        todayKey={todayKey}
-        onSelect={setSelected}
-        eventsOf={eventsOf}
-      />
+      <div className="grid items-start gap-4 xl:grid-cols-[1.6fr_1fr]">
+        <div className="min-w-0 space-y-3">
+          <MonthGrid
+            cells={view === "ad" ? adCells : bsCells}
+            selectedKey={selectedKey}
+            todayKey={todayKey}
+            onSelect={(d) => {
+              setSelected(d);
+              setPanel("day");
+            }}
+            eventsOf={eventsOf}
+          />
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-        <span className="inline-flex items-center gap-1.5">
-          <span className="size-2 rounded-full bg-gain" /> Book close
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="size-2 rounded-full bg-amber-500" /> Announced
-        </span>
-        <span className="num">
-          {view === "ad" ? "BS date under each day" : "AD date under each day"}
-        </span>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <section className="space-y-2">
-          <h3 className="font-display text-base font-semibold">
-            {formatDate(selected)}{" "}
-            <span className="num text-xs font-normal text-muted-foreground">
-              {(() => {
-                const bs = adToBs(selected);
-                return bs ? formatBs(bs) : "";
-              })()}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="size-2 rounded-full bg-gain" /> Book close
             </span>
-          </h3>
-          {selectedEvents.length === 0 ? (
-            <EmptyBlock title="No events" description="No dividend activity on this day." />
-          ) : (
-            <ul className="space-y-2">
-              {selectedEvents.map((e) => (
-                <li
-                  key={e.key}
-                  className="flex items-center gap-3 rounded-2xl border border-border/70 bg-card px-4 py-3"
-                >
-                  <span
-                    className={cn(
-                      "num flex size-10 shrink-0 items-center justify-center rounded-full text-xs font-bold",
-                      KIND_STYLE[e.kind].badge,
-                    )}
-                  >
-                    {e.symbol.slice(0, 2)}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-semibold">{e.symbol}</span>
-                      <span className={cn("num rounded-full px-2 py-0.5 text-[0.68rem] font-semibold", KIND_STYLE[e.kind].badge)}>
-                        {KIND_STYLE[e.kind].label}
-                      </span>
-                      {e.mine ? (
-                        <span className="num rounded-full bg-primary/10 px-2 py-0.5 text-[0.68rem] font-semibold text-primary">
-                          Holding
-                        </span>
-                      ) : null}
-                    </span>
-                    <span className="num mt-0.5 block text-xs text-muted-foreground">
-                      {dividendText(e)}
-                      {e.fy ? ` · FY ${e.fy}` : ""}
-                    </span>
-                    <span className="num mt-0.5 block text-xs text-muted-foreground">
-                      {formatDate(e.date)}
-                      {(() => {
-                        const bs = adToBs(e.date);
-                        return bs ? ` · ${formatBs(bs)}` : "";
-                      })()}
-                    </span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="size-2 rounded-full bg-amber-500" /> Announced
+            </span>
+            <span className="num">
+              {view === "ad" ? "BS date under each day" : "AD date under each day"}
+            </span>
+          </div>
+        </div>
 
-        <section className="space-y-2">
-          <h3 className="font-display text-base font-semibold">Upcoming book closures</h3>
-          {upcoming.length === 0 ? (
-            <p className="rounded-2xl border border-border/60 bg-surface px-4 py-3 text-sm text-muted-foreground">
-              Nothing on the books ahead.
-            </p>
-          ) : (
-            <ul className="space-y-2">
-              {upcoming.map((e) => (
-                <li key={e.key}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelected(e.date);
-                      setAdCursor({ y: e.date.getFullYear(), m: e.date.getMonth() });
-                      const bs = adToBs(e.date);
-                      if (bs) setBsCursor({ y: bs.y, m: bs.m, d: 1 });
-                    }}
-                    className="flex w-full items-center gap-3 rounded-2xl border border-border/70 bg-card px-4 py-3 text-left transition-colors hover:bg-muted/40"
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="text-sm font-semibold">{e.symbol}</span>
-                      <span className="num mt-0.5 block text-xs text-muted-foreground">
-                        {dividendText(e)} · closes {formatDate(e.date)}
+        <div className="min-w-0">
+          <div className="mb-3 flex rounded-full border border-border/70 bg-card p-1 sm:hidden">
+            {(
+              [
+                { key: "day", label: "Selected day", count: selectedEvents.length },
+                { key: "upcoming", label: "Upcoming", count: upcoming.length },
+              ] as const
+            ).map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setPanel(t.key)}
+                className={cn(
+                  "flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
+                  panel === t.key
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {t.label}
+                <span
+                  className={cn(
+                    "num rounded-full px-1.5 py-0.5 text-[0.65rem]",
+                    panel === t.key ? "bg-primary-foreground/20" : "bg-muted",
+                  )}
+                >
+                  {t.count}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
+            <section className={cn("space-y-2", panel === "day" ? "" : "hidden sm:block")}>
+              <h3 className="font-display text-base font-semibold">
+                {formatDate(selected)}{" "}
+                <span className="num text-xs font-normal text-muted-foreground">
+                  {(() => {
+                    const bs = adToBs(selected);
+                    return bs ? formatBs(bs) : "";
+                  })()}
+                </span>
+              </h3>
+              {selectedEvents.length === 0 ? (
+                <EmptyBlock title="No events" description="No dividend activity on this day." />
+              ) : (
+                <ul className="space-y-2">
+                  {selectedEvents.map((e) => (
+                    <li
+                      key={e.key}
+                      className="flex items-center gap-3 rounded-2xl border border-border/70 bg-card px-4 py-3"
+                    >
+                      <span
+                        className={cn(
+                          "num flex size-10 shrink-0 items-center justify-center rounded-full text-xs font-bold",
+                          KIND_STYLE[e.kind].badge,
+                        )}
+                      >
+                        {e.symbol.slice(0, 2)}
                       </span>
-                    </span>
-                    <span className="num shrink-0 rounded-full bg-gain/15 px-2 py-0.5 text-[0.68rem] font-semibold text-gain">
-                      Book close
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+                      <span className="min-w-0 flex-1">
+                        <span className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-semibold">{e.symbol}</span>
+                          <span
+                            className={cn(
+                              "num rounded-full px-2 py-0.5 text-[0.68rem] font-semibold",
+                              KIND_STYLE[e.kind].badge,
+                            )}
+                          >
+                            {KIND_STYLE[e.kind].label}
+                          </span>
+                          {e.mine ? (
+                            <span className="num rounded-full bg-primary/10 px-2 py-0.5 text-[0.68rem] font-semibold text-primary">
+                              Holding
+                            </span>
+                          ) : null}
+                        </span>
+                        <span className="num mt-0.5 block text-xs text-muted-foreground">
+                          {dividendText(e)}
+                          {e.fy ? ` · FY ${e.fy}` : ""}
+                        </span>
+                        <span className="num mt-0.5 block text-xs text-muted-foreground">
+                          {formatDate(e.date)}
+                          {(() => {
+                            const bs = adToBs(e.date);
+                            return bs ? ` · ${formatBs(bs)}` : "";
+                          })()}
+                        </span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <section className={cn("space-y-2", panel === "upcoming" ? "" : "hidden sm:block")}>
+              <h3 className="font-display text-base font-semibold">Upcoming book closures</h3>
+              {upcoming.length === 0 ? (
+                <p className="rounded-2xl border border-border/60 bg-surface px-4 py-3 text-sm text-muted-foreground">
+                  Nothing on the books ahead.
+                </p>
+              ) : (
+                <ul className="space-y-2">
+                  {upcoming.map((e) => (
+                    <li key={e.key}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelected(e.date);
+                          setPanel("day");
+                          setAdCursor({ y: e.date.getFullYear(), m: e.date.getMonth() });
+                          const bs = adToBs(e.date);
+                          if (bs) setBsCursor({ y: bs.y, m: bs.m, d: 1 });
+                        }}
+                        className="flex w-full items-center gap-3 rounded-2xl border border-border/70 bg-card px-4 py-3 text-left transition-colors hover:bg-muted/40"
+                      >
+                        <span className="min-w-0 flex-1">
+                          <span className="text-sm font-semibold">{e.symbol}</span>
+                          <span className="num mt-0.5 block text-xs text-muted-foreground">
+                            {dividendText(e)} · closes {formatDate(e.date)}
+                          </span>
+                        </span>
+                        <span className="num shrink-0 rounded-full bg-gain/15 px-2 py-0.5 text-[0.68rem] font-semibold text-gain">
+                          Book close
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </div>
+        </div>
       </div>
     </div>
   );

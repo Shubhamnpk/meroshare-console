@@ -81,7 +81,7 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
       <div
         className={cn(
           "flex-1 flex flex-col transition-[padding] duration-300 ease-in-out",
-          sidebarCollapsed ? "lg:pl-[4.75rem]" : "lg:pl-64",
+          sidebarCollapsed ? "lg:pl-[4.75rem]" : "lg:pl-60",
         )}
       >
         <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border/70 bg-background/85 px-4 backdrop-blur-xl sm:px-6">
