@@ -13,8 +13,28 @@ import {
   requireAuth,
   submitIpoApplication,
 } from "./api.server";
+import { CDSC_BASE } from "./cdsc.server";
 import { DEMO_APPLICATIONS } from "./demo-data";
 import type { ApplicableIssue, ApplicationReportItem, JsonRecord } from "./types";
+
+function resolveDocUrls(obj: unknown): unknown {
+  if (typeof obj === "string") {
+    const v = obj.trim();
+    if (v.startsWith("/") && !v.startsWith("//")) return `${CDSC_BASE}${v}`;
+    return obj;
+  }
+  if (Array.isArray(obj)) return obj.map(resolveDocUrls);
+  if (obj && typeof obj === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, val] of Object.entries(obj as Record<string, unknown>)) {
+      out[k] = /prospectus|document|attachment|filepath|fileurl|notice/i.test(k)
+        ? resolveDocUrls(val)
+        : val;
+    }
+    return out;
+  }
+  return obj;
+}
 
 export const getApplicableIssues = createServerFn({ method: "GET" }).handler(
   async (): Promise<ApplicableIssue[]> => {
@@ -63,7 +83,7 @@ export const getIssueDetail = createServerFn({ method: "POST" })
     z.object({ companyShareId: z.number().int().positive() }).parse(input),
   )
   .handler(async ({ data }): Promise<JsonRecord> =>
-    fetchIssueManagerDetail(await requireAuth(), data.companyShareId),
+    resolveDocUrls(await fetchIssueManagerDetail(await requireAuth(), data.companyShareId)) as JsonRecord,
   );
 
 export const getAppliedDetail = createServerFn({ method: "POST" })
@@ -76,7 +96,7 @@ export const getAppliedDetail = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data }): Promise<JsonRecord> =>
-    fetchAppliedDetail(await requireAuth(), data.formId, data.old === true),
+    resolveDocUrls(await fetchAppliedDetail(await requireAuth(), data.formId, data.old === true)) as JsonRecord,
   );
 
 export const getApplicationDetails = createServerFn({ method: "POST" })
@@ -101,7 +121,7 @@ export const getApplicationDetails = createServerFn({ method: "POST" })
       const settled = await Promise.allSettled(
         chunk.map((it) => fetchAppliedDetail(auth, it.formId, it.old === true)),
       );
-      results.push(...settled.map((r) => (r.status === "fulfilled" ? r.value : null)));
+      results.push(...settled.map((r) => (r.status === "fulfilled" ? resolveDocUrls(r.value) as JsonRecord : null)));
       if (i + chunkSize < data.items.length) await new Promise((r) => setTimeout(r, 250));
     }
     return results;

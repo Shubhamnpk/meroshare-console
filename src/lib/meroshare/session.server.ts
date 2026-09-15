@@ -16,6 +16,8 @@ export interface MeroShareSessionData {
   expiresAt?: number;
   /** Demo mode - bypasses CDSC auth, uses mock data. */
   demo?: boolean;
+  /** Auto-synced watchlist symbols, persisted across devices. */
+  watchlist?: string[];
 }
 
 // CDSC tokens are short lived; keep the cookie in the same ballpark.

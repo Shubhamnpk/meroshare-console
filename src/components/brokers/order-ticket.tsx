@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowDownRight, ArrowUpRight } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,6 +28,7 @@ import { placeBrokerAmo, placeBrokerOrder } from "@/lib/brokers/brokers.function
 import type { BrokerId } from "@/lib/brokers/types";
 import { errorMessage, formatNpr } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useBrokerMarketWs } from "@/hooks/use-broker-ws";
 
 const VALIDITIES = ["DAY", "GTD", "GTC", "IOC", "FOK"] as const;
 
@@ -49,8 +50,9 @@ export function OrderTicket({
   const connections = useQuery(brokerConnectionsQuery());
   const brokerId = (connections.data?.[0]?.brokerId ?? null) as BrokerId | null;
 
-  const quote = useQuery({ ...brokerQuoteQuery(brokerId, symbol), refetchInterval: 20_000 });
-  const depth = useQuery({ ...brokerDepthQuery(brokerId, symbol), refetchInterval: 20_000 });
+  const { wsReady } = useBrokerMarketWs(brokerId, symbol);
+  const quote = useQuery({ ...brokerQuoteQuery(brokerId, symbol), refetchInterval: wsReady ? false : 20_000 });
+  const depth = useQuery({ ...brokerDepthQuery(brokerId, symbol), refetchInterval: wsReady ? false : 20_000 });
   const holdings = useQuery(brokerHoldingsQuery(brokerId));
   const book = useQuery(brokerOrderBookQuery(brokerId));
   const amoList = useQuery(brokerAmoListQuery(brokerId));
@@ -115,6 +117,10 @@ export function OrderTicket({
     () => (amoList.data ?? []).filter((o) => o.scrip === symbol),
     [amoList.data, symbol],
   );
+  const otherAmoOrders = useMemo(
+    () => (amoList.data ?? []).filter((o) => o.scrip !== symbol),
+    [amoList.data, symbol],
+  );
 
   const qty = Math.floor(Number(quantity));
   const px = Number(price);
@@ -167,7 +173,6 @@ export function OrderTicket({
         void queryClient.invalidateQueries({ queryKey: ["broker-order-book"] });
         void queryClient.invalidateQueries({ queryKey: ["broker-amo-list"] });
       } else {
-        // eslint-disable-next-line no-console
         console.error("[order-ticket] broker rejected order", {
           symbol,
           side,
@@ -185,7 +190,7 @@ export function OrderTicket({
     },
     onError: (err) => {
       const message = errorMessage(err, "Order failed.");
-      // eslint-disable-next-line no-console
+
       console.error("[order-ticket] order request failed", {
         symbol,
         side,
@@ -223,27 +228,27 @@ export function OrderTicket({
                 AMO
               </span>
             ) : null}
-          {quote.data ? (
-            <div className="text-right">
-              <p className="num text-base font-semibold">{formatNpr(quote.data.ltp ?? 0)}</p>
-              <DeltaPill value={quote.data.changePercent ?? 0}>
-                {quote.data.changePercent !== null
-                  ? `${quote.data.changePercent.toFixed(2)}%`
-                  : "-"}
-              </DeltaPill>
-            </div>
-          ) : (
-            <p
-              className="text-xs text-muted-foreground"
-              title={quote.error ? errorMessage(quote.error, "") : ""}
-            >
-              {quote.isPending
-                ? "Live quote…"
-                : quote.isError
-                  ? `Quote failed: ${errorMessage(quote.error, "unknown")}`
-                  : "Quote unavailable"}
-            </p>
-          )}
+            {quote.data ? (
+              <div className="text-right">
+                <p className="num text-base font-semibold">{formatNpr(quote.data.ltp ?? 0)}</p>
+                <DeltaPill value={quote.data.changePercent ?? 0}>
+                  {quote.data.changePercent !== null
+                    ? `${quote.data.changePercent.toFixed(2)}%`
+                    : "-"}
+                </DeltaPill>
+              </div>
+            ) : (
+              <p
+                className="text-xs text-muted-foreground"
+                title={quote.error ? errorMessage(quote.error, "") : ""}
+              >
+                {quote.isPending
+                  ? "Live quote…"
+                  : quote.isError
+                    ? `Quote failed: ${errorMessage(quote.error, "unknown")}`
+                    : "Quote unavailable"}
+              </p>
+            )}
           </div>
         </div>
 
@@ -401,14 +406,12 @@ export function OrderTicket({
           disabled={!validQty || !validPx || shortfall > 0 || amoOddLot || place.isPending}
           onClick={() => setConfirmOpen(true)}
         >
-          {place.isPending ? "Sending…" : amo ? `Review ${side} order (AMO)` : `Review ${side} order`}
+          {place.isPending
+            ? "Sending…"
+            : amo
+              ? `Review ${side} order (AMO)`
+              : `Review ${side} order`}
         </Button>
-        {amo ? (
-          <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-            Market is closed. This queues as an after-market order for the next session.
-          </p>
-        ) : null}
-
         {openOrders.length > 0 ? (
           <div className="mt-3 rounded-xl border border-border/60 p-2.5">
             <p className="px-1 pb-1.5 text-xs font-semibold text-muted-foreground">
@@ -453,6 +456,37 @@ export function OrderTicket({
                 </span>
               </div>
             ))}
+          </div>
+        ) : null}
+
+        {otherAmoOrders.length > 0 ? (
+          <div className="mt-3 rounded-xl border border-border/60 p-2.5">
+            <p className="px-1 pb-1.5 text-xs font-semibold text-muted-foreground">
+              Today&apos;s other AMO orders · {otherAmoOrders.length}
+            </p>
+            {otherAmoOrders.slice(0, 5).map((o, i) => (
+              <div
+                key={o.alertName || `${o.scrip}-${o.side}-${o.price}-${o.quantity}-${i}`}
+                className="flex items-center justify-between px-1 py-1 text-xs"
+              >
+                <span>
+                  <span className="font-semibold">{o.scrip}</span>{" "}
+                  <span
+                    className={cn("font-bold", o.side === "BUY" ? "text-gain" : "text-destructive")}
+                  >
+                    {o.side} {o.quantity.toLocaleString("en-IN")}
+                  </span>
+                </span>
+                <span className="num text-muted-foreground">
+                  @ {o.price !== null ? o.price.toLocaleString("en-IN") : "-"}
+                </span>
+              </div>
+            ))}
+            {otherAmoOrders.length > 5 ? (
+              <p className="px-1 pt-1 text-[0.7rem] text-muted-foreground">
+                +{otherAmoOrders.length - 5} more — see Broker → Orders for the full list.
+              </p>
+            ) : null}
           </div>
         ) : null}
 
@@ -507,14 +541,31 @@ export function OrderTicket({
 
       {/* Depth */}
       <div className="rounded-2xl border border-border/60 bg-surface p-4 lg:col-span-2">
-        <p className="text-sm font-semibold">Market depth</p>
-        <p className="text-[0.7rem] text-muted-foreground">
-          {depth.isError
-            ? `Depth failed: ${errorMessage(depth.error, "unknown")}`
-            : depth.data && depth.data.errorCode !== 0
-              ? depth.data.message || "No depth right now. Streams during market hours."
-              : "Top of book, live from your broker."}
-        </p>
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className="text-sm font-semibold">Market depth</p>
+            <p className="text-[0.7rem] text-muted-foreground">
+              {depth.isError
+                ? `Depth failed: ${errorMessage(depth.error, "unknown")}`
+                : depth.data && depth.data.errorCode !== 0
+                  ? depth.data.message || "No depth right now. Streams during market hours."
+                  : "Top of book, live from your broker."}
+            </p>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7 shrink-0"
+            onClick={() => {
+              void quote.refetch();
+              void depth.refetch();
+            }}
+            disabled={quote.isFetching || depth.isFetching}
+            aria-label="Refresh quote and depth"
+          >
+            <RefreshCw className={`size-3.5 ${quote.isFetching || depth.isFetching ? "animate-spin" : ""}`} />
+          </Button>
+        </div>
         <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
           <div>
             <p className="mb-1 font-semibold text-gain">Bids</p>

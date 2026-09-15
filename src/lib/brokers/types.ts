@@ -112,6 +112,8 @@ export interface BrokerOrder {
   remainingQty: number;
   orderStatus: string;
   deliveryFlag: string;
+  date: string;
+  time: string;
 }
 
 export interface BrokerTrade {
@@ -227,4 +229,75 @@ export interface PlaceOrderResult {
   ok: boolean;
   message: string;
   tranId: string | null;
+}
+
+export interface ModifyOrderRequest {
+  brokerId: BrokerId;
+  tranId: string;
+  orderId: string;
+  orderStatus: string;
+  remainingQty: number;
+  side: "BUY" | "SELL";
+  symbol: string;
+  quantity: number;
+  price: number;
+  orderType: "LMT" | "MKT";
+  validity: "DAY" | "GTD" | "GTC" | "IOC" | "FOK";
+  validTill?: string | undefined;
+  /** Explicit user confirmation — the server refuses without it. */
+  confirmed: true;
+}
+
+export interface BrokerWatchlist {
+  name: string;
+  symbols: string[];
+  isDefault: boolean;
+  systemTag: string;
+}
+
+export interface BrokerWatchlists {
+  templates: BrokerWatchlist[];
+}
+
+/** One step in an order's life (placed → partial → complete/cancelled). */
+export interface BrokerOrderEvent {
+  status: string;
+  quantity: number | null;
+  price: number | null;
+  tradedQty: number | null;
+  remainingQty: number | null;
+  date: string;
+  time: string;
+  message: string;
+}
+
+/** Broker company snapshot: lot/tick/DPR data the public mirror lacks. */
+export interface BrokerCompanyInfo {
+  symbol: string;
+  companyName: string | null;
+  isin: string | null;
+  tickSize: number | null;
+  marketLot: number | null;
+  maxOrderSize: number | null;
+  dprLow: number | null;
+  dprHigh: number | null;
+  preOpenDprLow: number | null;
+  preOpenDprHigh: number | null;
+  weekHigh52: number | null;
+  weekLow52: number | null;
+  listingDate: string | null;
+  activeStatus: string | null;
+}
+
+export interface BrokerMarketStatus {
+  status: string;
+  isOpen: boolean;
+}
+
+export interface BrokerTicket {
+  id: string;
+  status: "open" | "pending" | "resolved";
+  time: string;
+  description: string;
+  unread: boolean;
 }

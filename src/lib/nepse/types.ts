@@ -215,6 +215,12 @@ export interface PortfolioHistoryPoint {
   breakdown: { symbol: string; units: number; close: number; value: number }[];
 }
 
+/** Live session value for a portfolio, plus each scrip's ticks (by UPPER symbol). */
+export interface PortfolioIntraday {
+  points: PricePoint[];
+  ticks: Record<string, { time: number; value: number }[]>;
+}
+
 export interface IpoArchiveRow {
   company: string;
   units: string | null;

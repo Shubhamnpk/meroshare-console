@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { CalendarDays, Search, Star, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -13,9 +13,12 @@ import {
 } from "@/components/ui/sheet";
 import { EmptyBlock } from "@/components/states";
 import { DeltaPill } from "@/components/stat-card";
-import { marketSnapshotQuery } from "@/lib/queries";
+import { brokerWatchlistsQuery, marketSnapshotQuery } from "@/lib/queries";
+import { saveBrokerWatchlist } from "@/lib/brokers/brokers.functions";
+import { errorMessage } from "@/lib/format";
 import { formatNpr, formatPercent } from "@/lib/format";
 import { useWatchlist } from "@/lib/watchlist";
+import { useWatchlist as usePrefsWatchlist } from "@/lib/prefs";
 
 /**
  * Watchlist as a side panel, shared by Market, Dashboard and Terminal.
@@ -31,8 +34,90 @@ export function WatchlistPanel({
   onPick: (symbol: string) => void;
 }) {
   const watchlist = useWatchlist();
+  // Also read prefs-watchlist for union (both hooks point to same store, but keep both for compat)
+  const prefsWatchlist = usePrefsWatchlist();
+  const queryClient = useQueryClient();
   const snapshot = useQuery(marketSnapshotQuery());
   const [term, setTerm] = useState("");
+
+  // Broker watchlist sync — reuses existing watchlist, no new panel.
+  // If a broker is linked, its symbols merge into local on open (and can be pushed back).
+  const brokerConns = useQuery({
+    queryKey: ["broker-connections"],
+    queryFn: async () => {
+      const { listBrokerConnections } = await import("@/lib/brokers/brokers.functions");
+      return listBrokerConnections();
+    },
+    staleTime: 30_000,
+    retry: false,
+  });
+  const brokerId = (brokerConns.data?.[0]?.brokerId ?? null) as
+    import("@/lib/brokers/types").BrokerId | null;
+  const brokerWatchlists = useQuery({
+    ...brokerWatchlistsQuery(brokerId),
+    enabled: Boolean(brokerId) && open,
+  });
+  const brokerSymbols = useMemo(() => {
+    const templates = brokerWatchlists.data ?? [];
+    return [...new Set(templates.flatMap((t) => t.symbols))];
+  }, [brokerWatchlists.data]);
+  const brokerSet = useMemo(() => new Set(brokerSymbols), [brokerSymbols]);
+  const onlyBroker = useMemo(
+    () => brokerSymbols.filter((s) => !prefsWatchlist.symbols.includes(s)),
+    [brokerSymbols, prefsWatchlist.symbols],
+  );
+  const onlyLocal = useMemo(
+    () => prefsWatchlist.symbols.filter((s) => !brokerSet.has(s)),
+    [prefsWatchlist.symbols, brokerSet],
+  );
+
+  const pushLocalToBroker = useMutation({
+    mutationFn: async () => {
+      const templates = brokerWatchlists.data ?? [];
+      const target = templates.find((t) => /default/i.test(t.name)) ?? templates[0];
+      const template = target?.name ?? "Default";
+      const merged = [
+        ...new Set(
+          [...(target?.symbols ?? []), ...prefsWatchlist.symbols].map((s) => s.toUpperCase()),
+        ),
+      ];
+      const res = await saveBrokerWatchlist({
+        data: { brokerId: brokerId!, template, symbols: merged },
+      });
+      if (!res.ok) throw new Error(res.message);
+      return res.message;
+    },
+    onSuccess: (msg) => {
+      toast.success(msg);
+      void queryClient.invalidateQueries({ queryKey: ["broker-watchlists"] });
+    },
+    onError: (err) => toast.error(errorMessage(err, "Push failed.")),
+  });
+
+  // Fully automatic two-way sync, once per open: pull broker-only scrips
+  // into local and push local-only scrips back (union both ways, no buttons).
+  const autoSynced = useRef(false);
+  const brokerKey = brokerSymbols.join(",");
+  const localKey = prefsWatchlist.symbols.join(",");
+  useEffect(() => {
+    if (!open) {
+      autoSynced.current = false;
+      return;
+    }
+    if (!brokerId || brokerWatchlists.isPending || autoSynced.current) return;
+    autoSynced.current = true;
+    let added = 0;
+    for (const s of onlyBroker) {
+      if (!prefsWatchlist.has(s)) {
+        prefsWatchlist.toggle(s);
+        added++;
+      }
+    }
+    if (added > 0)
+      toast.success(`Synced ${added} scrip${added === 1 ? "" : "s"} from broker watchlist.`);
+    if (onlyLocal.length > 0 && !pushLocalToBroker.isPending) pushLocalToBroker.mutate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, brokerId, brokerWatchlists.isPending, brokerKey, localKey]);
 
   const prices = snapshot.data?.prices ?? [];
   const rows = useMemo(
@@ -56,7 +141,7 @@ export function WatchlistPanel({
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="flex w-full flex-col p-0 sm:max-w-md">
-        <SheetHeader className="border-b border-border/60 px-4 py-3 text-left">
+        <SheetHeader className="border-b border-border/60 py-3 pl-4 pr-12 text-left">
           <div className="flex items-center justify-between gap-2">
             <SheetTitle className="flex items-center gap-2 font-display text-base font-semibold">
               <Star className="size-4 fill-warning text-warning" aria-hidden />
@@ -129,7 +214,7 @@ export function WatchlistPanel({
               {rows.map(({ symbol, price }) => (
                 <li
                   key={symbol}
-                  className="flex items-center gap-2 rounded-xl border border-border/60 bg-surface px-3 py-2.5"
+                  className="flex items-center gap-2 rounded-xl border border-border/60 bg-surface px-3 py-2.5 transition-colors hover:border-primary/30 hover:bg-accent/5"
                 >
                   <button
                     type="button"

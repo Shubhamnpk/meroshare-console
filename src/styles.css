@@ -354,9 +354,23 @@ html.light[data-color="pink"] {
   --primary: oklch(0.56 0.13 340);
   --primary-foreground: oklch(0.99 0.004 250);
   --accent: oklch(0.945 0.03 340);
-  --accent-foreground: oklch(0.28 0.05 340);
+  --accent-foreground: oklch(0.96 0.006 250);
   --ring: oklch(0.56 0.13 340);
   --sidebar-primary: oklch(0.56 0.13 340);
   --sidebar-ring: oklch(0.56 0.13 340);
   --sidebar-accent: oklch(0.955 0.008 340);
+}
+
+/* Sonner hangs its dismiss button outside the toast card by default — pull
+ * it inside the top-right corner and reserve room so text never slides under
+ * it. Scoped to our toaster so the library default stays intact elsewhere. */
+.toaster [data-sonner-toast] [data-close-button] {
+  top: 8px;
+  left: auto;
+  right: 8px;
+  transform: none;
+}
+
+.toaster [data-sonner-toast]:has([data-close-button]) {
+  padding-right: 36px;
 }

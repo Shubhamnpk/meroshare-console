@@ -11,6 +11,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Panel } from "@/components/ui/panel";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -24,21 +32,30 @@ import {
   brokerFundsQuery,
   brokerFundTxnsQuery,
   brokerHoldingsQuery,
+  brokerMarketStatusQuery,
   brokerOrderBookQuery,
+  brokerOrderHistoryQuery,
   brokerQuoteQuery,
   brokerTradeBookQuery,
+  brokerWatchlistsQuery,
   type BrokerRange,
 } from "@/lib/queries";
 import {
   cancelBrokerAmo,
   cancelBrokerOrder,
+  modifyBrokerOrder,
   placeBrokerAmo,
   requestBrokerWithdraw,
   retestBrokerConnection,
+  saveBrokerWatchlist,
 } from "@/lib/brokers/brokers.functions";
+import { useWatchlist } from "@/lib/prefs";
 import type { BrokerId } from "@/lib/brokers/types";
-import { errorMessage, formatNpr } from "@/lib/format";
+import { errorMessage, formatNpr, formatQty } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
+import { PriceAlertsPanel } from "@/components/brokers/price-alerts-panel";
+import { BrokerTicketsPanel } from "@/components/brokers/tickets-panel";
 import { ogImage, canonicalLink } from "@/lib/seo";
 
 export const Route = createFileRoute("/_dash/broker")({
@@ -56,13 +73,12 @@ export const Route = createFileRoute("/_dash/broker")({
   component: BrokerPage,
 });
 
-type BrokerTab = "overview" | "holdings" | "orders" | "amo" | "trades" | "funds";
+type BrokerTab = "overview" | "holdings" | "orders" | "trades" | "funds";
 
 const TABS: { id: BrokerTab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "holdings", label: "Holdings" },
   { id: "orders", label: "Orders" },
-  { id: "amo", label: "AMO" },
   { id: "trades", label: "Trades" },
   { id: "funds", label: "Funds" },
 ];
@@ -241,38 +257,6 @@ function QueryNote({ query }: { query: { isPending: boolean; isError: boolean; e
 
 type TxnSortKey = "date" | "type" | "amount" | "status";
 
-function SortTh({
-  label,
-  k,
-  sort,
-  onSort,
-  right,
-}: {
-  label: string;
-  k: TxnSortKey;
-  sort: { key: TxnSortKey; dir: 1 | -1 } | null;
-  onSort: (k: TxnSortKey) => void;
-  right?: boolean;
-}) {
-  const active = sort?.key === k;
-  return (
-    <th className={cn("py-2 pr-2 font-medium", right && "text-right")}>
-      <button
-        type="button"
-        onClick={() => onSort(k)}
-        className={cn(
-          "inline-flex items-center gap-1 uppercase tracking-wide hover:text-foreground",
-          active && "text-foreground",
-        )}
-        aria-label={`Sort by ${label}`}
-      >
-        {label}
-        <span className="text-[0.6rem]">{active ? (sort.dir === 1 ? "▲" : "▼") : "△"}</span>
-      </button>
-    </th>
-  );
-}
-
 function AmoPanel({ brokerId }: { brokerId: BrokerId }) {
   const queryClient = useQueryClient();
   const amos = useQuery(brokerAmoListQuery(brokerId));
@@ -283,9 +267,10 @@ function AmoPanel({ brokerId }: { brokerId: BrokerId }) {
   const [eprice, setEprice] = useState("");
 
   const rows = amos.data ?? [];
-  const editing = rows.find(
-    (r) => (r.alertName || `${r.scrip}-${r.side}-${r.price}-${r.quantity}`) === editKey,
-  ) ?? null;
+  const editing =
+    rows.find(
+      (r) => (r.alertName || `${r.scrip}-${r.side}-${r.price}-${r.quantity}`) === editKey,
+    ) ?? null;
   const editQuote = useQuery({
     ...brokerQuoteQuery(brokerId, editing?.scrip ?? ""),
     enabled: Boolean(editing),
@@ -411,7 +396,16 @@ function AmoPanel({ brokerId }: { brokerId: BrokerId }) {
                   className="flex w-full items-center justify-between gap-3 text-left"
                 >
                   <span className="min-w-0 text-sm">
-                    <span className={cn("font-bold", o.side === "BUY" ? "text-gain" : o.side === "SELL" ? "text-destructive" : "")}>
+                    <span
+                      className={cn(
+                        "font-bold",
+                        o.side === "BUY"
+                          ? "text-gain"
+                          : o.side === "SELL"
+                            ? "text-destructive"
+                            : "",
+                      )}
+                    >
                       {o.side}
                     </span>{" "}
                     <span className="num font-semibold">{o.quantity.toLocaleString("en-IN")}</span>{" "}
@@ -420,7 +414,9 @@ function AmoPanel({ brokerId }: { brokerId: BrokerId }) {
                       @ {o.price !== null ? o.price.toLocaleString("en-IN") : "-"}
                     </span>
                   </span>
-                  <span className="shrink-0 text-xs text-muted-foreground">{open ? "Hide" : "Detail"}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {open ? "Hide" : "Detail"}
+                  </span>
                 </button>
                 {open ? (
                   <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 border-t border-border/60 pt-2 text-xs">
@@ -462,7 +458,9 @@ function AmoPanel({ brokerId }: { brokerId: BrokerId }) {
                         id={`amo-price-${key}`}
                         inputMode="decimal"
                         value={eprice}
-                        onChange={(e) => setEprice(e.target.value.replace(/[^0-9.]/g, "").slice(0, 12))}
+                        onChange={(e) =>
+                          setEprice(e.target.value.replace(/[^0-9.]/g, "").slice(0, 12))
+                        }
                         className="h-8 text-xs"
                       />
                     </div>
@@ -509,7 +507,10 @@ function AmoPanel({ brokerId }: { brokerId: BrokerId }) {
                         size="sm"
                         variant={armed ? "destructive" : "ghost"}
                         disabled={cancelAmo.isPending}
-                        className={cn(!armed && "text-destructive hover:text-destructive", "text-xs")}
+                        className={cn(
+                          !armed && "text-destructive hover:text-destructive",
+                          "text-xs",
+                        )}
                         onClick={() => {
                           if (!armed) {
                             setArmedKey(key);
@@ -544,6 +545,187 @@ function AmoPanel({ brokerId }: { brokerId: BrokerId }) {
   );
 }
 
+function CollateralBreakdown({ funds }: { funds: import("@/lib/brokers/types").BrokerFunds }) {
+  const total = funds.finalCollateral ?? 0;
+  const used = funds.collateralUsed ?? 0;
+  const pending = funds.pendingOrder ?? 0;
+  const ledger = funds.ledgerBalance ?? 0;
+  const withdrawable = funds.availableForWithdraw ?? 0;
+  const unbilled = funds.unbilledSales ?? 0;
+
+  const usedPct = total > 0 ? Math.min(100, (used / total) * 100) : 0;
+  const pendingPct = total > 0 ? Math.min(100 - usedPct, (pending / total) * 100) : 0;
+  const freePct = Math.max(0, 100 - usedPct - pendingPct);
+
+  if (total <= 0) return null;
+
+  return (
+    <div className="rounded-2xl border border-border/60 bg-surface p-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold">Collateral utilization</p>
+          <p className="text-xs text-muted-foreground">How your {money(total)} is deployed</p>
+        </div>
+        <div className="text-right">
+          <p className="num text-lg font-bold">{usedPct.toFixed(1)}%</p>
+          <p className="text-[0.68rem] text-muted-foreground">utilized</p>
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <div className="flex h-4 w-full overflow-hidden rounded-full border border-border/60 bg-background">
+          {used > 0 ? (
+            <div
+              className="bg-primary/80 transition-all"
+              style={{ width: `${usedPct}%` }}
+              title={`Collateral used: ${money(used)}`}
+            />
+          ) : null}
+          {pending > 0 ? (
+            <div
+              className="bg-amber-400/80 transition-all"
+              style={{ width: `${pendingPct}%` }}
+              title={`Pending orders: ${money(pending)}`}
+            />
+          ) : null}
+          {freePct > 0 ? (
+            <div
+              className="bg-emerald-400/60 transition-all"
+              style={{ width: `${freePct}%` }}
+              title={`Free: ${money(total - used - pending)}`}
+            />
+          ) : null}
+        </div>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-[0.68rem]">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-primary/80" />
+            Used <span className="num font-semibold">{money(used)}</span>
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-amber-400/80" />
+            Pending <span className="num font-semibold">{money(pending)}</span>
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-emerald-400/60" />
+            Free <span className="num font-semibold">{money(total - used - pending)}</span>
+          </span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+        {[
+          { label: "Ledger balance", value: ledger },
+          { label: "Available to withdraw", value: withdrawable },
+          { label: "Unbilled sales", value: unbilled },
+        ].map((item) => (
+          <div key={item.label} className="rounded-xl border border-border/60 bg-background p-2.5">
+            <p className="text-[0.62rem] uppercase tracking-wide text-muted-foreground">
+              {item.label}
+            </p>
+            <p className="num mt-0.5 text-sm font-semibold">{money(item.value)}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MarketStatusPill({ brokerId }: { brokerId: BrokerId | null }) {
+  const status = useQuery(brokerMarketStatusQuery(brokerId));
+  if (!brokerId || status.isPending) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 px-2.5 py-0.5 text-[0.7rem] font-medium text-muted-foreground">
+        <span className="size-1.5 rounded-full bg-muted-foreground/40" />
+        Market status…
+      </span>
+    );
+  }
+  if (status.isError || !status.data) return null;
+  const open = status.data.isOpen;
+  return (
+    <span
+      title={open ? "Regular session open at the broker" : "Broker-reported session state"}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[0.7rem] font-semibold",
+        open
+          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+          : "border-border/60 bg-surface text-muted-foreground",
+      )}
+    >
+      <span className={cn("size-1.5 rounded-full", open ? "bg-emerald-500" : "bg-amber-500")} />
+      {status.data.status}
+    </span>
+  );
+}
+
+function OrderHistoryBox({ brokerId, orderId }: { brokerId: BrokerId; orderId: string }) {
+  const history = useQuery(brokerOrderHistoryQuery(brokerId, orderId));
+  if (history.isPending) {
+    return <p className="mt-2 text-[0.7rem] text-muted-foreground">Loading timeline…</p>;
+  }
+  if (history.isError) {
+    return (
+      <p className="mt-2 text-[0.7rem] text-muted-foreground">
+        Timeline unavailable.{" "}
+        <button
+          type="button"
+          className="font-semibold text-primary hover:underline"
+          onClick={() => void history.refetch()}
+        >
+          Retry
+        </button>
+      </p>
+    );
+  }
+  const events = history.data ?? [];
+  if (events.length === 0) {
+    return (
+      <p className="mt-2 text-[0.7rem] text-muted-foreground">
+        No lifecycle events returned for this order.
+      </p>
+    );
+  }
+  return (
+    <ol className="mt-2 space-y-0 border-t border-border/60 pt-2">
+      {events.map((e, i) => (
+        <li key={i} className="flex gap-2.5 text-[0.7rem]">
+          <span className="flex flex-col items-center" aria-hidden>
+            <span className="mt-1 size-1.5 shrink-0 rounded-full bg-primary" />
+            {i < events.length - 1 ? <span className="w-px flex-1 bg-border/70" /> : null}
+          </span>
+          <div className="min-w-0 flex-1 pb-2">
+            <p className="font-semibold">
+              {e.status || "Update"}
+              {e.price !== null && e.price !== undefined ? (
+                <span className="num font-normal text-muted-foreground">
+                  {` @ ${e.price.toLocaleString("en-IN")}`}
+                </span>
+              ) : null}
+            </p>
+            <p className="num text-muted-foreground">
+              {[
+                e.quantity !== null ? `qty ${e.quantity}` : null,
+                e.tradedQty !== null ? `filled ${e.tradedQty}` : null,
+                e.remainingQty !== null ? `left ${e.remainingQty}` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ") || "—"}
+              {[e.date, e.time].filter(Boolean).join(" ").trim()
+                ? ` · ${[e.date, e.time].filter(Boolean).join(" ")}`
+                : ""}
+            </p>
+            {e.message ? (
+              <p className="truncate text-muted-foreground" title={e.message}>
+                {e.message}
+              </p>
+            ) : null}
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 function BrokerPage() {
   const queryClient = useQueryClient();
   const connections = useQuery(brokerConnectionsQuery());
@@ -560,13 +742,8 @@ function BrokerPage() {
   const [txnType, setTxnType] = useState("");
   const [txnStatus, setTxnStatus] = useState("");
   const [txnPage, setTxnPage] = useState(1);
-  const [txnSort, setTxnSort] = useState<{ key: TxnSortKey; dir: 1 | -1 } | null>(null);
   const [armedCancel, setArmedCancel] = useState<string | null>(null);
-
-  const toggleTxnSort = (key: TxnSortKey) =>
-    setTxnSort((cur) =>
-      cur?.key === key ? { key, dir: cur.dir === 1 ? -1 : 1 } : { key, dir: 1 },
-    );
+  const [histKey, setHistKey] = useState<string | null>(null);
 
   const range = useMemo(() => rangeFor(preset, custom), [preset, custom]);
   const txnRange = useMemo(() => rangeFor(txnPreset, txnCustom), [txnPreset, txnCustom]);
@@ -585,20 +762,50 @@ function BrokerPage() {
     }),
   );
 
+  type HoldingSortKey = "symbol" | "availableQty" | "closePrice" | "marketValue";
+  const { sort: holdingSort, toggle: toggleHoldingSort } = useSort<HoldingSortKey>(
+    { key: "marketValue", dir: "desc" },
+    { symbol: "text", availableQty: "number", closePrice: "number", marketValue: "number" },
+  );
+
+  type TradeSortKey =
+    "id" | "orderNo" | "symbol" | "side" | "quantity" | "price" | "amount" | "date";
+  const { sort: tradeSort, toggle: toggleTradeSort } = useSort<TradeSortKey>(
+    { key: "date", dir: "desc" },
+    {
+      id: "text",
+      orderNo: "text",
+      symbol: "text",
+      side: "text",
+      quantity: "number",
+      price: "number",
+      amount: "number",
+      date: "text",
+    },
+  );
+
+  const { sort: txnSort, toggle: toggleTxnSort } = useSort<TxnSortKey>(
+    { key: "date", dir: "desc" },
+    { date: "text", type: "text", amount: "number", status: "text" },
+  );
+
   const sortedTxns = useMemo(() => {
     const rows = [...(fundTxns.data?.rows ?? [])];
-    if (!txnSort) return rows;
-    const key: TxnSortKey = txnSort.key;
-    const dir = txnSort.dir;
-    const strOf = (t: (typeof rows)[number]) => (t[key] as string | null) ?? "";
-    return rows.sort((a, b) => {
-      if (key === "amount") {
-        return (
-          ((a.amount ?? Number.NEGATIVE_INFINITY) - (b.amount ?? Number.NEGATIVE_INFINITY)) * dir
-        );
+    const getter = (t: (typeof rows)[number]): string | number => {
+      switch (txnSort.key) {
+        case "date":
+          return t.date ?? "";
+        case "type":
+          return t.type ?? "";
+        case "amount":
+          return t.amount ?? Number.NEGATIVE_INFINITY;
+        case "status":
+          return t.status ?? "";
+        default:
+          return "";
       }
-      return strOf(a).toLowerCase().localeCompare(strOf(b).toLowerCase()) * dir;
-    });
+    };
+    return sortBy(rows, getter, txnSort.dir);
   }, [fundTxns.data?.rows, txnSort]);
 
   const refreshAll = () => {
@@ -654,12 +861,66 @@ function BrokerPage() {
     },
   });
 
+  const modify = useMutation({
+    mutationFn: (o: {
+      tranId: string;
+      orderId: string;
+      orderStatus: string;
+      remainingQty: number;
+      side: "BUY" | "SELL";
+      symbol: string;
+      quantity: number;
+      price: number;
+      orderType: "LMT" | "MKT";
+      validity: string;
+      validTill?: string;
+    }) =>
+      modifyBrokerOrder({
+        data: {
+          brokerId: brokerId!,
+          ...o,
+          validity: o.validity as "DAY" | "GTD" | "GTC" | "IOC" | "FOK",
+          ...(o.validity === "GTD" && o.validTill ? { validTill: o.validTill } : {}),
+          confirmed: true as const,
+        },
+      }),
+    onSuccess: (r) => {
+      if (r.ok) {
+        toast.success(r.message);
+        setModKey(null);
+        void queryClient.invalidateQueries({ queryKey: ["broker-order-book"] });
+      } else {
+        toast.error(r.message);
+      }
+    },
+    onError: (err) => toast.error(errorMessage(err, "Modify failed.")),
+  });
+
+  const [modKey, setModKey] = useState<string | null>(null);
+  const [mqty, setMqty] = useState("");
+  const [mprice, setMprice] = useState("");
+  const [mtill, setMtill] = useState(() => new Date().toISOString().slice(0, 10));
+
   const holdingRows = useMemo(() => {
     const term = holdingSearch.trim().toLowerCase();
     const rows = holdings.data ?? [];
-    if (!term) return rows;
-    return rows.filter((h) => h.symbol.toLowerCase().includes(term));
-  }, [holdings.data, holdingSearch]);
+    const filtered = !term ? rows : rows.filter((h) => h.symbol.toLowerCase().includes(term));
+    const getter = (h: (typeof filtered)[number]): string | number => {
+      switch (holdingSort.key) {
+        case "symbol":
+          return h.symbol;
+        case "availableQty":
+          return h.availableQty;
+        case "closePrice":
+          return h.closePrice ?? 0;
+        case "marketValue":
+          return h.marketValue;
+        default:
+          return "";
+      }
+    };
+    return sortBy(filtered, getter, holdingSort.dir);
+  }, [holdings.data, holdingSearch, holdingSort]);
 
   const openOrders = useMemo(
     () => (orders.data ?? []).filter((o) => /OPEN|PARTIALLY/.test(o.status.toUpperCase())),
@@ -748,10 +1009,24 @@ function BrokerPage() {
           <p className="mt-1 text-sm text-muted-foreground">
             {connection.displayName ?? connection.username} · {connection.username}
           </p>
+          <div className="mt-2">
+            <MarketStatusPill brokerId={brokerId} />
+          </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={refreshAll} className="gap-1.5 text-xs">
-            <RefreshCw className="size-3.5" /> Refresh
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={refreshAll}
+            disabled={
+              funds.isFetching || holdings.isFetching || orders.isFetching || trades.isFetching
+            }
+            className="gap-1.5 text-xs"
+          >
+            <RefreshCw
+              className={`size-3.5 ${funds.isFetching || holdings.isFetching || orders.isFetching || trades.isFetching ? "animate-spin" : ""}`}
+            />{" "}
+            Refresh
           </Button>
           <Button
             variant="outline"
@@ -784,36 +1059,45 @@ function BrokerPage() {
       </div>
 
       {tab === "overview" ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            {
-              label: "Holdings",
-              value: `${(holdings.data ?? []).length} scrips`,
-              sub: "broker demat",
-            },
-            {
-              label: "Open orders",
-              value: String(orderSummary.open),
-              sub: `${orderSummary.total} in range`,
-            },
-            {
-              label: "Trades (range)",
-              value: String(tradeSummary.count),
-              sub: `net ${money(tradeSummary.net)}`,
-            },
-            { label: "Collateral", value: money(f?.finalCollateral), sub: "deployable now" },
-          ].map((c) => (
-            <div key={c.label} className="rounded-2xl border border-border/60 bg-surface p-4">
-              <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                {c.label}
-              </p>
-              <p className="num mt-1 text-xl font-bold">
-                {funds.isPending && c.label === "Collateral" ? "…" : c.value}
-              </p>
-              <p className="text-[0.7rem] text-muted-foreground">{c.sub}</p>
-            </div>
-          ))}
-          <div className="rounded-2xl border border-border/60 bg-surface p-4 sm:col-span-2 lg:col-span-4">
+        <div className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              {
+                label: "Holdings",
+                value: `${(holdings.data ?? []).length} scrips`,
+                sub: "broker demat",
+              },
+              {
+                label: "Open orders",
+                value: String(orderSummary.open),
+                sub: `${orderSummary.total} in range`,
+              },
+              {
+                label: "Trades (range)",
+                value: String(tradeSummary.count),
+                sub: `net ${money(tradeSummary.net)}`,
+              },
+              { label: "Collateral", value: money(f?.finalCollateral), sub: "deployable now" },
+            ].map((c) => (
+              <div key={c.label} className="rounded-2xl border border-border/60 bg-surface p-4">
+                <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
+                  {c.label}
+                </p>
+                <p className="num mt-1 text-xl font-bold">
+                  {funds.isPending && c.label === "Collateral" ? "…" : c.value}
+                </p>
+                <p className="text-[0.7rem] text-muted-foreground">{c.sub}</p>
+              </div>
+            ))}
+          </div>
+
+          {f && !funds.isPending ? <CollateralBreakdown funds={f} /> : null}
+
+          <PriceAlertsPanel />
+
+          <BrokerTicketsPanel brokerId={brokerId} />
+
+          <div className="rounded-2xl border border-border/60 bg-surface p-4">
             <p className="text-xs font-semibold">Orders vs trades: different things</p>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
               Orders are instructions you placed (open, partially filled, cancelled). Trades are
@@ -840,30 +1124,56 @@ function BrokerPage() {
             <p className="text-xs text-muted-foreground">No holdings match.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border/60 text-left text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                    <th className="py-2 pr-2 font-medium">Scrip</th>
-                    <th className="py-2 pr-2 text-right font-medium">Avail. qty</th>
-                    <th className="py-2 pr-2 text-right font-medium">Close</th>
-                    <th className="py-2 text-right font-medium">Market value</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <Table>
+                <TableHeader className="sticky top-0 z-10 bg-surface">
+                  <TableRow>
+                    <SortableTh
+                      label="Scrip"
+                      active={holdingSort.key === "symbol"}
+                      dir={holdingSort.dir}
+                      onClick={() => toggleHoldingSort("symbol")}
+                      kind="text"
+                    />
+                    <SortableTh
+                      label="Avail. qty"
+                      active={holdingSort.key === "availableQty"}
+                      dir={holdingSort.dir}
+                      onClick={() => toggleHoldingSort("availableQty")}
+                      align="right"
+                    />
+                    <SortableTh
+                      label="Close"
+                      active={holdingSort.key === "closePrice"}
+                      dir={holdingSort.dir}
+                      onClick={() => toggleHoldingSort("closePrice")}
+                      align="right"
+                    />
+                    <SortableTh
+                      label="Market value"
+                      active={holdingSort.key === "marketValue"}
+                      dir={holdingSort.dir}
+                      onClick={() => toggleHoldingSort("marketValue")}
+                      align="right"
+                    />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {holdingRows.map((h) => (
-                    <tr key={h.symbol} className="border-b border-border/40 last:border-0">
-                      <td className="py-2 pr-2 font-semibold">{h.symbol}</td>
-                      <td className="num py-2 pr-2 text-right">
+                    <TableRow key={h.symbol}>
+                      <TableCell className="py-2 font-semibold">{h.symbol}</TableCell>
+                      <TableCell className="num py-2 text-right">
                         {h.availableQty.toLocaleString("en-IN")}
-                      </td>
-                      <td className="num py-2 pr-2 text-right">
+                      </TableCell>
+                      <TableCell className="num py-2 text-right">
                         {h.closePrice !== null ? money(h.closePrice) : "-"}
-                      </td>
-                      <td className="num py-2 text-right">{money(h.marketValue)}</td>
-                    </tr>
+                      </TableCell>
+                      <TableCell className="num py-2 text-right font-semibold">
+                        {money(h.marketValue)}
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           )}
         </Panel>
@@ -926,66 +1236,187 @@ function BrokerPage() {
                   {(orders.data ?? []).map((o) => {
                     const key = o.id || `${o.symbol}-${o.side}-${o.price}`;
                     const armed = armedCancel === key;
+                    const modifying = modKey === key;
                     const cancellable = Boolean(
                       o.orderId && o.tranId && /OPEN|PARTIALLY/.test(o.status.toUpperCase()),
                     );
+                    const isMktRow = o.orderType === "MKT" || o.orderType === "MARKET";
                     return (
                       <div
                         key={key}
-                        className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-background px-3 py-2.5"
+                        className="rounded-xl border border-border/60 bg-background px-3 py-2.5"
                       >
-                        <div className="min-w-0">
-                          <p className="text-sm">
-                            <span
-                              className={cn(
-                                "font-bold",
-                                o.side === "BUY" ? "text-gain" : "text-destructive",
-                              )}
-                            >
-                              {o.side}
-                            </span>{" "}
-                            <span className="num font-semibold">
-                              {o.quantity.toLocaleString("en-IN")}
-                            </span>{" "}
-                            <span className="font-semibold">{o.symbol}</span>{" "}
-                            <span className="num text-muted-foreground">
-                              @ {o.price !== null ? o.price.toLocaleString("en-IN") : "MKT"}
-                            </span>
-                          </p>
-                          <p className="text-[0.7rem] text-muted-foreground">
-                            {o.status} · {o.orderType} · {o.validity}
-                          </p>
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm">
+                              <span
+                                className={cn(
+                                  "font-bold",
+                                  o.side === "BUY" ? "text-gain" : "text-destructive",
+                                )}
+                              >
+                                {o.side}
+                              </span>{" "}
+                              <span className="num font-semibold">
+                                {o.quantity.toLocaleString("en-IN")}
+                              </span>{" "}
+                              <span className="font-semibold">{o.symbol}</span>{" "}
+                              <span className="num text-muted-foreground">
+                                @ {o.price !== null ? o.price.toLocaleString("en-IN") : "MKT"}
+                              </span>
+                            </p>
+                            <p className="text-[0.7rem] text-muted-foreground">
+                              {o.status} · {o.orderType} · {o.validity}
+                              {o.date ? ` · ${o.date}` : ""}
+                              {o.time ? ` ${o.time}` : ""}
+                            </p>
+                          </div>
+                          {cancellable ? (
+                            <div className="flex shrink-0 gap-1.5">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={cancel.isPending || modify.isPending}
+                                className="text-xs"
+                                onClick={() => {
+                                  if (modifying) {
+                                    setModKey(null);
+                                  } else {
+                                    setModKey(key);
+                                    setMqty(
+                                      String(Math.max(1, Math.floor(o.remainingQty || o.quantity))),
+                                    );
+                                    setMprice(o.price !== null ? String(o.price) : "");
+                                    setMtill(new Date().toISOString().slice(0, 10));
+                                    setArmedCancel(null);
+                                  }
+                                }}
+                              >
+                                {modifying ? "Close" : "Modify"}
+                              </Button>
+                              <Button
+                                variant={armed ? "destructive" : "outline"}
+                                size="sm"
+                                disabled={cancel.isPending || modify.isPending}
+                                className="text-xs"
+                                onClick={() => {
+                                  if (!armed) {
+                                    setArmedCancel(key);
+                                    setTimeout(
+                                      () => setArmedCancel((cur) => (cur === key ? null : cur)),
+                                      4000,
+                                    );
+                                    return;
+                                  }
+                                  cancel.mutate({
+                                    orderId: o.orderId,
+                                    tranId: o.tranId,
+                                    orderStatus: o.orderStatus || o.status,
+                                    buySellType: o.side === "SELL" ? "Sell" : "Buy",
+                                    deliveryFlag: o.deliveryFlag,
+                                    orderTerms: o.validity,
+                                    price: o.price !== null ? String(o.price) : "0",
+                                    quantity: Math.max(1, Math.floor(o.remainingQty || o.quantity)),
+                                    symbol: o.symbol,
+                                  });
+                                }}
+                              >
+                                {armed ? "Tap again to cancel" : "Cancel"}
+                              </Button>
+                            </div>
+                          ) : null}
+                          {o.orderId ? (
+                            <div className="flex shrink-0">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-xs text-muted-foreground"
+                                onClick={() => setHistKey((cur) => (cur === key ? null : cur))}
+                              >
+                                {histKey === key ? "Hide timeline" : "Timeline"}
+                              </Button>
+                            </div>
+                          ) : null}
                         </div>
-                        {cancellable ? (
-                          <Button
-                            variant={armed ? "destructive" : "outline"}
-                            size="sm"
-                            disabled={cancel.isPending}
-                            className="shrink-0 text-xs"
-                            onClick={() => {
-                              if (!armed) {
-                                setArmedCancel(key);
-                                setTimeout(
-                                  () => setArmedCancel((cur) => (cur === key ? null : cur)),
-                                  4000,
-                                );
-                                return;
-                              }
-                              cancel.mutate({
-                                orderId: o.orderId,
-                                tranId: o.tranId,
-                                orderStatus: o.orderStatus || o.status,
-                                buySellType: o.side === "SELL" ? "Sell" : "Buy",
-                                deliveryFlag: o.deliveryFlag,
-                                orderTerms: o.validity,
-                                price: o.price !== null ? String(o.price) : "0",
-                                quantity: Math.max(1, Math.floor(o.remainingQty || o.quantity)),
-                                symbol: o.symbol,
-                              });
-                            }}
-                          >
-                            {armed ? "Tap again to cancel" : "Cancel"}
-                          </Button>
+                        {histKey === key && o.orderId && brokerId ? (
+                          <OrderHistoryBox brokerId={brokerId} orderId={o.orderId} />
+                        ) : null}
+                        {modifying && cancellable && o.side !== "UNKNOWN" ? (
+                          <div className="mt-2 grid grid-cols-2 gap-2 border-t border-border/60 pt-2">
+                            <div className="space-y-1">
+                              <Label htmlFor={`mod-qty-${key}`}>
+                                Quantity (max{" "}
+                                {Math.floor(o.remainingQty || o.quantity).toLocaleString("en-IN")})
+                              </Label>
+                              <Input
+                                id={`mod-qty-${key}`}
+                                inputMode="numeric"
+                                value={mqty}
+                                onChange={(e) =>
+                                  setMqty(e.target.value.replace(/[^0-9]/g, "").slice(0, 6))
+                                }
+                                className="h-8 text-xs"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label htmlFor={`mod-price-${key}`}>Price</Label>
+                              <Input
+                                id={`mod-price-${key}`}
+                                inputMode="decimal"
+                                value={mprice}
+                                disabled={isMktRow}
+                                onChange={(e) =>
+                                  setMprice(e.target.value.replace(/[^0-9.]/g, "").slice(0, 12))
+                                }
+                                className="h-8 text-xs"
+                              />
+                            </div>
+                            {o.validity === "GTD" ? (
+                              <div className="col-span-2 space-y-1">
+                                <Label htmlFor={`mod-till-${key}`}>Valid till</Label>
+                                <Input
+                                  id={`mod-till-${key}`}
+                                  type="date"
+                                  value={mtill}
+                                  onChange={(e) => setMtill(e.target.value)}
+                                  className="h-8 text-xs"
+                                />
+                              </div>
+                            ) : null}
+                            <p className="col-span-2 text-[0.7rem] text-muted-foreground">
+                              Sends a real modify for the remaining{" "}
+                              {Math.floor(o.remainingQty || o.quantity).toLocaleString("en-IN")}{" "}
+                              units. If the order changed at the broker meanwhile, you&apos;ll be
+                              asked to refresh.
+                            </p>
+                            <div className="col-span-2">
+                              <Button
+                                size="sm"
+                                disabled={modify.isPending}
+                                className="text-xs"
+                                onClick={() => {
+                                  if (o.side !== "BUY" && o.side !== "SELL") return;
+                                  const qty = Math.floor(Number(mqty));
+                                  const px = Number(mprice);
+                                  modify.mutate({
+                                    tranId: o.tranId,
+                                    orderId: o.orderId,
+                                    orderStatus: o.orderStatus || o.status,
+                                    remainingQty: o.remainingQty || o.quantity,
+                                    side: o.side,
+                                    symbol: o.symbol,
+                                    quantity: qty,
+                                    price: isMktRow ? 0 : px,
+                                    orderType: isMktRow ? "MKT" : "LMT",
+                                    validity: o.validity,
+                                    ...(o.validity === "GTD" ? { validTill: mtill } : {}),
+                                  });
+                                }}
+                              >
+                                {modify.isPending ? "Modifying…" : "Confirm modify"}
+                              </Button>
+                            </div>
+                          </div>
                         ) : null}
                       </div>
                     );
@@ -1008,59 +1439,110 @@ function BrokerPage() {
                 <p className="text-xs text-muted-foreground">No trades in this range.</p>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border/60 text-left text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                        <th className="py-2 pr-2 font-medium">Trade ID</th>
-                        <th className="py-2 pr-2 font-medium">Order No</th>
-                        <th className="py-2 pr-2 font-medium">Scrip</th>
-                        <th className="py-2 pr-2 font-medium">Side</th>
-                        <th className="py-2 pr-2 text-right font-medium">Qty</th>
-                        <th className="py-2 pr-2 text-right font-medium">Price</th>
-                        <th className="py-2 pr-2 text-right font-medium">Amount</th>
-                        <th className="py-2 pr-2 font-medium">Date</th>
-                        <th className="py-2 font-medium">Time</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                  <Table>
+                    <TableHeader className="sticky top-0 z-10 bg-surface">
+                      <TableRow>
+                        <SortableTh
+                          label="Trade ID"
+                          active={tradeSort.key === "id"}
+                          dir={tradeSort.dir}
+                          onClick={() => toggleTradeSort("id")}
+                          kind="text"
+                        />
+                        <SortableTh
+                          label="Order No"
+                          active={tradeSort.key === "orderNo"}
+                          dir={tradeSort.dir}
+                          onClick={() => toggleTradeSort("orderNo")}
+                          kind="text"
+                        />
+                        <SortableTh
+                          label="Scrip"
+                          active={tradeSort.key === "symbol"}
+                          dir={tradeSort.dir}
+                          onClick={() => toggleTradeSort("symbol")}
+                          kind="text"
+                        />
+                        <SortableTh
+                          label="Side"
+                          active={tradeSort.key === "side"}
+                          dir={tradeSort.dir}
+                          onClick={() => toggleTradeSort("side")}
+                          kind="text"
+                        />
+                        <SortableTh
+                          label="Qty"
+                          active={tradeSort.key === "quantity"}
+                          dir={tradeSort.dir}
+                          onClick={() => toggleTradeSort("quantity")}
+                          align="right"
+                        />
+                        <SortableTh
+                          label="Price"
+                          active={tradeSort.key === "price"}
+                          dir={tradeSort.dir}
+                          onClick={() => toggleTradeSort("price")}
+                          align="right"
+                        />
+                        <SortableTh
+                          label="Amount"
+                          active={tradeSort.key === "amount"}
+                          dir={tradeSort.dir}
+                          onClick={() => toggleTradeSort("amount")}
+                          align="right"
+                        />
+                        <SortableTh
+                          label="Date"
+                          active={tradeSort.key === "date"}
+                          dir={tradeSort.dir}
+                          onClick={() => toggleTradeSort("date")}
+                          kind="text"
+                        />
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
                       {(trades.data ?? []).map((t, i) => (
-                        <tr key={t.id || i} className="border-b border-border/40 last:border-0">
-                          <td
-                            className="max-w-24 truncate py-2 pr-2 text-xs text-muted-foreground"
+                        <TableRow key={t.id || i}>
+                          <TableCell
+                            className="max-w-24 truncate py-2 text-xs text-muted-foreground"
                             title={t.id}
                           >
                             {t.id ? `${t.id.slice(0, 8)}…` : "-"}
-                          </td>
-                          <td
-                            className="max-w-24 truncate py-2 pr-2 text-xs text-muted-foreground"
+                          </TableCell>
+                          <TableCell
+                            className="max-w-24 truncate py-2 text-xs text-muted-foreground"
                             title={t.orderNo}
                           >
                             {t.orderNo || "-"}
-                          </td>
-                          <td className="py-2 pr-2 font-semibold">{t.symbol}</td>
-                          <td
+                          </TableCell>
+                          <TableCell className="py-2 font-semibold">{t.symbol}</TableCell>
+                          <TableCell
                             className={cn(
-                              "py-2 pr-2 font-medium",
+                              "py-2 font-medium",
                               t.side === "BUY" ? "text-gain" : "text-destructive",
                             )}
                           >
                             {t.side}
-                          </td>
-                          <td className="num py-2 pr-2 text-right">
+                          </TableCell>
+                          <TableCell className="num py-2 text-right">
                             {t.quantity.toLocaleString("en-IN")}
-                          </td>
-                          <td className="num py-2 pr-2 text-right">
+                          </TableCell>
+                          <TableCell className="num py-2 text-right">
                             {t.price !== null ? t.price.toLocaleString("en-IN") : "-"}
-                          </td>
-                          <td className="num py-2 pr-2 text-right">{money(t.amount)}</td>
-                          <td className="whitespace-nowrap py-2 pr-2 text-xs">{t.date || "-"}</td>
-                          <td className="whitespace-nowrap py-2 text-xs text-muted-foreground">
-                            {t.time || "-"}
-                          </td>
-                        </tr>
+                          </TableCell>
+                          <TableCell className="num py-2 text-right font-semibold">
+                            {money(t.amount)}
+                          </TableCell>
+                          <TableCell
+                            className="whitespace-nowrap py-2 text-xs"
+                            title={`${t.date} ${t.time}`}
+                          >
+                            {t.date ? `${t.date}${t.time ? ` ${t.time}` : ""}` : "-"}
+                          </TableCell>
+                        </TableRow>
                       ))}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </div>
               )}
             </Panel>
@@ -1068,7 +1550,7 @@ function BrokerPage() {
         </div>
       ) : null}
 
-      {tab === "amo" && brokerId ? <AmoPanel brokerId={brokerId} /> : null}
+      {tab === "orders" && brokerId ? <AmoPanel brokerId={brokerId} /> : null}
 
       {tab === "funds" ? (
         <Panel padding="lg" shadow className="space-y-3">
@@ -1192,47 +1674,71 @@ function BrokerPage() {
               <p className="text-xs text-muted-foreground">No fund movements in this range.</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border/60 text-left text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                      <SortTh label="Date" k="date" sort={txnSort} onSort={toggleTxnSort} />
-                      <SortTh label="Type" k="type" sort={txnSort} onSort={toggleTxnSort} />
-                      <th className="py-2 pr-2 font-medium">Gateway</th>
-                      <SortTh
-                        label="Amount"
-                        k="amount"
-                        sort={txnSort}
-                        onSort={toggleTxnSort}
-                        right
+                <Table>
+                  <TableHeader className="sticky top-0 z-10 bg-surface">
+                    <TableRow>
+                      <SortableTh
+                        label="Date"
+                        active={txnSort.key === "date"}
+                        dir={txnSort.dir}
+                        onClick={() => toggleTxnSort("date")}
+                        kind="text"
                       />
-                      <SortTh label="Status" k="status" sort={txnSort} onSort={toggleTxnSort} />
-                      <th className="py-2 font-medium">Reference</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                      <SortableTh
+                        label="Type"
+                        active={txnSort.key === "type"}
+                        dir={txnSort.dir}
+                        onClick={() => toggleTxnSort("type")}
+                        kind="text"
+                      />
+                      <th className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                        Gateway
+                      </th>
+                      <SortableTh
+                        label="Amount"
+                        active={txnSort.key === "amount"}
+                        dir={txnSort.dir}
+                        onClick={() => toggleTxnSort("amount")}
+                        align="right"
+                      />
+                      <SortableTh
+                        label="Status"
+                        active={txnSort.key === "status"}
+                        dir={txnSort.dir}
+                        onClick={() => toggleTxnSort("status")}
+                        kind="text"
+                      />
+                      <th className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                        Reference
+                      </th>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {sortedTxns.map((t, i) => (
-                      <tr key={t.id || i} className="border-b border-border/40 last:border-0">
-                        <td className="whitespace-nowrap py-2 pr-2 text-xs">{t.date || "-"}</td>
-                        <td className="py-2 pr-2 text-xs font-medium capitalize">
+                      <TableRow key={t.id || i}>
+                        <TableCell className="whitespace-nowrap py-2 text-xs">
+                          {t.date || "-"}
+                        </TableCell>
+                        <TableCell className="py-2 text-xs font-medium capitalize">
                           {t.type || "-"}
-                        </td>
-                        <td className="py-2 pr-2 text-xs text-muted-foreground">
+                        </TableCell>
+                        <TableCell className="py-2 text-xs text-muted-foreground">
                           {t.gateway || "-"}
-                        </td>
-                        <td className="num py-2 pr-2 text-right font-semibold">
+                        </TableCell>
+                        <TableCell className="num py-2 text-right font-semibold">
                           {t.amount !== null ? money(t.amount) : "-"}
-                        </td>
-                        <td className="py-2 pr-2 text-xs">{t.status || "-"}</td>
-                        <td
+                        </TableCell>
+                        <TableCell className="py-2 text-xs">{t.status || "-"}</TableCell>
+                        <TableCell
                           className="max-w-40 truncate py-2 text-xs text-muted-foreground"
                           title={t.reference}
                         >
                           {t.reference || "-"}
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
             )}
             {(fundTxns.data?.totalPages ?? 0) > 1 ? (
@@ -1266,8 +1772,8 @@ function BrokerPage() {
       ) : null}
 
       <p className="text-[0.7rem] leading-relaxed text-muted-foreground">
-        Live from your linked broker terminal. Cancelling is two taps and immediate. Placing
-        happens from the Terminal or any scrip&apos;s Trade tab, always behind a confirmation.
+        Live from your linked broker terminal. Cancelling is two taps and immediate. Placing happens
+        from the Terminal or any scrip&apos;s Trade tab, always behind a confirmation.
       </p>
     </div>
   );

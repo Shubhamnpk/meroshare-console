@@ -97,7 +97,10 @@ export function AreaChart({
   };
 
   return (
-    <div className={cn("relative select-none", className)} onPointerLeave={() => setHover(null)}>
+    <div
+      className={cn("relative min-w-0 select-none", className)}
+      onPointerLeave={() => setHover(null)}
+    >
       <svg
         ref={svgRef}
         viewBox={`0 0 ${W} ${H}`}

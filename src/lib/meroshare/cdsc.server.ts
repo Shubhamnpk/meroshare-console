@@ -3,8 +3,7 @@
 // so every call is proxied through the app server.
 import { SessionExpiredError } from "./session.server";
 
-export const CDSC_BASE = "https://webbackend.cdsc.com.np";
-export const IPO_RESULT_BASE = "https://iporesult.cdsc.com.np";
+export const CDSC_BASE = (process.env["CDSC_BASE_URL"] ?? "https://webbackend.cdsc.com.np").replace(/\/+$/, "");
 
 export const CDSC_URLS = {
   login: `${CDSC_BASE}/api/meroShare/auth/`,
@@ -56,12 +55,14 @@ export const CDSC_URLS = {
   edisMigratedTransferCsv: `${CDSC_BASE}/api/meroShareView/report/migrated/transfer/csv`,
 } as const;
 
+const CDSC_ORIGIN = (process.env["CDSC_ORIGIN_URL"] ?? "https://meroshare.cdsc.com.np").replace(/\/+$/, "");
+
 const BASE_HEADERS: Record<string, string> = {
   Accept: "application/json, text/plain, */*",
   "Content-Type": "application/json",
   Connection: "keep-alive",
-  Origin: "https://meroshare.cdsc.com.np",
-  Referer: "https://meroshare.cdsc.com.np/",
+  Origin: CDSC_ORIGIN,
+  Referer: `${CDSC_ORIGIN}/`,
   "User-Agent":
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
 };
@@ -90,7 +91,15 @@ async function parseBody(res: Response): Promise<unknown> {
   const text = await res.text();
   if (!text) return null;
   const contentType = res.headers.get("content-type") ?? "";
-  if (!contentType.includes("json") && /^\s*</.test(text)) {
+  // CDSC returns XML for auth failures (<?xml ...><message>Username or password invalid.</message>)
+  // Don't treat that as a WAF block - extract the message.
+  if (/^\s*<\?xml/i.test(text)) {
+    const m = text.match(/<message>([^<]+)<\/message>/i);
+    if (m?.[1]) return m[1].trim();
+    return text;
+  }
+  // Only treat HTML as WAF block, not XML.
+  if (!contentType.includes("json") && /^\s*<(?:!doctype|html|head)/i.test(text)) {
     throw new CdscError(
       "MeroShare returned a non-JSON response, possibly blocked by a security filter. Please try again.",
       403,
@@ -100,6 +109,14 @@ async function parseBody(res: Response): Promise<unknown> {
   try {
     return JSON.parse(text);
   } catch {
+    // Non-JSON text (e.g. WAF HTML without html tag) - detect block keywords.
+    if (/security filter|attention required|cf-challenge/i.test(text) && /<[^>]+>/.test(text)) {
+      throw new CdscError(
+        "MeroShare returned a non-JSON response, possibly blocked by a security filter. Please try again.",
+        403,
+        text.slice(0, 200),
+      );
+    }
     return text;
   }
 }
@@ -147,6 +164,10 @@ export async function cdscRequest<T = unknown>(
     const payload = await parseBody(res);
 
     if (res.status === 401 || res.status === 403) {
+      // Login failures are 401 with XML <message> - show that, don't treat as session expiry.
+      if (url.includes("/auth/")) {
+        throw new CdscError(messageFrom(payload, "Username or password invalid."), res.status, payload);
+      }
       throw new SessionExpiredError();
     }
 
@@ -187,6 +208,12 @@ export async function cdscRequestWithHeaders<T = unknown>(
   }
 
   const payload = await parseBody(res);
+  if (res.status === 401 || res.status === 403) {
+    if (url.includes("/auth/")) {
+      throw new CdscError(messageFrom(payload, "Username or password invalid."), res.status, payload);
+    }
+    throw new SessionExpiredError();
+  }
   if (!res.ok) {
     throw new CdscError(
       messageFrom(payload, `MeroShare request failed (${res.status})`),

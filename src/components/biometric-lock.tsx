@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Fingerprint, Loader2, LogOut } from "lucide-react";
@@ -11,10 +11,13 @@ import {
 } from "@/lib/biometric";
 import { logout } from "@/lib/meroshare/auth.functions";
 
+const LOCK_TIMEOUT_MS = 15 * 60 * 1000;
+
 /**
  * App-lock gate: when biometrics are enrolled on this device, a signed-in
- * session stays hidden until the user passes a fingerprint/face check.
- * Unlock lasts for the browser tab session only.
+ * session stays hidden until the user passes a fingerprint/face/PIN check.
+ * Unlock lasts for the browser tab session only. The app re-locks after
+ * 15 minutes in the background.
  */
 export function BiometricGate({ children }: { children: ReactNode }) {
   const [enrolled] = useState(() => isBiometricEnrolled());
@@ -24,6 +27,26 @@ export function BiometricGate({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const hiddenAt = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!enrolled || unlocked) return;
+
+    function onVisibility() {
+      if (document.hidden) {
+        hiddenAt.current = Date.now();
+        return;
+      }
+      if (hiddenAt.current && Date.now() - hiddenAt.current >= LOCK_TIMEOUT_MS) {
+        clearSessionUnlock();
+        setUnlocked(false);
+      }
+      hiddenAt.current = null;
+    }
+
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [enrolled, unlocked]);
 
   if (!enrolled || unlocked) return <>{children}</>;
 
@@ -60,9 +83,14 @@ export function BiometricGate({ children }: { children: ReactNode }) {
           <Fingerprint className="size-8" />
         </div>
         <div>
-          <h1 className="font-display text-2xl font-semibold">Unlock MeroShare Console</h1>
+          <h1 className="flex items-center justify-center gap-2 font-display text-2xl font-semibold">
+            Unlock MeroShare Console
+            <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[0.68rem] font-semibold text-warning">
+              Beta
+            </span>
+          </h1>
           <p className="mt-1.5 text-sm text-muted-foreground">
-            Use your fingerprint or face to continue on this device.
+            Use your fingerprint, face, or PIN to continue on this device.
           </p>
         </div>
         {error ? (
@@ -77,7 +105,7 @@ export function BiometricGate({ children }: { children: ReactNode }) {
             </>
           ) : (
             <>
-              <Fingerprint className="size-4" /> Unlock with biometrics
+              <Fingerprint className="size-4" /> Unlock
             </>
           )}
         </Button>

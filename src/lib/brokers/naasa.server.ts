@@ -4,8 +4,8 @@
 // from lockouts). Read-only proof: never places, modifies, or cancels orders.
 import type { BrokerTestResult } from "./types";
 
-const BASE = "https://x.naasasecurities.com.np";
-const KC = "https://auth.naasasecurities.com.np";
+const BASE = process.env["NAASA_BASE_URL"];
+const KC = process.env["NAASA_AUTH_URL"];
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
 const TIMEOUT_MS = 20_000;
@@ -388,7 +388,7 @@ export function dropNaasaSession(cacheKey: string): void {
 // and use that session's access token for tradeflow.
 // ---------------------------------------------------------------------------
 
-const WALLET_BASE = "https://wallet.naasasecurities.com.np";
+const WALLET_BASE = process.env["NAASA_WALLET_URL"];
 const walletSessionCache = new Map<string, { accessToken: string; obtainedAt: number }>();
 
 async function establishWalletAccessToken(username: string, password: string): Promise<string> {
@@ -558,11 +558,33 @@ export async function getNaasaDepth(
   symbol: string,
 ): Promise<{ errorCode: number; message: string; rows: Record<string, unknown>[] }> {
   const sym = symbol.trim().toUpperCase();
+  // Try plain SYM first (docs), fallback to NEPSE.SYM if empty — some envs need prefix
+  for (const tickers of [sym, `NEPSE.${sym}`, `25.1!${sym}`]) {
+    const params = new URLSearchParams({ Tickers: tickers, Exchange: "NEPSE" });
+    const json = await naasaJson<unknown>(session, `/api/feed/Services.GetMDepth?${params}`);
+    const root = (json ?? {}) as Record<string, unknown>;
+    const result = (root["Result"] ?? root) as Record<string, unknown>;
+    const { errorCode, rows } = unwrapBrokerData(json);
+    const message =
+      (typeof result["Message"] === "string" ? (result["Message"] as string) : "") ||
+      (typeof root["Message"] === "string" ? (root["Message"] as string) : "");
+    if (rows.length > 0 || errorCode === 0) {
+      if (tickers !== sym) console.error(`[brokers] depth ${sym} fallback Tickers=${tickers} ec=${errorCode} rows=${rows.length}`);
+      return { errorCode, message, rows };
+    }
+    // ec -100 = No data available (off-hours) — don't try other tickers, return as is
+    if (errorCode === -100) {
+      console.error(`[brokers] depth ${sym} Tickers=${tickers} ec=-100 msg=${message} rawKeys=${Object.keys(result).join(",")}`);
+      return { errorCode, message, rows };
+    }
+    console.error(`[brokers] depth ${sym} Tickers=${tickers} ec=${errorCode} rows=0 raw=${JSON.stringify(json).slice(0,300)}`);
+  }
+  // final attempt already logged
   const params = new URLSearchParams({ Tickers: sym, Exchange: "NEPSE" });
   const json = await naasaJson<unknown>(session, `/api/feed/Services.GetMDepth?${params}`);
   const root = (json ?? {}) as Record<string, unknown>;
   const { errorCode, rows } = unwrapBrokerData(json);
-  const message = typeof root["Message"] === "string" ? (root["Message"] as string) : "";
+  const message = typeof (root["Result"] as Record<string, unknown> | undefined)?.["Message"] === "string" ? ((root["Result"] as Record<string, unknown>)["Message"] as string) : (typeof root["Message"] === "string" ? (root["Message"] as string) : "");
   return { errorCode, message, rows };
 }
 
@@ -654,9 +676,6 @@ async function fetchReportTable(
         body: v.body(c.from, c.to),
       });
       const rows = toReportRows(json?.data?.reportTable);
-      if (rows.length > 0 || !logHit) {
-        console.error(`[brokers] report ${reportType} [${v.label}] ${c.from}..${c.to}: ${rows.length} rows`);
-      }
       if (rows.length > 0) {
         winnerCache.set(reportType, variants.indexOf(v));
         for (const r of rows) {
@@ -677,12 +696,8 @@ async function fetchReportTable(
       body: { reportType, fromDate: "", toDate: "" },
     });
     const rows = toReportRows(json?.data?.reportTable);
-    console.error(`[brokers] report ${reportType} [undated]: ${rows.length} rows`);
     merged.push(...rows);
   }
-  console.error(
-    `[brokers] report ${reportType}: ${merged.length} merged rows from ${chunks.length} window(s)`,
-  );
   return merged;
 }
 
@@ -789,14 +804,16 @@ export interface NaasaAmoOrder {
 }
 
 /** List pending after-market orders (`POST /api/trading/amo/list`). */
-export async function getNaasaAmoList(session: NaasaSession): Promise<NaasaAmoOrder[]> {  const json = await naasaJson<Record<string, unknown>>(session, "/api/trading/amo/list", {
+export async function getNaasaAmoList(session: NaasaSession): Promise<NaasaAmoOrder[]> {
+  const json = await naasaJson<Record<string, unknown>>(session, "/api/trading/amo/list", {
     method: "POST",
     body: {},
   });
-  const rows = (
-    Array.isArray(json["data"]) ? (json["data"] as unknown[]) : []
-  ) as Record<string, unknown>[];
-  // eslint-disable-next-line no-console
+  const rows = (Array.isArray(json["data"]) ? (json["data"] as unknown[]) : []) as Record<
+    string,
+    unknown
+  >[];
+
   console.error("[amo-list] keys", rows.length > 0 ? Object.keys(rows[0] ?? {}) : []);
   const numOrNull = (v: unknown): number | null => {
     const n = typeof v === "number" ? v : Number(String(v ?? "").replace(/,/g, ""));
@@ -846,13 +863,13 @@ export async function cancelNaasaAmo(
     BuySellInd: input.side === "SELL" ? "S" : "B",
     ValidTill: input.validTill ?? "",
   };
-  // eslint-disable-next-line no-console
+
   console.error("[amo-cancel] request", body);
   const json = await naasaJson<Record<string, unknown>>(session, "/api/trading/amo/cancel", {
     method: "POST",
     body,
   });
-  // eslint-disable-next-line no-console
+
   console.error("[amo-cancel] response", json);
   const err = json["error"];
   const success = json["Success"];
@@ -878,11 +895,11 @@ export async function cancelNaasaAmo(
 
 const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 
-/** Place a REAL order. Callers must confirm with the user first. */
-export async function placeNaasaOrder(
-  session: NaasaSession,
-  input: NaasaPlaceInput,
-): Promise<NaasaPlaceResult> {
+/** Shared validation + body for place and modify (modify adds identity fields). */
+function buildNaasaOrderBody(input: NaasaPlaceInput): {
+  sym: string;
+  body: Record<string, unknown>;
+} {
   const sym = input.symbol.trim().toUpperCase();
   if (!/^[A-Z0-9]{3,24}$/.test(sym)) throw new Error("Invalid scrip symbol.");
   if (!Number.isInteger(input.quantity) || input.quantity < 1 || input.quantity > 100000) {
@@ -898,16 +915,27 @@ export async function placeNaasaOrder(
     if (!m) throw new Error("Valid-till date (YYYY-MM-DD) is required for GTD orders.");
     validTill = `${m[3]}-${MONTHS[Number(m[2]) - 1] ?? m[2]}-${m[1]!.slice(-2)}`;
   }
-  const body: Record<string, unknown> = {
-    BuySellType: input.side === "BUY" ? "Buy" : "Sell",
-    DeliveryFlag: input.side === "BUY" ? "DEL" : "AUTO",
-    OrderTerms: input.validity,
-    OrderType: isMkt ? "MKT" : "NORMAL",
-    Price: isMkt ? "0" : String(input.price),
-    Quantity: input.quantity,
-    Scrip: sym,
-    ...(validTill ? { ValidTill: validTill } : {}),
+  return {
+    sym,
+    body: {
+      BuySellType: input.side === "BUY" ? "Buy" : "Sell",
+      DeliveryFlag: input.side === "BUY" ? "DEL" : "AUTO",
+      OrderTerms: input.validity,
+      OrderType: isMkt ? "MKT" : "NORMAL",
+      Price: isMkt ? "0" : String(input.price),
+      Quantity: input.quantity,
+      Scrip: sym,
+      ...(validTill ? { ValidTill: validTill } : {}),
+    },
   };
+}
+
+/** Place a REAL order. Callers must confirm with the user first. */
+export async function placeNaasaOrder(
+  session: NaasaSession,
+  input: NaasaPlaceInput,
+): Promise<NaasaPlaceResult> {
+  const { sym, body } = buildNaasaOrderBody(input);
   const json = await naasaJson<Record<string, unknown>>(session, "/api/trading/order", {
     method: "POST",
     body,
@@ -930,6 +958,213 @@ export async function placeNaasaOrder(
     ok: true,
     message: (typeof json["Message"] === "string" && json["Message"]) || `Order placed for ${sym}.`,
     tranId: typeof tran === "string" || typeof tran === "number" ? String(tran) : null,
+  };
+}
+
+export interface NaasaModifyInput extends NaasaPlaceInput {
+  tranId: string;
+  orderId: string;
+  orderStatus: string;
+  remainingQty: number;
+}
+
+/**
+ * Modify a REAL order (same route as place + identity fields). A 409 or
+ * "modified-changed" error means the order changed server-side: refresh the
+ * book. Callers must confirm with the user first.
+ */
+export async function modifyNaasaOrder(
+  session: NaasaSession,
+  input: NaasaModifyInput,
+): Promise<NaasaPlaceResult> {
+  if (!input.tranId || !input.orderId)
+    throw new Error("Order identity missing — refresh the book.");
+  if (!Number.isFinite(input.remainingQty) || input.remainingQty < 1) {
+    throw new Error("Nothing left to modify on this order.");
+  }
+  if (input.quantity > Math.floor(input.remainingQty)) {
+    throw new Error("Quantity cannot exceed the remaining quantity.");
+  }
+  const { sym, body } = buildNaasaOrderBody(input);
+  const json = await naasaJson<Record<string, unknown>>(session, "/api/trading/order", {
+    method: "POST",
+    body: {
+      ...body,
+      TranId: String(input.tranId),
+      OrderId: String(input.orderId),
+      OrderStatus: input.orderStatus || "ACCEPTED",
+      OriginalRemainingQty: Math.floor(input.remainingQty),
+    },
+  });
+  const err = json["error"];
+  const success = json["Success"];
+  const ec = json["ErrorCode"];
+  const bad =
+    err !== undefined || success === false || (ec !== undefined && ec !== 0 && ec !== "0");
+  if (bad) {
+    const msg =
+      (typeof err === "string" && err) ||
+      (typeof json["Message"] === "string" && json["Message"]) ||
+      (typeof json["message"] === "string" && json["message"]) ||
+      "Modify rejected by broker.";
+    return { ok: false, message: msg, tranId: null };
+  }
+  const tran = json["TranId"] ?? json["tranId"] ?? input.tranId;
+  return {
+    ok: true,
+    message:
+      (typeof json["Message"] === "string" && json["Message"]) || `Order modified for ${sym}.`,
+    tranId: typeof tran === "string" || typeof tran === "number" ? String(tran) : null,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Watchlists (broker templates ↔ local watchlist sync).
+// Endpoints: POST /api/watchlist-list {} | POST /api/market-watch
+// {template} | POST /api/market-watch/save {tickersList, template} |
+// POST /api/market-watch/delete {tickersList, template}
+// Ticket format: "NEPSE.SYM^..."  (broker's ^-joined list).
+// ---------------------------------------------------------------------------
+
+export interface NaasaWatchlist {
+  name: string;
+  symbols: string[];
+  isDefault: boolean;
+  systemTag: string;
+}
+
+function parseTickersList(raw: unknown): string[] {
+  if (typeof raw !== "string" || raw.trim().length === 0) return [];
+  // Broker stores either JSON array string or ^-joined NEPSE.SYM list.
+  const s = raw.trim();
+  if (s.startsWith("[")) {
+    try {
+      const arr = JSON.parse(s) as unknown[];
+      return arr
+        .map((v) =>
+          String(v)
+            .replace(/^NEPSE\./, "")
+            .toUpperCase(),
+        )
+        .filter(Boolean);
+    } catch {
+      // fall through to ^ split
+    }
+  }
+  return s
+    .split("^")
+    .map((t) =>
+      t
+        .replace(/^NEPSE\./, "")
+        .trim()
+        .toUpperCase(),
+    )
+    .filter(Boolean);
+}
+
+function parseWatchlistList(payload: unknown): NaasaWatchlist[] {
+  // Observed shapes: {data:"[...]"}  {data:[...]}  {Table:[...]}  {Watchlist:[...]}
+  const root = (payload ?? {}) as Record<string, unknown>;
+  let data: unknown = root["data"] ?? root["Data"] ?? root["Table"] ?? root["Watchlist"] ?? [];
+  if (typeof data === "string") {
+    const t = data.trim();
+    try {
+      data = t ? (JSON.parse(t) as unknown) : [];
+    } catch {
+      data = [];
+    }
+  }
+  const rows = Array.isArray(data) ? (data as Record<string, unknown>[]) : [];
+  return rows.map((r) => ({
+    name: String(r["Template_Name"] ?? r["template"] ?? r["name"] ?? "Default"),
+    symbols: parseTickersList(
+      r["tickersList"] ?? r["TickersList"] ?? r["symbols"] ?? r["Symbols"] ?? "",
+    ),
+    isDefault: String(r["Default_marketWatch"] ?? r["isDefault"] ?? "0") === "1",
+    systemTag: String(r["SystemTag"] ?? r["systemTag"] ?? "0"),
+  }));
+}
+
+export async function getNaasaWatchlists(session: NaasaSession): Promise<NaasaWatchlist[]> {
+  const json = await naasaJson<unknown>(session, "/api/watchlist-list", {
+    method: "POST",
+    body: {},
+  });
+  return parseWatchlistList(json);
+}
+
+export async function getNaasaMarketWatch(
+  session: NaasaSession,
+  template: string,
+): Promise<string[]> {
+  const json = await naasaJson<unknown>(session, "/api/market-watch", {
+    method: "POST",
+    body: { template },
+  });
+  // {TickerList:"[...]" | [...]} is the symbol set for that template.
+  const root = (json ?? {}) as Record<string, unknown>;
+  let list: unknown = root["TickerList"] ?? root["tickerList"] ?? root["data"] ?? [];
+  if (typeof list === "string") {
+    try {
+      list = JSON.parse(list as string) as unknown;
+    } catch {
+      list = [];
+    }
+  }
+  const rows = Array.isArray(list) ? (list as Record<string, unknown>[]) : [];
+  return rows
+    .map((r) =>
+      String(r["ticker"] ?? r["Ticker"] ?? r["symbol"] ?? r["Symbol"] ?? "").toUpperCase(),
+    )
+    .filter(Boolean);
+}
+
+export async function saveNaasaWatchlist(
+  session: NaasaSession,
+  template: string,
+  symbols: string[],
+): Promise<{ ok: boolean; message: string }> {
+  const tickersList = symbols.map((s) => `NEPSE.${s.toUpperCase()}`).join("^");
+  const json = await naasaJson<Record<string, unknown>>(session, "/api/market-watch/save", {
+    method: "POST",
+    body: { tickersList, template },
+  });
+  const err = json["error"];
+  const ec = json["ErrorCode"];
+  if (err !== undefined || (ec !== undefined && ec !== 0 && ec !== "0")) {
+    const msg =
+      (typeof err === "string" && err) ||
+      (typeof json["Message"] === "string" && json["Message"]) ||
+      "Save watchlist failed.";
+    return { ok: false, message: msg };
+  }
+  return {
+    ok: true,
+    message: (typeof json["Message"] === "string" && json["Message"]) || "Watchlist saved.",
+  };
+}
+
+export async function deleteNaasaWatchlist(
+  session: NaasaSession,
+  template: string,
+  tickersList?: string,
+): Promise<{ ok: boolean; message: string }> {
+  const json = await naasaJson<Record<string, unknown>>(session, "/api/market-watch/delete", {
+    method: "POST",
+    body: { template, ...(tickersList ? { tickersList } : {}) },
+  });
+  const err = json["error"];
+  const ec = json["ErrorCode"];
+  if (err !== undefined || (ec !== undefined && ec !== 0 && ec !== "0")) {
+    const msg =
+      (typeof err === "string" && err) ||
+      (typeof json["Message"] === "string" && json["Message"]) ||
+      "Delete watchlist failed.";
+    return { ok: false, message: msg };
+  }
+  return {
+    ok: true,
+    message: (typeof json["Message"] === "string" && json["Message"]) || "Watchlist deleted.",
   };
 }
 
@@ -995,6 +1230,129 @@ export async function cancelNaasaOrder(
       (typeof json["Message"] === "string" && json["Message"]) ||
       `Order for ${input.symbol} cancelled.`,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Order history, company info, market status, support tickets (read-only).
+// Shapes follow docs/xnasa-api-reference.md §§14-18; every parser below is
+// defensive because the broker double-encodes JSON and renames keys per env.
+// ---------------------------------------------------------------------------
+
+export interface NaasaTicket {
+  id: string;
+  status: "open" | "pending" | "resolved";
+  time: string;
+  description: string;
+  unread: boolean;
+}
+
+/** Per-order event trail (`POST /api/report/order-history { orderId }`). */
+export async function getNaasaOrderHistory(
+  session: NaasaSession,
+  orderId: string,
+): Promise<Record<string, unknown>[]> {
+  const id = orderId.trim().slice(0, 64);
+  if (!id) return [];
+  const json = await naasaJson<{ data?: { reportTable?: unknown } }>(
+    session,
+    "/api/report/order-history",
+    { method: "POST", body: { orderId: id } },
+  );
+  return toReportRows(json?.data?.reportTable);
+}
+
+/**
+ * Broker company snapshot (`GET /api/feed/Services.GetCompanyInformation`).
+ * Returns the single row object, whether the broker sends an array or a
+ * bare object. Null when the service reports an error (ErrorCode != 0).
+ */
+export async function getNaasaCompanyInfo(
+  session: NaasaSession,
+  symbol: string,
+): Promise<Record<string, unknown> | null> {
+  const sym = symbol.trim().toUpperCase();
+  if (!sym) return null;
+  const params = new URLSearchParams({ Exchange: "NEPSE", Scrip: sym });
+  const json = await naasaJson<unknown>(
+    session,
+    `/api/feed/Services.GetCompanyInformation?${params}`,
+  );
+  const { errorCode, rows } = unwrapBrokerData(json);
+  if (errorCode !== 0) return null;
+  if (rows.length > 0) return rows[0]!;
+  const root = (json ?? {}) as Record<string, unknown>;
+  const o = (root["Result"] ?? root) as Record<string, unknown>;
+  const data = o["data"] ?? o["Data"];
+  if (data && typeof data === "object" && !Array.isArray(data)) {
+    return data as Record<string, unknown>;
+  }
+  return null;
+}
+
+export interface NaasaMarketStatus {
+  status: string;
+  isOpen: boolean;
+}
+
+/** Broker market status (`GET /api/feed/Services.GetMarketStatus`). Read-only poll. */
+export async function getNaasaMarketStatus(session: NaasaSession): Promise<NaasaMarketStatus> {
+  const json = await naasaJson<unknown>(session, "/api/feed/Services.GetMarketStatus");
+  const { rows } = unwrapBrokerData(json);
+  let status = "";
+  if (rows.length > 0) {
+    const r = rows[0]!;
+    status = String(r["Status"] ?? r["status"] ?? r["MarketStatus"] ?? r["message"] ?? "");
+  }
+  if (!status) {
+    const root = (json ?? {}) as Record<string, unknown>;
+    const o = (root["Result"] ?? root) as Record<string, unknown>;
+    const data = o["data"] ?? o["Data"];
+    if (typeof data === "string") status = data;
+    else if (typeof o["Message"] === "string") status = o["Message"] as string;
+    else if (typeof root["Message"] === "string") status = root["Message"] as string;
+  }
+  const s = status.trim() || "Unknown";
+  return { status: s, isOpen: /regular market open/i.test(s) };
+}
+
+function normalizeTicketStatus(raw: unknown): NaasaTicket["status"] {
+  const t = String(raw ?? "").toLowerCase();
+  if (t.includes("resolv") || t.includes("clos")) return "resolved";
+  if (t.includes("pend")) return "pending";
+  return "open";
+}
+
+/** Support tickets (`POST /api/CI/GetTicketLogs {}`). Read-only. */
+export async function getNaasaTickets(session: NaasaSession): Promise<NaasaTicket[]> {
+  const json = await naasaJson<unknown>(session, "/api/CI/GetTicketLogs", {
+    method: "POST",
+    body: {},
+  });
+  const root = (json ?? {}) as Record<string, unknown>;
+  let list: unknown = root["tickets"] ?? root["Tickets"] ?? root["data"] ?? root["Data"] ?? json;
+  if (typeof list === "string") {
+    try {
+      list = JSON.parse(list) as unknown;
+    } catch {
+      list = [];
+    }
+  }
+  const rows = Array.isArray(list) ? (list as Record<string, unknown>[]) : [];
+  return rows
+    .map((r) => {
+      const unreadRaw = r["unread"] ?? r["Unread"] ?? r["isUnread"];
+      return {
+        id: String(r["id"] ?? r["Id"] ?? r["TicketId"] ?? ""),
+        status: normalizeTicketStatus(r["status"] ?? r["Status"]),
+        time: String(r["time"] ?? r["Time"] ?? r["createdAt"] ?? ""),
+        description: String(r["description"] ?? r["Description"] ?? r["subject"] ?? ""),
+        unread:
+          unreadRaw === true ||
+          String(unreadRaw ?? "").toLowerCase() === "true" ||
+          Number(unreadRaw) === 1,
+      };
+    })
+    .filter((t) => t.id !== "" || t.description !== "");
 }
 
 const TRADEFLOW = "https://api-tradeflow.naasasecurities.com.np/api/v1";
@@ -1140,7 +1498,9 @@ export async function getTradeflowBanks(accessToken: string): Promise<Record<str
     }
     const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
     if (json["isSuccess"] === false) {
-      console.error(`[brokers] banks rejected: ${String(json["message"] ?? "unknown").slice(0, 120)}`);
+      console.error(
+        `[brokers] banks rejected: ${String(json["message"] ?? "unknown").slice(0, 120)}`,
+      );
       return [];
     }
     const result = json["result"] as Record<string, unknown> | undefined;

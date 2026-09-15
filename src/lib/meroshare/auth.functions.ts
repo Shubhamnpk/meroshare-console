@@ -6,13 +6,18 @@ import { getMeroShareSession, readSession } from "./session.server";
 import { logoutCdsc } from "./api.server";
 import { DEMO_USER } from "./demo-data";
 import type { Capital, SessionUser } from "./types";
+import capitalsFallback from "./capitals.json";
 
 export const getCapitals = createServerFn({ method: "GET" }).handler(
   async (): Promise<Capital[]> => {
-    const capitals = await fetchCapitals();
-    return capitals
-      .map((c) => ({ id: c.id, code: c.code, name: c.name }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+    try {
+      const capitals = await fetchCapitals();
+      return capitals
+        .map((c) => ({ id: c.id, code: c.code, name: c.name }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    } catch {
+      return capitalsFallback.sort((a, b) => a.name.localeCompare(b.name));
+    }
   },
 );
 

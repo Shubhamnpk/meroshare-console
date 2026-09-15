@@ -1,11 +1,11 @@
 /**
- * Device biometrics (fingerprint / face) via WebAuthn platform authenticator.
+ * Device biometrics (fingerprint / face / PIN) via WebAuthn platform authenticator.
  *
- * This is a convenience app-lock for this device: after enrollment, opening the
- * app with a valid session asks for a biometric check before showing anything.
- * It does NOT replace the MeroShare password - the CDSC session still expires
- * normally and sign-in still needs the password. No biometric data ever leaves
- * the device; we only keep the credential id to challenge against.
+ 
+ *
+ * Uses userVerification: "preferred" so the platform authenticator can fall
+ * back to PIN, pattern, or password when biometrics are unavailable (e.g.
+ * Windows Hello PIN on a laptop without a fingerprint reader).
  */
 
 export interface BiometricEnrollment {
@@ -37,11 +37,15 @@ function randomChallenge(): Uint8Array<ArrayBuffer> {
   return new Uint8Array(buffer);
 }
 
+function randomId(): Uint8Array<ArrayBuffer> {
+  return randomChallenge();
+}
+
 export function isWebAuthnSupported(): boolean {
   return typeof window !== "undefined" && !!window.PublicKeyCredential;
 }
 
-/** True when this device/browser can do fingerprint or face unlock. */
+/** True when this device/browser can do fingerprint, face, or PIN unlock. */
 export async function isPlatformAuthenticatorAvailable(): Promise<boolean> {
   try {
     if (!isWebAuthnSupported()) return false;
@@ -73,59 +77,6 @@ export function isBiometricEnrolled(): boolean {
   return getEnrollment() !== null;
 }
 
-export interface EnrollResult {
-  enrollment: BiometricEnrollment;
-  /**
-   * Encrypted-storage (PRF) support learned during enrollment:
-   * true = confirmed, false = confirmed NOT supported,
-   * null = unknown (older client) - saving will be attempted anyway.
-   */
-  prfEnabled: boolean | null;
-}
-
-function randomId(): Uint8Array<ArrayBuffer> {
-  const buffer = new ArrayBuffer(32);
-  crypto.getRandomValues(new Uint8Array(buffer));
-  return new Uint8Array(buffer);
-}
-
-function cancelledError(): Error {
-  return new Error("Biometric setup was cancelled. Try again when ready.");
-}
-
-async function createCredential(username: string, probePrf: boolean): Promise<PublicKeyCredential> {
-  const rpId = window.location.hostname;
-  const existing = getEnrollment();
-  const input: PublicKeyCredentialCreationOptions = {
-    challenge: randomId(),
-    rp: { name: "MeroShare Console", id: rpId },
-    user: {
-      id: randomId().slice(0, 16),
-      name: username || "meroshare-user",
-      displayName: username || "MeroShare user",
-    },
-    pubKeyCredParams: [
-      { type: "public-key", alg: -7 },
-      { type: "public-key", alg: -257 },
-    ],
-    authenticatorSelection: {
-      authenticatorAttachment: "platform",
-      userVerification: "required",
-    },
-    excludeCredentials: existing
-      ? [{ id: base64urlDecode(existing.credentialId), type: "public-key" }]
-      : [],
-    timeout: 60_000,
-    attestation: "none",
-  };
-  if (probePrf) input.extensions = { prf: { eval: { first: randomId() } } };
-  const credential = (await navigator.credentials.create({
-    publicKey: input,
-  })) as PublicKeyCredential | null;
-  if (!credential) throw new Error("No credential was created. Try again.");
-  return credential;
-}
-
 function storeEnrollment(credential: PublicKeyCredential): BiometricEnrollment {
   const enrollment: BiometricEnrollment = {
     credentialId: base64urlEncode(credential.rawId),
@@ -136,44 +87,44 @@ function storeEnrollment(credential: PublicKeyCredential): BiometricEnrollment {
   return enrollment;
 }
 
-/**
- * Register this device's biometrics, probing encrypted-storage (PRF) support
- * for free via the enrollment ceremony. Throws with a friendly message.
- */
-export async function enrollBiometricDetailed(username: string): Promise<EnrollResult> {
+/** Register this device's biometrics. Throws with a friendly message. */
+export async function enrollBiometric(username: string): Promise<BiometricEnrollment> {
   if (!isWebAuthnSupported()) throw new Error("This browser does not support biometrics.");
+  const rpId = window.location.hostname;
+  const existing = getEnrollment();
   try {
-    const credential = await createCredential(username, true);
-    const enabled = credential.getClientExtensionResults()?.prf?.enabled;
-    return { enrollment: storeEnrollment(credential), prfEnabled: enabled ?? null };
+    const credential = (await navigator.credentials.create({
+      publicKey: {
+        challenge: randomId(),
+        rp: { name: "MeroShare Console", id: rpId },
+        user: {
+          id: randomId().slice(0, 16),
+          name: username || "meroshare-user",
+          displayName: username || "MeroShare user",
+        },
+        pubKeyCredParams: [
+          { type: "public-key", alg: -7 },
+          { type: "public-key", alg: -257 },
+        ],
+        authenticatorSelection: {
+          authenticatorAttachment: "platform",
+          userVerification: "preferred",
+        },
+        excludeCredentials: existing
+          ? [{ id: base64urlDecode(existing.credentialId), type: "public-key" }]
+          : [],
+        timeout: 60_000,
+        attestation: "none",
+      },
+    })) as PublicKeyCredential | null;
+    if (!credential) throw new Error("No credential was created. Try again.");
+    return storeEnrollment(credential);
   } catch (error) {
     if (error instanceof DOMException && error.name === "NotAllowedError") {
-      throw cancelledError();
+      throw new Error("Biometric setup was cancelled. Try again when ready.");
     }
-    const probeRejected =
-      (error instanceof DOMException && error.name === "NotSupportedError") ||
-      (error instanceof Error && /not supported/i.test(error.message));
-    if (!probeRejected) {
-      if (error instanceof Error && /not supported|not allowed/i.test(error.message)) throw error;
-      throw new Error("Could not set up biometrics on this device.");
-    }
-    // Older client choked on the PRF probe - retry clean. Support stays
-    // unknown and saving will be attempted at the next step.
-    try {
-      const credential = await createCredential(username, false);
-      return { enrollment: storeEnrollment(credential), prfEnabled: null };
-    } catch (retryError) {
-      if (retryError instanceof DOMException && retryError.name === "NotAllowedError") {
-        throw cancelledError();
-      }
-      throw new Error("Could not set up biometrics on this device.");
-    }
+    throw new Error("Could not set up biometrics on this device.");
   }
-}
-
-/** Register this device's biometrics. Throws with a friendly message on failure. */
-export async function enrollBiometric(username: string): Promise<BiometricEnrollment> {
-  return (await enrollBiometricDetailed(username)).enrollment;
 }
 
 /** Challenge the enrolled credential. Resolves on success, throws when it fails. */
@@ -185,7 +136,7 @@ export async function unlockWithBiometrics(): Promise<void> {
       publicKey: {
         challenge: randomChallenge(),
         allowCredentials: [{ id: base64urlDecode(enrollment.credentialId), type: "public-key" }],
-        userVerification: "required",
+        userVerification: "preferred",
         timeout: 60_000,
       },
     });

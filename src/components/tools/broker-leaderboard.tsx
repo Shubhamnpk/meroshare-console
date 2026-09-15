@@ -24,6 +24,7 @@ import {
   ShieldCheck,
   Star,
   Store,
+  TableIcon,
   TrendingUp,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -34,13 +35,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { EmptyBlock } from "@/components/states";
-import { formatNpr } from "@/lib/format";
+import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
+import { formatNpr, formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { BrokerRow } from "@/lib/nepse/types";
 
 type PodiumMetric = "today" | "month" | "review";
-type ViewMode = "cards" | "list";
+type ViewMode = "cards" | "list" | "table";
 type RankSort = "high" | "low" | "branches";
 
 const metricValue = (b: BrokerRow, m: PodiumMetric): number => {
@@ -687,6 +697,152 @@ function BuySellBars({
     </div>
   );
 }
+/** Sortable table view (table view). */
+type TableSortKey = "code" | "name" | "todayTurnover" | "monthTurnover" | "branches" | "districts" | "rating";
+
+function BrokerTable({
+  brokers,
+  ranks,
+  onSelect,
+}: {
+  brokers: BrokerRow[];
+  ranks: Map<number, number>;
+  onSelect: (b: BrokerRow) => void;
+}) {
+  const { sort, toggle } = useSort<TableSortKey>(
+    { key: "todayTurnover", dir: "desc" },
+    {
+      code: "number",
+      name: "text",
+      todayTurnover: "number",
+      monthTurnover: "number",
+      branches: "number",
+      districts: "text",
+      rating: "number",
+    },
+  );
+  const sorted = useMemo(() => {
+    const getter = (b: BrokerRow): number | string => {
+      switch (sort.key) {
+        case "code":
+          return b.code;
+        case "name":
+          return b.name;
+        case "todayTurnover":
+          return b.todayStats?.totalAmount ?? 0;
+        case "monthTurnover":
+          return b.thirtyDaysTurnover;
+        case "branches":
+          return b.branchCount;
+        case "districts":
+          return b.districts.join(", ");
+        case "rating":
+          return b.rating?.averageRating ?? 0;
+      }
+    };
+    return sortBy(brokers, getter, sort.dir);
+  }, [brokers, sort]);
+
+  return (
+    <div className="max-h-[520px] overflow-auto rounded-2xl border border-border/60 bg-surface">
+      <Table>
+        <TableHeader className="sticky top-0 z-10 bg-surface">
+          <TableRow>
+            <SortableTh
+              label="#"
+              active={sort.key === "code"}
+              dir={sort.dir}
+              onClick={() => toggle("code")}
+              align="right"
+            />
+            <SortableTh
+              label="Broker"
+              active={sort.key === "name"}
+              dir={sort.dir}
+              onClick={() => toggle("name")}
+              kind="text"
+            />
+            <SortableTh
+              label="Today"
+              active={sort.key === "todayTurnover"}
+              dir={sort.dir}
+              onClick={() => toggle("todayTurnover")}
+              align="right"
+            />
+            <SortableTh
+              label="30d"
+              active={sort.key === "monthTurnover"}
+              dir={sort.dir}
+              onClick={() => toggle("monthTurnover")}
+              align="right"
+            />
+            <SortableTh
+              label="Branches"
+              active={sort.key === "branches"}
+              dir={sort.dir}
+              onClick={() => toggle("branches")}
+              align="right"
+            />
+            <SortableTh
+              label="Districts"
+              active={sort.key === "districts"}
+              dir={sort.dir}
+              onClick={() => toggle("districts")}
+              kind="text"
+            />
+            <SortableTh
+              label="Rating"
+              active={sort.key === "rating"}
+              dir={sort.dir}
+              onClick={() => toggle("rating")}
+              align="right"
+            />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {sorted.map((b) => (
+            <TableRow
+              key={b.code}
+              onClick={() => onSelect(b)}
+              className={cn("cursor-pointer", !b.active && "opacity-60")}
+            >
+              <TableCell className="num py-2 text-right text-xs font-bold text-muted-foreground">
+                {ranks.get(b.code) ?? "—"}
+              </TableCell>
+              <TableCell className="max-w-[220px] py-2">
+                <p className="text-[0.8125rem] font-semibold">{b.name}</p>
+                <p className="truncate text-[0.68rem] text-muted-foreground">
+                  #{b.code}
+                  {b.isDealer ? " · Dealer" : ""}
+                  {b.rating && b.rating.totalRatings > 0
+                    ? ` · ★ ${b.rating.averageRating.toFixed(1)}`
+                    : ""}
+                </p>
+              </TableCell>
+              <TableCell className="num py-2 text-right text-xs">
+                {b.todayStats ? formatNpr(b.todayStats.totalAmount, { compact: true }) : "—"}
+              </TableCell>
+              <TableCell className="num py-2 text-right text-xs">
+                {formatNpr(b.thirtyDaysTurnover, { compact: true })}
+              </TableCell>
+              <TableCell className="num py-2 text-right text-xs">{b.branchCount}</TableCell>
+              <TableCell className="py-2 text-xs text-muted-foreground">
+                {b.districts.slice(0, 2).join(", ") || "—"}
+                {b.districts.length > 2 ? ` +${b.districts.length - 2}` : ""}
+              </TableCell>
+              <TableCell className="num py-2 text-right text-xs">
+                {b.rating && b.rating.totalRatings > 0
+                  ? `★ ${b.rating.averageRating.toFixed(1)}`
+                  : "—"}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
 export function BrokerLeaderboard({
   brokers,
   onViewTrail,
@@ -861,7 +1017,7 @@ export function BrokerLeaderboard({
             ))}
           </div>
           <div className="inline-flex items-center gap-0.5 rounded-full border bg-muted/60 p-0.5 shadow-sm">
-            {(["cards", "list"] as const).map((v) => (
+            {(["cards", "list", "table"] as const).map((v) => (
               <button
                 key={v}
                 type="button"
@@ -876,10 +1032,12 @@ export function BrokerLeaderboard({
               >
                 {v === "cards" ? (
                   <LayoutGrid className="size-3.5" aria-hidden />
-                ) : (
+                ) : v === "list" ? (
                   <List className="size-3.5" aria-hidden />
+                ) : (
+                  <TableIcon className="size-3.5" aria-hidden />
                 )}
-                {v === "cards" ? "Cards" : "List"}
+                {v === "cards" ? "Cards" : v === "list" ? "List" : "Table"}
               </button>
             ))}
           </div>
@@ -902,7 +1060,7 @@ export function BrokerLeaderboard({
             />
           ))}
         </div>
-      ) : (
+      ) : view === "list" ? (
         <div className="space-y-1.5">
           {filtered.map((b) => (
             <BrokerListRow
@@ -913,6 +1071,12 @@ export function BrokerLeaderboard({
             />
           ))}
         </div>
+      ) : (
+        <BrokerTable
+          brokers={filtered}
+          ranks={categoryRankByCode}
+          onSelect={(row) => setPickedCode(row.code)}
+        />
       )}
 
       {search ? (

@@ -40,7 +40,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 import { errorMessage } from "@/lib/format";
 import { clearRemembered, loadRemembered, saveRemembered } from "@/lib/remember-me";
-import { isBiometricEnrolled } from "@/lib/biometric";
+import { isBiometricEnrolled, unlockWithBiometrics } from "@/lib/biometric";
 import { clearVault, getVaultOwner, hasVault, readVault, writeVault } from "@/lib/secure-vault";
 import { toast } from "sonner";
 import { ogImage, canonicalLink } from "@/lib/seo";
@@ -90,7 +90,7 @@ const HIGHLIGHTS = [
   {
     icon: ShieldCheck,
     title: "Private by design",
-    text: "Nothing is saved unless you ask, fingerprint sign-ins stay encrypted on your device.",
+    text: "Nothing is saved unless you ask, fingerprint sign-ins stay on your device.",
   },
 ];
 
@@ -168,9 +168,6 @@ function LoginPage() {
     onSuccess: async (_data, vars) => {
       if (rememberMe) saveRemembered(vars.username, vars.capitalId);
       else clearRemembered();
-      // Save for fingerprint sign-in only when needed: a fresh vault, or the
-      // vault belongs to a different user. Re-saving identical credentials
-      // would demand a pointless extra fingerprint prompt on every login.
       if (bioEnrolled && saveBio && getVaultOwner() !== vars.username) {
         try {
           await writeVault({
@@ -206,10 +203,11 @@ function LoginPage() {
     try {
       if (!hasVault()) {
         setFormError(
-          "No fingerprint sign-in saved yet. Sign in with your password once and keep “Save for fingerprint sign-in” checked.",
+          'No fingerprint sign-in saved yet. Sign in with your password once and keep "Save for fingerprint sign-in" checked.',
         );
         return;
       }
+      await unlockWithBiometrics();
       const creds = await readVault();
       bioAttempt.current = true;
       setCapitalId(creds.capitalId);
@@ -222,11 +220,9 @@ function LoginPage() {
     } catch (err) {
       bioAttempt.current = false;
       const message = err instanceof Error ? err.message : "Fingerprint sign-in failed.";
-      // An automatic attempt failing (no gesture, device asleep) is not the
-      // user's fault - point at the button instead of the error.
       setFormError(
         source === "auto" && /cancelled|did not complete/i.test(message)
-          ? "Your session expired. Tap “Sign in with fingerprint” to jump back in."
+          ? 'Your session expired. Tap "Sign in with fingerprint" to jump back in.'
           : message,
       );
     } finally {
@@ -234,8 +230,7 @@ function LoginPage() {
     }
   };
 
-  // Expired mid-use with a vault on this device? Try to glide back in once;
-  // any failure just leaves the normal sign-in form (and button) in place.
+  // Expired mid-use with a vault on this device? Try to glide back in once.
   const autoTried = useRef(false);
   useEffect(() => {
     if (expired && !autoTried.current && bioEnrolled && hasVault()) {
@@ -455,7 +450,7 @@ function LoginPage() {
                 <Clock className="mt-0.5 size-3.5 shrink-0 text-amber-500" />
                 Your MeroShare session expired.
                 {bioEnrolled
-                  ? " Trying your fingerprint to sign you straight back in."
+                  ? ' Trying your fingerprint to sign you straight back in.'
                   : " Sign back in to continue."}
               </p>
             ) : null}
@@ -475,6 +470,9 @@ function LoginPage() {
                   ) : (
                     <>
                       <Fingerprint className="size-4" /> Sign in with fingerprint
+                      <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[0.68rem] font-semibold text-warning">
+                        Beta
+                      </span>
                     </>
                   )}
                 </Button>
@@ -487,7 +485,7 @@ function LoginPage() {
                     <p className="mt-1 leading-relaxed">
                       1. Sign in with your password below.
                       <br />
-                      2. Keep “Save for fingerprint sign-in” checked.
+                      2. Keep "Save for fingerprint sign-in" checked.
                       <br />
                       Next visit, the button above signs you straight in.
                     </p>
@@ -514,7 +512,7 @@ function LoginPage() {
               <Label htmlFor="username">Username</Label>
               <Input
                 id="username"
-                autoComplete="username"
+                autoComplete="username webauthn"
                 inputMode="numeric"
                 placeholder="MeroShare username"
                 value={username}
@@ -571,7 +569,7 @@ function LoginPage() {
               </div>
             </div>
 
-            {bioEnrolled ? (
+            {bioEnrolled && getVaultOwner() !== username.trim() ? (
               <div className="flex items-start gap-2.5">
                 <Checkbox
                   id="save-bio"
@@ -582,9 +580,12 @@ function LoginPage() {
                 <div className="leading-snug">
                   <Label htmlFor="save-bio" className="cursor-pointer text-sm font-medium">
                     Save for fingerprint sign-in
+                    <span className="ml-1.5 rounded-full bg-warning/15 px-2 py-0.5 align-middle text-[0.68rem] font-semibold text-warning">
+                      Beta
+                    </span>
                   </Label>
                   <p className="text-xs text-muted-foreground">
-                    Encrypts this sign-in on your device so your fingerprint signs you in next time.
+                    Saves this sign-in on your device so your fingerprint signs you in next time.
                   </p>
                 </div>
               </div>

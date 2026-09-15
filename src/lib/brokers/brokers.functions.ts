@@ -6,21 +6,26 @@ import { z } from "zod";
 import {
   brokerMeta,
   type BrokerBank,
+  type BrokerCompanyInfo,
   type BrokerConnectionMeta,
   type BrokerDepth,
   type BrokerDepthRow,
   type BrokerFunds,
   type BrokerHolding,
   type BrokerId,
+  type BrokerMarketStatus,
   type BrokerOrder,
+  type BrokerOrderEvent,
   type BrokerQuote,
   type BrokerTestResult,
+  type BrokerTicket,
   type BrokerTrade,
   type CancelOrderRequest,
   type CancelOrderResult,
   type FundTransaction,
   type FundTransactionPage,
   type FundTransactionQuery,
+  type ModifyOrderRequest,
   type PlaceOrderRequest,
   type PlaceOrderResult,
   type WithdrawRequest,
@@ -30,22 +35,31 @@ import { listConnections, loadCredentials, removeConnection, saveConnection } fr
 import {
   BrokerSessionError,
   cancelNaasaOrder,
+  deleteNaasaWatchlist,
   dropNaasaSession,
   dropWalletSession,
   exchangeTradeflowToken,
+  getNaasaAmoList,
+  getNaasaCompanyInfo,
   getNaasaDepth,
   getNaasaHoldings,
+  getNaasaMarketStatus,
+  getNaasaMarketWatch,
   getNaasaOrderBook,
+  getNaasaOrderHistory,
   getNaasaQuote,
   getNaasaSession,
+  getNaasaTickets,
   getNaasaTokens,
   getNaasaTradeBook,
-  getNaasaAmoList,
+  getNaasaWatchlists,
   getTradeflowBanks,
   getTradeflowFunds,
   getTradeflowTxns,
   getWalletAccessToken,
+  modifyNaasaOrder,
   requestTradeflowWithdraw,
+  saveNaasaWatchlist,
   cancelNaasaAmo,
   placeNaasaAmo,
   placeNaasaOrder,
@@ -202,28 +216,36 @@ export const getBrokerQuote = createServerFn({ method: "GET" })
   });
 
 function toDepthRows(rows: Record<string, unknown>[], side: "bid" | "ask"): BrokerDepthRow[] {
+  // Case-insensitive key lookup — broker sometimes returns lower/upper variants
+  const lcMap = (r: Record<string, unknown>) => {
+    const m = new Map<string, unknown>();
+    for (const [k, v] of Object.entries(r)) m.set(k.toLowerCase(), v);
+    return m;
+  };
   return rows
     .map((r) => {
-      const priceKeys =
-        side === "bid"
-          ? ["BBR", "BidPrice", "bid", "price"]
-          : ["BSR", "OfferPrice", "ask", "price"];
-      const qtyKeys =
-        side === "bid"
-          ? ["BBQ", "BidQty", "qty", "quantity"]
-          : ["BSQ", "OfferQty", "qty", "quantity"];
-      const pick = (keys: string[]) => {
+      const m = lcMap(r);
+      const get = (keys: string[]) => {
         for (const k of keys) {
-          const n = numOrNull(r[k]);
+          const n = numOrNull(m.get(k.toLowerCase()) ?? r[k]);
           if (n !== null) return n;
         }
         return null;
       };
+      const priceKeys =
+        side === "bid"
+          ? ["bbr", "bidprice", "bid_price", "buyprice", "bid", "price", "rate"]
+          : ["bsr", "offerprice", "offer_price", "sellprice", "ask", "price", "rate"];
+      const qtyKeys =
+        side === "bid"
+          ? ["bbq", "bidqty", "bid_qty", "buyqty", "qty", "quantity", "volume"]
+          : ["bsq", "offerqty", "offer_qty", "sellqty", "qty", "quantity", "volume"];
+      const orderKeys = side === "bid" ? ["bo", "buyorders", "bidorders", "orders"] : ["so", "sellorders", "askorders", "orders"];
       return {
         side,
-        price: pick(priceKeys),
-        quantity: pick(qtyKeys),
-        orders: numOrNull(r["SO"] ?? r["orders"]),
+        price: get(priceKeys),
+        quantity: get(qtyKeys),
+        orders: get(orderKeys),
       };
     })
     .filter((r) => r.price !== null && r.quantity !== null)
@@ -235,22 +257,62 @@ export const getBrokerDepth = createServerFn({ method: "GET" })
   .handler(async ({ data }): Promise<BrokerDepth> => {
     return withBrokerSession(data.brokerId, async (session) => {
       const depth = await getNaasaDepth(session, data.symbol);
-      // Broker returns one row set; split heuristically when side is marked,
-      // else mirror top-5 both sides from bid/ask column pairs.
-      const bids = toDepthRows(
-        depth.rows.filter((r) => /b/i.test(String(r["side"] ?? "B"))),
-        "bid",
-      );
-      const asks = toDepthRows(
-        depth.rows.filter((r) => /a|s/i.test(String(r["side"] ?? "S"))),
-        "ask",
-      );
-      const fallback = depth.rows.length > 0 && bids.length === 0 && asks.length === 0;
+      // Naasa wraps levels inside a single row: {Ticker, DateTime, depth: [...]} or "depth" string
+      // Your log: keys=Ticker,DateTime,depth → need to unwrap
+      let rawRows: Record<string, unknown>[] = depth.rows;
+      if (rawRows.length === 1 && rawRows[0]!["depth"] !== undefined) {
+        const d = rawRows[0]!["depth"];
+        if (typeof d === "string") {
+          const t = (d as string).trim();
+          try {
+            const parsed = t ? (JSON.parse(t) as unknown) : [];
+            if (Array.isArray(parsed)) rawRows = parsed as Record<string, unknown>[];
+            else if (parsed && typeof parsed === "object") rawRows = [parsed as Record<string, unknown>];
+            else rawRows = [];
+          } catch {
+            // pipe format: BBR^BBQ^BO^BSR^BSQ^SO | ...
+            if (t.includes("^") || t.includes("|")) {
+              rawRows = t
+                .split("|")
+                .map((seg) => seg.trim())
+                .filter(Boolean)
+                .map((seg) => {
+                  const p = seg.split("^");
+                  return { BBR: p[0], BBQ: p[1], BO: p[2], BSR: p[3], BSQ: p[4], SO: p[5] } as Record<string, unknown>;
+                });
+            } else rawRows = [];
+          }
+        } else if (Array.isArray(d)) {
+          rawRows = d as Record<string, unknown>[];
+        } else if (d && typeof d === "object") {
+          rawRows = [d as Record<string, unknown>];
+        }
+      }
+      const hasSideCol = rawRows.some((r) => "side" in r || "Side" in r || "SIDE" in r);
+      let bids: BrokerDepthRow[];
+      let asks: BrokerDepthRow[];
+      if (hasSideCol) {
+        bids = toDepthRows(
+          rawRows.filter((r) => /b/i.test(String(r["side"] ?? r["Side"] ?? r["SIDE"] ?? "B"))),
+          "bid",
+        );
+        asks = toDepthRows(
+          rawRows.filter((r) => /a|s/i.test(String(r["side"] ?? r["Side"] ?? r["SIDE"] ?? "S"))),
+          "ask",
+        );
+      } else {
+        bids = toDepthRows(rawRows, "bid");
+        asks = toDepthRows(rawRows, "ask");
+      }
+      if (rawRows.length > 0 && bids.length === 0 && asks.length === 0) {
+        bids = toDepthRows(rawRows, "bid");
+        asks = toDepthRows(rawRows, "ask");
+      }
       return {
         errorCode: depth.errorCode,
         message: depth.message,
-        bids: fallback ? toDepthRows(depth.rows, "bid") : bids,
-        asks: fallback ? [] : asks,
+        bids,
+        asks,
       };
     });
   });
@@ -308,6 +370,24 @@ export const getBrokerOrderBook = createServerFn({ method: "GET" })
           (numOrNull(r["Quantity"]) !== null && numOrNull(r["TradedQuantity"]) !== null
             ? Math.max(0, (numOrNull(r["Quantity"]) ?? 0) - (numOrNull(r["TradedQuantity"]) ?? 0))
             : (numOrNull(r["Quantity"]) ?? 0));
+        const rawDate =
+          r["Date"] ??
+          r["OrderDate"] ??
+          r["BusinessDate"] ??
+          r["EntryDate"] ??
+          r["CreatedDate"] ??
+          r["DateTime"] ??
+          "";
+        const rawTime =
+          r["Time"] ?? r["OrderTime"] ?? r["EntryTime"] ?? r["LastTradeTime"] ?? "";
+        let date = String(rawDate ?? "");
+        let time = String(rawTime ?? "");
+        const combined = date || time;
+        const m = /(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}(?::\d{2})?)/.exec(String(combined));
+        if (m) {
+          if (!date || /T/.test(String(rawDate ?? ""))) date = m[1]!;
+          if (!time) time = m[2]!;
+        }
         return {
           id,
           symbol: String(r["Scrip"] ?? ""),
@@ -322,6 +402,8 @@ export const getBrokerOrderBook = createServerFn({ method: "GET" })
           remainingQty: remaining,
           orderStatus: String(r["OrderStatus"] ?? ""),
           deliveryFlag: String(r["DeliveryFlag"] ?? "DEL"),
+          date,
+          time,
         };
       });
     });
@@ -357,6 +439,48 @@ export const placeBrokerOrder = createServerFn({ method: "POST" })
         orderType: data.orderType,
         validity: data.validity,
         validTill: data.validTill,
+      });
+    });
+  });
+
+const modifyInput = z.object({
+  brokerId: z.enum(["naasa-x"]),
+  tranId: z.string().min(1).max(64),
+  orderId: z.string().min(1).max(64),
+  orderStatus: z.string().min(1).max(32),
+  remainingQty: z.number().positive().max(100000),
+  side: z.enum(["BUY", "SELL"]),
+  symbol: z.string().trim().min(3).max(24),
+  quantity: z.number().int().min(1).max(100000),
+  price: z.number().min(0).max(100000),
+  orderType: z.enum(["LMT", "MKT"]),
+  validity: z.enum(["DAY", "GTD", "GTC", "IOC", "FOK"]),
+  validTill: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  confirmed: z.literal(true, {
+    errorMap: () => ({ message: "Modifying needs explicit confirmation." }),
+  }),
+});
+
+/** Modifies a REAL order at the broker. Refuses without confirmed: true. */
+export const modifyBrokerOrder = createServerFn({ method: "POST" })
+  .validator((input: unknown): ModifyOrderRequest => modifyInput.parse(input) as ModifyOrderRequest)
+  .handler(async ({ data }): Promise<PlaceOrderResult> => {
+    return withBrokerSession(data.brokerId, async (session) => {
+      return modifyNaasaOrder(session, {
+        side: data.side,
+        symbol: data.symbol,
+        quantity: data.quantity,
+        price: data.price,
+        orderType: data.orderType,
+        validity: data.validity,
+        validTill: data.validTill,
+        tranId: data.tranId,
+        orderId: data.orderId,
+        orderStatus: data.orderStatus,
+        remainingQty: data.remainingQty,
       });
     });
   });
@@ -447,14 +571,19 @@ export const getBrokerTradeBook = createServerFn({ method: "GET" })
         ...(data.fromDate ? { fromDate: data.fromDate } : {}),
         ...(data.toDate ? { toDate: data.toDate } : {}),
       });
-      // eslint-disable-next-line no-console
+
       console.error("[tradebook] keys", rows.length > 0 ? Object.keys(rows[0] ?? {}) : []);
       return rows.map((r) => {
         const sideRaw = String(r["B/S"] ?? r["BuySellType"] ?? "").toUpperCase();
         // Date/time keys vary by report: prefer explicit fields, else split a
         // combined datetime ("2026-09-12T14:30:00" or "... 14:30:00").
         const rawDate =
-          r["Date"] ?? r["TradeDate"] ?? r["BusinessDate"] ?? r["TransactionDate"] ?? r["DateTime"] ?? "";
+          r["Date"] ??
+          r["TradeDate"] ??
+          r["BusinessDate"] ??
+          r["TransactionDate"] ??
+          r["DateTime"] ??
+          "";
         const rawTime =
           r["Time"] ?? r["TradeTime"] ?? r["TransactionTime"] ?? r["LastTradeTime"] ?? "";
         let date = String(rawDate ?? "");
@@ -723,4 +852,126 @@ export const requestBrokerWithdraw = createServerFn({ method: "POST" })
       requestTradeflowWithdraw(bearer, data.amount, data.isQuickRefund ?? false),
     );
     return result;
+  });
+
+export const getBrokerWatchlists = createServerFn({ method: "GET" })
+  .validator((input: unknown) => z.object({ brokerId: z.enum(["naasa-x"]) }).parse(input))
+  .handler(async ({ data }) => {
+    return withBrokerSession(data.brokerId, async (s) => getNaasaWatchlists(s));
+  });
+
+export const getBrokerWatchlistSymbols = createServerFn({ method: "GET" })
+  .validator((input: unknown) =>
+    z.object({ brokerId: z.enum(["naasa-x"]), template: z.string().min(1).max(64) }).parse(input),
+  )
+  .handler(async ({ data }) => {
+    return withBrokerSession(data.brokerId, async (s) => getNaasaMarketWatch(s, data.template));
+  });
+
+export const saveBrokerWatchlist = createServerFn({ method: "POST" })
+  .validator((input: unknown) =>
+    z
+      .object({
+        brokerId: z.enum(["naasa-x"]),
+        template: z.string().min(1).max(64),
+        symbols: z.array(z.string().trim().min(2).max(24)).max(200),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data }) => {
+    return withBrokerSession(data.brokerId, async (s) =>
+      saveNaasaWatchlist(s, data.template, data.symbols),
+    );
+  });
+
+export const deleteBrokerWatchlist = createServerFn({ method: "POST" })
+  .validator((input: unknown) =>
+    z.object({ brokerId: z.enum(["naasa-x"]), template: z.string().min(1).max(64) }).parse(input),
+  )
+  .handler(async ({ data }) => {
+    return withBrokerSession(data.brokerId, async (s) => deleteNaasaWatchlist(s, data.template));
+  });
+
+export const getBrokerOrderHistory = createServerFn({ method: "GET" })
+  .validator((input: unknown) =>
+    z
+      .object({ brokerId: z.enum(["naasa-x"]), orderId: z.string().trim().min(1).max(64) })
+      .parse(input),
+  )
+  .handler(async ({ data }): Promise<BrokerOrderEvent[]> => {
+    return withBrokerSession(data.brokerId, async (session) => {
+      const rows = await getNaasaOrderHistory(session, data.orderId);
+      return rows.map((r) => {
+        const rawDate =
+          r["Date"] ?? r["OrderDate"] ?? r["BusinessDate"] ?? r["EntryDate"] ?? r["DateTime"] ?? "";
+        const rawTime = r["Time"] ?? r["OrderTime"] ?? r["EntryTime"] ?? "";
+        return {
+          status: String(r["OrderStatus"] ?? r["Status"] ?? ""),
+          quantity: numOrNull(r["Quantity"]),
+          price: numOrNull(r["Price"]),
+          tradedQty: numOrNull(r["TradedQuantity"] ?? r["TradedQty"]),
+          remainingQty: numOrNull(r["RemainingQty"] ?? r["RemainingQuantity"]),
+          date: String(rawDate ?? ""),
+          time: String(rawTime ?? ""),
+          message: String(r["Message"] ?? r["Remarks"] ?? r["Remark"] ?? ""),
+        };
+      });
+    });
+  });
+
+export const getBrokerCompanyInfo = createServerFn({ method: "GET" })
+  .validator((input: unknown) =>
+    z
+      .object({ brokerId: z.enum(["naasa-x"]), symbol: z.string().trim().min(3).max(24) })
+      .parse(input),
+  )
+  .handler(async ({ data }): Promise<BrokerCompanyInfo | null> => {
+    return withBrokerSession(data.brokerId, async (session) => {
+      const r = await getNaasaCompanyInfo(session, data.symbol);
+      if (!r) return null;
+      const pick = (...keys: string[]): unknown => {
+        for (const k of keys) {
+          if (r[k] !== undefined && r[k] !== null && r[k] !== "") return r[k];
+        }
+        return null;
+      };
+      const str = (v: unknown): string | null => (typeof v === "string" && v.length > 0 ? v : null);
+      return {
+        symbol: data.symbol.trim().toUpperCase(),
+        companyName: str(pick("CompanyName", "companyName", "Security Name", "InstrumentName")),
+        isin: str(pick("ISIN", "isin")),
+        tickSize: numOrNull(pick("TickSize", "tickSize")),
+        marketLot: numOrNull(pick("MarketLot", "marketLot", "LotSize")),
+        maxOrderSize: numOrNull(pick("Max. Order Size", "MaxOrderSize", "maxOrderSize")),
+        dprLow: numOrNull(pick("DPR Low", "dprLow", "DprLow")),
+        dprHigh: numOrNull(pick("DPR High", "dprHigh", "DprHigh")),
+        preOpenDprLow: numOrNull(pick("PreOpen DPR Low", "preOpenDprLow")),
+        preOpenDprHigh: numOrNull(pick("PreOpen DPR High", "preOpenDprHigh")),
+        weekHigh52: numOrNull(pick("52WeekHigh", "weekHigh52")),
+        weekLow52: numOrNull(pick("52WeekLow", "weekLow52")),
+        listingDate: str(pick("ListingDate", "listingDate", "TradingStartDate")),
+        activeStatus: str(pick("ActiveStatus", "activeStatus")),
+      };
+    });
+  });
+
+export const getBrokerMarketStatus = createServerFn({ method: "GET" })
+  .validator((input: unknown) => z.object({ brokerId: z.enum(["naasa-x"]) }).parse(input))
+  .handler(async ({ data }): Promise<BrokerMarketStatus> => {
+    return withBrokerSession(data.brokerId, async (session) => getNaasaMarketStatus(session));
+  });
+
+export const getBrokerTickets = createServerFn({ method: "GET" })
+  .validator((input: unknown) => z.object({ brokerId: z.enum(["naasa-x"]) }).parse(input))
+  .handler(async ({ data }): Promise<BrokerTicket[]> => {
+    return withBrokerSession(data.brokerId, async (session) => getNaasaTickets(session));
+  });
+
+export const getBrokerWsCredentials = createServerFn({ method: "GET" })
+  .validator((input: unknown) => z.object({ brokerId: z.enum(["naasa-x"]) }).parse(input))
+  .handler(async ({ data }): Promise<{ wsUrl: string; clientCode: string } | null> => {
+    const { session } = await withSavedSession(data.brokerId);
+    if (!session.clientCode || !session.sessionNo) return null;
+    const wsUrl = `wss://serverx.naasasecurities.com.np:8006/WebSocket/Connect?UserId=${encodeURIComponent(session.clientCode)}&Password=${encodeURIComponent(session.sessionNo)}&protocol=WSS&ClientIP=&Source=1`;
+    return { wsUrl, clientCode: session.clientCode };
   });

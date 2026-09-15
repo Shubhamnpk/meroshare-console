@@ -101,7 +101,7 @@ function isDocKey(key: string): boolean {
 function docHref(value: string): string | null {
   const v = value.trim();
   if (/^https?:\/\//i.test(v)) return v;
-  if (v.startsWith("/")) return `https://webbackend.cdsc.com.np${v}`;
+  if (v.startsWith("/")) return v;
   return null;
 }
 

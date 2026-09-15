@@ -31,6 +31,7 @@ import {
   getFloorSheetDayData,
   getFloorSheetRangeData,
   getFloorSheetTrailData,
+  getIndexDailyHistory,
   getIndexGraph,
   getIpoArchiveList,
   getMarketMovers,
@@ -38,6 +39,7 @@ import {
   getMarketSnapshot,
   getNews,
   getPortfolioHistorySeries,
+  getPortfolioIntradaySeries,
   getProposedDividends,
   getScripBarsBatch,
   getScripDetail,
@@ -58,15 +60,22 @@ import type { ChartRange, PortfolioGranularity } from "./nepse/types";
 import { brokerVaultStatus, listBrokerConnections } from "./brokers/brokers.functions";
 import {
   getBrokerBanks,
+  getBrokerCompanyInfo,
   getBrokerDepth,
   getBrokerFundTransactions,
   getBrokerFunds,
   getBrokerHoldings,
+  getBrokerMarketStatus,
   getBrokerOrderBook,
+  getBrokerOrderHistory,
   getBrokerAmoList,
   getBrokerQuote,
+  getBrokerTickets,
   getBrokerTradeBook,
+  getBrokerWatchlists,
+  getBrokerWatchlistSymbols,
 } from "./brokers/brokers.functions";
+import { getUdfHistory } from "./charts/udf.functions";
 import type { BrokerId } from "./brokers/types";
 import type { MfPipelineType } from "./mutual-funds/types";
 import {
@@ -132,6 +141,14 @@ export const indexGraphQuery = (indexName: string) =>
     staleTime: 5 * 60_000,
   });
 
+export const indexDailyQuery = (indexName: string, days: number, enabled = true) =>
+  queryOptions({
+    queryKey: ["index-daily", indexName, days],
+    queryFn: () => getIndexDailyHistory({ data: { indexName, days } }),
+    enabled,
+    staleTime: 30 * 60_000,
+  });
+
 export const scripDetailQuery = (symbol: string | null) =>
   queryOptions({
     queryKey: ["scrip-detail", symbol],
@@ -189,6 +206,17 @@ export const portfolioHistoryQuery = (
     queryFn: () => getPortfolioHistorySeries({ data: { holdings, months, granularity } }),
     enabled: enabled && holdings.length > 0,
     staleTime: 30 * 60_000,
+  });
+
+export const portfolioIntradayQuery = (
+  holdings: { scrip: string; units: number; price: number }[],
+  enabled = true,
+) =>
+  queryOptions({
+    queryKey: ["portfolio-intraday", JSON.stringify(holdings.map((h) => [h.scrip, h.units]))],
+    queryFn: () => getPortfolioIntradaySeries({ data: { holdings } }),
+    enabled: enabled && holdings.length > 0,
+    staleTime: 60_000,
   });
 
 export const enrichedPortfolioQuery = () =>
@@ -295,6 +323,43 @@ export const brokerAmoListQuery = (brokerId: BrokerId | null) =>
     retry: false,
   });
 
+export const brokerOrderHistoryQuery = (brokerId: BrokerId | null, orderId: string | null) =>
+  queryOptions({
+    queryKey: ["broker-order-history", brokerId, orderId],
+    queryFn: () => getBrokerOrderHistory({ data: { brokerId: brokerId!, orderId: orderId! } }),
+    enabled: Boolean(brokerId && orderId),
+    staleTime: 20_000,
+    retry: false,
+  });
+
+export const brokerCompanyInfoQuery = (brokerId: BrokerId | null, symbol: string | null) =>
+  queryOptions({
+    queryKey: ["broker-company-info", brokerId, symbol],
+    queryFn: () => getBrokerCompanyInfo({ data: { brokerId: brokerId!, symbol: symbol! } }),
+    enabled: Boolean(brokerId && symbol),
+    staleTime: 10 * 60_000,
+    retry: false,
+  });
+
+export const brokerMarketStatusQuery = (brokerId: BrokerId | null) =>
+  queryOptions({
+    queryKey: ["broker-market-status", brokerId],
+    queryFn: () => getBrokerMarketStatus({ data: { brokerId: brokerId! } }),
+    enabled: Boolean(brokerId),
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    retry: false,
+  });
+
+export const brokerTicketsQuery = (brokerId: BrokerId | null) =>
+  queryOptions({
+    queryKey: ["broker-tickets", brokerId],
+    queryFn: () => getBrokerTickets({ data: { brokerId: brokerId! } }),
+    enabled: Boolean(brokerId),
+    staleTime: 60_000,
+    retry: false,
+  });
+
 export const brokerFundsQuery = (brokerId: BrokerId | null) =>
   queryOptions({
     queryKey: ["broker-funds", brokerId],
@@ -310,6 +375,41 @@ export const brokerBanksQuery = (brokerId: BrokerId | null) =>
     queryFn: () => getBrokerBanks({ data: { brokerId: brokerId! } }),
     enabled: Boolean(brokerId),
     staleTime: 5 * 60_000,
+    retry: false,
+  });
+
+export const brokerWatchlistsQuery = (brokerId: BrokerId | null) =>
+  queryOptions({
+    queryKey: ["broker-watchlists", brokerId],
+    queryFn: () => getBrokerWatchlists({ data: { brokerId: brokerId! } }),
+    enabled: Boolean(brokerId),
+    staleTime: 30_000,
+    retry: false,
+  });
+
+export const brokerWatchlistSymbolsQuery = (brokerId: BrokerId | null, template: string | null) =>
+  queryOptions({
+    queryKey: ["broker-watchlist-symbols", brokerId, template],
+    queryFn: () =>
+      getBrokerWatchlistSymbols({ data: { brokerId: brokerId!, template: template! } }),
+    enabled: Boolean(brokerId && template),
+    staleTime: 30_000,
+    retry: false,
+  });
+
+export const udfHistoryQuery = (
+  symbol: string | null,
+  range: import("./charts/udf").ChartRange | null,
+  intradayRes?: import("./charts/udf").UdfResolution | null,
+) =>
+  queryOptions({
+    queryKey: ["udf-history", symbol, range, intradayRes ?? ""],
+    queryFn: () =>
+      getUdfHistory({ data: { symbol: symbol!, range: range!, intradayRes: intradayRes ?? null } }),
+    enabled: Boolean(symbol && range),
+    staleTime: range === "1D" ? 15_000 : 60_000,
+    refetchInterval: range === "1D" ? 15_000 : false,
+    refetchIntervalInBackground: range === "1D",
     retry: false,
   });
 

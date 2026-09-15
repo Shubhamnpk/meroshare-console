@@ -4,6 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import {
+  Bell,
+  BellRing,
   Building2,
   Calculator,
   ChartCandlestick,
@@ -12,7 +14,6 @@ import {
   Info,
   Maximize2,
   Star,
-  StarOff,
 } from "lucide-react";
 import {
   Sheet,
@@ -40,6 +41,7 @@ import {
 import { DeltaPill } from "@/components/stat-card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AreaChart } from "@/components/market/area-chart";
+import { RangeBar } from "@/components/market/range-bar";
 import { DividendSimulator, actualMatchedTotals } from "@/components/market/dividend-simulator";
 import {
   ChartModal,
@@ -49,6 +51,8 @@ import {
 } from "@/components/market/chart-modal";
 import { useDocViewer } from "@/components/ui/use-doc-viewer";
 import { OrderTicket } from "@/components/brokers/order-ticket";
+import { PriceAlertDialog } from "@/components/brokers/price-alert-dialog";
+import { usePriceAlerts } from "@/lib/price-alerts";
 import { Panel } from "@/components/ui/panel";
 import {
   dividendsQuery,
@@ -61,6 +65,7 @@ import {
   scripFinancialsQuery,
   scripFullHistoryQuery,
   transactionsQuery,
+  udfHistoryQuery,
   waccReportQuery,
 } from "@/lib/queries";
 import { formatDate, formatNpr, formatPercent, formatQty, toNumber } from "@/lib/format";
@@ -82,44 +87,6 @@ function resolveFaceValue(
   if (apiFaceValue != null && apiFaceValue > 0) return apiFaceValue;
   return 100;
 }
-/** Range bar with a labeled marker at the current value's position. */
-function RangeBar({
-  low,
-  high,
-  value,
-  format,
-  tone,
-}: {
-  low: number;
-  high: number;
-  value: number;
-  format: (v: number) => string;
-  tone?: "gain" | "loss" | null;
-}) {
-  const pct = high > low ? Math.min(100, Math.max(0, ((value - low) / (high - low)) * 100)) : 0;
-  const toneClass =
-    tone === "gain" ? "text-gain" : tone === "loss" ? "text-loss" : "text-foreground";
-  const dotClass = tone === "gain" ? "bg-gain" : tone === "loss" ? "bg-loss" : "bg-primary";
-  return (
-    <div>
-      <div className="relative mt-2 flex h-1.5 rounded-full bg-muted">
-        <div className="rounded-full bg-primary/70" style={{ width: `${pct}%` }} />
-        <span
-          aria-hidden
-          title={format(value)}
-          className={`absolute top-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-surface ${dotClass}`}
-          style={{ left: `${pct}%` }}
-        />
-      </div>
-      <div className="num mt-1 flex justify-between text-[0.65rem] text-muted-foreground">
-        <span>{format(low)}</span>
-        <span className={`font-semibold ${toneClass}`}>{format(value)}</span>
-        <span>{format(high)}</span>
-      </div>
-    </div>
-  );
-}
-
 /** Unrealized P/L against a cost basis (CDSC WACC, or purchase-source estimate). */
 function PositionCard({
   scrip,
@@ -652,6 +619,7 @@ export function ScripSheet({
   const navigate = useNavigate();
   const brokerConn = useQuery(brokerConnectionsQuery());
   const brokerOn = (brokerConn.data?.length ?? 0) > 0;
+  const [alertOpen, setAlertOpen] = useState(false);
   const [tab, setTab] = useState("overview");
   const [rangeKey, setRangeKey] = useState<string>("1D");
   const [chartOpen, setChartOpen] = useState(false);
@@ -665,6 +633,8 @@ export function ScripSheet({
   }, [symbol]);
 
   const upper = symbol?.toUpperCase() ?? "";
+  const priceAlerts = usePriceAlerts();
+  const hasAlert = upper ? priceAlerts.alerts.some((a) => a.symbol === upper) : false;
   const price = snapshot.data?.prices.find((p) => p.symbol === upper) ?? null;
   const holding = portfolio.data?.holdings.find((h) => h.scrip === upper) ?? null;
   const watched = upper ? watchlist.has(upper) : false;
@@ -743,7 +713,26 @@ export function ScripSheet({
     [fullHistory.data],
   );
   const dailyPoints = rangeKey === "All" && fullPoints.length >= 2 ? fullPoints : historyPoints;
-  const intradayPoints: PricePoint[] = useMemo(() => detail.data?.intraday ?? [], [detail.data]);
+  const udf = useQuery({
+    ...udfHistoryQuery(
+      upper || null,
+      rangeKey === "All" ? null : (rangeKey as import("@/lib/charts/udf").ChartRange),
+    ),
+    enabled: brokerOn && Boolean(symbol) && rangeKey === "1D",
+  });
+  const udfIntraday: PricePoint[] = useMemo(() => {
+    const pts = udf.data?.points ?? [];
+    return pts.map((p) => ({ time: p.time, value: p.value }));
+  }, [udf.data?.points]);
+  const useUdf =
+    brokerOn &&
+    rangeKey === "1D" &&
+    udfIntraday.length > 0 &&
+    (detail.data?.intraday ?? []).length === 0;
+  const intradayPoints: PricePoint[] = useMemo(
+    () => (useUdf ? udfIntraday : (detail.data?.intraday ?? [])),
+    [useUdf, udfIntraday, detail.data],
+  );
 
   const ranges = useMemo(() => {
     const built = buildScripRanges(intradayPoints, dailyPoints);
@@ -846,32 +835,56 @@ export function ScripSheet({
               </span>
               <div className="min-w-0 pb-1">
                 <span className="flex items-center gap-2">
-                <SheetTitle className="font-display text-xl">{upper || "Scrip"}</SheetTitle>
-                {price ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      watchlist.toggle(upper);
-                      toast.success(watched ? "Removed from watchlist" : "Added to watchlist");
-                    }}
-                    aria-label={watched ? "Remove from watchlist" : "Add to watchlist"}
-                    title={watched ? "Remove from watchlist" : "Add to watchlist"}
-                    className={cn(
-                      "inline-flex size-7 shrink-0 items-center justify-center rounded-lg border transition-colors",
-                      watched
-                        ? "border-primary/50 bg-primary/15 text-primary"
-                        : "border-border/70 text-muted-foreground hover:border-primary/40 hover:text-primary",
-                    )}
-                  >
-                    {watched ? <StarOff className="size-3.5" /> : <Star className="size-3.5" />}
-                  </button>
+                  <SheetTitle className="font-display text-xl">{upper || "Scrip"}</SheetTitle>
+                  {price ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          watchlist.toggle(upper);
+                          toast.success(watched ? "Removed from watchlist" : "Added to watchlist");
+                        }}
+                        aria-label={watched ? "Remove from watchlist" : "Add to watchlist"}
+                        title={watched ? "Remove from watchlist" : "Add to watchlist"}
+                        className={cn(
+                          "inline-flex size-7 shrink-0 items-center justify-center rounded-lg border transition-colors",
+                          watched
+                            ? "border-amber-500/50 bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                            : "border-border/70 text-muted-foreground hover:border-primary/40 hover:text-primary",
+                        )}
+                      >
+                        {watched ? (
+                          <Star className="size-3.5 fill-warning text-warning" />
+                        ) : (
+                          <Star className="size-3.5" />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAlertOpen(true)}
+                        aria-label={hasAlert ? "Edit price alert" : "Set price alert"}
+                        title={hasAlert ? "Price alert active — edit" : "Set price alert"}
+                        className={cn(
+                          "inline-flex size-7 shrink-0 items-center justify-center rounded-lg border transition-colors",
+                          hasAlert
+                            ? "border-amber-500/50 bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                            : "border-border/70 text-muted-foreground hover:border-primary/40 hover:text-primary",
+                        )}
+                      >
+                        {hasAlert ? (
+                          <BellRing className="size-3.5" />
+                        ) : (
+                          <Bell className="size-3.5" />
+                        )}
+                      </button>
+                    </>
+                  ) : null}
+                </span>
+                {price || overview ? (
+                  <SheetDescription className="truncate text-left">
+                    {overview?.name ?? price?.name}
+                  </SheetDescription>
                 ) : null}
-              </span>
-              {price || overview ? (
-                <SheetDescription className="truncate text-left">
-                  {overview?.name ?? price?.name}
-                </SheetDescription>
-              ) : null}
               </div>
             </div>
             {price ? (
@@ -971,10 +984,13 @@ export function ScripSheet({
                       </button>
                       <button
                         type="button"
-                        onClick={() => setChartOpen(true)}
+                        onClick={() => {
+                          onOpenChange(false);
+                          void navigate({ to: "/terminal", search: { symbol: upper } });
+                        }}
                         className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
                       >
-                        <Maximize2 className="size-3.5" /> Enlarge
+                        <Maximize2 className="size-3.5" /> Terminal
                       </button>
                     </div>
                   ) : null}
@@ -1028,7 +1044,7 @@ export function ScripSheet({
                     </div>
                     <p className="mt-2 text-[0.68rem] text-muted-foreground">
                       {activeRange?.key === "1D"
-                        ? `Today's intraday session (${intradayPoints.length} ticks). `
+                        ? `Today's intraday session (${intradayPoints.length} ticks)${useUdf ? " · Source: UDF · NEPSE" : ""}. `
                         : activeRange?.key === "All"
                           ? `Whole LTP history from the YONEPSE archive${fullSince ? ` since ${fullSince.toLocaleDateString("en-GB", { month: "short", year: "numeric" })}` : ""} (${formatQty(fullPoints.length)} closes). `
                           : `Daily closes from the YONEPSE LTP archive, ${activeRange?.label ?? ""}. `}
@@ -1452,6 +1468,14 @@ export function ScripSheet({
         formatIntradayLabel={chartTimeLabel}
         formatDailyLabel={chartDayLabel}
       />
+      {upper ? (
+        <PriceAlertDialog
+          symbol={upper}
+          defaultPrice={price?.ltp ?? null}
+          open={alertOpen}
+          onOpenChange={setAlertOpen}
+        />
+      ) : null}
       {docModal}
     </Sheet>
   );

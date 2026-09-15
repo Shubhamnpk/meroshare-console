@@ -28,9 +28,9 @@ export const PRIMARY_NAV: NavItem[] = [
   { to: "/portfolio", label: "Portfolio", icon: Briefcase },
   { to: "/market", label: "Market", icon: LineChart },
   { to: "/terminal", label: "Terminal", icon: ChartCandlestick },
-  { to: "/tools", label: "Tools", icon: Blocks },
-  { to: "/transactions", label: "Transactions", icon: History },
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
+  { to: "/transactions", label: "Transactions", icon: History },
+  { to: "/tools", label: "Tools", icon: Blocks },
 ];
 
 export const IPO_NAV: NavItem[] = [
@@ -70,7 +70,7 @@ function NavGroup({
   return (
     <div className="space-y-1">
       {collapsed ? (
-        <div className="px-3 pb-1 pt-4">
+        <div className="px-3 pb-0.5 pt-2">
           <div className="h-px bg-sidebar-border/70" aria-hidden />
         </div>
       ) : (
@@ -80,21 +80,47 @@ function NavGroup({
       )}
       {items.map((item) => {
         const active = pathname === item.to;
+        // Expanded rows get the full treatment (gradient wash + accent bar +
+        // filled tile). Collapsed rail stays bare: no row background at all,
+        // the filled tile alone marks the active icon.
+        const rowClass = collapsed
+          ? active
+            ? "font-semibold text-foreground"
+            : "font-medium text-muted-foreground hover:text-foreground"
+          : active
+            ? "bg-gradient-to-r from-primary/[0.14] via-primary/[0.06] to-transparent font-semibold text-foreground"
+            : "font-medium text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground";
+        const tileClass = cn(
+          "flex shrink-0 items-center justify-center rounded-xl transition-all duration-200",
+          collapsed ? "size-9" : "size-7 rounded-lg",
+          active
+            ? "bg-primary text-primary-foreground shadow-sm shadow-primary/30"
+            : collapsed
+              ? "text-muted-foreground group-hover/item:scale-105 group-hover/item:text-foreground"
+              : "bg-muted/50 text-muted-foreground group-hover/item:bg-muted group-hover/item:text-foreground",
+        );
         return (
           <Link
             key={item.to}
             to={item.to}
             title={collapsed ? item.label : undefined}
+            aria-current={active ? "page" : undefined}
             className={cn(
-              "flex items-center rounded-xl text-sm font-medium transition-colors",
-              collapsed ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2.5",
-              active
-                ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground",
+              "group/item relative flex items-center rounded-xl text-sm transition-all duration-200",
+              collapsed ? "justify-center px-0 py-0.5" : "gap-2.5 px-2.5 py-1.5",
+              rowClass,
             )}
           >
-            <item.icon className={cn("size-4 shrink-0", active && "text-primary")} aria-hidden />
-            {!collapsed && item.label}
+            {active && !collapsed ? (
+              <span
+                aria-hidden
+                className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-primary shadow-[0_0_8px_1px] shadow-primary/40"
+              />
+            ) : null}
+            <span className={tileClass}>
+              <item.icon className="size-4" aria-hidden />
+            </span>
+            {!collapsed && <span className="truncate">{item.label}</span>}
           </Link>
         );
       })}
@@ -193,7 +219,7 @@ export function AppSidebar({
       className={cn(
         "group/sidebar fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-sidebar-border bg-sidebar lg:flex",
         "cursor-pointer select-none transition-[width] duration-300 ease-in-out",
-        collapsed ? "w-[4.75rem]" : "w-64",
+        collapsed ? "w-[4.75rem]" : "w-60",
       )}
     >
       <Brand collapsed={collapsed} onToggle={onToggleCollapsed} />
