@@ -62,14 +62,17 @@ import {
   getBrokerBanks,
   getBrokerCompanyInfo,
   getBrokerDepth,
+  getBrokerDirectStatus,
   getBrokerFundTransactions,
   getBrokerFunds,
   getBrokerHoldings,
+  getBrokerTriggers,
   getBrokerMarketStatus,
   getBrokerOrderBook,
   getBrokerOrderHistory,
   getBrokerAmoList,
   getBrokerQuote,
+  getBrokerStatement,
   getBrokerTickets,
   getBrokerTradeBook,
   getBrokerWatchlists,
@@ -357,6 +360,43 @@ export const brokerTicketsQuery = (brokerId: BrokerId | null) =>
     queryFn: () => getBrokerTickets({ data: { brokerId: brokerId! } }),
     enabled: Boolean(brokerId),
     staleTime: 60_000,
+    retry: false,
+  });
+
+export const brokerStatementQuery = (
+  brokerId: BrokerId | null,
+  range?: { fromDate?: string; toDate?: string } | null,
+) =>
+  queryOptions({
+    queryKey: ["broker-statement", brokerId, range?.fromDate ?? "", range?.toDate ?? ""],
+    queryFn: () =>
+      getBrokerStatement({
+        data: {
+          brokerId: brokerId!,
+          ...(range?.fromDate ? { fromDate: range.fromDate } : {}),
+          ...(range?.toDate ? { toDate: range.toDate } : {}),
+        },
+      }),
+    enabled: Boolean(brokerId),
+    staleTime: 60_000,
+    retry: false,
+  });
+
+export const brokerTriggersQuery = (brokerId: BrokerId | null) =>
+  queryOptions({
+    queryKey: ["broker-triggers", brokerId],
+    queryFn: () => getBrokerTriggers({ data: { brokerId: brokerId! } }),
+    enabled: Boolean(brokerId),
+    staleTime: 30_000,
+    retry: false,
+  });
+
+export const brokerDirectStatusQuery = (brokerId: BrokerId | null) =>
+  queryOptions({
+    queryKey: ["broker-direct-status", brokerId],
+    queryFn: () => getBrokerDirectStatus({ data: { brokerId: brokerId! } }),
+    enabled: Boolean(brokerId),
+    staleTime: 5 * 60_000,
     retry: false,
   });
 

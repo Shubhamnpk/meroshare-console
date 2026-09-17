@@ -20,6 +20,8 @@ import {
   type BrokerTestResult,
   type BrokerTicket,
   type BrokerTrade,
+  type BrokerStatementRow,
+  type BrokerTrigger,
   type CancelOrderRequest,
   type CancelOrderResult,
   type FundTransaction,
@@ -28,6 +30,7 @@ import {
   type ModifyOrderRequest,
   type PlaceOrderRequest,
   type PlaceOrderResult,
+  type PlaceTriggerRequest,
   type WithdrawRequest,
   type WithdrawResult,
 } from "./types";
@@ -55,6 +58,7 @@ import {
   getNaasaWatchlists,
   getTradeflowBanks,
   getTradeflowFunds,
+  getTradeflowStatement,
   getTradeflowTxns,
   getWalletAccessToken,
   modifyNaasaOrder,
@@ -67,6 +71,32 @@ import {
   type NaasaAmoOrder,
   type NaasaSession,
 } from "./naasa.server";
+import {
+  blazeLogin,
+  cancelBlazeOrder,
+  getBlazeTriggers,
+  modifyBlazeOrder,
+  placeBlazeOrder,
+  placeBlazeTrigger,
+} from "./blaze.server";
+import {
+  consumeTmsProof,
+  getTmsCaptcha as getTmsCaptchaWorker,
+  getTmsHoldings as getTmsHoldingsWorker,
+  getTmsIndices as getTmsIndicesWorker,
+  getTmsMarketWatch as getTmsMarketWatchWorker,
+  getTmsOrderBook as getTmsOrderBookWorker,
+  getTmsTradeBook as getTmsTradeBookWorker,
+  getTmsSession as getTmsSessionWorker,
+  normalizeTmsHost as normalizeTmsHostWorker,
+  reauthTmsLogin,
+  testTmsLogin,
+  tmsCacheKey,
+  verifyTmsOtp as verifyTmsOtpWorker,
+  type TmsCaptcha,
+  type TmsReauthResult,
+  type TmsTestResult,
+} from "./tms.server";
 
 const brokerInput = z.object({
   brokerId: z.enum(["naasa-x"]),
@@ -116,7 +146,7 @@ export const brokerVaultStatus = createServerFn({ method: "GET" }).handler(
 );
 
 export const removeBrokerConnection = createServerFn({ method: "POST" })
-  .validator((input: unknown) => z.object({ brokerId: z.enum(["naasa-x"]) }).parse(input))
+  .validator((input: unknown) => z.object({ brokerId: z.enum(["naasa-x", "tms"]) }).parse(input))
   .handler(async ({ data }): Promise<{ ok: true }> => {
     await removeConnection(data.brokerId);
     return { ok: true };
@@ -124,11 +154,214 @@ export const removeBrokerConnection = createServerFn({ method: "POST" })
 
 /** Re-run the live test using SAVED credentials (no password round-trip). */
 export const retestBrokerConnection = createServerFn({ method: "POST" })
-  .validator((input: unknown) => z.object({ brokerId: z.enum(["naasa-x"]) }).parse(input))
+  .validator((input: unknown) => z.object({ brokerId: z.enum(["naasa-x", "tms"]) }).parse(input))
   .handler(async ({ data }): Promise<BrokerTestResult> => {
+    if (data.brokerId === "tms") {
+      throw new Error("TMS needs a fresh captcha — reconnect it in Settings → Advanced.");
+    }
     const creds = await loadCredentials(data.brokerId);
     if (!creds) throw new Error("No saved connection for this broker.");
     return runTest(data.brokerId, creds.username, creds.password);
+  });
+
+// ---------------------------------------------------------------------------
+// Classic TMS (captcha login — user-in-the-loop, never silent).
+// ---------------------------------------------------------------------------
+
+export const getTmsCaptcha = createServerFn({ method: "POST" })
+  .validator((input: unknown) =>
+    z.object({ host: z.string().trim().max(128).optional() }).parse(input),
+  )
+  .handler(async ({ data }): Promise<TmsCaptcha> => getTmsCaptchaWorker(data.host));
+
+const tmsTestInput = z.object({
+  host: z.string().trim().max(128).optional(),
+  username: z.string().trim().min(1).max(128),
+  password: z.string().min(1).max(128),
+  captchaId: z.string().min(1).max(128),
+  captchaText: z.string().trim().min(1).max(16),
+});
+
+/** Live TMS test login. Does NOT save anything. May ask for OTP. */
+export const testTmsConnection = createServerFn({ method: "POST" })
+  .validator((input: unknown) => tmsTestInput.parse(input))
+  .handler(async ({ data }): Promise<TmsTestResult> => testTmsLogin(data));
+
+const tmsOtpInput = z.object({
+  pendingId: z.string().min(1).max(128),
+  otp: z.string().trim().min(1).max(16),
+});
+
+/** Complete the TMS OTP step. Does NOT save anything. */
+export const verifyTmsOtp = createServerFn({ method: "POST" })
+  .validator((input: unknown) => tmsOtpInput.parse(input))
+  .handler(async ({ data }): Promise<TmsTestResult> => verifyTmsOtpWorker(data));
+
+// ---------------------------------------------------------------------------
+// TMS reads — same shapes the Broker page already renders. Each call
+// rehydrates the cached cookie jar + token (or surfaces reconnect).
+// ---------------------------------------------------------------------------
+
+function tmsBaseOf(host: string | null | undefined): string {
+  return `${normalizeTmsHostWorker(host)}/tmsapi`;
+}
+
+async function withTmsSession<T>(
+  brokerId: "tms",
+  op: (args: { base: string; token: string; cookies: string; xsrf: string }) => Promise<T>,
+): Promise<T> {
+  const creds = await loadCredentials(brokerId);
+  if (!creds) throw new Error("No saved TMS connection. Connect it in Settings → Advanced.");
+  const host = normalizeTmsHostWorker(creds.host ?? undefined);
+  const base = `${host}/tmsapi`;
+  const key = tmsCacheKey(host, creds.username);
+  const session = await getTmsSessionWorker(key);
+  try {
+    return await op({ base, token: session.token, cookies: session.cookies, xsrf: session.xsrf });
+  } catch (err) {
+    if (err instanceof BrokerSessionError) throw err;
+    throw err;
+  }
+}
+
+function toTmsHoldings(rows: Record<string, unknown>[]): import("./types").BrokerHolding[] {
+  return rows.map((r) => ({
+    symbol: String(r["symbol"] ?? r["scrip"] ?? r["NEPSECode"] ?? ""),
+    availableQty:
+      typeof r["qty"] === "number"
+        ? r["qty"]
+        : typeof r["quantity"] === "number"
+          ? r["quantity"]
+          : Number(String(r["quantity"] ?? r["qty"] ?? 0).replace(/,/g, "")) || 0,
+    closePrice:
+      r["closePrice"] != null ? Number(String(r["closePrice"]).replace(/,/g, "")) || null : null,
+    marketValue:
+      r["marketValue"] != null ? Number(String(r["marketValue"]).replace(/,/g, "")) || null : null,
+  }));
+}
+
+export const getTmsHoldings = createServerFn({ method: "GET" })
+  .validator((input: unknown) => z.object({ brokerId: z.enum(["tms"]) }).parse(input))
+  .handler(async ({ data }): Promise<import("./types").BrokerHolding[]> => {
+    return withTmsSession(data.brokerId, async ({ base, token, cookies, xsrf }) => {
+      const { createTmsClientFromSession } = await import("./tms.server");
+      const client = createTmsClientFromSession(cookies, xsrf);
+      const { rows } = await getTmsHoldingsWorker(client, token, base);
+      return toTmsHoldings(rows);
+    });
+  });
+
+export const getTmsOrderBook = createServerFn({ method: "GET" })
+  .validator((input: unknown) => z.object({ brokerId: z.enum(["tms"]) }).parse(input))
+  .handler(async ({ data }): Promise<import("./types").BrokerOrder[]> => {
+    return withTmsSession(data.brokerId, async ({ base, token, cookies, xsrf }) => {
+      const { createTmsClientFromSession } = await import("./tms.server");
+      const client = createTmsClientFromSession(cookies, xsrf);
+      const { rows } = await getTmsOrderBookWorker(client, token, base);
+      return rows.map((r) => ({
+        id: String(r["orderId"] ?? r["id"] ?? ""),
+        symbol: String(r["symbol"] ?? r["scrip"] ?? ""),
+        side: String(r["side"] ?? "")
+          .toUpperCase()
+          .startsWith("S")
+          ? ("SELL" as const)
+          : ("BUY" as const),
+        quantity: Number(r["quantity"] ?? 0) || 0,
+        price: r["price"] != null ? Number(String(r["price"]).replace(/,/g, "")) || null : null,
+        status: String(r["status"] ?? ""),
+        orderType: String(r["orderType"] ?? ""),
+        validity: String(r["validity"] ?? "DAY"),
+        orderId: String(r["orderId"] ?? ""),
+        tranId: String(r["tranId"] ?? ""),
+        remainingQty: Number(r["remainingQty"] ?? r["quantity"] ?? 0) || 0,
+        orderStatus: String(r["orderStatus"] ?? r["status"] ?? ""),
+        deliveryFlag: String(r["deliveryFlag"] ?? "DEL"),
+        date: String(r["date"] ?? ""),
+        time: String(r["time"] ?? ""),
+      }));
+    });
+  });
+
+export const getTmsTradeBook = createServerFn({ method: "GET" })
+  .validator((input: unknown) => z.object({ brokerId: z.enum(["tms"]) }).parse(input))
+  .handler(async ({ data }): Promise<import("./types").BrokerTrade[]> => {
+    return withTmsSession(data.brokerId, async ({ base, token, cookies, xsrf }) => {
+      const { createTmsClientFromSession } = await import("./tms.server");
+      const client = createTmsClientFromSession(cookies, xsrf);
+      const { rows } = await getTmsTradeBookWorker(client, token, base);
+      return rows.map((r) => ({
+        id: String(r["tradeId"] ?? r["id"] ?? ""),
+        orderNo: String(r["orderNo"] ?? ""),
+        symbol: String(r["symbol"] ?? ""),
+        side: String(r["side"] ?? "")
+          .toUpperCase()
+          .startsWith("S")
+          ? ("SELL" as const)
+          : ("BUY" as const),
+        quantity: Number(r["quantity"] ?? 0) || 0,
+        price: r["price"] != null ? Number(String(r["price"]).replace(/,/g, "")) || null : null,
+        amount: r["amount"] != null ? Number(String(r["amount"]).replace(/,/g, "")) || null : null,
+        date: String(r["date"] ?? ""),
+        time: String(r["time"] ?? ""),
+        account: String(r["account"] ?? ""),
+      }));
+    });
+  });
+
+const tmsSaveInput = z.object({
+  proofId: z.string().min(1).max(128),
+});
+
+/**
+ * Save a TMS connection from a proof token minted by a just-completed test
+ * or OTP verification. The proof carries the proven credentials, so saving
+ * never re-logs-in (captchas are single-use). Single use, 5-min TTL.
+ */
+export const saveTmsConnection = createServerFn({ method: "POST" })
+  .validator((input: unknown) => tmsSaveInput.parse(input))
+  .handler(async ({ data }): Promise<BrokerConnectionMeta> => {
+    const proof = consumeTmsProof(data.proofId);
+    if (!proof) {
+      throw new Error("Proof expired. Test the login again, then save promptly.");
+    }
+    return saveConnection("tms", proof.username, proof.password, proof.displayName, proof.host);
+  });
+
+// ---------------------------------------------------------------------------
+// TMS silent re-auth — when the 30-min session expires, try to re-login
+// in the background with saved creds + fresh captcha. Client handles OCR.
+// ---------------------------------------------------------------------------
+
+/** Fetch a fresh captcha for re-auth. Returns the image for client-side OCR. */
+export const startTmsReauth = createServerFn({ method: "GET" })
+  .validator((input: unknown) => z.object({ brokerId: z.enum(["tms"]) }).parse(input))
+  .handler(async ({ data }): Promise<TmsCaptcha> => {
+    const creds = await loadCredentials(data.brokerId);
+    if (!creds) throw new Error("No saved TMS connection.");
+    return getTmsCaptchaWorker(creds.host ?? undefined);
+  });
+
+/** Submit the solved captcha to complete re-auth. Caches session on success. */
+export const completeTmsReauth = createServerFn({ method: "POST" })
+  .validator((input: unknown) =>
+    z
+      .object({
+        brokerId: z.enum(["tms"]),
+        captchaId: z.string().min(1).max(128),
+        captchaText: z.string().trim().min(1).max(16),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data }): Promise<TmsReauthResult> => {
+    const creds = await loadCredentials(data.brokerId);
+    if (!creds) return { ok: false, error: "No saved TMS connection." };
+    return reauthTmsLogin({
+      host: creds.host ?? "",
+      username: creds.username,
+      password: creds.password,
+      captchaId: data.captchaId,
+      captchaText: data.captchaText,
+    });
   });
 
 // ---------------------------------------------------------------------------
@@ -240,7 +473,10 @@ function toDepthRows(rows: Record<string, unknown>[], side: "bid" | "ask"): Brok
         side === "bid"
           ? ["bbq", "bidqty", "bid_qty", "buyqty", "qty", "quantity", "volume"]
           : ["bsq", "offerqty", "offer_qty", "sellqty", "qty", "quantity", "volume"];
-      const orderKeys = side === "bid" ? ["bo", "buyorders", "bidorders", "orders"] : ["so", "sellorders", "askorders", "orders"];
+      const orderKeys =
+        side === "bid"
+          ? ["bo", "buyorders", "bidorders", "orders"]
+          : ["so", "sellorders", "askorders", "orders"];
       return {
         side,
         price: get(priceKeys),
@@ -267,7 +503,8 @@ export const getBrokerDepth = createServerFn({ method: "GET" })
           try {
             const parsed = t ? (JSON.parse(t) as unknown) : [];
             if (Array.isArray(parsed)) rawRows = parsed as Record<string, unknown>[];
-            else if (parsed && typeof parsed === "object") rawRows = [parsed as Record<string, unknown>];
+            else if (parsed && typeof parsed === "object")
+              rawRows = [parsed as Record<string, unknown>];
             else rawRows = [];
           } catch {
             // pipe format: BBR^BBQ^BO^BSR^BSQ^SO | ...
@@ -278,7 +515,14 @@ export const getBrokerDepth = createServerFn({ method: "GET" })
                 .filter(Boolean)
                 .map((seg) => {
                   const p = seg.split("^");
-                  return { BBR: p[0], BBQ: p[1], BO: p[2], BSR: p[3], BSQ: p[4], SO: p[5] } as Record<string, unknown>;
+                  return {
+                    BBR: p[0],
+                    BBQ: p[1],
+                    BO: p[2],
+                    BSR: p[3],
+                    BSQ: p[4],
+                    SO: p[5],
+                  } as Record<string, unknown>;
                 });
             } else rawRows = [];
           }
@@ -378,8 +622,7 @@ export const getBrokerOrderBook = createServerFn({ method: "GET" })
           r["CreatedDate"] ??
           r["DateTime"] ??
           "";
-        const rawTime =
-          r["Time"] ?? r["OrderTime"] ?? r["EntryTime"] ?? r["LastTradeTime"] ?? "";
+        const rawTime = r["Time"] ?? r["OrderTime"] ?? r["EntryTime"] ?? r["LastTradeTime"] ?? "";
         let date = String(rawDate ?? "");
         let time = String(rawTime ?? "");
         const combined = date || time;
@@ -409,6 +652,8 @@ export const getBrokerOrderBook = createServerFn({ method: "GET" })
     });
   });
 
+const engineInput = { engine: z.enum(["proxy", "direct"]).optional() };
+
 const placeInput = z.object({
   brokerId: z.enum(["naasa-x"]),
   side: z.enum(["BUY", "SELL"]),
@@ -421,6 +666,7 @@ const placeInput = z.object({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional(),
+  ...engineInput,
   confirmed: z.literal(true, {
     errorMap: () => ({ message: "Order needs explicit confirmation." }),
   }),
@@ -431,6 +677,16 @@ export const placeBrokerOrder = createServerFn({ method: "POST" })
   .validator((input: unknown): PlaceOrderRequest => placeInput.parse(input) as PlaceOrderRequest)
   .handler(async ({ data }): Promise<PlaceOrderResult> => {
     return withBrokerSession(data.brokerId, async (session) => {
+      if (data.engine === "direct") {
+        return placeBlazeOrder(session, {
+          side: data.side,
+          symbol: data.symbol,
+          quantity: data.quantity,
+          price: data.price,
+          orderType: data.orderType,
+          validity: data.validity,
+        });
+      }
       return placeNaasaOrder(session, {
         side: data.side,
         symbol: data.symbol,
@@ -459,6 +715,7 @@ const modifyInput = z.object({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional(),
+  ...engineInput,
   confirmed: z.literal(true, {
     errorMap: () => ({ message: "Modifying needs explicit confirmation." }),
   }),
@@ -469,6 +726,19 @@ export const modifyBrokerOrder = createServerFn({ method: "POST" })
   .validator((input: unknown): ModifyOrderRequest => modifyInput.parse(input) as ModifyOrderRequest)
   .handler(async ({ data }): Promise<PlaceOrderResult> => {
     return withBrokerSession(data.brokerId, async (session) => {
+      if (data.engine === "direct") {
+        return modifyBlazeOrder(session, {
+          side: data.side,
+          symbol: data.symbol,
+          quantity: data.quantity,
+          price: data.price,
+          orderType: data.orderType,
+          validity: data.validity,
+          tranId: data.tranId,
+          orderId: data.orderId,
+          remainingQty: data.remainingQty,
+        });
+      }
       return modifyNaasaOrder(session, {
         side: data.side,
         symbol: data.symbol,
@@ -572,7 +842,6 @@ export const getBrokerTradeBook = createServerFn({ method: "GET" })
         ...(data.toDate ? { toDate: data.toDate } : {}),
       });
 
-      console.error("[tradebook] keys", rows.length > 0 ? Object.keys(rows[0] ?? {}) : []);
       return rows.map((r) => {
         const sideRaw = String(r["B/S"] ?? r["BuySellType"] ?? "").toUpperCase();
         // Date/time keys vary by report: prefer explicit fields, else split a
@@ -621,6 +890,7 @@ const cancelInput = z.object({
   price: z.string().max(24),
   quantity: z.number().int().min(1).max(100000),
   symbol: z.string().trim().min(3).max(24),
+  ...engineInput,
   confirmed: z.literal(true, {
     errorMap: () => ({ message: "Cancelling needs explicit confirmation." }),
   }),
@@ -631,6 +901,17 @@ export const cancelBrokerOrder = createServerFn({ method: "POST" })
   .validator((input: unknown): CancelOrderRequest => cancelInput.parse(input) as CancelOrderRequest)
   .handler(async ({ data }): Promise<CancelOrderResult> => {
     return withBrokerSession(data.brokerId, async (session) => {
+      if (data.engine === "direct") {
+        return cancelBlazeOrder(session, {
+          orderId: data.orderId,
+          tranId: data.tranId,
+          side: data.buySellType === "Sell" ? "SELL" : "BUY",
+          symbol: data.symbol,
+          quantity: data.quantity,
+          price: Number(data.price) || 0,
+          ...(data.orderTerms ? { validity: data.orderTerms } : {}),
+        });
+      }
       return cancelNaasaOrder(session, {
         orderStatus: data.orderStatus,
         buySellType: data.buySellType,
@@ -668,36 +949,20 @@ async function withTradeflow<T>(
     const key = `wallet:${creds.username.toLowerCase()}`;
     try {
       const wToken = await getWalletAccessToken(key, creds.username, creds.password);
-      console.error("[brokers] tradeflow: using wallet-host token");
       return await op(wToken);
-    } catch (err) {
-      console.error(
-        `[brokers] tradeflow: wallet-token path failed (${err instanceof Error ? err.message : err}), trying X token`,
-      );
+    } catch {
       dropWalletSession(key);
     }
   }
   return withBrokerSession(brokerId, async (session) => {
     const tokens = await getNaasaTokens(session);
     if (!tokens.accessToken) {
-      console.error("[brokers] tradeflow: no Keycloak access token in broker session");
       throw new Error("Broker identity token unavailable. Retest the connection.");
     }
     let bearer = tokens.accessToken;
     if (tokens.refreshToken) {
       const exchanged = await exchangeTradeflowToken(tokens.refreshToken);
-      if (exchanged) {
-        console.error(`[brokers] tradeflow: token exchanged (clientId=${exchanged.clientId})`);
-        bearer = exchanged.accessToken;
-      } else {
-        console.error(
-          "[brokers] tradeflow: refresh exchange failed, falling back to Keycloak bearer",
-        );
-      }
-    } else {
-      console.error(
-        "[brokers] tradeflow: no Keycloak refresh token, using Keycloak bearer directly",
-      );
+      if (exchanged) bearer = exchanged.accessToken;
     }
     return op(bearer);
   });
@@ -736,14 +1001,6 @@ export const getBrokerFundTransactions = createServerFn({ method: "GET" })
         pageNumber: data.page ?? 1,
       }),
     );
-    if (page.rows.length > 0) {
-      const first = page.rows[0]!;
-      console.error(
-        `[brokers] fund-txns row keys: ${Object.entries(first)
-          .map(([k, v]) => `${k}:${typeof v}`)
-          .join(",")}`,
-      );
-    }
     return {
       totalCount: page.totalCount,
       totalPages: page.totalPages,
@@ -799,14 +1056,6 @@ function toBrokerFunds(
   collateral: Record<string, unknown>,
   utilization: Record<string, unknown>,
 ): BrokerFunds {
-  const shapeOf = (o: unknown) =>
-    o && typeof o === "object"
-      ? Object.entries(o as Record<string, unknown>)
-          .map(([k, v]) => `${k}:${Array.isArray(v) ? `arr[${v.length}]` : typeof v}`)
-          .join(",")
-      : typeof o;
-  console.error(`[brokers] funds: collateral shape {${shapeOf(collateral)}}`);
-  console.error(`[brokers] funds: utilization shape {${shapeOf(utilization)}}`);
   const cn = (v: unknown) => numOrNull(v);
   return {
     balance: cn(collateral["balance"]),
@@ -852,6 +1101,35 @@ export const requestBrokerWithdraw = createServerFn({ method: "POST" })
       requestTradeflowWithdraw(bearer, data.amount, data.isQuickRefund ?? false),
     );
     return result;
+  });
+
+export const getBrokerStatement = createServerFn({ method: "GET" })
+  .validator((input: unknown) =>
+    z
+      .object({
+        brokerId: z.enum(["naasa-x"]),
+        fromDate: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional(),
+        toDate: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional(),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data }): Promise<BrokerStatementRow[]> => {
+    const today = new Date().toISOString().slice(0, 10);
+    const from = new Date();
+    from.setDate(from.getDate() - 29);
+    return withTradeflow(data.brokerId, (bearer) =>
+      getTradeflowStatement(
+        bearer,
+        data.fromDate ?? from.toISOString().slice(0, 10),
+        data.toDate ?? today,
+      ),
+    );
   });
 
 export const getBrokerWatchlists = createServerFn({ method: "GET" })
@@ -965,6 +1243,72 @@ export const getBrokerTickets = createServerFn({ method: "GET" })
   .validator((input: unknown) => z.object({ brokerId: z.enum(["naasa-x"]) }).parse(input))
   .handler(async ({ data }): Promise<BrokerTicket[]> => {
     return withBrokerSession(data.brokerId, async (session) => getNaasaTickets(session));
+  });
+
+export const getBrokerTriggers = createServerFn({ method: "GET" })
+  .validator((input: unknown) => z.object({ brokerId: z.enum(["naasa-x"]) }).parse(input))
+  .handler(async ({ data }): Promise<BrokerTrigger[]> => {
+    return withBrokerSession(data.brokerId, async (session) => {
+      const rows = await getBlazeTriggers(session);
+      return rows.map((r) => {
+        const sideRaw = String(r["BuySellInd"] ?? "").toUpperCase();
+        return {
+          id: String(r["TriggerId"] ?? ""),
+          symbol: String(r["Symbol"] ?? ""),
+          side: sideRaw.startsWith("S") ? "SELL" : sideRaw.startsWith("B") ? "BUY" : "UNKNOWN",
+          orderQty: numOrNull(r["OrderQty"]) ?? 0,
+          orderPrice: numOrNull(r["OrderPrice"]),
+          triggerPrice: numOrNull(r["TriggerPrice"]),
+          status: String(r["OrderStatus"] ?? r["Status"] ?? ""),
+          validTill: strOrNull(r["ValidTill"]),
+        };
+      });
+    });
+  });
+
+const triggerInput = z.object({
+  brokerId: z.enum(["naasa-x"]),
+  symbol: z.string().trim().min(3).max(24),
+  side: z.enum(["BUY", "SELL"]),
+  orderQty: z.number().int().min(1).max(100000),
+  orderPrice: z.number().positive().max(100000),
+  triggerPrice: z.number().min(0).max(100000).optional(),
+  alertName: z.string().trim().max(64).optional(),
+  confirmed: z.literal(true, {
+    errorMap: () => ({ message: "Trigger order needs explicit confirmation." }),
+  }),
+});
+
+/** Places a REAL trigger/stop order via the direct path. Refuses without confirmed: true. */
+export const placeBrokerTrigger = createServerFn({ method: "POST" })
+  .validator(
+    (input: unknown): PlaceTriggerRequest => triggerInput.parse(input) as PlaceTriggerRequest,
+  )
+  .handler(async ({ data }): Promise<PlaceOrderResult> => {
+    return withBrokerSession(data.brokerId, async (session) => {
+      return placeBlazeTrigger(session, {
+        symbol: data.symbol,
+        orderQty: data.orderQty,
+        orderPrice: data.orderPrice,
+        ...(data.triggerPrice !== undefined ? { triggerPrice: data.triggerPrice } : {}),
+        buySellInd: data.side,
+        ...(data.alertName ? { alertName: data.alertName } : {}),
+      });
+    });
+  });
+
+/** Direct-path health check: BLAZE login with the saved session's token. */
+export const getBrokerDirectStatus = createServerFn({ method: "GET" })
+  .validator((input: unknown) => z.object({ brokerId: z.enum(["naasa-x"]) }).parse(input))
+  .handler(async ({ data }): Promise<{ loginOk: boolean; message: string }> => {
+    return withBrokerSession(data.brokerId, async (session) => {
+      const tokens = await getNaasaTokens(session);
+      if (!tokens.accessToken) {
+        return { loginOk: false, message: "No identity token in broker session." };
+      }
+      const r = await blazeLogin(tokens.accessToken);
+      return { loginOk: r.ok, message: r.message };
+    });
   });
 
 export const getBrokerWsCredentials = createServerFn({ method: "GET" })

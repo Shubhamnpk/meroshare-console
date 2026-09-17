@@ -11,9 +11,11 @@ const MAX_AGE = 60 * 60 * 24 * 30; // 30 days: broker links outlive the 2h CDSC 
 
 interface VaultEntry {
   username: string;
-  /** "v1.<base64 iv>.<base64 ciphertext>" AES-GCM of JSON {username,password}. */
+  /** "v1.<base64 iv>.<base64 ciphertext>" AES-GCM of JSON {username,password,host?}. */
   blob: string;
   displayName: string | null;
+  /** TMS host (hostname). Duplicated outside the blob: not a secret. */
+  host?: string | null | undefined;
   connectedAt: string;
   lastTestedAt: string;
 }
@@ -51,19 +53,25 @@ function b64decode(s: string): Uint8Array {
   return out;
 }
 
-/** AES-GCM encrypt {username,password}. Returns opaque blob, never logged. */
-export async function encryptCredentials(username: string, password: string): Promise<string> {
+/** AES-GCM encrypt {username,password,host?}. Returns opaque blob, never logged. */
+export async function encryptCredentials(
+  username: string,
+  password: string,
+  host?: string | null | undefined,
+): Promise<string> {
   const key = await vaultKey();
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ct = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv: iv as BufferSource },
     key,
-    new TextEncoder().encode(JSON.stringify({ username, password })),
+    new TextEncoder().encode(JSON.stringify({ username, password, ...(host ? { host } : {}) })),
   );
   return `${VAULT_VERSION}.${b64encode(iv)}.${b64encode(new Uint8Array(ct))}`;
 }
 
-async function decryptCredentials(blob: string): Promise<{ username: string; password: string }> {
+async function decryptCredentials(
+  blob: string,
+): Promise<{ username: string; password: string; host?: string | undefined }> {
   const [version, ivB64, ctB64] = blob.split(".");
   if (version !== VAULT_VERSION || !ivB64 || !ctB64) throw new Error("Unrecognised vault entry");
   const key = await vaultKey();
@@ -75,11 +83,16 @@ async function decryptCredentials(blob: string): Promise<{ username: string; pas
   const parsed = JSON.parse(new TextDecoder().decode(pt)) as {
     username?: unknown;
     password?: unknown;
+    host?: unknown;
   };
   if (typeof parsed.username !== "string" || typeof parsed.password !== "string") {
     throw new Error("Corrupt vault entry");
   }
-  return { username: parsed.username, password: parsed.password };
+  return {
+    username: parsed.username,
+    password: parsed.password,
+    ...(typeof parsed.host === "string" ? { host: parsed.host } : {}),
+  };
 }
 
 function vaultConfig() {
@@ -124,6 +137,7 @@ export async function listConnections(): Promise<BrokerConnectionMeta[]> {
         displayName: e.displayName,
         connectedAt: e.connectedAt,
         lastTestedAt: e.lastTestedAt,
+        ...(e.host ? { host: e.host } : {}),
       };
     });
 }
@@ -133,6 +147,7 @@ export async function saveConnection(
   username: string,
   password: string,
   displayName: string | null,
+  host?: string | null | undefined,
 ): Promise<BrokerConnectionMeta> {
   vaultSecret(); // fail fast when the feature is not configured
   const now = new Date().toISOString();
@@ -140,8 +155,9 @@ export async function saveConnection(
   const prev = vault.connections[brokerId];
   vault.connections[brokerId] = {
     username,
-    blob: await encryptCredentials(username, password),
+    blob: await encryptCredentials(username, password, host),
     displayName,
+    ...(host ? { host } : {}),
     connectedAt: prev?.connectedAt ?? now,
     lastTestedAt: now,
   };
@@ -152,6 +168,7 @@ export async function saveConnection(
     displayName,
     connectedAt: vault.connections[brokerId]!.connectedAt,
     lastTestedAt: now,
+    ...(host ? { host } : {}),
   };
 }
 
@@ -165,7 +182,7 @@ export async function removeConnection(brokerId: BrokerId): Promise<void> {
  * the result to the client or write it to logs. */
 export async function loadCredentials(
   brokerId: BrokerId,
-): Promise<{ username: string; password: string } | null> {
+): Promise<{ username: string; password: string; host?: string | undefined } | null> {
   const vault = await readVault();
   const entry = vault.connections[brokerId];
   if (!entry) return null;

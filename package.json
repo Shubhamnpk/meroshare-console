@@ -1,6 +1,6 @@
 {
   "name": "meroshare-console",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "description": "A modern, high-performance web client for Nepal Stock (NEPSE) and CDSC MeroShare investors.",
   "license": "MIT",
   "author": "Shubham",
@@ -89,6 +89,7 @@
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4.2.1",
+    "tesseract.js": "^7.0.0",
     "tw-animate-css": "^1.3.4",
     "vaul": "^1.1.2",
     "zod": "^3.24.2"

@@ -51,8 +51,14 @@ export function OrderTicket({
   const brokerId = (connections.data?.[0]?.brokerId ?? null) as BrokerId | null;
 
   const { wsReady } = useBrokerMarketWs(brokerId, symbol);
-  const quote = useQuery({ ...brokerQuoteQuery(brokerId, symbol), refetchInterval: wsReady ? false : 20_000 });
-  const depth = useQuery({ ...brokerDepthQuery(brokerId, symbol), refetchInterval: wsReady ? false : 20_000 });
+  const quote = useQuery({
+    ...brokerQuoteQuery(brokerId, symbol),
+    refetchInterval: wsReady ? false : 20_000,
+  });
+  const depth = useQuery({
+    ...brokerDepthQuery(brokerId, symbol),
+    refetchInterval: wsReady ? false : 20_000,
+  });
   const holdings = useQuery(brokerHoldingsQuery(brokerId));
   const book = useQuery(brokerOrderBookQuery(brokerId));
   const amoList = useQuery(brokerAmoListQuery(brokerId));
@@ -173,32 +179,12 @@ export function OrderTicket({
         void queryClient.invalidateQueries({ queryKey: ["broker-order-book"] });
         void queryClient.invalidateQueries({ queryKey: ["broker-amo-list"] });
       } else {
-        console.error("[order-ticket] broker rejected order", {
-          symbol,
-          side,
-          quantity: qty,
-          price: orderType === "MKT" ? 0 : px,
-          orderType,
-          validity,
-          amo,
-          marketOpen,
-          message: r.message,
-        });
         setPlaceError(r.message);
         toast.error(r.message);
       }
     },
     onError: (err) => {
       const message = errorMessage(err, "Order failed.");
-
-      console.error("[order-ticket] order request failed", {
-        symbol,
-        side,
-        quantity: qty,
-        amo,
-        marketOpen,
-        message,
-      });
       setPlaceError(message);
       toast.error(message);
     },
@@ -563,7 +549,9 @@ export function OrderTicket({
             disabled={quote.isFetching || depth.isFetching}
             aria-label="Refresh quote and depth"
           >
-            <RefreshCw className={`size-3.5 ${quote.isFetching || depth.isFetching ? "animate-spin" : ""}`} />
+            <RefreshCw
+              className={`size-3.5 ${quote.isFetching || depth.isFetching ? "animate-spin" : ""}`}
+            />
           </Button>
         </div>
         <div className="mt-2 grid grid-cols-2 gap-2 text-xs">

@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeftRight, Landmark, Plug, RefreshCw } from "lucide-react";
+import { ArrowLeftRight, Plug, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,6 +24,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   brokerAmoListQuery,
@@ -43,6 +44,7 @@ import {
 import {
   cancelBrokerAmo,
   cancelBrokerOrder,
+  getBrokerStatement,
   modifyBrokerOrder,
   placeBrokerAmo,
   requestBrokerWithdraw,
@@ -56,6 +58,8 @@ import { cn } from "@/lib/utils";
 import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
 import { PriceAlertsPanel } from "@/components/brokers/price-alerts-panel";
 import { BrokerTicketsPanel } from "@/components/brokers/tickets-panel";
+import { TmsReauthModal } from "@/components/brokers/tms-reauth-modal";
+import { useTmsReauth } from "@/hooks/use-tms-reauth";
 import { ogImage, canonicalLink } from "@/lib/seo";
 
 export const Route = createFileRoute("/_dash/broker")({
@@ -117,7 +121,10 @@ function money(v: number | null | undefined): string {
   return typeof v === "number" && Number.isFinite(v) ? formatNpr(v) : "-";
 }
 
-function WithdrawCard({
+const WALLET_APP_URL = "https://wallet.naasasecurities.com.np/";
+
+/** Compact side-by-side money moves: withdraw dialog trigger + wallet redirect. */
+function FundsMoveRow({
   brokerId,
   withdrawable,
   onDone,
@@ -126,120 +133,217 @@ function WithdrawCard({
   withdrawable: number | null;
   onDone: () => void;
 }) {
+  const QUICK_MAX = 10_000;
+  const QUICK_KEY = "meroshare.quick-refund.v1";
+  const todayKey = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
   const banks = useQuery(brokerBanksQuery(brokerId));
+  const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState("");
-  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [armed, setArmed] = useState(false);
+  const [method, setMethod] = useState<"normal" | "quick">("quick");
+  const [quickUsedOn, setQuickUsedOn] = useState<string | null>(() =>
+    typeof window === "undefined" ? null : window.localStorage.getItem(QUICK_KEY),
+  );
+  const quickUsedToday = quickUsedOn === todayKey();
 
   const primary = (banks.data ?? []).find((b) => b.isPrimary) ?? banks.data?.[0] ?? null;
   const amt = Math.floor(Number(amount));
   const valid = Number.isInteger(amt) && amt >= 1;
   const overLimit = valid && amt > 1_000_000;
   const over = valid && withdrawable !== null && amt > withdrawable;
+  const quickOver = method === "quick" && valid && amt > QUICK_MAX;
+  const quickBlockedToday = method === "quick" && quickUsedToday;
 
   const withdraw = useMutation({
     mutationFn: () =>
       requestBrokerWithdraw({
-        data: { brokerId, amount: amt, isQuickRefund: false, confirmed: true as const },
+        data: {
+          brokerId,
+          amount: amt,
+          isQuickRefund: method === "quick",
+          confirmed: true as const,
+        },
       }),
     onSuccess: (r) => {
-      setConfirmOpen(false);
+      setArmed(false);
       if (r.ok) {
         toast.success(r.message);
         setAmount("");
+        setOpen(false);
+        if (method === "quick") {
+          const key = todayKey();
+          setQuickUsedOn(key);
+          try {
+            window.localStorage.setItem(QUICK_KEY, key);
+          } catch {
+            // storage blocked — limit just won't persist
+          }
+        }
         onDone();
       } else {
         toast.error(r.message);
       }
     },
     onError: (err) => {
-      setConfirmOpen(false);
+      setArmed(false);
       toast.error(errorMessage(err, "Withdrawal failed."));
     },
   });
+  const canSend =
+    valid && !over && !overLimit && !quickOver && !quickBlockedToday && !withdraw.isPending;
 
   return (
-    <div className="rounded-xl border border-border/60 bg-background p-3.5">
-      <div className="flex items-center gap-2">
-        <Landmark className="size-4 text-primary" />
-        <p className="text-sm font-semibold">Withdraw to bank</p>
-      </div>
-      {banks.isPending ? (
-        <p className="mt-2 text-xs text-muted-foreground">Loading linked banks…</p>
-      ) : (
-        <div className="mt-2 space-y-2.5">
-          <p className="text-xs text-muted-foreground">
-            {primary ? (
-              <>
-                To <span className="font-semibold text-foreground">{primary.bankName}</span>
-                {primary.branchName ? ` · ${primary.branchName}` : ""}
-                {primary.accountName ? ` · ${primary.accountName}` : ""} ·{" "}
-                <span className="num">{primary.accountNumber || "—"}</span>
-              </>
-            ) : (
-              "To your primary bank on file at the broker."
-            )}
-          </p>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <div className="flex-1 space-y-1.5">
-              <Label htmlFor="withdraw-amount">Amount (NPR)</Label>
-              <Input
-                id="withdraw-amount"
-                inputMode="numeric"
-                placeholder={
-                  withdrawable !== null ? `Max ${withdrawable.toLocaleString("en-IN")}` : "Amount"
-                }
-                value={amount}
-                onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, "").slice(0, 10))}
-              />
-            </div>
-            <div className="flex items-end">
-              <Button
-                size="sm"
-                disabled={!valid || over || overLimit || withdraw.isPending}
-                onClick={() => setConfirmOpen(true)}
-                className="w-full sm:w-auto"
-              >
-                {withdraw.isPending ? "Sending…" : "Review withdrawal"}
-              </Button>
-            </div>
-          </div>
-          {overLimit ? (
-            <p className="text-xs font-medium text-destructive">
-              Per-transaction limit is NPR 10 lakhs. Split larger amounts into multiple requests.
-            </p>
-          ) : over ? (
-            <p className="text-xs font-medium text-destructive">
-              Above the withdrawable {withdrawable!.toLocaleString("en-IN")}.
-            </p>
-          ) : null}
-        </div>
-      )}
-
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+    <div className="grid grid-cols-2 gap-2">
+      <Dialog
+        open={open}
+        onOpenChange={(o) => {
+          setOpen(o);
+          if (!o) setArmed(false);
+        }}
+      >
+        <DialogTrigger asChild>
+          <Button variant="outline" size="sm" className="w-full">
+            Withdraw
+          </Button>
+        </DialogTrigger>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Confirm withdrawal</DialogTitle>
+            <DialogTitle>Withdraw to bank</DialogTitle>
             <DialogDescription>
               This moves <strong>real money</strong> from your broker account to your bank.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid grid-cols-2 gap-2 rounded-xl bg-muted/40 p-3 text-sm">
-            <span className="text-muted-foreground">Amount</span>
-            <span className="num text-right font-bold">{valid ? formatNpr(amt) : "-"}</span>
-            <span className="text-muted-foreground">To</span>
-            <span className="text-right font-semibold">
-              {primary?.bankName ?? "-"} · <span className="num">{primary?.accountNumber}</span>
-            </span>
-          </div>
-          <Button
-            className="w-full font-bold"
-            disabled={withdraw.isPending}
-            onClick={() => withdraw.mutate()}
-          >
-            {withdraw.isPending ? "Submitting…" : `Withdraw ${valid ? formatNpr(amt) : ""} now`}
-          </Button>
+          {banks.isPending ? (
+            <p className="mt-2 text-xs text-muted-foreground">Loading linked banks…</p>
+          ) : (
+            <div className="space-y-2.5">
+              <div className="grid grid-cols-2 gap-2" role="group" aria-label="Withdrawal speed">
+                {(
+                  [
+                    { id: "normal", label: "Standard", hint: "≈2 days" },
+                    {
+                      id: "quick",
+                      label: "Quick refund",
+                      hint: quickUsedToday ? "Used today" : "Instant · ≤ Rs. 10k",
+                    },
+                  ] as const
+                ).map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    disabled={m.id === "quick" && quickUsedToday}
+                    onClick={() => {
+                      setMethod(m.id);
+                      setArmed(false);
+                    }}
+                    aria-pressed={method === m.id}
+                    className={cn(
+                      "rounded-xl border px-3 py-2 text-left transition-colors",
+                      method === m.id
+                        ? "border-primary/50 bg-primary/10"
+                        : "border-border/60 hover:border-primary/30",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "block text-xs font-bold",
+                        method === m.id ? "" : "text-muted-foreground",
+                      )}
+                    >
+                      {m.label}
+                    </span>
+                    <span className="block text-[0.68rem] text-muted-foreground">{m.hint}</span>
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {primary ? (
+                  <>
+                    To <span className="font-semibold text-foreground">{primary.bankName}</span>
+                    {primary.accountNumber ? (
+                      <span className="num"> · {primary.accountNumber}</span>
+                    ) : null}
+                  </>
+                ) : (
+                  "To your primary bank on file at the broker."
+                )}
+              </p>
+              <div className="space-y-1.5">
+                <div className="flex items-baseline justify-between gap-2">
+                  <Label htmlFor="withdraw-amount">Amount (NPR)</Label>
+                  <span className="num text-[0.68rem] text-muted-foreground">
+                    Max{" "}
+                    {method === "quick"
+                      ? formatNpr(QUICK_MAX)
+                      : (withdrawable ?? 1_000_000).toLocaleString("en-IN")}
+                  </span>
+                </div>
+                <Input
+                  id="withdraw-amount"
+                  inputMode="numeric"
+                  placeholder="Enter amount"
+                  value={amount}
+                  onChange={(e) => {
+                    const next = e.target.value.replace(/[^0-9]/g, "").slice(0, 10);
+                    setAmount(next);
+                    const v = Math.floor(Number(next));
+                    if (method === "quick" && Number.isInteger(v) && v > QUICK_MAX) {
+                      setMethod("normal");
+                      setArmed(false);
+                      toast.message("Switched to Standard — Quick caps at Rs. 10,000.");
+                    }
+                  }}
+                />
+              </div>
+              {overLimit ? (
+                <p className="text-xs font-medium text-destructive">
+                  Per-transaction limit is NPR 10 lakhs. Split larger amounts into multiple
+                  requests.
+                </p>
+              ) : over ? (
+                <p className="text-xs font-medium text-destructive">
+                  Above the withdrawable {withdrawable!.toLocaleString("en-IN")}.
+                </p>
+              ) : quickOver ? (
+                <p className="text-xs font-medium text-destructive">
+                  Quick refund caps at {formatNpr(QUICK_MAX)}. Use Standard for larger amounts.
+                </p>
+              ) : quickBlockedToday ? (
+                <p className="text-xs font-medium text-destructive">
+                  Quick refund is once a day — already used today. Use Standard instead.
+                </p>
+              ) : null}
+              <Button
+                className="w-full font-bold"
+                variant={armed ? "destructive" : "default"}
+                disabled={!canSend}
+                onClick={() => {
+                  if (!armed) {
+                    setArmed(true);
+                    setTimeout(() => setArmed(false), 4000);
+                    return;
+                  }
+                  withdraw.mutate();
+                }}
+              >
+                {withdraw.isPending
+                  ? "Submitting…"
+                  : armed
+                    ? `Tap again to ${method === "quick" ? "refund" : "withdraw"} ${formatNpr(amt)}`
+                    : `${method === "quick" ? "Refund" : "Withdraw"} ${valid ? formatNpr(amt) : ""}`}
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
+      <Button variant="outline" size="sm" asChild className="w-full">
+        <a href={WALLET_APP_URL} target="_blank" rel="noopener noreferrer">
+          Add fund
+        </a>
+      </Button>
     </div>
   );
 }
@@ -729,7 +833,10 @@ function OrderHistoryBox({ brokerId, orderId }: { brokerId: BrokerId; orderId: s
 function BrokerPage() {
   const queryClient = useQueryClient();
   const connections = useQuery(brokerConnectionsQuery());
-  const brokerId = (connections.data?.[0]?.brokerId ?? null) as BrokerId | null;
+  // Naasa X data views only until the TMS readers land — a TMS-only link
+  // keeps this page's empty state instead of erroring on every panel.
+  const brokerId = (connections.data?.find((c) => c.brokerId === "naasa-x")?.brokerId ??
+    null) as BrokerId | null;
   const connection = connections.data?.[0] ?? null;
 
   const [tab, setTab] = useState<BrokerTab>("funds");
@@ -744,6 +851,38 @@ function BrokerPage() {
   const [txnPage, setTxnPage] = useState(1);
   const [armedCancel, setArmedCancel] = useState<string | null>(null);
   const [histKey, setHistKey] = useState<string | null>(null);
+  const [exportingStatement, setExportingStatement] = useState(false);
+  const { reauthOpen, setReauthOpen, handleSessionError } = useTmsReauth();
+
+  const exportStatement = async () => {
+    if (!brokerId || exportingStatement) return;
+    setExportingStatement(true);
+    try {
+      const rows = await getBrokerStatement({ data: { brokerId, ...txnRange } });
+      const cell = (v: string | number | null): string => {
+        if (v === null) return "";
+        const s = String(v).replace(/"/g, '""');
+        return /[",\n]/.test(s) ? `"${s}"` : s;
+      };
+      const csv = [
+        "date,narration,debit,credit,balance",
+        ...rows.map((r) => [r.date, r.narration, r.debit, r.credit, r.balance].map(cell).join(",")),
+      ].join("\n");
+      const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `broker-statement-${txnRange.fromDate ?? "all"}_${txnRange.toDate ?? "all"}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success(`Exported ${rows.length} statement rows.`);
+    } catch (err) {
+      toast.error(errorMessage(err, "Statement export failed."));
+    } finally {
+      setExportingStatement(false);
+    }
+  };
 
   const range = useMemo(() => rangeFor(preset, custom), [preset, custom]);
   const txnRange = useMemo(() => rangeFor(txnPreset, txnCustom), [txnPreset, txnCustom]);
@@ -752,6 +891,14 @@ function BrokerPage() {
   const holdings = useQuery(brokerHoldingsQuery(brokerId));
   const orders = useQuery(brokerOrderBookQuery(brokerId, range));
   const trades = useQuery(brokerTradeBookQuery(brokerId, range));
+
+  // Watch for TMS session expiry across key queries and trigger re-auth.
+  useEffect(() => {
+    for (const q of [holdings, orders, trades, funds]) {
+      if (q.isError) handleSessionError(q.error);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to error state changes
+  }, [holdings.isError, orders.isError, trades.isError, funds.isError]);
   const fundTxns = useQuery(
     brokerFundTxnsQuery(brokerId, {
       ...(txnSearch.trim() ? { search: txnSearch.trim() } : {}),
@@ -914,7 +1061,7 @@ function BrokerPage() {
         case "closePrice":
           return h.closePrice ?? 0;
         case "marketValue":
-          return h.marketValue;
+          return h.marketValue ?? 0;
         default:
           return "";
       }
@@ -1581,13 +1728,8 @@ function BrokerPage() {
               ))}
             </div>
           ) : null}
-          <p className="text-[0.7rem] leading-relaxed text-muted-foreground">
-            Collateral answers “how much can I actually deploy”: ledger balance minus what&apos;s
-            locked in pending orders and used as margin. If this tab errors, the exact broker
-            message shows above. Send it over and we&apos;ll trace it.
-          </p>
 
-          <WithdrawCard
+          <FundsMoveRow
             brokerId={brokerId}
             withdrawable={funds.data?.availableForWithdraw ?? null}
             onDone={() => {
@@ -1595,6 +1737,18 @@ function BrokerPage() {
               void queryClient.invalidateQueries({ queryKey: ["broker-fund-txns"] });
             }}
           />
+
+          <div className="flex justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={exportingStatement}
+              onClick={() => void exportStatement()}
+              className="gap-1.5 text-xs"
+            >
+              {exportingStatement ? "Exporting…" : "Export statement (CSV)"}
+            </Button>
+          </div>
 
           <div className="border-t border-border/60 pt-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1775,6 +1929,8 @@ function BrokerPage() {
         Live from your linked broker terminal. Cancelling is two taps and immediate. Placing happens
         from the Terminal or any scrip&apos;s Trade tab, always behind a confirmation.
       </p>
+
+      <TmsReauthModal open={reauthOpen} onOpenChange={setReauthOpen} />
     </div>
   );
 }

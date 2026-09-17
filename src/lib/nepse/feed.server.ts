@@ -337,23 +337,39 @@ export async function getTopStocks(): Promise<TopStocks> {
   };
 }
 
+interface DividendResponse {
+  scraped_at: string;
+  symbols: string[];
+  columns: string[];
+  records: (string | number)[][];
+}
+
 export async function getDividends(): Promise<DividendRow[]> {
-  const { data } = await feedJson<Rec[]>(
-    `${YONEPSE_BASE}/data/proposed_dividend/history_all_years.json`,
+  const { data } = await feedJson<DividendResponse>(
+    `${YONEPSE_BASE}/data/dividend/history.json`,
     TTL.slow,
   );
-  return (data ?? []).flatMap((row): DividendRow[] => {
-    const symbol = str(row["symbol"]);
+  if (!data?.records?.length || !data.symbols?.length) return [];
+  const { symbols, records } = data;
+  return records.flatMap((row): DividendRow[] => {
+    const symbolIdx = typeof row[0] === "number" ? row[0] : -1;
+    const symbol = symbols[symbolIdx];
     if (!symbol) return [];
+    const bonus = typeof row[1] === "number" ? row[1] : parseFloat(String(row[1])) || 0;
+    const cash = typeof row[2] === "number" ? row[2] : parseFloat(String(row[2])) || 0;
+    const total = typeof row[3] === "number" ? row[3] : parseFloat(String(row[3])) || 0;
+    const announce = str(row[4]);
+    const bookclose = str(row[5]);
+    const fiscalYear = str(row[6]);
     return [
       {
         symbol: symbol.toUpperCase(),
-        bonusShare: num(row["bonus_share"]),
-        cashDividend: num(row["cash_dividend"]),
-        totalDividend: num(row["total_dividend"]),
-        announcementDate: str(row["announcement_date"]),
-        bookCloseDate: str(row["bookclose_date"]),
-        fiscalYear: str(row["fiscal_year"]),
+        bonusShare: bonus,
+        cashDividend: cash,
+        totalDividend: total,
+        announcementDate: announce || null,
+        bookCloseDate: bookclose || null,
+        fiscalYear: fiscalYear || null,
       },
     ];
   });

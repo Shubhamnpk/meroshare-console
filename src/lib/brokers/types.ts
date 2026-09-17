@@ -2,7 +2,7 @@
 // A "broker" here is an external trading terminal account (e.g. Naasa X)
 // the user optionally links so the server can act on their behalf.
 
-export const BROKER_IDS = ["naasa-x"] as const;
+export const BROKER_IDS = ["naasa-x", "tms"] as const;
 export type BrokerId = (typeof BROKER_IDS)[number];
 
 export interface BrokerMeta {
@@ -22,6 +22,12 @@ export const BROKERS: BrokerMeta[] = [
     tagline: "Naasa Securities web trading (NEPSE)",
     capabilities: ["Holdings & dashboard", "Order book & trades", "Live market data"],
   },
+  {
+    id: "tms",
+    name: "NEPSE TMS",
+    tagline: "Classic TMS terminal (captcha login)",
+    capabilities: ["Holdings", "Order book & trades"],
+  },
 ];
 
 /** What the client is ever allowed to see about a saved connection. */
@@ -33,6 +39,8 @@ export interface BrokerConnectionMeta {
   displayName: string | null;
   connectedAt: string;
   lastTestedAt: string;
+  /** TMS host (hostname only, not a secret). Absent for Naasa X. */
+  host?: string | null | undefined;
 }
 
 /** Proof returned by a test login. Contains no secrets. */
@@ -140,6 +148,8 @@ export interface CancelOrderRequest {
   price: string;
   quantity: number;
   symbol: string;
+  /** X-proxy is the default; "direct" hits the BLAZE backend (AES envelope). */
+  engine?: BrokerOrderEngine | undefined;
   /** Explicit user confirmation — the server refuses without it. */
   confirmed: true;
 }
@@ -212,6 +222,16 @@ export interface WithdrawResult {
   message: string;
 }
 
+export interface BrokerStatementRow {
+  date: string;
+  narration: string;
+  debit: number | null;
+  credit: number | null;
+  balance: number | null;
+}
+
+export type BrokerOrderEngine = "proxy" | "direct";
+
 export interface PlaceOrderRequest {
   brokerId: BrokerId;
   side: "BUY" | "SELL";
@@ -221,6 +241,8 @@ export interface PlaceOrderRequest {
   orderType: "LMT" | "MKT";
   validity: "DAY" | "GTD" | "GTC" | "IOC" | "FOK";
   validTill?: string | undefined;
+  /** X-proxy is the default; "direct" hits the BLAZE backend (AES envelope). */
+  engine?: BrokerOrderEngine | undefined;
   /** Explicit user confirmation — the server refuses without it. */
   confirmed: true;
 }
@@ -244,6 +266,8 @@ export interface ModifyOrderRequest {
   orderType: "LMT" | "MKT";
   validity: "DAY" | "GTD" | "GTC" | "IOC" | "FOK";
   validTill?: string | undefined;
+  /** X-proxy is the default; "direct" hits the BLAZE backend (AES envelope). */
+  engine?: BrokerOrderEngine | undefined;
   /** Explicit user confirmation — the server refuses without it. */
   confirmed: true;
 }
@@ -300,4 +324,27 @@ export interface BrokerTicket {
   time: string;
   description: string;
   unread: boolean;
+}
+
+export interface BrokerTrigger {
+  id: string;
+  symbol: string;
+  side: "BUY" | "SELL" | "UNKNOWN";
+  orderQty: number;
+  orderPrice: number | null;
+  triggerPrice: number | null;
+  status: string;
+  validTill: string | null;
+}
+
+export interface PlaceTriggerRequest {
+  brokerId: BrokerId;
+  symbol: string;
+  side: "BUY" | "SELL";
+  orderQty: number;
+  orderPrice: number;
+  triggerPrice?: number | undefined;
+  alertName?: string | undefined;
+  /** Explicit user confirmation — the server refuses without it. */
+  confirmed: true;
 }

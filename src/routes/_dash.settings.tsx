@@ -34,12 +34,7 @@ import {
   X,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -91,6 +86,7 @@ import {
   testBrokerConnection,
 } from "@/lib/brokers/brokers.functions";
 import { BROKERS, type BrokerId, type BrokerTestResult } from "@/lib/brokers/types";
+import { TmsConnectDialog } from "@/components/brokers/tms-connect-dialog";
 import {
   disableBiometrics,
   enrollBiometric,
@@ -438,8 +434,8 @@ function BiometricCard() {
             </button>
           </TooltipTrigger>
           <TooltipContent className="max-w-xs text-xs leading-relaxed">
-            A convenience lock for this device only. Uses your device&apos;s fingerprint, face,
-            or PIN. When enabled, one-tap sign-in saves your credentials on this device so your
+            A convenience lock for this device only. Uses your device&apos;s fingerprint, face, or
+            PIN. When enabled, one-tap sign-in saves your credentials on this device so your
             fingerprint signs you in next time. Your MeroShare session still expires normally.
           </TooltipContent>
         </Tooltip>
@@ -603,11 +599,7 @@ function EdisBetaCard() {
             Adds the EDIS Transfer page to navigation. Off by default while in beta.
           </p>
         </div>
-        <Switch
-          checked={edisBeta}
-          onCheckedChange={setEdisBeta}
-          aria-label="edis-beta"
-        />
+        <Switch checked={edisBeta} onCheckedChange={setEdisBeta} aria-label="edis-beta" />
       </div>
     </Panel>
   );
@@ -812,8 +804,16 @@ function BrokerConnectionsCard() {
         stored until a live test proves it works.
       </p>
 
+      {dialogFor === "tms" ? (
+        <TmsConnectDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setDialogFor(null);
+          }}
+        />
+      ) : null}
       <Dialog
-        open={dialogFor !== null}
+        open={dialogFor !== null && dialogFor !== "tms"}
         onOpenChange={(open) => {
           if (!open) {
             setDialogFor(null);

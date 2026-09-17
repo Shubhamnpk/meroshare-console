@@ -48,6 +48,8 @@ import {
 } from "@/lib/queries";
 import { cancelBrokerOrder } from "@/lib/brokers/brokers.functions";
 import type { BrokerId } from "@/lib/brokers/types";
+import { TmsReauthModal } from "@/components/brokers/tms-reauth-modal";
+import { useTmsReauth } from "@/hooks/use-tms-reauth";
 import { useBrokerMarketWs } from "@/hooks/use-broker-ws";
 import type { ChartBar, ChartRange, PortfolioHistoryPoint, PricePoint } from "@/lib/nepse/types";
 import { errorMessage, formatNpr, formatPercent } from "@/lib/format";
@@ -232,6 +234,7 @@ function TerminalPage() {
   const brokerConns = useQuery(brokerConnectionsQuery());
   const brokerLinked = (brokerConns.data?.length ?? 0) > 0;
   const termBrokerId = (brokerConns.data?.[0]?.brokerId ?? null) as BrokerId | null;
+  const { reauthOpen, setReauthOpen, handleSessionError } = useTmsReauth();
   const [armedOrder, setArmedOrder] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const isIndexEarly = (INDEX_SYMBOLS as readonly string[]).includes(state.symbol);
@@ -259,6 +262,12 @@ function TerminalPage() {
     ...brokerOrderBookQuery(termBrokerId, { fromDate: todayStr, toDate: todayStr }),
     enabled: brokerLinked && mode === "scrip",
   });
+
+  // Watch for TMS session expiry on broker queries.
+  useEffect(() => {
+    if (todayOrders.isError) handleSessionError(todayOrders.error);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to error state changes
+  }, [todayOrders.isError]);
 
   const cancelTodayOrder = useMutation({
     mutationFn: (o: {
@@ -575,7 +584,7 @@ function TerminalPage() {
   const udfIntradayRaw = useMemo(() => {
     const pts = udf.data?.points ?? [];
     return pts.map((p) => ({
-      time: new Date(p.time * 1000).toISOString().slice(0, 10),
+      time: p.time,
       value: p.value,
     }));
   }, [udf.data?.points]);
@@ -610,38 +619,38 @@ function TerminalPage() {
     ];
   }, [udfBarsRaw, tickLtp]);
 
-  // Stable empty fallbacks: fresh `[]` literals here would also rebuild the
-  // chart on every render (they are effect deps of TerminalChart).
   const showProfit = mode === "portfolio" && basis === "profit";
-  // No cost data anywhere (blocked feed and nothing pending): profit would
-  // be a flat zero line, so fall back to value with an explanation.
+
   const costMissing = showProfit && !investment.isPending && costByScrip.size === 0;
   const effectiveProfit = showProfit && !costMissing;
   const indexBars: ChartBar[] = useMemo(() => {
     const pts = (indexHistory.data ?? []) as import("@/lib/nepse/types").PricePoint[];
     if (!isIndexEarly || pts.length === 0) return NO_BARS;
-    // 1D/1W render the live session as an intraday line (see indexIntraday):
-    // grouping session points by calendar date would crush them into one bar.
+  
     if (state.range === "1D" || state.range === "1W") return NO_BARS;
-    // Longer ranges: daily candles from the YONEPSE indices archive.
-    const daily = (indexDaily.data ?? []) as ChartBar[];
-    if (daily.length > 0) return [...daily].sort((a, b) => a.date.localeCompare(b.date));
-    // Filter by range window like portfolio
+    const daily = (indexDaily.data ?? []) as unknown as Record<string, unknown>[];
+    const mapped = daily.map((b) => ({
+      date: String(b["date"] ?? ""),
+      open: Number(b["open"] ?? 0),
+      high: Number(b["high"] ?? 0),
+      low: Number(b["low"] ?? 0),
+      close: Number(b["close"] ?? 0),
+      volume: Number(b["volume"] ?? 0),
+      synthetic: Boolean(b["synthetic"]),
+    })) as ChartBar[];
+    if (mapped.length > 0) return [...mapped].sort((a, b) => a.date.localeCompare(b.date));
     const windowDays =
-      state.range === "1D" || state.range === "1W"
-        ? 7
-        : state.range === "1M"
-          ? 31
-          : state.range === "3M"
-            ? 93
-            : state.range === "6M"
-              ? 186
-              : state.range === "1Y"
-                ? 366
-                : null;
+      state.range === "1M"
+        ? 31
+        : state.range === "3M"
+          ? 93
+          : state.range === "6M"
+            ? 186
+            : state.range === "1Y"
+              ? 366
+              : null;
     const cutoff = windowDays === null ? 0 : Date.now() / 1000 - windowDays * 86400;
     const filtered = pts.filter((p) => p.time >= cutoff);
-    // Dedup by date (index history can have duplicate days) and ensure asc order
     const byDate = new Map<string, (typeof filtered)[number]>();
     for (const p of filtered) {
       const d = new Date(p.time * 1000).toISOString().slice(0, 10);
@@ -656,10 +665,9 @@ function TerminalPage() {
         low: p.value,
         close: p.value,
         volume: 0,
+        synthetic: true,
       }));
   }, [indexDaily.data, indexHistory.data, isIndexEarly, state.range]);
-  // Index feed carries today's session only (no daily archive): on short
-  // ranges it becomes the intraday line instead of a single collapsed bar.
   const indexIntraday = useMemo(() => {
     if (!isIndexEarly || (state.range !== "1D" && state.range !== "1W")) return NO_POINTS;
     const pts = ((indexHistory.data ?? []) as PricePoint[]).filter(
@@ -668,7 +676,6 @@ function TerminalPage() {
     if (pts.length === 0) return NO_POINTS;
     return [...pts].sort((a, b) => Number(a.time) - Number(b.time));
   }, [indexHistory.data, isIndexEarly, state.range]);
-  // Portfolio 1D: live session line (profit basis shifts it down by cost).
   const portfolioIntraday = useMemo(() => {
     if (mode !== "portfolio" || state.range !== "1D") return NO_POINTS;
     const pts = ((worthIntraday.data?.points ?? []) as PricePoint[]).filter(
@@ -725,14 +732,8 @@ function TerminalPage() {
         : series.isPending ||
           (useUdf ? false : udf.isPending && state.range === "1D" && !hasMirror);
   const udfBadge = useUdf ? " · UDF" : "";
-  // Compact by default so the chart + controls fit the viewport without
-  // scrolling on laptop and phone screens; expand is opt-in extra height.
   const isMobile = useIsMobile();
   const chartHeight = expanded ? 640 : isMobile ? 320 : 400;
-
-  // Memoized: a fresh object identity here would tear down and rebuild
-  // the lightweight-charts instance on every render (e.g. each hover),
-  // resetting zoom and swallowing clicks.
   const indicators: IndicatorConfig = useMemo(
     () =>
       mode === "portfolio"
@@ -770,8 +771,6 @@ function TerminalPage() {
           pinned: true,
         }
       : hover;
-  // Profit mode: percent is measured on invested cost, not on the first
-  // profit point (which can sit near zero and explode the ratio).
   const costNow = investment.data?.totalInvestment ?? 0;
   const rangeReturn = isIntraday
     ? effectiveProfit
@@ -1473,6 +1472,8 @@ function TerminalPage() {
           setState((prev) => ({ ...prev, symbol }));
         }}
       />
+
+      <TmsReauthModal open={reauthOpen} onOpenChange={setReauthOpen} />
     </div>
   );
 }

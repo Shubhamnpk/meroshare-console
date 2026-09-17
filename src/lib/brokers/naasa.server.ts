@@ -569,22 +569,23 @@ export async function getNaasaDepth(
       (typeof result["Message"] === "string" ? (result["Message"] as string) : "") ||
       (typeof root["Message"] === "string" ? (root["Message"] as string) : "");
     if (rows.length > 0 || errorCode === 0) {
-      if (tickers !== sym) console.error(`[brokers] depth ${sym} fallback Tickers=${tickers} ec=${errorCode} rows=${rows.length}`);
       return { errorCode, message, rows };
     }
     // ec -100 = No data available (off-hours) — don't try other tickers, return as is
     if (errorCode === -100) {
-      console.error(`[brokers] depth ${sym} Tickers=${tickers} ec=-100 msg=${message} rawKeys=${Object.keys(result).join(",")}`);
       return { errorCode, message, rows };
     }
-    console.error(`[brokers] depth ${sym} Tickers=${tickers} ec=${errorCode} rows=0 raw=${JSON.stringify(json).slice(0,300)}`);
   }
-  // final attempt already logged
   const params = new URLSearchParams({ Tickers: sym, Exchange: "NEPSE" });
   const json = await naasaJson<unknown>(session, `/api/feed/Services.GetMDepth?${params}`);
   const root = (json ?? {}) as Record<string, unknown>;
   const { errorCode, rows } = unwrapBrokerData(json);
-  const message = typeof (root["Result"] as Record<string, unknown> | undefined)?.["Message"] === "string" ? ((root["Result"] as Record<string, unknown>)["Message"] as string) : (typeof root["Message"] === "string" ? (root["Message"] as string) : "");
+  const message =
+    typeof (root["Result"] as Record<string, unknown> | undefined)?.["Message"] === "string"
+      ? ((root["Result"] as Record<string, unknown>)["Message"] as string)
+      : typeof root["Message"] === "string"
+        ? (root["Message"] as string)
+        : "";
   return { errorCode, message, rows };
 }
 
@@ -814,7 +815,6 @@ export async function getNaasaAmoList(session: NaasaSession): Promise<NaasaAmoOr
     unknown
   >[];
 
-  console.error("[amo-list] keys", rows.length > 0 ? Object.keys(rows[0] ?? {}) : []);
   const numOrNull = (v: unknown): number | null => {
     const n = typeof v === "number" ? v : Number(String(v ?? "").replace(/,/g, ""));
     return Number.isFinite(n) ? n : null;
@@ -864,13 +864,10 @@ export async function cancelNaasaAmo(
     ValidTill: input.validTill ?? "",
   };
 
-  console.error("[amo-cancel] request", body);
   const json = await naasaJson<Record<string, unknown>>(session, "/api/trading/amo/cancel", {
     method: "POST",
     body,
   });
-
-  console.error("[amo-cancel] response", json);
   const err = json["error"];
   const success = json["Success"];
   const ec = json["ErrorCode"];
@@ -1355,6 +1352,7 @@ export async function getNaasaTickets(session: NaasaSession): Promise<NaasaTicke
     .filter((t) => t.id !== "" || t.description !== "");
 }
 
+/** Fund-side backend. API contract: https://api-tradeflow.naasasecurities.com.np/swagger/v1/swagger.json */
 const TRADEFLOW = "https://api-tradeflow.naasasecurities.com.np/api/v1";
 /** KYC/bank records live on a sibling host (same realm, same Bearer). */
 const NEWKYC = "https://api-newkyc.naasasecurities.com.np/api/v1";
@@ -1412,8 +1410,6 @@ async function tradeflowGet<T>(accessToken: string, path: string): Promise<T> {
     });
     if (res.status === 401) throw new BrokerSessionError();
     if (!res.ok) {
-      const preview = (await res.text()).slice(0, 160);
-      console.error(`[brokers] tradeflow ${path} -> ${res.status}: ${preview}`);
       return {} as T;
     }
     return (await res.json().catch(() => ({}))) as T;
@@ -1493,14 +1489,10 @@ export async function getTradeflowBanks(accessToken: string): Promise<Record<str
     });
     if (res.status === 401) throw new BrokerSessionError();
     if (!res.ok) {
-      console.error(`[brokers] banks -> ${res.status}: ${(await res.text()).slice(0, 120)}`);
       return [];
     }
     const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
     if (json["isSuccess"] === false) {
-      console.error(
-        `[brokers] banks rejected: ${String(json["message"] ?? "unknown").slice(0, 120)}`,
-      );
       return [];
     }
     const result = json["result"] as Record<string, unknown> | undefined;
@@ -1556,6 +1548,50 @@ export async function requestTradeflowWithdraw(
   }
 }
 
+export interface TradeflowStatementRow {
+  date: string;
+  narration: string;
+  debit: number | null;
+  credit: number | null;
+  balance: number | null;
+}
+
+/** Account statement export (safe GET). Dates as YYYY-MM-DD. */
+export async function getTradeflowStatement(
+  accessToken: string,
+  fromDate: string,
+  toDate: string,
+): Promise<TradeflowStatementRow[]> {
+  const q = new URLSearchParams({ FromDate: fromDate, ToDate: toDate });
+  const json = await tradeflowGet<Record<string, unknown>>(
+    accessToken,
+    `/user-account-statement/user-account-statement?${q}`,
+  );
+  let rows: unknown = json["data"] ?? json["Data"] ?? json["rows"] ?? json;
+  if (typeof rows === "string") {
+    try {
+      rows = JSON.parse(rows) as unknown;
+    } catch {
+      rows = [];
+    }
+  }
+  const list = Array.isArray(rows) ? (rows as Record<string, unknown>[]) : [];
+  const num = (v: unknown): number | null => {
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+    const n = Number(String(v ?? "").replace(/,/g, ""));
+    return Number.isFinite(n) ? n : null;
+  };
+  return list.map((r) => ({
+    date: String(r["date"] ?? r["Date"] ?? r["transactionDate"] ?? r["ValueDate"] ?? ""),
+    narration: String(
+      r["narration"] ?? r["Narration"] ?? r["remarks"] ?? r["Remarks"] ?? r["description"] ?? "",
+    ),
+    debit: num(r["debit"] ?? r["Debit"]),
+    credit: num(r["credit"] ?? r["Credit"]),
+    balance: num(r["balance"] ?? r["Balance"] ?? r["runningBalance"]),
+  }));
+}
+
 /**
  * Exchange a Keycloak refresh token for a tradeflow-native access token,
  * exactly like the wallet app: POST /auth/refresh {refreshToken, clientId}.
@@ -1578,20 +1614,14 @@ export async function exchangeTradeflowToken(
         body: JSON.stringify({ refreshToken: kcRefreshToken, clientId }),
       });
       if (!res.ok) {
-        console.error(
-          `[brokers] tradeflow refresh rejected for clientId=${clientId}: ${res.status}`,
-        );
         continue;
       }
       const json = (await res.json().catch(() => ({}))) as { accessToken?: unknown };
       if (typeof json.accessToken === "string" && json.accessToken.length > 0) {
         return { accessToken: json.accessToken, clientId };
       }
-      console.error(`[brokers] tradeflow refresh empty token for clientId=${clientId}`);
-    } catch (err) {
-      console.error(
-        `[brokers] tradeflow refresh error for clientId=${clientId}: ${err instanceof Error ? err.message : err}`,
-      );
+    } catch {
+      // try the next client id
     } finally {
       done();
     }
