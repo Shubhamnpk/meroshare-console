@@ -1,11 +1,4 @@
-﻿// Broker leaderboard for the Brokers page — mywallet-style: podium hero,
-// metric pills, search/filter, ranked broker cards with an in-app detail view,
-// plus a compact list view. Data comes pre-aggregated from the YONEPSE
-// enriched broker feed via the server layer.
-//
-// Rank is fixed to the source feed's per-category order (today / 30-session /
-// community rating). Filtering by name never re-ranks the list.
-import { useMemo, useState } from "react";
+﻿import { useMemo, useState } from "react";
 import {
   ArrowDownCircle,
   ArrowDownWideNarrow,
@@ -96,7 +89,7 @@ function BrokerAvatar({ broker, className }: { broker: BrokerRow; className?: st
   );
 }
 
-/** Hero podium: 2nd — 1st — 3rd with podium bars, mirroring mywallet. */
+/** Hero podium: 2nd: 1st: 3rd with podium bars, mirroring mywallet. */
 function PodiumHero({
   top3,
   metric,
@@ -244,7 +237,7 @@ function BrokerCard({
         <p className="num mt-1 text-[0.7rem] text-muted-foreground">
           Today{" "}
           <span className="font-semibold text-foreground">
-            {broker.todayStats ? formatNpr(broker.todayStats.totalAmount, { compact: true }) : "—"}
+            {broker.todayStats ? formatNpr(broker.todayStats.totalAmount, { compact: true }) : "-"}
           </span>
           {" · "}30d{" "}
           <span className="font-semibold text-foreground">
@@ -300,7 +293,7 @@ function BrokerListRow({
       <div className="min-w-0 flex-1">
         <p className="truncate text-[0.8125rem] font-medium">{broker.name}</p>
         <p className="truncate text-[0.68rem] text-muted-foreground">
-          {broker.districts.slice(0, 2).join(", ") || "—"}
+          {broker.districts.slice(0, 2).join(", ") || "-"}
           {broker.rating && broker.rating.totalRatings > 0
             ? ` · ★ ${broker.rating.averageRating.toFixed(1)}`
             : ""}
@@ -308,7 +301,7 @@ function BrokerListRow({
       </div>
       <div className="hidden text-right sm:block">
         <p className="num text-[0.8125rem] font-semibold">
-          {broker.todayStats ? formatNpr(broker.todayStats.totalAmount, { compact: true }) : "—"}
+          {broker.todayStats ? formatNpr(broker.todayStats.totalAmount, { compact: true }) : "-"}
         </p>
         <p className="text-[0.65rem] text-muted-foreground">today</p>
       </div>
@@ -356,7 +349,7 @@ export function BrokerDetail({
   onViewTrail,
 }: {
   broker: BrokerRow;
-  /** Rank in the overall (source) list — fixed, doesn't change with search. */
+  /** Rank in the overall (source) list: fixed, doesn't change with search. */
   rank: number;
   /** Active podium category: today / month / review. */
   category: PodiumMetric;
@@ -472,7 +465,7 @@ export function BrokerDetail({
         <DetailStat
           label="Today's turnover"
           icon={TrendingUp}
-          value={todayStats ? formatNpr(todayStats.totalAmount, { compact: true }) : "—"}
+          value={todayStats ? formatNpr(todayStats.totalAmount, { compact: true }) : "-"}
           hint={
             todayStats
               ? `Bought ${formatNpr(todayStats.buyAmount, { compact: true })} · Sold ${formatNpr(todayStats.sellAmount, { compact: true })}`
@@ -497,7 +490,7 @@ export function BrokerDetail({
         <DetailStat
           label="Community rating"
           icon={Star}
-          value={rating && rating.totalRatings > 0 ? `★ ${rating.averageRating.toFixed(1)}` : "—"}
+          value={rating && rating.totalRatings > 0 ? `★ ${rating.averageRating.toFixed(1)}` : "-"}
           hint={
             rating
               ? `${rating.totalRatings} review${rating.totalRatings === 1 ? "" : "s"}`
@@ -807,7 +800,7 @@ function BrokerTable({
               className={cn("cursor-pointer", !b.active && "opacity-60")}
             >
               <TableCell className="num py-2 text-right text-xs font-bold text-muted-foreground">
-                {ranks.get(b.code) ?? "—"}
+                {ranks.get(b.code) ?? "-"}
               </TableCell>
               <TableCell className="max-w-[220px] py-2">
                 <p className="text-[0.8125rem] font-semibold">{b.name}</p>
@@ -820,20 +813,20 @@ function BrokerTable({
                 </p>
               </TableCell>
               <TableCell className="num py-2 text-right text-xs">
-                {b.todayStats ? formatNpr(b.todayStats.totalAmount, { compact: true }) : "—"}
+                {b.todayStats ? formatNpr(b.todayStats.totalAmount, { compact: true }) : "-"}
               </TableCell>
               <TableCell className="num py-2 text-right text-xs">
                 {formatNpr(b.thirtyDaysTurnover, { compact: true })}
               </TableCell>
               <TableCell className="num py-2 text-right text-xs">{b.branchCount}</TableCell>
               <TableCell className="py-2 text-xs text-muted-foreground">
-                {b.districts.slice(0, 2).join(", ") || "—"}
+                {b.districts.slice(0, 2).join(", ") || "-"}
                 {b.districts.length > 2 ? ` +${b.districts.length - 2}` : ""}
               </TableCell>
               <TableCell className="num py-2 text-right text-xs">
                 {b.rating && b.rating.totalRatings > 0
                   ? `★ ${b.rating.averageRating.toFixed(1)}`
-                  : "—"}
+                  : "-"}
               </TableCell>
             </TableRow>
           ))}
@@ -885,7 +878,7 @@ export function BrokerLeaderboard({
   // Rank continues from the podium. Card/list ranks are the position inside
   // the active category, so the first card is rank #4 (right after the
   // podium's #1, #2, #3), the next is #5, and so on. Rankings stay fixed
-  // even when the user types in the search box — search only filters which
+  // even when the user types in the search box: search only filters which
   // rows render, never re-orders them.
   const categoryRankByCode = useMemo(() => {
     const map = new Map<number, number>();
@@ -907,7 +900,7 @@ export function BrokerLeaderboard({
       if (b.membershipType.toLowerCase().includes(q)) return true;
       return false;
     });
-    // Sort by category rank only — the rank badge stays the same value, this
+    // Sort by category rank only: the rank badge stays the same value, this
     // just decides whether rank #4 sits above or below rank #N in the list.
     // "branches" override sorts by branch count (most first); rank badge
     // still reflects the active podium category.

@@ -156,7 +156,7 @@ function IndexCard({
         <DeltaPill value={index.percentChange}>{formatPercent(index.percentChange)}</DeltaPill>
         {index.fiftyTwoWeekHigh ? (
           <span className="num">
-            52w {formatNumber(index.fiftyTwoWeekLow)}–{formatNumber(index.fiftyTwoWeekHigh)}
+            52w {formatNumber(index.fiftyTwoWeekLow)}-{formatNumber(index.fiftyTwoWeekHigh)}
           </span>
         ) : null}
       </div>
@@ -238,7 +238,7 @@ function MarketPage() {
   const [heatSize, setHeatSize] = useState<"turnover" | "volume">("turnover");
   const [heatSector, setHeatSector] = useState<string | null>(null);
   const heatSizeLabel = heatSize === "turnover" ? "turnover" : "volume";
-  // Every sector in the session, biggest turnover first — chips isolate even
+  // Every sector in the session, biggest turnover first: chips isolate even
   // sectors too small to earn a labeled region on the shared map.
   const heatSectors = useMemo(() => {
     const totals = new Map<string, { turnover: number; count: number }>();
@@ -708,7 +708,7 @@ function MarketPage() {
         title={chartIndex?.name ?? "Index"}
         subtitle={
           chartGraph.data && chartGraph.data.length >= 2
-            ? `Today's session, ${chartTimeLabel(chartGraph.data[0]!.time)}–${chartTimeLabel(
+            ? `Today's session, ${chartTimeLabel(chartGraph.data[0]!.time)}-${chartTimeLabel(
                 chartGraph.data[chartGraph.data.length - 1]!.time,
               )} NPT`
             : "Today's session (intraday)"

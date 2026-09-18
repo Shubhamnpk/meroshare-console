@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * One-tap alert creation for a single scrip. Used by the scrip sheet header
- * and the terminal chart readout bar — wherever a price is on screen, an
+ * and the terminal chart readout bar: wherever a price is on screen, an
  * alert is one click away. Full list management lives in PriceAlertsPanel.
  */
 export function PriceAlertDialog({

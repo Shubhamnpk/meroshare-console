@@ -31,8 +31,8 @@ const SORTS: { key: SortKey; label: string; dir: 1 | -1 }[] = [
   { key: "dividend", label: "Expected payout", dir: -1 },
   { key: "size", label: "Fund size", dir: -1 },
   { key: "holdings", label: "Most holdings", dir: -1 },
-  { key: "name", label: "Name A–Z", dir: 1 },
-  { key: "symbol", label: "Symbol A–Z", dir: 1 },
+  { key: "name", label: "Name A-Z", dir: 1 },
+  { key: "symbol", label: "Symbol A-Z", dir: 1 },
 ];
 
 function fundTypeLabel(t: string): string {

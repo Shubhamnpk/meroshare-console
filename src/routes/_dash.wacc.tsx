@@ -673,13 +673,13 @@ function WaccPage() {
   const { scrip: scripParam } = Route.useSearch();
   const [scrip, setScrip] = useState(scripParam ?? "");
   // Follow ?scrip= links (e.g. from a stock's detail sheet) even when the
-  // page is already open — without this the selection would go stale.
+  // page is already open: without this the selection would go stale.
   useEffect(() => {
     if (scripParam) setScrip(scripParam);
   }, [scripParam]);
   const search = useQuery(waccSearchQuery(scrip || null));
   const investment = useQuery(investmentSummaryQuery());
-  // Same cache as the Calculated WACC panel below — if the totals show there,
+  // Same cache as the Calculated WACC panel below: if the totals show there,
   // this entry exists here too. No separate fetch, no separate failure mode.
   const report = useQuery(waccReportQuery());
 

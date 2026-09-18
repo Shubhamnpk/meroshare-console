@@ -145,7 +145,7 @@ export function NotificationBell() {
   const holdings = useQuery(holdingSymbolsQuery());
   const { symbols: watchlisted } = useWatchlist();
   // Global price-alert watcher: the bell is mounted app-wide, so alerts fire
-  // on any page — not only while the broker panel is open.
+  // on any page: not only while the broker panel is open.
   const pa = usePriceAlerts();
   const liveSnap = useQuery({ ...marketSnapshotQuery(), enabled: pa.alerts.length > 0 });
 
@@ -346,7 +346,7 @@ export function NotificationBell() {
                         </span>
                       </span>
                       <span className="num mt-0.5 block text-[0.68rem] text-muted-foreground">
-                        Live {ltp != null ? formatNpr(ltp) : "—"} ·{" "}
+                        Live {ltp != null ? formatNpr(ltp) : "-"} ·{" "}
                         {a.hitAt ? "fired" : hit ? "crossed" : "watching"}
                       </span>
                     </span>

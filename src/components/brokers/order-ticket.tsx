@@ -470,7 +470,7 @@ export function OrderTicket({
             ))}
             {otherAmoOrders.length > 5 ? (
               <p className="px-1 pt-1 text-[0.7rem] text-muted-foreground">
-                +{otherAmoOrders.length - 5} more — see Broker → Orders for the full list.
+                +{otherAmoOrders.length - 5} more: see Broker → Orders for the full list.
               </p>
             ) : null}
           </div>

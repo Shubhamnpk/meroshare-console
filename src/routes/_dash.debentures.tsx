@@ -56,7 +56,7 @@ function StatChip({ label, value }: { label: string; value: string }) {
 }
 
 function CouponBadge({ value }: { value: number | null }) {
-  if (value == null) return <span className="text-xs text-muted-foreground">—</span>;
+  if (value == null) return <span className="text-xs text-muted-foreground">-</span>;
   const hot = value >= 10;
   const warm = value >= 8;
   return (
@@ -270,7 +270,7 @@ function DebenturesPage() {
               label="Coupon range"
               value={
                 summary?.couponMin != null && summary?.couponMax != null
-                  ? `${summary.couponMin.toFixed(2)}–${summary.couponMax.toFixed(2)}%`
+                  ? `${summary.couponMin.toFixed(2)}-${summary.couponMax.toFixed(2)}%`
                   : "-"
               }
             />

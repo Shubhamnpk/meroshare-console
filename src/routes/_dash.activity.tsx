@@ -75,7 +75,7 @@ function clean(value: unknown): string {
     .filter(Boolean);
   const unique = [...new Set(parts)];
   const v = unique[0] ?? "";
-  if (!v || v === "—" || v === "-" || /^unknown$/i.test(v) || /^null$/i.test(v)) return "";
+  if (!v || v === "-" || v === "-" || /^unknown$/i.test(v) || /^null$/i.test(v)) return "";
   return v;
 }
 

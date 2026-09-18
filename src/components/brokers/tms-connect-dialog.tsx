@@ -72,7 +72,7 @@ export function TmsConnectDialog({
         setConfidence(Math.round(confidence));
       }
     } catch {
-      // OCR failed — user types manually
+      // OCR failed: user types manually
     } finally {
       setSolving(false);
     }
@@ -267,7 +267,7 @@ export function TmsConnectDialog({
               {captcha ? (
                 <img
                   src={captcha.imageDataUrl}
-                  alt="TMS captcha — type the characters shown"
+                  alt="TMS captcha: type the characters shown"
                   className="h-10 shrink-0 rounded-lg border border-border/60 bg-white"
                 />
               ) : (

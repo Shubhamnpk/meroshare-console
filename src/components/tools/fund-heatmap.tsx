@@ -76,7 +76,7 @@ export function FundHeatmap({
         const tile: HeatTile = {
           key: r.symbol,
           label: r.symbol,
-          detail: raw != null ? formatPercent(raw) : "—",
+          detail: raw != null ? formatPercent(raw) : "-",
           value: Math.abs(sizeMode === "size" ? (r.size ?? 0) : (r.units ?? 0)),
           change: display ?? 0,
           title: `${r.symbol} · ${r.name}`,

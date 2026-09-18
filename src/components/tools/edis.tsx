@@ -32,7 +32,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 function StatusBadge({ status }: { status: string | undefined }) {
-  if (!status) return <span className="text-muted-foreground">—</span>;
+  if (!status) return <span className="text-muted-foreground">-</span>;
   const normalized = status.toUpperCase();
   const colors = STATUS_COLORS[normalized] ?? "bg-gray-100 text-gray-800 border-gray-200";
   return (
@@ -93,14 +93,14 @@ function TransferDetailDialog({
   const reqStatus = item["requestStatus"] as Record<string, unknown> | undefined;
 
   const details: [string, string][] = [
-    ["Transfer ID", String(item["id"] ?? "—")],
-    ["Scrip", String(item["scriptCode"] ?? obligation?.["scriptCode"] ?? "—")],
-    ["Quantity", String(item["quantity"] ?? obligation?.["quantity"] ?? "—")],
-    ["Settlement Date", String(item["settleDate"] ?? obligation?.["settlementDate"] ?? "—")],
-    ["Status", String(reqStatus?.["name"] ?? item["statusName"] ?? "—")],
-    ["Transfer Type", String(item["transferType"] ?? "—")],
-    ["Request Date", String(item["requestDate"] ?? "—")],
-    ["BOID", String(item["boid"] ?? obligation?.["clientBoid"] ?? "—")],
+    ["Transfer ID", String(item["id"] ?? "-")],
+    ["Scrip", String(item["scriptCode"] ?? obligation?.["scriptCode"] ?? "-")],
+    ["Quantity", String(item["quantity"] ?? obligation?.["quantity"] ?? "-")],
+    ["Settlement Date", String(item["settleDate"] ?? obligation?.["settlementDate"] ?? "-")],
+    ["Status", String(reqStatus?.["name"] ?? item["statusName"] ?? "-")],
+    ["Transfer Type", String(item["transferType"] ?? "-")],
+    ["Request Date", String(item["requestDate"] ?? "-")],
+    ["BOID", String(item["boid"] ?? obligation?.["clientBoid"] ?? "-")],
   ];
 
   return (
@@ -108,7 +108,7 @@ function TransferDetailDialog({
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Transfer Details</DialogTitle>
-          <DialogDescription>Transfer request #{String(item["id"] ?? "—")}</DialogDescription>
+          <DialogDescription>Transfer request #{String(item["id"] ?? "-")}</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           {details.map(([label, value]) => (
@@ -233,12 +233,12 @@ export function EdisTransferList() {
                 >
                   <td className="whitespace-nowrap px-4 py-3 font-medium">
                     {String(
-                      item["settleDate"] ?? getObligationField(item, "settlementDate") ?? "—",
+                      item["settleDate"] ?? getObligationField(item, "settlementDate") ?? "-",
                     )}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3">
                     <span className="font-mono text-xs font-semibold">
-                      {String(item["scriptCode"] ?? getObligationField(item, "scriptCode") ?? "—")}
+                      {String(item["scriptCode"] ?? getObligationField(item, "scriptCode") ?? "-")}
                     </span>
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right font-mono">
@@ -391,21 +391,21 @@ export function EdisNodelTrades() {
                 className="border-b border-border/50 transition-colors hover:bg-muted/30 last:border-0"
               >
                 <td className="whitespace-nowrap px-4 py-3 font-medium">
-                  {String(item["tradeDate"] ?? item["settleDate"] ?? "—")}
+                  {String(item["tradeDate"] ?? item["settleDate"] ?? "-")}
                 </td>
                 <td className="whitespace-nowrap px-4 py-3">
                   <span className="font-mono text-xs font-semibold">
-                    {String(item["scriptCode"] ?? "—")}
+                    {String(item["scriptCode"] ?? "-")}
                   </span>
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-right font-mono">
                   {formatQty(Number(item["quantity"] ?? 0))}
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
-                  {String(item["contractId"] ?? "—")}
+                  {String(item["contractId"] ?? "-")}
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
-                  {String(item["brokerCode"] ?? "—")}
+                  {String(item["brokerCode"] ?? "-")}
                 </td>
               </tr>
             ))}

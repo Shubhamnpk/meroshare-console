@@ -179,7 +179,7 @@ function FundsMoveRow({
           try {
             window.localStorage.setItem(QUICK_KEY, key);
           } catch {
-            // storage blocked — limit just won't persist
+            // storage blocked: limit just won't persist
           }
         }
         onDone();
@@ -293,7 +293,7 @@ function FundsMoveRow({
                     if (method === "quick" && Number.isInteger(v) && v > QUICK_MAX) {
                       setMethod("normal");
                       setArmed(false);
-                      toast.message("Switched to Standard — Quick caps at Rs. 10,000.");
+                      toast.message("Switched to Standard: Quick caps at Rs. 10,000.");
                     }
                   }}
                 />
@@ -313,7 +313,7 @@ function FundsMoveRow({
                 </p>
               ) : quickBlockedToday ? (
                 <p className="text-xs font-medium text-destructive">
-                  Quick refund is once a day — already used today. Use Standard instead.
+                  Quick refund is once a day: already used today. Use Standard instead.
                 </p>
               ) : null}
               <Button
@@ -813,7 +813,7 @@ function OrderHistoryBox({ brokerId, orderId }: { brokerId: BrokerId; orderId: s
                 e.remainingQty !== null ? `left ${e.remainingQty}` : null,
               ]
                 .filter(Boolean)
-                .join(" · ") || "—"}
+                .join(" · ") || "-"}
               {[e.date, e.time].filter(Boolean).join(" ").trim()
                 ? ` · ${[e.date, e.time].filter(Boolean).join(" ")}`
                 : ""}
@@ -833,7 +833,7 @@ function OrderHistoryBox({ brokerId, orderId }: { brokerId: BrokerId; orderId: s
 function BrokerPage() {
   const queryClient = useQueryClient();
   const connections = useQuery(brokerConnectionsQuery());
-  // Naasa X data views only until the TMS readers land — a TMS-only link
+  // Naasa X data views only until the TMS readers land: a TMS-only link
   // keeps this page's empty state instead of erroring on every panel.
   const brokerId = (connections.data?.find((c) => c.brokerId === "naasa-x")?.brokerId ??
     null) as BrokerId | null;

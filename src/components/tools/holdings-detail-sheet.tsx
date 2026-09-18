@@ -181,7 +181,7 @@ export function HoldingsDetailSheet({
                         sortBy === k ? "bg-primary/15 text-primary" : "text-muted-foreground",
                       )}
                     >
-                      {k === "value" ? "Value" : "A–Z"}
+                      {k === "value" ? "Value" : "A-Z"}
                     </button>
                   ))}
                 </div>

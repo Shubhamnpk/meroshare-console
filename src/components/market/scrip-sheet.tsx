@@ -604,9 +604,11 @@ function ScripHistoryTable({ items }: { items: TransactionItem[] }) {
 
 export function ScripSheet({
   symbol,
+  initialTab,
   onOpenChange,
 }: {
   symbol: string | null;
+  initialTab?: string | null;
   onOpenChange: (open: boolean) => void;
 }) {
   const snapshot = useQuery(marketSnapshotQuery());
@@ -629,8 +631,8 @@ export function ScripSheet({
   useEffect(() => {
     setRangeKey("1D");
     setDividendSimOpen(false);
-    setTab("overview");
-  }, [symbol]);
+    setTab(initialTab ?? "overview");
+  }, [symbol, initialTab]);
 
   const upper = symbol?.toUpperCase() ?? "";
   const priceAlerts = usePriceAlerts();
@@ -863,7 +865,7 @@ export function ScripSheet({
                         type="button"
                         onClick={() => setAlertOpen(true)}
                         aria-label={hasAlert ? "Edit price alert" : "Set price alert"}
-                        title={hasAlert ? "Price alert active — edit" : "Set price alert"}
+                        title={hasAlert ? "Price alert active: edit" : "Set price alert"}
                         className={cn(
                           "inline-flex size-7 shrink-0 items-center justify-center rounded-lg border transition-colors",
                           hasAlert

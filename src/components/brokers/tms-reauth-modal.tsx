@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * Lightweight re-auth modal. Appears when the TMS session expires.
- * Auto-solves the captcha in the background — user only sees it if OCR fails.
+ * Auto-solves the captcha in the background: user only sees it if OCR fails.
  */
 export function TmsReauthModal({
   open,
@@ -69,7 +69,7 @@ export function TmsReauthModal({
           }
         }
       } catch {
-        // OCR failed — user types manually
+        // OCR failed: user types manually
       } finally {
         setSolving(false);
       }
