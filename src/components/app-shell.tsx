@@ -1,7 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, LogOut, Search, Settings, UserRound } from "lucide-react";
+import { marketSnapshotQuery } from "@/lib/queries";
 import { APP_VERSION } from "@/lib/version";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -42,6 +43,8 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
   const [pickedScrip, setPickedScrip] = useState<string | null>(null);
 
   const toggleCollapsed = () => setSidebarCollapsed(!sidebarCollapsed);
+  const snapshot = useQuery(marketSnapshotQuery());
+  const marketOpen = snapshot.data?.status.isOpen ?? null;
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -91,6 +94,53 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
             </p>
             <p className="num truncate text-xs text-muted-foreground">BOID {user.demat}</p>
           </div>
+
+          {/* Global market open/closed bulb — red/green dot, uses marketSnapshot status */}
+          <span
+            title={
+              marketOpen === null
+                ? "Checking market status…"
+                : marketOpen
+                  ? "Market is OPEN — NEPSE is trading"
+                  : "Market is CLOSED — NEPSE 11:00 AM – 3:00 PM NPT"
+            }
+            aria-label={marketOpen === null ? "Checking market" : marketOpen ? "Market open" : "Market closed"}
+            className={cn(
+              "relative hidden items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold sm:inline-flex",
+              marketOpen === true
+                ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-500"
+                : marketOpen === false
+                  ? "border-red-500/30 bg-red-500/15 text-red-500"
+                  : "border-border bg-muted text-muted-foreground",
+            )}
+          >
+            <span className="relative flex size-2 shrink-0">
+              {marketOpen === true ? (
+                <>
+                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
+                </>
+              ) : marketOpen === false ? (
+                <span className="relative inline-flex size-2 rounded-full bg-red-500" />
+              ) : (
+                <span className="relative inline-flex size-2 animate-pulse rounded-full bg-muted-foreground/50" />
+              )}
+            </span>
+            <span className="hidden sm:inline">{marketOpen === null ? "…" : marketOpen ? "Open" : "Closed"}</span>
+          </span>
+          {/* Mobile: dot only */}
+          <span
+            aria-hidden
+            title={marketOpen === null ? "Checking…" : marketOpen ? "Market open" : "Market closed"}
+            className={cn(
+              "relative flex size-2.5 shrink-0 rounded-full sm:hidden",
+              marketOpen === true ? "bg-emerald-500" : marketOpen === false ? "bg-red-500" : "bg-muted-foreground/50",
+            )}
+          >
+            {marketOpen === true ? (
+              <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+            ) : null}
+          </span>
 
           <button
             type="button"

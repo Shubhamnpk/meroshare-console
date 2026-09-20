@@ -374,3 +374,26 @@ html.light[data-color="pink"] {
 .toaster [data-sonner-toast]:has([data-close-button]) {
   padding-right: 36px;
 }
+
+/* Continuous financial ticker marquee */
+@keyframes marquee-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee-scroll {
+  display: flex;
+  width: max-content;
+  animation: marquee-scroll var(--marquee-duration, 40s) linear infinite;
+  will-change: transform;
+}
+
+.animate-marquee-scroll:hover,
+.animate-marquee-scroll[data-paused="true"] {
+  animation-play-state: paused;
+}
+

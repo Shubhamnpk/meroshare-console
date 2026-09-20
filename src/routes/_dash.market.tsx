@@ -2,7 +2,16 @@ import { useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Activity, CalendarDays, ChartCandlestick, Maximize2, RefreshCw, Search, Star } from "lucide-react";
+import {
+  Activity,
+  CalendarDays,
+  ChartCandlestick,
+  Layers,
+  Maximize2,
+  RefreshCw,
+  Search,
+  Star,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
@@ -18,12 +27,13 @@ import {
 import { ErrorBlock, LoadingBlock, EmptyBlock } from "@/components/states";
 import { SwipeStrip } from "@/components/swipeable-cards";
 import { Heatmap, type HeatTile } from "@/components/market/heatmap";
+import { MarketMarquee } from "@/components/market/market-marquee";
 import { CategoryDropdown, ModeSwitch } from "@/components/market/heatmap-controls";
 import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
 import { DeltaPill } from "@/components/stat-card";
 import { ScripSheet } from "@/components/market/scrip-sheet";
 import { WatchlistPanel } from "@/components/market/watchlist-panel";
-import { ChartModal, chartTimeLabel } from "@/components/market/chart-modal";
+import { IndexChartModal } from "@/components/tools/index-chart-modal";
 import {
   marketMoversQuery,
   marketSectorsQuery,
@@ -179,19 +189,13 @@ function MarketPage() {
   const watchlist = useWatchlist();
   const [search, setSearch] = useState("");
   const [picked, setPicked] = useState<string | null>(null);
-  const [chartIndex, setChartIndex] = useState<MarketIndex | null>(null);
+  const [chartModal, setChartModal] = useState<{
+    open: boolean;
+    title: string;
+    indexName?: string;
+    sectorName?: string;
+  }>({ open: false, title: "" });
   const [watchlistOpen, setWatchlistOpen] = useState(false);
-
-  const chartGraphName = chartIndex ? INDEX_GRAPH_NAMES[chartIndex.name] : null;
-  const chartGraph = useQuery({
-    ...(chartGraphName
-      ? indexGraphQuery(chartGraphName)
-      : {
-          queryKey: ["index-graph-modal", "none"] as const,
-          queryFn: async () => [] as PricePoint[],
-        }),
-    enabled: Boolean(chartIndex && chartGraphName),
-  });
 
   const prices = snapshot.data?.prices ?? [];
   const { sort, toggle } = useSort<"symbol" | "ltp" | "percentChange" | "volume" | "turnover">(
@@ -257,13 +261,9 @@ function MarketPage() {
     () =>
       [...prices]
         .filter((p) =>
-          heatSector
-            ? (p.sector ?? sectorOf(p.symbol) ?? "Unclassified") === heatSector
-            : true,
+          heatSector ? (p.sector ?? sectorOf(p.symbol) ?? "Unclassified") === heatSector : true,
         )
-        .sort((a, b) =>
-          heatSize === "turnover" ? b.turnover - a.turnover : b.volume - a.volume,
-        )
+        .sort((a, b) => (heatSize === "turnover" ? b.turnover - a.turnover : b.volume - a.volume))
         .slice(0, 60)
         .map((p) => {
           const sizeValue = heatSize === "turnover" ? p.turnover : p.volume;
@@ -336,9 +336,9 @@ function MarketPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="font-display text-2xl font-semibold sm:text-3xl">Market</h1>
+      <div className="flex flex-nowrap items-center justify-between gap-2 sm:gap-3">
+        <div className="min-w-0 shrink-0">
+          <h1 className="font-display text-xl font-semibold sm:text-3xl">Market</h1>
           <p className="mt-1 hidden text-sm text-muted-foreground sm:block">
             Live NEPSE prices, indices and movers.{" "}
             {snapshot.data
@@ -348,37 +348,69 @@ function MarketPage() {
               : null}
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          {snapshot.data?.fetchedAt ? (
-            <span className="num hidden text-xs text-muted-foreground sm:inline">
-              Updated {formatDateTime(snapshot.data.fetchedAt)}
-            </span>
-          ) : null}
-          <Button variant="outline" size="sm" onClick={() => setWatchlistOpen(true)}>
-            <Star className={watchlist.symbols.length > 0 ? "fill-warning text-warning" : ""} />
-            Watchlist
-            {watchlist.symbols.length > 0 ? (
-              <span className="num rounded-full bg-muted px-1.5 text-[0.68rem]">
-                {watchlist.symbols.length}
+        <div className="flex min-w-0 items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+            {snapshot.data?.fetchedAt ? (
+              <span className="num hidden text-xs text-muted-foreground sm:inline">
+                Updated {formatDateTime(snapshot.data.fetchedAt)}
               </span>
             ) : null}
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => void navigate({ to: "/terminal" })}>
-            <ChartCandlestick /> Terminal
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => void navigate({ to: "/calendar" })}>
-            <CalendarDays /> Calendar
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void snapshot.refetch()}
-            disabled={snapshot.isFetching}
-          >
-            <RefreshCw className={snapshot.isFetching ? "animate-spin" : ""} /> Refresh
-          </Button>
+            <Button variant="outline" size="sm" onClick={() => setWatchlistOpen(true)} aria-label="Watchlist">
+              <Star className={watchlist.symbols.length > 0 ? "fill-warning text-warning" : ""} />
+              <span className="hidden sm:inline">Watchlist</span>
+              {watchlist.symbols.length > 0 ? (
+                <span className="num rounded-full bg-muted px-1.5 text-[0.68rem]">
+                  {watchlist.symbols.length}
+                </span>
+              ) : null}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void navigate({ to: "/market-depth" })}
+              aria-label="Market depth"
+            >
+              <Layers /> <span className="hidden sm:inline">Depth</span>
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => void navigate({ to: "/terminal" })} aria-label="Terminal">
+              <ChartCandlestick /> <span className="hidden sm:inline">Terminal</span>
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => void navigate({ to: "/calendar" })} aria-label="Calendar">
+              <CalendarDays /> <span className="hidden sm:inline">Calendar</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void snapshot.refetch()}
+              disabled={snapshot.isFetching}
+              aria-label="Refresh"
+            >
+              <RefreshCw className={snapshot.isFetching ? "animate-spin" : ""} /> <span className="hidden sm:inline">Refresh</span>
+            </Button>
+          </div>
         </div>
       </div>
+
+      <MarketMarquee
+        indices={indices}
+        sectorIndices={sectors.data ?? []}
+        prices={prices}
+        onSelectIndex={(idx) =>
+          setChartModal({
+            open: true,
+            title: `${idx} Index`,
+            indexName: idx,
+          })
+        }
+        onSelectSector={(sec) =>
+          setChartModal({
+            open: true,
+            title: `${sec} Index`,
+            sectorName: sec,
+          })
+        }
+        onSelectScrip={(sym) => setPicked(sym)}
+      />
 
       {snapshot.isLoading ? (
         <LoadingBlock label="Loading market data" />
@@ -397,7 +429,13 @@ function MarketPage() {
               <IndexCard
                 key={index.name}
                 index={index}
-                onExpand={() => setChartIndex(index)}
+                onExpand={() =>
+                  setChartModal({
+                    open: true,
+                    title: index.name,
+                    indexName: index.name,
+                  })
+                }
                 className="w-[15.5rem] shrink-0 snap-start sm:w-auto"
               />
             ))}
@@ -425,8 +463,8 @@ function MarketPage() {
           </SwipeStrip>
 
           <Panel as="section">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <div>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 sm:flex-nowrap">
+              <div className="min-w-0">
                 <h2 className="font-display text-base font-semibold">Market heatmap</h2>
                 <p className="mt-0.5 text-xs text-muted-foreground">
                   Top 60 by {heatSizeLabel}
@@ -435,9 +473,8 @@ function MarketPage() {
                   {!heatGrouped && !heatSector ? ", all mixed" : ""}
                 </p>
               </div>
-              <div className="flex flex-wrap items-center gap-1.5">
+              <div className="flex shrink-0 flex-nowrap items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <ModeSwitch
-                  label="Size"
                   options={
                     [
                       { key: "turnover", label: "Turnover" },
@@ -448,7 +485,6 @@ function MarketPage() {
                   onChange={setHeatSize}
                 />
                 <ModeSwitch
-                  label="Layout"
                   options={
                     [
                       { key: "grouped", label: "Grouped" },
@@ -700,29 +736,17 @@ function MarketPage() {
         }}
       />
 
-      <ChartModal
-        open={Boolean(chartIndex)}
-        onOpenChange={(open) => {
-          if (!open) setChartIndex(null);
+      <IndexChartModal
+        open={chartModal.open}
+        onOpenChange={(open) => setChartModal((s) => ({ ...s, open }))}
+        title={chartModal.title}
+        indexName={chartModal.indexName}
+        sectorName={chartModal.sectorName}
+        prices={prices}
+        onSelectScrip={(sym) => {
+          setChartModal((s) => ({ ...s, open: false }));
+          setPicked(sym);
         }}
-        title={chartIndex?.name ?? "Index"}
-        subtitle={
-          chartGraph.data && chartGraph.data.length >= 2
-            ? `Today's session, ${chartTimeLabel(chartGraph.data[0]!.time)}-${chartTimeLabel(
-                chartGraph.data[chartGraph.data.length - 1]!.time,
-              )} NPT`
-            : "Today's session (intraday)"
-        }
-        ranges={[
-          {
-            key: "today",
-            label: "Today",
-            points: chartGraph.data ?? [],
-          },
-        ]}
-        formatValue={(v) => formatNumber(v)}
-        formatIntradayLabel={chartTimeLabel}
-        formatDailyLabel={chartTimeLabel}
       />
     </div>
   );

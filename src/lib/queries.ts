@@ -246,7 +246,31 @@ export const sessionQuery = () =>
 export const brokerConnectionsQuery = () =>
   queryOptions({
     queryKey: ["broker-connections"],
-    queryFn: () => listBrokerConnections(),
+    queryFn: async () => {
+      const real = await listBrokerConnections();
+      try {
+        if (typeof window !== "undefined") {
+          const { loadYoWallet } = await import("@/lib/yobroker/store");
+          const w = loadYoWallet(null);
+          if (w.active) {
+            const hasYo = real.some((c) => c.brokerId === "yobroker");
+            if (!hasYo) {
+              return [
+                ...real,
+                {
+                  brokerId: "yobroker" as const,
+                  username: "paper@yo.local",
+                  displayName: "Yo Broker (Paper)",
+                  connectedAt: w.createdAt,
+                  lastTestedAt: new Date().toISOString(),
+                },
+              ];
+            }
+          }
+        }
+      } catch {}
+      return real;
+    },
     staleTime: 30_000,
     retry: false,
   });
@@ -262,7 +286,38 @@ export const brokerVaultStatusQuery = () =>
 export const brokerQuoteQuery = (brokerId: BrokerId | null, symbol: string | null) =>
   queryOptions({
     queryKey: ["broker-quote", brokerId, symbol],
-    queryFn: () => getBrokerQuote({ data: { brokerId: brokerId!, symbol: symbol! } }),
+    queryFn: async () => {
+      if (brokerId === "yobroker" && symbol) {
+        const { getMarketSnapshot } = await import("@/lib/nepse/market.functions");
+        try {
+          const snap = await getMarketSnapshot();
+          const p = snap.prices.find((x) => x.symbol === symbol.toUpperCase());
+          if (!p) return null;
+          return {
+            symbol: p.symbol,
+            ltp: p.ltp,
+            change: p.change,
+            changePercent: p.percentChange,
+            open: p.ltp,
+            high: p.high,
+            low: p.low,
+            close: p.previousClose,
+            volume: p.volume,
+            turnover: p.turnover,
+            bidQty: null,
+            bidPrice: null,
+            offerQty: null,
+            offerPrice: null,
+            weekHigh52: p.fiftyTwoWeekHigh,
+            weekLow52: p.fiftyTwoWeekLow,
+            lastTradeTime: p.lastUpdated,
+          };
+        } catch {
+          return null;
+        }
+      }
+      return getBrokerQuote({ data: { brokerId: brokerId!, symbol: symbol! } });
+    },
     enabled: Boolean(brokerId && symbol),
     staleTime: 15_000,
     refetchInterval: 30_000,
@@ -272,7 +327,12 @@ export const brokerQuoteQuery = (brokerId: BrokerId | null, symbol: string | nul
 export const brokerDepthQuery = (brokerId: BrokerId | null, symbol: string | null) =>
   queryOptions({
     queryKey: ["broker-depth", brokerId, symbol],
-    queryFn: () => getBrokerDepth({ data: { brokerId: brokerId!, symbol: symbol! } }),
+    queryFn: async () => {
+      if (brokerId === "yobroker") {
+        return { errorCode: 0, message: "Paper depth", bids: [], asks: [] };
+      }
+      return getBrokerDepth({ data: { brokerId: brokerId!, symbol: symbol! } });
+    },
     enabled: Boolean(brokerId && symbol),
     staleTime: 15_000,
     refetchInterval: 30_000,
@@ -282,7 +342,19 @@ export const brokerDepthQuery = (brokerId: BrokerId | null, symbol: string | nul
 export const brokerHoldingsQuery = (brokerId: BrokerId | null) =>
   queryOptions({
     queryKey: ["broker-holdings", brokerId],
-    queryFn: () => getBrokerHoldings({ data: { brokerId: brokerId! } }),
+    queryFn: async () => {
+      if (brokerId === "yobroker") {
+        const { loadYoWallet } = await import("@/lib/yobroker/store");
+        const w = loadYoWallet(null);
+        return w.holdings.map((h) => ({
+          symbol: h.symbol,
+          availableQty: h.qty,
+          closePrice: h.avgCost,
+          marketValue: h.qty * h.avgCost,
+        }));
+      }
+      return getBrokerHoldings({ data: { brokerId: brokerId! } });
+    },
     enabled: Boolean(brokerId),
     staleTime: 60_000,
     retry: false,
@@ -296,10 +368,16 @@ export interface BrokerRange {
 export const brokerOrderBookQuery = (brokerId: BrokerId | null, range?: BrokerRange) =>
   queryOptions({
     queryKey: ["broker-order-book", brokerId, range?.fromDate ?? "", range?.toDate ?? ""],
-    queryFn: () =>
-      getBrokerOrderBook({
+    queryFn: async () => {
+      if (brokerId === "yobroker") {
+        const { loadYoWallet } = await import("@/lib/yobroker/store");
+        const { yoToOrders } = await import("@/lib/yobroker/adapter");
+        return yoToOrders(loadYoWallet(null));
+      }
+      return getBrokerOrderBook({
         data: { brokerId: brokerId!, fromDate: range?.fromDate, toDate: range?.toDate },
-      }),
+      });
+    },
     enabled: Boolean(brokerId),
     staleTime: 20_000,
     retry: false,
@@ -308,10 +386,16 @@ export const brokerOrderBookQuery = (brokerId: BrokerId | null, range?: BrokerRa
 export const brokerTradeBookQuery = (brokerId: BrokerId | null, range?: BrokerRange) =>
   queryOptions({
     queryKey: ["broker-trade-book", brokerId, range?.fromDate ?? "", range?.toDate ?? ""],
-    queryFn: () =>
-      getBrokerTradeBook({
+    queryFn: async () => {
+      if (brokerId === "yobroker") {
+        const { loadYoWallet } = await import("@/lib/yobroker/store");
+        const { yoToTrades } = await import("@/lib/yobroker/adapter");
+        return yoToTrades(loadYoWallet(null));
+      }
+      return getBrokerTradeBook({
         data: { brokerId: brokerId!, fromDate: range?.fromDate, toDate: range?.toDate },
-      }),
+      });
+    },
     enabled: Boolean(brokerId),
     staleTime: 30_000,
     retry: false,
@@ -320,7 +404,10 @@ export const brokerTradeBookQuery = (brokerId: BrokerId | null, range?: BrokerRa
 export const brokerAmoListQuery = (brokerId: BrokerId | null) =>
   queryOptions({
     queryKey: ["broker-amo-list", brokerId],
-    queryFn: () => getBrokerAmoList({ data: { brokerId: brokerId! } }),
+    queryFn: async () => {
+      if (brokerId === "yobroker") return [];
+      return getBrokerAmoList({ data: { brokerId: brokerId! } });
+    },
     enabled: Boolean(brokerId),
     staleTime: 20_000,
     retry: false,
@@ -329,7 +416,10 @@ export const brokerAmoListQuery = (brokerId: BrokerId | null) =>
 export const brokerOrderHistoryQuery = (brokerId: BrokerId | null, orderId: string | null) =>
   queryOptions({
     queryKey: ["broker-order-history", brokerId, orderId],
-    queryFn: () => getBrokerOrderHistory({ data: { brokerId: brokerId!, orderId: orderId! } }),
+    queryFn: async () => {
+      if (brokerId === "yobroker") return [];
+      return getBrokerOrderHistory({ data: { brokerId: brokerId!, orderId: orderId! } });
+    },
     enabled: Boolean(brokerId && orderId),
     staleTime: 20_000,
     retry: false,
@@ -338,7 +428,10 @@ export const brokerOrderHistoryQuery = (brokerId: BrokerId | null, orderId: stri
 export const brokerCompanyInfoQuery = (brokerId: BrokerId | null, symbol: string | null) =>
   queryOptions({
     queryKey: ["broker-company-info", brokerId, symbol],
-    queryFn: () => getBrokerCompanyInfo({ data: { brokerId: brokerId!, symbol: symbol! } }),
+    queryFn: async () => {
+      if (brokerId === "yobroker") return null;
+      return getBrokerCompanyInfo({ data: { brokerId: brokerId!, symbol: symbol! } });
+    },
     enabled: Boolean(brokerId && symbol),
     staleTime: 10 * 60_000,
     retry: false,
@@ -347,7 +440,18 @@ export const brokerCompanyInfoQuery = (brokerId: BrokerId | null, symbol: string
 export const brokerMarketStatusQuery = (brokerId: BrokerId | null) =>
   queryOptions({
     queryKey: ["broker-market-status", brokerId],
-    queryFn: () => getBrokerMarketStatus({ data: { brokerId: brokerId! } }),
+    queryFn: async () => {
+      if (brokerId === "yobroker") {
+        const { getMarketStatus } = await import("@/lib/nepse/feed.server");
+        try {
+          const s = await getMarketStatus();
+          return { status: s.isOpen ? "OPEN" : "CLOSED", isOpen: s.isOpen };
+        } catch {
+          return { status: "UNKNOWN", isOpen: false };
+        }
+      }
+      return getBrokerMarketStatus({ data: { brokerId: brokerId! } });
+    },
     enabled: Boolean(brokerId),
     staleTime: 30_000,
     refetchInterval: 60_000,
@@ -357,7 +461,10 @@ export const brokerMarketStatusQuery = (brokerId: BrokerId | null) =>
 export const brokerTicketsQuery = (brokerId: BrokerId | null) =>
   queryOptions({
     queryKey: ["broker-tickets", brokerId],
-    queryFn: () => getBrokerTickets({ data: { brokerId: brokerId! } }),
+    queryFn: async () => {
+      if (brokerId === "yobroker") return [];
+      return getBrokerTickets({ data: { brokerId: brokerId! } });
+    },
     enabled: Boolean(brokerId),
     staleTime: 60_000,
     retry: false,
@@ -369,14 +476,20 @@ export const brokerStatementQuery = (
 ) =>
   queryOptions({
     queryKey: ["broker-statement", brokerId, range?.fromDate ?? "", range?.toDate ?? ""],
-    queryFn: () =>
-      getBrokerStatement({
+    queryFn: async () => {
+      if (brokerId === "yobroker") {
+        const { loadYoWallet } = await import("@/lib/yobroker/store");
+        const { yoToStatement } = await import("@/lib/yobroker/adapter");
+        return yoToStatement(loadYoWallet(null));
+      }
+      return getBrokerStatement({
         data: {
           brokerId: brokerId!,
           ...(range?.fromDate ? { fromDate: range.fromDate } : {}),
           ...(range?.toDate ? { toDate: range.toDate } : {}),
         },
-      }),
+      });
+    },
     enabled: Boolean(brokerId),
     staleTime: 60_000,
     retry: false,
@@ -385,7 +498,10 @@ export const brokerStatementQuery = (
 export const brokerTriggersQuery = (brokerId: BrokerId | null) =>
   queryOptions({
     queryKey: ["broker-triggers", brokerId],
-    queryFn: () => getBrokerTriggers({ data: { brokerId: brokerId! } }),
+    queryFn: async () => {
+      if (brokerId === "yobroker") return [];
+      return getBrokerTriggers({ data: { brokerId: brokerId! } });
+    },
     enabled: Boolean(brokerId),
     staleTime: 30_000,
     retry: false,
@@ -394,7 +510,10 @@ export const brokerTriggersQuery = (brokerId: BrokerId | null) =>
 export const brokerDirectStatusQuery = (brokerId: BrokerId | null) =>
   queryOptions({
     queryKey: ["broker-direct-status", brokerId],
-    queryFn: () => getBrokerDirectStatus({ data: { brokerId: brokerId! } }),
+    queryFn: async () => {
+      if (brokerId === "yobroker") return null;
+      return getBrokerDirectStatus({ data: { brokerId: brokerId! } });
+    },
     enabled: Boolean(brokerId),
     staleTime: 5 * 60_000,
     retry: false,
@@ -403,7 +522,16 @@ export const brokerDirectStatusQuery = (brokerId: BrokerId | null) =>
 export const brokerFundsQuery = (brokerId: BrokerId | null) =>
   queryOptions({
     queryKey: ["broker-funds", brokerId],
-    queryFn: () => getBrokerFunds({ data: { brokerId: brokerId! } }),
+    queryFn: async () => {
+      if (brokerId === "yobroker") {
+        const { loadYoWallet } = await import("@/lib/yobroker/store");
+        const { yoToFunds } = await import("@/lib/yobroker/adapter");
+        const w = loadYoWallet(null);
+        const holdingsValue = w.holdings.reduce((s, h) => s + h.qty * h.avgCost, 0);
+        return yoToFunds(w, holdingsValue);
+      }
+      return getBrokerFunds({ data: { brokerId: brokerId! } });
+    },
     enabled: Boolean(brokerId),
     staleTime: 60_000,
     retry: false,
@@ -412,7 +540,10 @@ export const brokerFundsQuery = (brokerId: BrokerId | null) =>
 export const brokerBanksQuery = (brokerId: BrokerId | null) =>
   queryOptions({
     queryKey: ["broker-banks", brokerId],
-    queryFn: () => getBrokerBanks({ data: { brokerId: brokerId! } }),
+    queryFn: async () => {
+      if (brokerId === "yobroker") return [];
+      return getBrokerBanks({ data: { brokerId: brokerId! } });
+    },
     enabled: Boolean(brokerId),
     staleTime: 5 * 60_000,
     retry: false,
@@ -421,7 +552,10 @@ export const brokerBanksQuery = (brokerId: BrokerId | null) =>
 export const brokerWatchlistsQuery = (brokerId: BrokerId | null) =>
   queryOptions({
     queryKey: ["broker-watchlists", brokerId],
-    queryFn: () => getBrokerWatchlists({ data: { brokerId: brokerId! } }),
+    queryFn: async () => {
+      if (brokerId === "yobroker") return { templates: [] };
+      return getBrokerWatchlists({ data: { brokerId: brokerId! } });
+    },
     enabled: Boolean(brokerId),
     staleTime: 30_000,
     retry: false,
@@ -430,8 +564,10 @@ export const brokerWatchlistsQuery = (brokerId: BrokerId | null) =>
 export const brokerWatchlistSymbolsQuery = (brokerId: BrokerId | null, template: string | null) =>
   queryOptions({
     queryKey: ["broker-watchlist-symbols", brokerId, template],
-    queryFn: () =>
-      getBrokerWatchlistSymbols({ data: { brokerId: brokerId!, template: template! } }),
+    queryFn: async () => {
+      if (brokerId === "yobroker") return [];
+      return getBrokerWatchlistSymbols({ data: { brokerId: brokerId!, template: template! } });
+    },
     enabled: Boolean(brokerId && template),
     staleTime: 30_000,
     retry: false,
@@ -474,8 +610,13 @@ export const brokerFundTxnsQuery = (brokerId: BrokerId | null, filters?: FundTxn
       filters?.toDate ?? "",
       filters?.page ?? 1,
     ],
-    queryFn: () =>
-      getBrokerFundTransactions({
+    queryFn: async () => {
+      if (brokerId === "yobroker") {
+        const { loadYoWallet } = await import("@/lib/yobroker/store");
+        const { yoToFundTxns } = await import("@/lib/yobroker/adapter");
+        return yoToFundTxns(loadYoWallet(null), filters?.page ?? 1, 20);
+      }
+      return getBrokerFundTransactions({
         data: {
           brokerId: brokerId!,
           ...(filters?.search ? { search: filters.search } : {}),
@@ -485,7 +626,8 @@ export const brokerFundTxnsQuery = (brokerId: BrokerId | null, filters?: FundTxn
           ...(filters?.toDate ? { toDate: filters.toDate } : {}),
           page: filters?.page ?? 1,
         },
-      }),
+      });
+    },
     enabled: Boolean(brokerId),
     staleTime: 30_000,
     retry: false,

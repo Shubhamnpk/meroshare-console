@@ -373,7 +373,45 @@ function DashboardPage() {
               <div>
                 <p className="flex items-center gap-1.5 text-xs uppercase tracking-wider text-muted-foreground">
                   <ChartLine className="size-3.5 text-primary" /> NEPSE Index
-                  <span className="hidden sm:inline">· today</span>
+                  <span
+                    title={
+                      market.data?.status.isOpen
+                        ? "Live trading — NEPSE is open today"
+                        : (() => {
+                            const raw = nepse?.generatedTime;
+                            if (!raw) return "Market is closed — no session data";
+                            const d = new Date(String(raw).replace(" ", "T"));
+                            const dateStr = formatDate(raw);
+                            if (Number.isNaN(d.getTime())) return `Last session: ${dateStr} — market is closed`;
+                            const today0 = new Date();
+                            today0.setHours(0, 0, 0, 0);
+                            const gen0 = new Date(d);
+                            gen0.setHours(0, 0, 0, 0);
+                            const diff = Math.round((today0.getTime() - gen0.getTime()) / 86_400_000);
+                            const rel = diff <= 0 ? "today" : diff === 1 ? "1 day ago" : `${diff} days ago`;
+                            return `Last session: ${dateStr} · ${rel} — market is closed`;
+                          })()
+                    }
+                  >
+                    ·{" "}
+                    {(() => {
+                      if (!market.data) return "—";
+                      if (market.data.status.isOpen) return "today";
+                      const raw = nepse?.generatedTime;
+                      if (!raw) return "closed";
+                      const d = new Date(String(raw).replace(" ", "T"));
+                      const dateStr = formatDate(raw);
+                      if (Number.isNaN(d.getTime())) return `${dateStr} · closed`;
+                      const today0 = new Date();
+                      today0.setHours(0, 0, 0, 0);
+                      const gen0 = new Date(d);
+                      gen0.setHours(0, 0, 0, 0);
+                      const diff = Math.round((today0.getTime() - gen0.getTime()) / 86_400_000);
+                      if (diff <= 0) return `${dateStr} · closed`;
+                      if (diff === 1) return `1 day ago · ${dateStr}`;
+                      return `${diff} days ago · ${dateStr}`;
+                    })()}
+                  </span>
                 </p>
                 {nepse ? (
                   <p className="num mt-2 flex flex-wrap items-center gap-2 text-3xl font-semibold">
@@ -621,7 +659,7 @@ function DashboardPage() {
         )}
       </Panel>
 
-      <Panel as="section">
+      <Panel as="section" className="min-w-0 overflow-hidden">
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="font-display text-base font-semibold">Issues</h2>
           <Link
@@ -645,7 +683,7 @@ function DashboardPage() {
         ) : (
           <div className="space-y-4">
             {openIssues.length > 0 ? (
-              <ul className="grid gap-2 md:grid-cols-2">
+              <ul className="grid min-w-0 gap-2 overflow-hidden md:grid-cols-2">
                 {openIssues.map((issue) => {
                   const applied = (reports.data ?? []).some(
                     (r) => r.companyShareId === issue.companyShareId,
@@ -684,56 +722,58 @@ function DashboardPage() {
                           navigate({ to: "/ipo", search: { tab: "apply" } });
                         }
                       }}
-                      className="flex cursor-pointer items-center gap-3 rounded-xl border border-border/60 bg-surface px-3 py-3 transition-colors hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="flex min-w-0 w-full cursor-pointer flex-col gap-3 overflow-hidden rounded-xl border border-border/60 bg-surface p-3 transition-colors hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:flex-row sm:items-center sm:gap-3 sm:px-3 sm:py-3"
                     >
-                      <span className="num flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
-                        {String(issue.companyName ?? issue.scrip ?? "?")
-                          .trim()
-                          .charAt(0)
-                          .toUpperCase() || "?"}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="flex flex-wrap items-center gap-1.5">
-                          <span
-                            className="truncate text-sm font-semibold"
-                            title={issue.companyName ?? ""}
-                          >
-                            {issue.companyName}
-                          </span>
-                          {typeLabel ? (
-                            <span className="num shrink-0 rounded-full border border-border/70 px-2 py-0.5 text-[0.62rem] font-semibold text-muted-foreground">
-                              {typeLabel}
-                            </span>
-                          ) : null}
-                          <span
-                            className={
-                              dLeft !== null && dLeft < 0
-                                ? "num shrink-0 rounded-full bg-muted px-2 py-0.5 text-[0.62rem] font-semibold text-muted-foreground"
-                                : urgent
-                                  ? "num shrink-0 rounded-full bg-loss/15 px-2 py-0.5 text-[0.62rem] font-semibold text-loss"
-                                  : "num shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[0.62rem] font-semibold text-primary"
-                            }
-                          >
-                            {chip}
-                          </span>
-                          {applied ? (
-                            <span className="num inline-flex shrink-0 items-center gap-1 rounded-full bg-gain/15 px-2 py-0.5 text-[0.62rem] font-semibold text-gain">
-                              <CheckCircle2 className="size-3" /> Applied
-                            </span>
-                          ) : null}
+                      <div className="flex min-w-0 w-full flex-1 items-center gap-3 overflow-hidden">
+                        <span className="num flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
+                          {String(issue.companyName ?? issue.scrip ?? "?")
+                            .trim()
+                            .charAt(0)
+                            .toUpperCase() || "?"}
                         </span>
-                        <span className="num mt-1 block truncate text-[0.70rem] leading-none text-muted-foreground">
-                          {issue.scrip}
-                          {issue.shareTypeName || issue.shareGroupName
-                            ? ` · ${[issue.shareTypeName, issue.shareGroupName].filter(Boolean).join(" ")}`
-                            : ""}{" "}
-                          · {formatDate(issue.issueOpenDate)} → {formatDate(issue.issueCloseDate)}
+                        <span className="min-w-0 flex-1">
+                          <span className="flex flex-wrap items-center gap-1.5">
+                            <span
+                              className="min-w-0 flex-1 truncate text-sm font-semibold"
+                              title={issue.companyName ?? ""}
+                            >
+                              {issue.companyName}
+                            </span>
+                            {typeLabel ? (
+                              <span className="num shrink-0 rounded-full border border-border/70 px-2 py-0.5 text-[0.62rem] font-semibold text-muted-foreground">
+                                {typeLabel}
+                              </span>
+                            ) : null}
+                            <span
+                              className={
+                                dLeft !== null && dLeft < 0
+                                  ? "num shrink-0 rounded-full bg-muted px-2 py-0.5 text-[0.62rem] font-semibold text-muted-foreground"
+                                  : urgent
+                                    ? "num shrink-0 rounded-full bg-loss/15 px-2 py-0.5 text-[0.62rem] font-semibold text-loss"
+                                    : "num shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[0.62rem] font-semibold text-primary"
+                              }
+                            >
+                              {chip}
+                            </span>
+                            {applied ? (
+                              <span className="num inline-flex shrink-0 items-center gap-1 rounded-full bg-gain/15 px-2 py-0.5 text-[0.62rem] font-semibold text-gain">
+                                <CheckCircle2 className="size-3" /> Applied
+                              </span>
+                            ) : null}
+                          </span>
+                          <span className="num mt-1 block truncate text-[0.70rem] leading-none text-muted-foreground">
+                            {issue.scrip}
+                            {issue.shareTypeName || issue.shareGroupName
+                              ? ` · ${[issue.shareTypeName, issue.shareGroupName].filter(Boolean).join(" ")}`
+                              : ""}{" "}
+                            · {formatDate(issue.issueOpenDate)} → {formatDate(issue.issueCloseDate)}
+                          </span>
                         </span>
-                      </span>
+                      </div>
                       <Button
                         size="sm"
                         variant={applied ? "outline" : "default"}
-                        className="h-7 shrink-0 px-3 text-xs"
+                        className="h-7 w-full shrink-0 px-3 text-xs sm:ml-2 sm:w-auto"
                         onClick={(e) => {
                           e.stopPropagation();
                           navigate({ to: "/ipo", search: { tab: "apply" } });
@@ -747,11 +787,11 @@ function DashboardPage() {
               </ul>
             ) : null}
             {upcomingIssues.length > 0 ? (
-              <div className="space-y-2">
+              <div className="min-w-0 space-y-2 overflow-hidden">
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Upcoming
                 </h3>
-                <ul className="grid gap-2 md:grid-cols-2">
+                <ul className="grid min-w-0 gap-2 overflow-hidden md:grid-cols-2">
                   {upcomingIssues.map((item) => (
                     <li
                       key={item.key}

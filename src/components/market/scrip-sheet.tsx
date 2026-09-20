@@ -51,8 +51,10 @@ import {
 } from "@/components/market/chart-modal";
 import { useDocViewer } from "@/components/ui/use-doc-viewer";
 import { OrderTicket } from "@/components/brokers/order-ticket";
+import { YoOrderTicket } from "@/components/brokers/yobroker-ticket";
 import { PriceAlertDialog } from "@/components/brokers/price-alert-dialog";
 import { usePriceAlerts } from "@/lib/price-alerts";
+import { loadYoWallet } from "@/lib/yobroker/store";
 import { Panel } from "@/components/ui/panel";
 import {
   dividendsQuery,
@@ -609,6 +611,7 @@ export function ScripSheet({
 }: {
   symbol: string | null;
   initialTab?: string | null;
+  open?: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
   const snapshot = useQuery(marketSnapshotQuery());
@@ -621,6 +624,13 @@ export function ScripSheet({
   const navigate = useNavigate();
   const brokerConn = useQuery(brokerConnectionsQuery());
   const brokerOn = (brokerConn.data?.length ?? 0) > 0;
+  const yoActive = (() => {
+    try {
+      return loadYoWallet(null).active;
+    } catch {
+      return false;
+    }
+  })();
   const [alertOpen, setAlertOpen] = useState(false);
   const [tab, setTab] = useState("overview");
   const [rangeKey, setRangeKey] = useState<string>("1D");
@@ -743,6 +753,14 @@ export function ScripSheet({
     return built;
   }, [intradayPoints, dailyPoints]);
   const activeRange = ranges.find((r) => r.key === rangeKey) ?? ranges[0];
+
+  // If the current range isn't available (e.g. no intraday data for 1D),
+  // auto-select the first available range.
+  useEffect(() => {
+    if (ranges.length > 0 && !ranges.some((r) => r.key === rangeKey)) {
+      setRangeKey(ranges[0]!.key);
+    }
+  }, [ranges, rangeKey]);
   const fullSince = fullPoints.length > 0 ? new Date(fullPoints[0]!.time * 1000) : null;
 
   const stats: { label: string; value: string }[] = price
@@ -927,7 +945,7 @@ export function ScripSheet({
           <Tabs value={tab} onValueChange={setTab}>
             <TabsList className="w-full justify-start">
               <TabsTrigger value="overview">Overview</TabsTrigger>
-              {brokerOn ? <TabsTrigger value="trade">Trade</TabsTrigger> : null}
+              {brokerOn || yoActive ? <TabsTrigger value="trade">Trade</TabsTrigger> : null}
               {financials.data ? <TabsTrigger value="financials">Financials</TabsTrigger> : null}
               {dividend || yearlyDividends.length > 0 ? (
                 <TabsTrigger value="dividend">Dividend</TabsTrigger>
@@ -936,12 +954,16 @@ export function ScripSheet({
               {newsItems.length > 0 ? <TabsTrigger value="news">News</TabsTrigger> : null}
             </TabsList>
 
-            {brokerOn ? (
+            {brokerOn || yoActive ? (
               <TabsContent value="trade" className="space-y-4">
-                <OrderTicket symbol={upper} />
+                {yoActive ? <YoOrderTicket symbol={upper} /> : null}
+                {brokerOn ? <OrderTicket symbol={upper} /> : null}
                 <p className="text-[0.7rem] leading-relaxed text-muted-foreground">
-                  Live broker quote, market depth and order placement for {upper}. Orders placed
-                  here are real.
+                  {yoActive && !brokerOn
+                    ? `Paper trading via Yo Broker for ${upper}. Fills against live NEPSE prices, no real money moves.`
+                    : yoActive && brokerOn
+                      ? `Yo Broker on top is paper, Naasa X below is real for ${upper}.`
+                      : `Live broker quote, market depth and order placement for ${upper}. Orders placed here are real.`}
                 </p>
               </TabsContent>
             ) : null}
@@ -973,28 +995,16 @@ export function ScripSheet({
                 <div className="flex items-center justify-between gap-3">
                   <h3 className="font-display text-sm font-semibold">Price history</h3>
                   {ranges.length > 0 ? (
-                    <div className="flex items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onOpenChange(false);
-                          void navigate({ to: "/terminal", search: { symbol: upper } });
-                        }}
-                        className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-                      >
-                        <ChartCandlestick className="size-3.5" /> Terminal
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onOpenChange(false);
-                          void navigate({ to: "/terminal", search: { symbol: upper } });
-                        }}
-                        className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-                      >
-                        <Maximize2 className="size-3.5" /> Terminal
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onOpenChange(false);
+                        void navigate({ to: "/terminal", search: { symbol: upper } });
+                      }}
+                      className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                    >
+                      <ChartCandlestick className="size-3.5" /> Terminal
+                    </button>
                   ) : null}
                 </div>
 

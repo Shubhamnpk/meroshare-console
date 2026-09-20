@@ -3,7 +3,10 @@ import {
   ArrowRight,
   Blocks,
   Building2,
+  Calculator,
   ClipboardList,
+  GitCompareArrows,
+  Globe,
   Landmark,
   PiggyBank,
   TrendingUp,
@@ -16,7 +19,7 @@ export const Route = createFileRoute("/_dash/tools")({
       {
         name: "description",
         content:
-          "Investor tools: top-ranked shares, mutual funds and broker floor-sheet analytics.",
+          "Investor tools: stock screener, sector heatmap, stock compare, mutual funds, broker analytics and more.",
       },
       { property: "og:title", content: "Tools | MeroShare Investor Console" },
     ],
@@ -31,7 +34,31 @@ const TOOLS = [
     title: "Best Shares",
     description:
       "Top-ranked NEPSE stocks by short-term momentum and long-term fundamentals, with red-flag checks.",
-    tag: "Stock screener",
+    tag: "Screener",
+  },
+  {
+    to: "/market-depth",
+    icon: Globe,
+    title: "Market Depth & Heatmap",
+    description:
+      "Live ticker tape, all-time charts for indices & sectors, market breadth, and sector depth matrix.",
+    tag: "Market Depth",
+  },
+  {
+    to: "/stock-compare",
+    icon: GitCompareArrows,
+    title: "Stock Compare",
+    description:
+      "Side-by-side comparison of P/E, ROE, dividends, scores for up to 4 stocks.",
+    tag: "Compare",
+  },
+  {
+    to: "/dividend-vs-fd",
+    icon: Calculator,
+    title: "Dividend vs FD",
+    description:
+      "Compare dividend investing with fixed deposit returns over your time horizon.",
+    tag: "Calculator",
   },
   {
     to: "/mutual-funds",

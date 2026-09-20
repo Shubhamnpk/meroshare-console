@@ -27,6 +27,8 @@ import {
 import { placeBrokerAmo, placeBrokerOrder } from "@/lib/brokers/brokers.functions";
 import type { BrokerId } from "@/lib/brokers/types";
 import { errorMessage, formatNpr } from "@/lib/format";
+import { loadYoWallet, saveYoWallet } from "@/lib/yobroker/store";
+import { placeYoOrder } from "@/lib/yobroker/engine";
 import { cn } from "@/lib/utils";
 import { useBrokerMarketWs } from "@/hooks/use-broker-ws";
 
@@ -141,7 +143,15 @@ export function OrderTicket({
     side === "SELL" && validQty && holding ? Math.max(0, qty - holding.availableQty) : 0;
 
   const place = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
+      if (brokerId === "yobroker") {
+        const w = loadYoWallet(null);
+        const res = placeYoOrder(w, { symbol, side, qty, price: orderType === "MKT" ? null : px, orderType }, ltp);
+        if (res.error || !res.order) throw new Error(res.error ?? "Paper order failed.");
+        saveYoWallet(null, res.wallet);
+        // mimic PlaceOrderResult shape
+        return { ok: true as const, message: res.wallet.orders[0]?.status === "filled" ? `Filled ${side} ${qty} ${symbol}` : `Paper order placed: ${side} ${qty} ${symbol}`, tranId: res.order.id } as unknown as Awaited<ReturnType<typeof placeBrokerOrder>>;
+      }
       if (amo) {
         const ref = ltp ?? quote.data?.close ?? px;
         return placeBrokerAmo({
@@ -202,7 +212,7 @@ export function OrderTicket({
           <p className="font-display text-base font-semibold">
             {symbol}{" "}
             <span className="text-xs font-normal text-muted-foreground">
-              via {brokerId === "naasa-x" ? "Naasa X" : brokerId}
+              via {brokerId === "yobroker" ? "Yo Broker (paper)" : brokerId === "naasa-x" ? "Naasa X" : brokerId}
             </span>
           </p>
           <div className="flex items-center gap-2">
@@ -483,7 +493,15 @@ export function OrderTicket({
                 Confirm {side} {qty.toLocaleString("en-IN")} × {symbol}
               </DialogTitle>
               <DialogDescription>
-                This places a <strong>real order</strong> at your broker. Real money moves.
+                {brokerId === "yobroker" ? (
+                  <>
+                    This is a <strong>paper order</strong> via Yo Broker. No real money moves — fills against live NEPSE prices.
+                  </>
+                ) : (
+                  <>
+                    This places a <strong>real order</strong> at your broker. Real money moves.
+                  </>
+                )}
               </DialogDescription>
             </DialogHeader>
             <div className="grid grid-cols-2 gap-2 rounded-xl bg-muted/40 p-3 text-sm">

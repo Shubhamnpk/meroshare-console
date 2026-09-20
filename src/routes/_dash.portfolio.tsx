@@ -1,11 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { RefreshCw } from "lucide-react";
+import { FlaskConical, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { YoBrokerModal } from "@/components/brokers/yobroker-modal";
+import { loadYoWallet } from "@/lib/yobroker/store";
+import { marketSnapshotQuery } from "@/lib/queries";
 import { Panel } from "@/components/ui/panel";
 import { ErrorBlock, LoadingBlock, EmptyBlock } from "@/components/states";
 import { DeltaPill } from "@/components/stat-card";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -148,8 +151,38 @@ function PortfolioPage() {
     refetchInterval: autoRefresh ? refreshMinutes * 60_000 : false,
   });
   const investment = useQuery(investmentSummaryQuery());
+  const market = useQuery(marketSnapshotQuery());
   const [search, setSearch] = useState("");
   const [picked, setPicked] = useState<string | null>(null);
+  const [yoOpen, setYoOpen] = useState(false);
+  const [yoVersion, setYoVersion] = useState(0);
+  const [view, setView] = useState<"actual" | "yobroker">("actual");
+  useEffect(() => {
+    const onChange = () => setYoVersion((v) => v + 1);
+    window.addEventListener("yobroker:change", onChange);
+    window.addEventListener("storage", onChange);
+    return () => {
+      window.removeEventListener("yobroker:change", onChange);
+      window.removeEventListener("storage", onChange);
+    };
+  }, []);
+  void yoVersion;
+  const yoData = (() => {
+    try {
+      return loadYoWallet(null);
+    } catch {
+      return {
+        active: false,
+        cash: 0,
+        holdings: [],
+        orders: [],
+        trades: [],
+        seq: 1,
+        createdAt: "",
+      } as ReturnType<typeof loadYoWallet>;
+    }
+  })();
+  const yoActive = yoData.active;
   const { sort, toggle } = useSort<SortKey>(
     { key: "value", dir: "desc" },
     {
@@ -223,14 +256,97 @@ function PortfolioPage() {
 
   const liveCount = q.data?.liveCount ?? 0;
 
+  const priceMap = useMemo(
+    () => new Map((market.data?.prices ?? []).map((p) => [p.symbol, p] as const)),
+    [market.data],
+  );
+  const yoEnriched = useMemo(() => {
+    if (!yoActive) return null;
+    const holdingsYo = yoData.holdings.map((h) => {
+      const live = priceMap.get(h.symbol);
+      const ltp = live?.ltp ?? h.avgCost;
+      const prev = live?.previousClose ?? h.avgCost;
+      const value = h.qty * ltp;
+      const prevValue = h.qty * prev;
+      return {
+        scrip: h.symbol,
+        description: live?.name ?? h.symbol,
+        units: h.qty,
+        ltp,
+        previousClose: prev,
+        change: ltp - prev,
+        percentChange: prev > 0 ? ((ltp - prev) / prev) * 100 : 0,
+        value,
+        previousValue: prevValue,
+        dayChange: value - prevValue,
+        avgCost: h.avgCost,
+      } as EnrichedHolding & { avgCost: number };
+    });
+    const totalValue = holdingsYo.reduce((s, h) => s + h.value, 0);
+    const totalPrev = holdingsYo.reduce((s, h) => s + h.previousValue, 0);
+    return {
+      holdings: holdingsYo,
+      totalValue,
+      totalPrev,
+      dayChange: totalValue - totalPrev,
+      dayPct: totalPrev > 0 ? ((totalValue - totalPrev) / totalPrev) * 100 : 0,
+      totalUnits: holdingsYo.reduce((s, h) => s + h.units, 0),
+    };
+  }, [yoActive, yoData.holdings, priceMap]);
+
+  const yoItems = useMemo(() => {
+    if (!yoEnriched) return [];
+    const term = search.trim().toLowerCase();
+    const filtered = term
+      ? yoEnriched.holdings.filter((h) =>
+          [h.scrip, h.description].some((s) => s.toLowerCase().includes(term)),
+        )
+      : yoEnriched.holdings;
+    const weightOf = (h: (typeof yoEnriched.holdings)[number]) =>
+      yoEnriched.totalValue > 0 ? h.value / yoEnriched.totalValue : 0;
+    const getter = (h: (typeof yoEnriched.holdings)[number]): string | number => {
+      switch (sort.key) {
+        case "scrip":
+          return h.scrip;
+        case "units":
+          return h.units;
+        case "ltp":
+          return h.ltp;
+        case "previousClose":
+          return h.previousClose;
+        case "value":
+          return h.value;
+        case "avgBuy":
+          return (h as unknown as { avgCost: number }).avgCost ?? 0;
+        case "unrealized":
+          return h.value - h.units * ((h as unknown as { avgCost: number }).avgCost ?? 0);
+        case "percentChange":
+          return h.dayChange;
+        case "weight":
+          return weightOf(h);
+        default:
+          return "";
+      }
+    };
+    return sortBy(filtered, getter, sort.dir);
+  }, [yoEnriched, search, sort]);
+
+  // auto-switch to Yo Broker view when activated first time
+  useEffect(() => {
+    if (yoActive && view === "actual" && yoData.holdings.length > 0) {
+      // keep actual as default, don't auto-switch
+    }
+  }, [yoActive, yoData.holdings.length, view]);
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl font-semibold sm:text-3xl">Portfolio</h1>
           <p className="mt-1 hidden text-sm text-muted-foreground sm:block">
-            {holdings.length} scrip{holdings.length === 1 ? "" : "s"} · {liveCount} valued at live
-            NEPSE prices. Click any scrip for its full detail.
+            {view === "yobroker" && yoEnriched
+              ? `${yoEnriched.holdings.length} scrip${yoEnriched.holdings.length === 1 ? "" : "s"} · virtual Yo Broker portfolio. Click any scrip for detail.`
+              : `${holdings.length} scrip${holdings.length === 1 ? "" : "s"} · ${liveCount} valued at live NEPSE prices. Click any scrip for its full detail.`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -323,6 +439,54 @@ function PortfolioPage() {
         </div>
       </div>
 
+      {yoActive ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex rounded-full border border-border/70 bg-card p-1">
+            {(
+              [
+                { id: "actual", label: "Actual" },
+                { id: "yobroker", label: "Yo Broker" },
+              ] as const
+            ).map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setView(t.id)}
+                className={cn(
+                  "rounded-full px-3 py-1 text-xs font-semibold transition-colors",
+                  view === t.id
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <span className="text-xs text-muted-foreground">
+            {view === "yobroker"
+              ? `Virtual ${formatNpr(yoData.cash)} cash · ${yoEnriched?.holdings.length ?? 0} holdings`
+              : "Real demat holdings"}
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="ml-auto h-7 gap-1 text-xs"
+            onClick={() => setYoOpen(true)}
+          >
+            <FlaskConical className="size-3.5" /> Manage Yo Broker
+          </Button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setYoOpen(true)}
+          className="inline-flex items-center gap-1.5 rounded-full border border-violet-500/20 bg-violet-500/10 px-3 py-1 text-xs font-medium text-violet-600 hover:bg-violet-500/15"
+        >
+          <FlaskConical className="size-3.5" /> Try Yo Broker paper trading
+        </button>
+      )}
+
       {q.data?.marketStale ? (
         <p className="rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
           The market feed is temporarily unreachable. Prices shown are MeroShare's own, which may
@@ -340,74 +504,284 @@ function PortfolioPage() {
         />
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        <StatChip
-          icon={<Coins className="size-4" />}
-          label="Scrips held"
-          value={String(holdings.length)}
-        />
-        <StatChip
-          icon={<Wallet className="size-4" />}
-          label="Total units"
-          value={formatQty(totals.units)}
-        />
-        <StatChip
-          icon={
-            totals.dayChange > 0 ? (
-              <TrendingUp className="size-4 text-gain" />
-            ) : totals.dayChange < 0 ? (
-              <TrendingDown className="size-4 text-loss" />
-            ) : (
-              <TrendingUp className="size-4" />
-            )
-          }
-          label="Market value"
-          value={formatNpr(totals.value, { compact: compactNumbers })}
-          valueClass={totals.dayChange > 0 ? "text-gain" : totals.dayChange < 0 ? "text-loss" : ""}
-        />
-        <StatChip
-          icon={<TrendingUp className="size-4" />}
-          label="Value (prev close)"
-          value={formatNpr(totals.valuePrev, { compact: compactNumbers })}
-        />
-        <StatChip
-          icon={
-            totals.dayChange > 0 ? (
-              <TrendingUp className="size-4 text-gain" />
-            ) : totals.dayChange < 0 ? (
-              <TrendingDown className="size-4 text-loss" />
-            ) : (
-              <TrendingUp className="size-4" />
-            )
-          }
-          label="Day change"
-          value={`${totals.dayChange > 0 ? "+" : totals.dayChange < 0 ? "-" : ""}${formatNpr(Math.abs(totals.dayChange))} (${totals.dayPct.toFixed(2)}%)`}
-          valueClass={totals.dayChange > 0 ? "text-gain" : totals.dayChange < 0 ? "text-loss" : ""}
-        />
-        <StatChip
-          icon={<PiggyBank className="size-4" />}
-          label={pendingCount > 0 ? `Investment (${pendingCount} pending)` : "Total investment"}
-          value={
-            investment.isLoading ? "…" : formatNpr(totalInvestment, { compact: compactNumbers })
-          }
-        />
-        {totalInvestment > 0 ? (
+      {view === "yobroker" && yoEnriched ? (
+        <div className="flex flex-wrap gap-2">
+          <StatChip
+            icon={<Coins className="size-4" />}
+            label="Yo scrips"
+            value={String(yoEnriched.holdings.length)}
+          />
+          <StatChip
+            icon={<Wallet className="size-4" />}
+            label="Yo units"
+            value={formatQty(yoEnriched.totalUnits)}
+          />
           <StatChip
             icon={
-              unrealizedPL >= 0 ? (
+              yoEnriched.dayChange > 0 ? (
                 <TrendingUp className="size-4 text-gain" />
-              ) : (
+              ) : yoEnriched.dayChange < 0 ? (
                 <TrendingDown className="size-4 text-loss" />
+              ) : (
+                <TrendingUp className="size-4" />
               )
             }
-            label="Unrealized P/L"
-            value={`${unrealizedPL >= 0 ? "+" : ""}${formatNpr(unrealizedPL, { compact: compactNumbers })}`}
-            valueClass={unrealizedPL >= 0 ? "text-gain" : "text-loss"}
+            label="Yo market value"
+            value={formatNpr(yoEnriched.totalValue, { compact: compactNumbers })}
+            valueClass={
+              yoEnriched.dayChange > 0 ? "text-gain" : yoEnriched.dayChange < 0 ? "text-loss" : ""
+            }
           />
-        ) : null}
-      </div>
+          <StatChip
+            icon={<Wallet className="size-4" />}
+            label="Virtual cash"
+            value={formatNpr(yoData.cash, { compact: compactNumbers })}
+          />
+          <StatChip
+            icon={
+              yoEnriched.dayChange > 0 ? (
+                <TrendingUp className="size-4 text-gain" />
+              ) : yoEnriched.dayChange < 0 ? (
+                <TrendingDown className="size-4 text-loss" />
+              ) : (
+                <TrendingUp className="size-4" />
+              )
+            }
+            label="Yo day change"
+            value={`${yoEnriched.dayChange > 0 ? "+" : yoEnriched.dayChange < 0 ? "-" : ""}${formatNpr(Math.abs(yoEnriched.dayChange))} (${yoEnriched.dayPct.toFixed(2)}%)`}
+            valueClass={
+              yoEnriched.dayChange > 0 ? "text-gain" : yoEnriched.dayChange < 0 ? "text-loss" : ""
+            }
+          />
+          <StatChip
+            icon={<PiggyBank className="size-4" />}
+            label="Yo total"
+            value={formatNpr(yoEnriched.totalValue + yoData.cash, { compact: compactNumbers })}
+          />
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          <StatChip
+            icon={<Coins className="size-4" />}
+            label="Scrips held"
+            value={String(holdings.length)}
+          />
+          <StatChip
+            icon={<Wallet className="size-4" />}
+            label="Total units"
+            value={formatQty(totals.units)}
+          />
+          <StatChip
+            icon={
+              totals.dayChange > 0 ? (
+                <TrendingUp className="size-4 text-gain" />
+              ) : totals.dayChange < 0 ? (
+                <TrendingDown className="size-4 text-loss" />
+              ) : (
+                <TrendingUp className="size-4" />
+              )
+            }
+            label="Market value"
+            value={formatNpr(totals.value, { compact: compactNumbers })}
+            valueClass={
+              totals.dayChange > 0 ? "text-gain" : totals.dayChange < 0 ? "text-loss" : ""
+            }
+          />
+          <StatChip
+            icon={<TrendingUp className="size-4" />}
+            label="Value (prev close)"
+            value={formatNpr(totals.valuePrev, { compact: compactNumbers })}
+          />
+          <StatChip
+            icon={
+              totals.dayChange > 0 ? (
+                <TrendingUp className="size-4 text-gain" />
+              ) : totals.dayChange < 0 ? (
+                <TrendingDown className="size-4 text-loss" />
+              ) : (
+                <TrendingUp className="size-4" />
+              )
+            }
+            label="Day change"
+            value={`${totals.dayChange > 0 ? "+" : totals.dayChange < 0 ? "-" : ""}${formatNpr(Math.abs(totals.dayChange))} (${totals.dayPct.toFixed(2)}%)`}
+            valueClass={
+              totals.dayChange > 0 ? "text-gain" : totals.dayChange < 0 ? "text-loss" : ""
+            }
+          />
+          <StatChip
+            icon={<PiggyBank className="size-4" />}
+            label={pendingCount > 0 ? `Investment (${pendingCount} pending)` : "Total investment"}
+            value={
+              investment.isLoading ? "…" : formatNpr(totalInvestment, { compact: compactNumbers })
+            }
+          />
+          {totalInvestment > 0 ? (
+            <StatChip
+              icon={
+                unrealizedPL >= 0 ? (
+                  <TrendingUp className="size-4 text-gain" />
+                ) : (
+                  <TrendingDown className="size-4 text-loss" />
+                )
+              }
+              label="Unrealized P/L"
+              value={`${unrealizedPL >= 0 ? "+" : ""}${formatNpr(unrealizedPL, { compact: compactNumbers })}`}
+              valueClass={unrealizedPL >= 0 ? "text-gain" : "text-loss"}
+            />
+          ) : null}
+        </div>
+      )}
 
-      {q.isLoading ? (
+      {view === "yobroker" && yoEnriched ? (
+        yoEnriched.holdings.length === 0 ? (
+          <EmptyBlock
+            title="No Yo holdings"
+            description="Buy virtual scrips with Yo Broker to see them here. Use the Terminal or Market to place paper orders."
+          />
+        ) : yoItems.length === 0 ? (
+          <EmptyBlock title="No matches" description="Nothing matches your search." />
+        ) : (
+          <Panel padding="none" className="overflow-hidden">
+            <Table className="min-w-[760px]">
+              <TableHeader>
+                <TableRow className="bg-muted/40 hover:bg-muted/40">
+                  <TableHead className="w-10 pl-4">SN</TableHead>
+                  <SortableTh
+                    label="Scrip"
+                    active={sort.key === "scrip"}
+                    dir={sort.dir}
+                    onClick={() => toggle("scrip")}
+                    align="left"
+                    kind="text"
+                  />
+                  <SortableTh
+                    label="Units"
+                    active={sort.key === "units"}
+                    dir={sort.dir}
+                    onClick={() => toggle("units")}
+                    align="right"
+                  />
+                  <SortableTh
+                    label="LTP"
+                    active={sort.key === "ltp"}
+                    dir={sort.dir}
+                    onClick={() => toggle("ltp")}
+                    align="right"
+                  />
+                  <SortableTh
+                    label="Prev close"
+                    active={sort.key === "previousClose"}
+                    dir={sort.dir}
+                    onClick={() => toggle("previousClose")}
+                    align="right"
+                  />
+                  <SortableTh
+                    label="Value"
+                    active={sort.key === "value"}
+                    dir={sort.dir}
+                    onClick={() => toggle("value")}
+                    align="right"
+                  />
+                  <SortableTh
+                    label="Avg cost"
+                    active={sort.key === "avgBuy"}
+                    dir={sort.dir}
+                    onClick={() => toggle("avgBuy")}
+                    align="right"
+                  />
+                  <SortableTh
+                    label="P/L"
+                    active={sort.key === "unrealized"}
+                    dir={sort.dir}
+                    onClick={() => toggle("unrealized")}
+                    align="right"
+                  />
+                  <SortableTh
+                    label="Day"
+                    active={sort.key === "percentChange"}
+                    dir={sort.dir}
+                    onClick={() => toggle("percentChange")}
+                    align="right"
+                  />
+                  <SortableTh
+                    label="Weight"
+                    active={sort.key === "weight"}
+                    dir={sort.dir}
+                    onClick={() => toggle("weight")}
+                    align="right"
+                    className="pr-4"
+                  />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {yoItems.map((h, idx) => {
+                  const weight =
+                    yoEnriched.totalValue > 0 ? (h.value / yoEnriched.totalValue) * 100 : 0;
+                  const avg = (h as unknown as { avgCost: number }).avgCost ?? 0;
+                  const pl = h.value - h.units * avg;
+                  const plPct = avg > 0 ? (pl / (h.units * avg)) * 100 : 0;
+                  return (
+                    <TableRow
+                      key={`${h.scrip}-${idx}`}
+                      className="cursor-pointer"
+                      onClick={() => setPicked(h.scrip)}
+                    >
+                      <TableCell className="pl-4 text-xs text-muted-foreground">
+                        {idx + 1}
+                      </TableCell>
+                      <TableCell>
+                        <p className="font-semibold hover:text-primary">{h.scrip}</p>
+                        <p className="max-w-52 truncate text-xs text-muted-foreground">
+                          {h.description}
+                        </p>
+                      </TableCell>
+                      <TableCell className="num text-right">{formatQty(h.units)}</TableCell>
+                      <TableCell className="text-right">
+                        <span className="num font-medium">{formatNpr(h.ltp)}</span>
+                      </TableCell>
+                      <TableCell className="num text-right text-muted-foreground">
+                        {h.previousClose > 0 ? formatNpr(h.previousClose) : "-"}
+                      </TableCell>
+                      <TableCell className="num text-right font-medium">
+                        {formatNpr(h.value)}
+                      </TableCell>
+                      <TableCell className="num text-right text-muted-foreground">
+                        {formatNpr(avg)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <DeltaPill
+                          value={pl}
+                        >{`${pl >= 0 ? "+" : "-"}${formatNpr(Math.abs(pl))} (${plPct.toFixed(1)}%)`}</DeltaPill>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <DeltaPill
+                          value={h.percentChange}
+                        >{`${h.dayChange >= 0 ? "+" : "-"}${formatNpr(Math.abs(h.dayChange))}`}</DeltaPill>
+                      </TableCell>
+                      <TableCell className="pr-4 text-right">
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="num text-xs text-muted-foreground">
+                            {weight.toFixed(1)}%
+                          </span>
+                          <div
+                            className="h-1 w-14 overflow-hidden rounded-full bg-muted"
+                            aria-hidden
+                          >
+                            <div
+                              className="h-full rounded-full bg-violet-500/60"
+                              style={{ width: `${Math.min(100, weight)}%` }}
+                            />
+                          </div>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </Panel>
+        )
+      ) : q.isLoading ? (
         <LoadingBlock label="Loading portfolio" />
       ) : q.isError ? (
         <ErrorBlock error={q.error} retry={() => void q.refetch()} />
@@ -640,7 +1014,7 @@ function PortfolioPage() {
         </Panel>
       )}
 
-      {q.data && q.data.sectors.length > 0 ? (
+      {view !== "yobroker" && q.data && q.data.sectors.length > 0 ? (
         <Panel as="section">
           <h2 className="mb-3 font-display text-base font-semibold">Sector allocation</h2>
           <ul className="flex flex-wrap gap-2">
@@ -657,7 +1031,14 @@ function PortfolioPage() {
         </Panel>
       ) : null}
 
-      {holdings.length > 0 ? <HistoryPanel holdings={holdings} onPickScrip={setPicked} /> : null}
+      {view === "yobroker" && yoEnriched && yoEnriched.holdings.length > 0 ? (
+        <HistoryPanel
+          holdings={yoEnriched.holdings as unknown as EnrichedHolding[]}
+          onPickScrip={setPicked}
+        />
+      ) : view !== "yobroker" && holdings.length > 0 ? (
+        <HistoryPanel holdings={holdings} onPickScrip={setPicked} />
+      ) : null}
 
       <ScripSheet
         symbol={picked}
@@ -665,6 +1046,7 @@ function PortfolioPage() {
           if (!open) setPicked(null);
         }}
       />
+      <YoBrokerModal open={yoOpen} onOpenChange={setYoOpen} />
     </div>
   );
 }

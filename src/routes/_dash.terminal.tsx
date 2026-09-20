@@ -689,10 +689,11 @@ function TerminalPage() {
   const mirrorBars = series.data?.bars ?? NO_BARS;
   const mirrorIntraday = series.data?.intraday ?? NO_POINTS;
   const hasMirror = mirrorBars.length > 0 || mirrorIntraday.length > 0;
+  const hasMirrorIntraday = mirrorIntraday.length >= 2;
   const useUdf =
     mode === "scrip" &&
     state.range === "1D" &&
-    !hasMirror &&
+    !hasMirrorIntraday &&
     (udfBars.length > 0 || udfIntraday.length > 0) &&
     !isIndexEarly;
   const activeBars =
@@ -705,8 +706,12 @@ function TerminalPage() {
       : isIndexEarly
         ? indexBars
         : useUdf
-          ? (udfBars as ChartBar[])
-          : mirrorBars;
+          ? udfIntraday.length >= 2
+            ? NO_BARS
+            : (udfBars as ChartBar[])
+          : mirrorIntraday.length >= 2
+            ? NO_BARS
+            : mirrorBars;
   const intraday =
     mode === "portfolio"
       ? portfolioIntraday
@@ -715,6 +720,7 @@ function TerminalPage() {
         : useUdf
           ? (udfIntraday as PricePoint[])
           : mirrorIntraday;
+
   // Per-point resolution for daily candles on 1M+ ranges (day/week/month/year).
   const showAgg = mode === "scrip" && state.range !== "1D" && state.range !== "1W";
   const drawnBars = useMemo(
@@ -730,7 +736,7 @@ function TerminalPage() {
           ? indexHistory.isPending
           : indexDaily.isPending
         : series.isPending ||
-          (useUdf ? false : udf.isPending && state.range === "1D" && !hasMirror);
+          (useUdf ? false : udf.isPending && state.range === "1D" && !hasMirrorIntraday);
   const udfBadge = useUdf ? " · UDF" : "";
   const isMobile = useIsMobile();
   const chartHeight = expanded ? 640 : isMobile ? 320 : 400;
