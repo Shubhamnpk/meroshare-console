@@ -712,13 +712,62 @@ export async function getIpoArchive(): Promise<{
 }
 
 /** Terminal/RANGES index key → YONEPSE archive series key. Unknown keys pass through. */
-function yonepseIndexKey(indexName: string): string {
-  const upper = indexName.trim().toUpperCase();
-  if (upper === "NEPSE") return "NEPSE";
-  if (upper === "SENSITIVE" || upper === "SENSIND") return "SENSIND";
-  if (upper === "FLOAT" || upper === "FLOATIND") return "FLOATIND";
-  if (upper === "SENFLOAT" || upper === "SENSFLTIND") return "SENSFLTIND";
-  return upper;
+export function yonepseIndexKey(indexName: string): string {
+  const clean = indexName
+    .trim()
+    .toUpperCase()
+    .replace(/\s*SUBINDEX$/i, "")
+    .replace(/\s*INDEX$/i, "")
+    .replace(/[&]/g, "AND")
+    .replace(/[^A-Z0-9]/g, "")
+    .trim();
+
+  const map: Record<string, string> = {
+    NEPSE: "NEPSE",
+    SENSITIVE: "SENSIND",
+    SENSIND: "SENSIND",
+    FLOAT: "FLOATIND",
+    FLOATIND: "FLOATIND",
+    SENFLOAT: "SENSFLTIND",
+    SENSITIVEFLOAT: "SENSFLTIND",
+    SENSFLTIND: "SENSFLTIND",
+    BANKING: "BANKSUBIND",
+    COMMERCIALBANK: "BANKSUBIND",
+    COMMERCIALBANKS: "BANKSUBIND",
+    BANKSUBIND: "BANKSUBIND",
+    DEVELOPMENTBANK: "DEVBANKIND",
+    DEVELOPMENTBANKS: "DEVBANKIND",
+    DEVBANKIND: "DEVBANKIND",
+    FINANCE: "FININD",
+    FININD: "FININD",
+    HOTEL: "HOTELIND",
+    HOTELS: "HOTELIND",
+    HOTELANDTOURISM: "HOTELIND",
+    HOTELSANDTOURISM: "HOTELIND",
+    HOTELIND: "HOTELIND",
+    HYDROPOWER: "HYDPOWIND",
+    HYDPOWIND: "HYDPOWIND",
+    INVESTMENT: "INVIDX",
+    INVIDX: "INVIDX",
+    LIFEINSURANCE: "LIFINSIND",
+    LIFINSIND: "LIFINSIND",
+    MANUFACTURING: "MANPROCIND",
+    MANUFACTURINGANDPROCESSING: "MANPROCIND",
+    MANPROCIND: "MANPROCIND",
+    MICROFINANCE: "MICRFININD",
+    MICRFININD: "MICRFININD",
+    MUTUALFUND: "MUTUALIND",
+    MUTUALFUNDS: "MUTUALIND",
+    MUTUALIND: "MUTUALIND",
+    NONLIFEINSURANCE: "NONLIFIND",
+    NONLIFIND: "NONLIFIND",
+    OTHERS: "OTHERSIND",
+    OTHERSIND: "OTHERSIND",
+    TRADING: "TRDIND",
+    TRDIND: "TRDIND",
+  };
+
+  return map[clean] ?? map[indexName.trim().toUpperCase()] ?? indexName.trim().toUpperCase();
 }
 
 /**
@@ -726,8 +775,8 @@ function yonepseIndexKey(indexName: string): string {
  * first. Monthly files carry every trading day as
  * `[dateIndex, close, open, high, low, turnover, volume, trades]`, so any
  * range (1M → MAX) gets real candles. `days` bounds the trailing window;
- * 0 means everything (no cap). Bounded ranges are capped to 64 monthly
- * files (~5 years) so a cold load stays fast.
+ * 0 means everything (capped to 144 months / 12 years for fast load).
+ * Bounded ranges are capped to 64 monthly files (~5 years).
  */
 export async function getIndexDailyBars(indexName: string, days = 0): Promise<ChartBar[]> {
   const key = yonepseIndexKey(indexName);
@@ -740,6 +789,7 @@ export async function getIndexDailyBars(indexName: string, days = 0): Promise<Ch
   const tailMonth = days > 0 ? monthKeyFromEpoch(now - days * 86400) : "0000-00";
   let months = availableMonths.filter((m) => m >= tailMonth);
   if (days > 0 && months.length > 64) months = months.slice(-64);
+  else if (days === 0 && months.length > 144) months = months.slice(-144);
   if (months.length === 0) return [];
 
   const files = await Promise.all(

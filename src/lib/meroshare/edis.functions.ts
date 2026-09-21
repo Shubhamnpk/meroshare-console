@@ -30,17 +30,21 @@ export const getEdisTransferActive = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data }): Promise<{ items: EdisTransferItem[]; total: number }> => {
+    const auth = await requireAuth();
+    if (auth.demo) return { items: [], total: 0 };
     const opts: { page?: number; size?: number } = {};
     if (data.page !== undefined) opts.page = data.page;
     if (data.size !== undefined) opts.size = data.size;
-    const res = await fetchEdisTransferActive(await requireAuth(), opts);
+    const res = await fetchEdisTransferActive(auth, opts);
     return { items: res.object ?? [], total: res.totalCount ?? 0 };
   });
 
 export const getEdisTransferDetail = createServerFn({ method: "POST" })
   .validator((input: unknown) => z.object({ transferId: z.number().int().positive() }).parse(input))
   .handler(async ({ data }): Promise<EdisTransferDetail> => {
-    return fetchEdisTransferDetail(await requireAuth(), data.transferId);
+    const auth = await requireAuth();
+    if (auth.demo) throw new Error("EDIS detail is not available in demo mode.");
+    return fetchEdisTransferDetail(auth, data.transferId);
   });
 
 export const getEdisNodel = createServerFn({ method: "POST" })
@@ -53,34 +57,44 @@ export const getEdisNodel = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data }): Promise<{ items: EdisNodelItem[]; total: number }> => {
+    const auth = await requireAuth();
+    if (auth.demo) return { items: [], total: 0 };
     const opts: { page?: number; size?: number } = {};
     if (data.page !== undefined) opts.page = data.page;
     if (data.size !== undefined) opts.size = data.size;
-    const res = await fetchEdisNodel(await requireAuth(), opts);
+    const res = await fetchEdisNodel(auth, opts);
     return { items: res.object ?? [], total: res.totalCount ?? 0 };
   });
 
 export const getEdisStatuses = createServerFn({ method: "GET" }).handler(
   async (): Promise<EdisStatusItem[]> => {
-    return fetchEdisStatuses(await requireAuth());
+    const auth = await requireAuth();
+    if (auth.demo) return [];
+    return fetchEdisStatuses(auth);
   },
 );
 
 export const getEdisDisclaimer = createServerFn({ method: "GET" }).handler(
   async (): Promise<string> => {
-    return fetchEdisDisclaimer(await requireAuth());
+    const auth = await requireAuth();
+    if (auth.demo) return "EDIS is not available in demo mode.";
+    return fetchEdisDisclaimer(auth);
   },
 );
 
 export const checkEdisPoolAccountFn = createServerFn({ method: "GET" }).handler(
   async (): Promise<boolean> => {
-    return checkEdisPoolAccount(await requireAuth());
+    const auth = await requireAuth();
+    if (auth.demo) return false;
+    return checkEdisPoolAccount(auth);
   },
 );
 
 export const checkEdisWaccLeftFn = createServerFn({ method: "GET" }).handler(
   async (): Promise<boolean> => {
-    return checkEdisWaccLeft(await requireAuth());
+    const auth = await requireAuth();
+    if (auth.demo) return false;
+    return checkEdisWaccLeft(auth);
   },
 );
 
@@ -93,7 +107,9 @@ export const checkEdisTransferFn = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data }): Promise<JsonRecord[]> => {
-    return checkEdisTransfer(await requireAuth(), data.requests);
+    const auth = await requireAuth();
+    if (auth.demo) throw new Error("EDIS check is not available in demo mode.");
+    return checkEdisTransfer(auth, data.requests);
   });
 
 export const submitEdisTransferFn = createServerFn({ method: "POST" })
@@ -105,5 +121,7 @@ export const submitEdisTransferFn = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data }): Promise<JsonRecord> => {
-    return submitEdisTransfer(await requireAuth(), data.requests);
+    const auth = await requireAuth();
+    if (auth.demo) throw new Error("EDIS submit is not available in demo mode.");
+    return submitEdisTransfer(auth, data.requests);
   });

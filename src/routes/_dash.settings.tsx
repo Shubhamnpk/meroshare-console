@@ -48,6 +48,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useSettings, COLOR_OPTIONS, type ThemePref } from "@/lib/settings";
+import { getNumberFormat, setNumberFormat } from "@/components/ui/amount-input";
 import { clearRemembered, loadRemembered } from "@/lib/remember-me";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { APP_VERSION, GITHUB_REPO_URL } from "@/lib/version";
@@ -87,6 +88,8 @@ import {
 } from "@/lib/brokers/brokers.functions";
 import { BROKERS, type BrokerId, type BrokerTestResult } from "@/lib/brokers/types";
 import { TmsConnectDialog } from "@/components/brokers/tms-connect-dialog";
+import { YoBrokerModal } from "@/components/brokers/yobroker-modal";
+import { loadYoWallet } from "@/lib/yobroker/store";
 import {
   disableBiometrics,
   enrollBiometric,
@@ -611,6 +614,8 @@ function BrokerConnectionsCard() {
   const vaultStatus = useQuery(brokerVaultStatusQuery());
   const vaultReady = vaultStatus.data?.configured ?? null;
   const [dialogFor, setDialogFor] = useState<BrokerId | null>(null);
+  const [yoOpen, setYoOpen] = useState(false);
+  const [yoTick, setYoTick] = useState(0);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -656,6 +661,10 @@ function BrokerConnectionsCard() {
   });
 
   const openDialog = (brokerId: BrokerId) => {
+    if (brokerId === "yobroker") {
+      setYoOpen(true);
+      return;
+    }
     setDialogFor(brokerId);
     setEmail("");
     setPassword("");
@@ -663,6 +672,16 @@ function BrokerConnectionsCard() {
     setTestResult(null);
     saveMutation.reset();
   };
+
+  useEffect(() => {
+    const bump = () => setYoTick((v) => v + 1);
+    window.addEventListener("yobroker:change", bump);
+    window.addEventListener("storage", bump);
+    return () => {
+      window.removeEventListener("yobroker:change", bump);
+      window.removeEventListener("storage", bump);
+    };
+  }, []);
 
   const connected = (id: BrokerId) => connections.data?.find((c) => c.brokerId === id) ?? null;
   const connectedCount = connections.data?.length ?? 0;
@@ -711,6 +730,74 @@ function BrokerConnectionsCard() {
 
       <div className="space-y-3">
         {BROKERS.map((broker) => {
+          if (broker.id === "yobroker") {
+            void yoTick;
+            let yoActive = false;
+            let yoCash = 0;
+            let yoHoldings = 0;
+            try {
+              const w = loadYoWallet(null);
+              yoActive = w.active;
+              yoCash = w.cash;
+              yoHoldings = w.holdings.length;
+            } catch {}
+            return (
+              <div
+                key={broker.id}
+                className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-4"
+              >
+                <div className="flex items-center justify-between gap-4">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <FlaskConical className="size-4 text-violet-600" />
+                      <p className="text-sm font-semibold">{broker.name}</p>
+                      {yoActive ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-violet-500/15 px-2 py-0.5 text-[0.68rem] font-medium text-violet-600">
+                          <Check className="size-3" /> Active
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-[0.68rem] font-medium text-muted-foreground">
+                          Practice
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">{broker.tagline}</p>
+                    <p className="text-[0.7rem] text-muted-foreground/80">
+                      {broker.capabilities.join(" · ")}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant={yoActive ? "outline" : "default"}
+                    className="shrink-0"
+                    onClick={() => setYoOpen(true)}
+                  >
+                    {yoActive ? "Manage" : "Activate"}
+                  </Button>
+                </div>
+                {yoActive ? (
+                  <div className="mt-2.5 grid gap-1 rounded-lg border border-border/60 bg-background px-3 py-2 text-xs sm:grid-cols-3">
+                    <div>
+                      <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
+                        Virtual cash
+                      </p>
+                      <p className="num font-medium">{yoCash.toLocaleString("en-NP")}</p>
+                    </div>
+                    <div>
+                      <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
+                        Holdings
+                      </p>
+                      <p className="font-medium">{yoHoldings} scrips</p>
+                    </div>
+                    <div>
+                      <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">Mode</p>
+                      <p className="font-medium">Paper — no email needed</p>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            );
+          }
           const link = connected(broker.id);
           return (
             <div key={broker.id} className="rounded-xl border border-border/60 bg-background p-4">
@@ -786,6 +873,7 @@ function BrokerConnectionsCard() {
           );
         })}
       </div>
+      <YoBrokerModal open={yoOpen} onOpenChange={setYoOpen} />
 
       {retestMutation.isError ? (
         <p className="text-xs text-destructive">
@@ -1187,6 +1275,7 @@ function SettingsPage() {
     openPassword,
     openPin,
   } = useSettings();
+  const [numberFormat, setNumberFormatState] = useState<"np" | "us">(() => getNumberFormat() as "np" | "us");
 
   const intervalOptions = [1, 5, 10, 30];
 
@@ -1431,6 +1520,37 @@ function SettingsPage() {
                       onCheckedChange={setCompactNumbers}
                       aria-label="compact-numbers"
                     />
+                  </div>
+
+                  {/* Number System — Nepali vs International */}
+                  <div className="flex items-center justify-between gap-4 rounded-xl border border-border/60 bg-background p-4">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <Hash className="size-4 text-primary" />
+                        <p className="text-sm font-semibold">Number System</p>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {numberFormat === "np" ? "Nepali: 1,00,000 • Rs 12,34,567" : "International: 100,000 • Rs 1,234,567"} — affects all amount inputs.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1 rounded-lg border border-border/60 bg-secondary/60 p-1">
+                      {(["np", "us"] as const).map((fmt) => (
+                        <button
+                          key={fmt}
+                          type="button"
+                          onClick={() => {
+                            setNumberFormat(fmt);
+                            setNumberFormatState(fmt);
+                          }}
+                          className={cn(
+                            "rounded-md px-3 py-1 text-xs font-semibold transition-all",
+                            numberFormat === fmt ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          {fmt === "np" ? "Nepali" : "International"}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </Panel>

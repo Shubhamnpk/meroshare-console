@@ -18,11 +18,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { ExportButton, type ExportFormat } from "@/components/export-dialog";
 import { ErrorBlock, LoadingBlock } from "@/components/states";
-import { accountProfileQuery } from "@/lib/queries";
+import { accountProfileQuery, brokerConnectionsQuery, brokerHoldingsQuery } from "@/lib/queries";
 import { useSettings } from "@/lib/settings";
 import { logout } from "@/lib/meroshare/auth.functions";
 import { ogImage, canonicalLink } from "@/lib/seo";
+import type { BrokerId } from "@/lib/brokers/types";
 import type { AccountBank, AccountProfile, JsonRecord } from "@/lib/meroshare/types";
+import { formatNpr, formatQty } from "@/lib/format";
 
 export const Route = createFileRoute("/_dash/profile")({
   head: () => ({
@@ -205,6 +207,9 @@ function ProfilePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [reveal, setReveal] = useState(false);
+  const connections = useQuery(brokerConnectionsQuery());
+  const realBrokerId = (connections.data?.find((c) => c.brokerId !== "yobroker")?.brokerId ?? null) as BrokerId | null;
+  const brokerHoldings = useQuery(brokerHoldingsQuery(realBrokerId));
 
   const data = q.data;
   const sections = useMemo(() => {
@@ -455,6 +460,40 @@ function ProfilePage() {
           </div>
         )}
       </div>
+
+      {/* Connected broker holdings — like paper trading holdings in Portfolio, but for real broker. No Yo Broker promo here. */}
+      {realBrokerId ? (
+        <div className="space-y-3">
+          <h2 className="text-sm font-semibold">Broker holdings · {realBrokerId}</h2>
+          {brokerHoldings.isLoading ? (
+            <LoadingBlock label="Loading broker holdings" rows={2} />
+          ) : brokerHoldings.isError ? (
+            <ErrorBlock error={brokerHoldings.error} retry={() => void brokerHoldings.refetch()} />
+          ) : !brokerHoldings.data || brokerHoldings.data.length === 0 ? (
+            <p className="rounded-2xl border border-border/70 bg-card px-4 py-6 text-sm text-muted-foreground">
+              No holdings found in your connected broker account.
+            </p>
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {brokerHoldings.data.map((h) => (
+                <div
+                  key={h.symbol}
+                  className="rounded-xl border border-border/60 bg-card px-3 py-2.5"
+                >
+                  <p className="truncate text-sm font-semibold">{h.symbol}</p>
+                  <p className="mt-1 flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">{formatQty(h.availableQty)} units</span>
+                    <span className="num font-medium">{formatNpr(h.closePrice)}</span>
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Value {formatNpr(h.marketValue)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : null}
 
       <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <CalendarClock className="size-3.5" />

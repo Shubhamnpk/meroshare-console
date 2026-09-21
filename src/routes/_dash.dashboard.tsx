@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
-import { Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowUpRight,
   Briefcase,
   CalendarDays,
   ChartLine,
+  CheckCircle2,
   RefreshCw,
   Rocket,
   Star,
@@ -15,6 +15,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { Panel } from "@/components/ui/panel";
+import { Button } from "@/components/ui/button";
 import { StatCard, DeltaPill } from "@/components/stat-card";
 import { WatchlistPanel } from "@/components/market/watchlist-panel";
 import { useWatchlist } from "@/lib/watchlist";
@@ -26,19 +27,29 @@ import { Sparkline } from "@/components/market/sparkline";
 import { RangeBar } from "@/components/market/range-bar";
 import {
   applicableIssuesQuery,
+  applicationReportsQuery,
   currentIssuesQuery,
   dividendsQuery,
   enrichedPortfolioQuery,
+  holdingSymbolsQuery,
   indexGraphQuery,
   investmentSummaryQuery,
   ipoArchiveQuery,
   marketSnapshotQuery,
 } from "@/lib/queries";
-import { formatDate, formatNpr, formatPercent, formatQty } from "@/lib/format";
+import {
+  daysUntil,
+  formatDate,
+  formatNpr,
+  formatNumber,
+  formatPercent,
+  formatQty,
+} from "@/lib/format";
 import { parseFeedDate } from "@/lib/nepali-dates";
 import { upcomingMerged } from "@/lib/ipo/status";
 import { ogImage, canonicalLink } from "@/lib/seo";
 import { cn } from "@/lib/utils";
+import { canonicalSymbol } from "@/lib/nepse/aliases";
 import type { EnrichedHolding } from "@/lib/nepse/types";
 
 export const Route = createFileRoute("/_dash/dashboard")({
@@ -124,7 +135,10 @@ function DashboardPage() {
   const nepseGraph = useQuery(indexGraphQuery("NEPSE"));
   const investment = useQuery(investmentSummaryQuery());
   const dividends = useQuery(dividendsQuery());
+  const reports = useQuery(applicationReportsQuery());
+  const navigate = useNavigate();
   const [picked, setPicked] = useState<string | null>(null);
+  const [pickedTab, setPickedTab] = useState<string | null>(null);
   const [watchlistOpen, setWatchlistOpen] = useState(false);
   const watchlist = useWatchlist();
   const [chartOpen, setChartOpen] = useState(false);
@@ -143,19 +157,65 @@ function DashboardPage() {
 
   const openIssues = (issues.data ?? []).slice(0, 4);
 
-  // Next book closures among holdings, for the dividend calendar shortcut.
+  const holdingSymbols = useQuery(holdingSymbolsQuery());
+  // Dividend shortcut: mirrors calendar's canonical-symbol match. Window is
+  // -3 days .. +7 days around today (your ask); book-closes and announces both
+  // count. Keeps the strip calm and timely instead of surfacing far-future FYs.
   const upcomingClosures = (() => {
-    const held = new Set(holdings.map((h) => h.scrip.toUpperCase()));
+    const fromPortfolio = holdings.map((h) => canonicalSymbol(h.scrip));
+    const fromSymbols = (holdingSymbols.data ?? []).map((s) => canonicalSymbol(s));
+    const held = new Set([...fromPortfolio, ...fromSymbols].filter(Boolean));
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    return (dividends.data ?? [])
-      .map((d) => {
-        const symbol = String(d.symbol ?? "").trim().toUpperCase();
-        const date = parseFeedDate(d.bookCloseDate);
-        return { symbol, date, bonus: Number(d.bonusShare ?? 0) || 0, cash: Number(d.cashDividend ?? 0) || 0 };
+    const DAY = 86_400_000;
+    const from = today - 3 * DAY;
+    const to = today + 7 * DAY;
+    if (held.size === 0) return [];
+    type Clos = {
+      symbol: string;
+      canon: string;
+      date: Date;
+      bonus: number;
+      cash: number;
+      fy: string | null;
+      kind: "bookclose" | "announce";
+    };
+    const all: Clos[] = [];
+    for (const d of dividends.data ?? []) {
+      const symbol = String(d.symbol ?? "")
+        .trim()
+        .toUpperCase();
+      if (!symbol) continue;
+      const canon = canonicalSymbol(symbol);
+      if (!held.has(canon)) continue;
+      const bonus = Number(d.bonusShare ?? 0) || 0;
+      const cash = Number(d.cashDividend ?? 0) || 0;
+      const fy = String(d.fiscalYear ?? "").trim() || null;
+      const book = parseFeedDate(d.bookCloseDate);
+      const ann = parseFeedDate(d.announcementDate);
+      if (book) all.push({ symbol, canon, date: book, bonus, cash, fy, kind: "bookclose" });
+      if (ann) all.push({ symbol, canon, date: ann, bonus, cash, fy, kind: "announce" });
+    }
+    const seen = new Set<string>();
+    const deduped = all.filter((r) => {
+      const k = `${r.symbol}-${r.kind}-${r.date.getTime()}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+    const inWindow = deduped
+      .filter((r) => {
+        const t = r.date.getTime();
+        return t >= from && t <= to;
       })
-      .filter((r) => r.symbol !== "" && held.has(r.symbol) && r.date && r.date.getTime() >= today)
-      .sort((a, b) => (a.date as Date).getTime() - (b.date as Date).getTime())
-      .slice(0, 3);
+      .sort((a, b) => a.date.getTime() - b.date.getTime());
+    if (inWindow.length === 0) return [];
+    // Prefer book-close over announce for same symbol on same window.
+    const bySym = new Map<string, Clos>();
+    for (const r of inWindow) {
+      const cur = bySym.get(r.symbol);
+      if (!cur || (cur.kind === "announce" && r.kind === "bookclose")) bySym.set(r.symbol, r);
+    }
+    return [...bySym.values()].sort((a, b) => a.date.getTime() - b.date.getTime()).slice(0, 3);
   })();
 
   // Upcoming below open: same grouping as /ipo calendar so closed never shows as upcoming.
@@ -186,11 +246,13 @@ function DashboardPage() {
 
   const isRefreshing =
     portfolio.isFetching ||
+    holdingSymbols.isFetching ||
     issues.isFetching ||
     market.isFetching ||
     nepseGraph.isFetching ||
     investment.isFetching ||
-    dividends.isFetching;
+    dividends.isFetching ||
+    reports.isFetching;
 
   const statCards = [
     <StatCard
@@ -257,11 +319,13 @@ function DashboardPage() {
 
   const refreshAll = () => {
     void portfolio.refetch();
+    void holdingSymbols.refetch();
     void issues.refetch();
     void market.refetch();
     void nepseGraph.refetch();
     void investment.refetch();
     void dividends.refetch();
+    void reports.refetch();
   };
 
   return (
@@ -309,11 +373,49 @@ function DashboardPage() {
               <div>
                 <p className="flex items-center gap-1.5 text-xs uppercase tracking-wider text-muted-foreground">
                   <ChartLine className="size-3.5 text-primary" /> NEPSE Index
-                  <span className="hidden sm:inline">· today</span>
+                  <span
+                    title={
+                      market.data?.status.isOpen
+                        ? "Live trading — NEPSE is open today"
+                        : (() => {
+                            const raw = nepse?.generatedTime;
+                            if (!raw) return "Market is closed — no session data";
+                            const d = new Date(String(raw).replace(" ", "T"));
+                            const dateStr = formatDate(raw);
+                            if (Number.isNaN(d.getTime())) return `Last session: ${dateStr} — market is closed`;
+                            const today0 = new Date();
+                            today0.setHours(0, 0, 0, 0);
+                            const gen0 = new Date(d);
+                            gen0.setHours(0, 0, 0, 0);
+                            const diff = Math.round((today0.getTime() - gen0.getTime()) / 86_400_000);
+                            const rel = diff <= 0 ? "today" : diff === 1 ? "1 day ago" : `${diff} days ago`;
+                            return `Last session: ${dateStr} · ${rel} — market is closed`;
+                          })()
+                    }
+                  >
+                    ·{" "}
+                    {(() => {
+                      if (!market.data) return "—";
+                      if (market.data.status.isOpen) return "today";
+                      const raw = nepse?.generatedTime;
+                      if (!raw) return "closed";
+                      const d = new Date(String(raw).replace(" ", "T"));
+                      const dateStr = formatDate(raw);
+                      if (Number.isNaN(d.getTime())) return `${dateStr} · closed`;
+                      const today0 = new Date();
+                      today0.setHours(0, 0, 0, 0);
+                      const gen0 = new Date(d);
+                      gen0.setHours(0, 0, 0, 0);
+                      const diff = Math.round((today0.getTime() - gen0.getTime()) / 86_400_000);
+                      if (diff <= 0) return `${dateStr} · closed`;
+                      if (diff === 1) return `1 day ago · ${dateStr}`;
+                      return `${diff} days ago · ${dateStr}`;
+                    })()}
+                  </span>
                 </p>
                 {nepse ? (
                   <p className="num mt-2 flex flex-wrap items-center gap-2 text-3xl font-semibold">
-                    {nepse.close != null ? nepse.close.toLocaleString("en-IN") : "-"}
+                    {nepse.close != null ? nepse.close.toLocaleString("en-NP") : "-"}
                     <DeltaPill value={nepse.percentChange}>
                       {formatPercent(nepse.percentChange)}
                     </DeltaPill>
@@ -384,7 +486,10 @@ function DashboardPage() {
                     <button
                       key={symbol}
                       type="button"
-                      onClick={() => setPicked(symbol)}
+                      onClick={() => {
+                        setPicked(symbol);
+                        setPickedTab(null);
+                      }}
                       className="w-36 shrink-0 snap-start rounded-xl border border-border/60 bg-surface px-3 py-2.5 text-left transition-colors hover:border-primary/40"
                     >
                       <p className="truncate text-[13px] font-semibold">{symbol}</p>
@@ -421,13 +526,19 @@ function DashboardPage() {
                   label="Top gainer"
                   holding={topGainer}
                   tone="gain"
-                  onOpen={() => setPicked(topGainer?.scrip ?? null)}
+                  onOpen={() => {
+                    setPicked(topGainer?.scrip ?? null);
+                    setPickedTab(null);
+                  }}
                 />
                 <MoverCard
                   label="Top loser"
                   holding={topLoser}
                   tone="loss"
-                  onOpen={() => setPicked(topLoser?.scrip ?? null)}
+                  onOpen={() => {
+                    setPicked(topLoser?.scrip ?? null);
+                    setPickedTab(null);
+                  }}
                 />
               </div>
             )}
@@ -473,34 +584,82 @@ function DashboardPage() {
           <SkeletonCards count={1} />
         ) : upcomingClosures.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No upcoming book closures for your holdings. Announced dividends land here.
+            No upcoming book closures for your holdings. Announced dividends land here: flip to{" "}
+            <span className="font-medium text-foreground">All scrips</span> in the calendar to
+            browse the feed.
           </p>
         ) : (
           <ul className="grid gap-2 md:grid-cols-3">
-            {upcomingClosures.map((c) => (
-              <li key={`${c.symbol}-${(c.date as Date).getTime()}`} className="min-w-0">
-                <Link
-                  to="/calendar"
-                  search={{ symbol: c.symbol }}
-                  title={`${c.symbol} dividends in calendar`}
-                  className="block rounded-xl border border-border/60 bg-surface p-3 transition-colors hover:border-primary/40"
-                >
-                  <p className="truncate text-sm font-semibold">{c.symbol}</p>
-                  <p className="num mt-0.5 truncate text-xs text-muted-foreground">
-                    {[c.bonus > 0 ? `${c.bonus}% bonus` : null, c.cash > 0 ? `${c.cash}% cash` : null]
-                      .filter(Boolean)
-                      .join(" + ") || "Dividend"}
-                    {" · closes "}
-                    {formatDate(c.date)}
-                  </p>
-                </Link>
-              </li>
-            ))}
+            {upcomingClosures.map((c) => {
+              const dLeft = daysUntil(c.date);
+              const isAnnounce = c.kind === "announce";
+              const urgent = !isAnnounce && dLeft !== null && dLeft >= 0 && dLeft <= 3;
+              const chip = (() => {
+                if (dLeft === null) return isAnnounce ? "Announced" : null;
+                if (isAnnounce) {
+                  if (dLeft < 0) return `Announced ${Math.abs(dLeft)}d ago`;
+                  if (dLeft === 0) return "Announced today";
+                  if (dLeft === 1) return "Announces tomorrow";
+                  return `Announces in ${dLeft}d`;
+                }
+                if (dLeft < 0) return `${Math.abs(dLeft)}d ago`;
+                if (dLeft === 0) return "Closes today";
+                if (dLeft === 1) return "1 day left";
+                return `${dLeft} days left`;
+              })();
+              return (
+                <li key={`${c.symbol}-${c.kind}-${(c.date as Date).getTime()}`} className="min-w-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPicked(c.symbol);
+                      setPickedTab("dividend");
+                    }}
+                    title={`${c.symbol} dividends: tap to see estimate`}
+                    className="flex w-full flex-col gap-2 rounded-xl border border-border/60 bg-surface p-3 text-left transition-colors hover:border-primary/40"
+                  >
+                    <span className="flex items-center gap-2">
+                      <span className="num flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                        {c.symbol.slice(0, 2)}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+                        {c.symbol}
+                      </span>
+                      {chip ? (
+                        <span
+                          className={
+                            isAnnounce
+                              ? "num shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 text-[0.68rem] font-semibold text-amber-600 dark:text-amber-400"
+                              : urgent
+                                ? "num shrink-0 rounded-full bg-loss/15 px-2 py-0.5 text-[0.68rem] font-semibold text-loss"
+                                : dLeft !== null && dLeft < 0
+                                  ? "num shrink-0 rounded-full bg-muted px-2 py-0.5 text-[0.68rem] font-semibold text-muted-foreground"
+                                  : "num shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[0.68rem] font-semibold text-primary"
+                          }
+                        >
+                          {chip}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="num truncate text-xs text-muted-foreground">
+                      {[
+                        c.bonus > 0 ? `${c.bonus}% bonus` : null,
+                        c.cash > 0 ? `${c.cash}% cash` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" + ") || "Dividend"}
+                      {c.fy ? ` · FY ${c.fy}` : ""} · {isAnnounce ? "announced" : "closes"}{" "}
+                      {formatDate(c.date)}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         )}
       </Panel>
 
-      <Panel as="section">
+      <Panel as="section" className="min-w-0 overflow-hidden">
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="font-display text-base font-semibold">Issues</h2>
           <Link
@@ -522,72 +681,165 @@ function DashboardPage() {
             icon={<Rocket className="size-6" />}
           />
         ) : (
-          <ul className="grid gap-2 md:grid-cols-2">
-            {openIssues.map((issue) => (
-              <li key={issue.companyShareId} className="min-w-0">
-                <Link
-                  to="/ipo"
-                  search={{ tab: "apply" }}
-                  title={`${issue.companyName ?? issue.scrip ?? ""} - apply on IPO page`}
-                  className="block rounded-xl border border-border/60 bg-surface p-3 transition-colors hover:border-primary/40"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold" title={issue.companyName ?? ""}>
-                        {issue.companyName}
-                      </p>
-                      <p
-                        className="num truncate text-xs text-muted-foreground"
-                        title={`${issue.scrip ?? ""} · ${issue.shareTypeName ?? ""} ${issue.shareGroupName ?? ""}`}
+          <div className="space-y-4">
+            {openIssues.length > 0 ? (
+              <ul className="grid min-w-0 gap-2 overflow-hidden md:grid-cols-2">
+                {openIssues.map((issue) => {
+                  const applied = (reports.data ?? []).some(
+                    (r) => r.companyShareId === issue.companyShareId,
+                  );
+                  const dLeft = daysUntil(issue.issueCloseDate);
+                  const urgent = dLeft !== null && dLeft >= 0 && dLeft <= 3;
+                  const chip =
+                    dLeft === null
+                      ? (issue.statusName ?? "Open")
+                      : dLeft < 0
+                        ? `Closed ${formatDate(issue.issueCloseDate)}`
+                        : dLeft === 0
+                          ? "Closes today"
+                          : dLeft === 1
+                            ? "1 day left"
+                            : `${dLeft} days left`;
+                  const typeLabel = (() => {
+                    const hay = `${issue.shareTypeName ?? ""} ${issue.shareGroupName ?? ""}`;
+                    if (/right/i.test(hay)) return "Right";
+                    if (/fpo/i.test(hay)) return "FPO";
+                    if (/\bipo\b/i.test(hay)) return "IPO";
+                    if (/mutual|fund/i.test(hay)) return "Fund";
+                    if (/debenture|bond/i.test(hay)) return "Bond";
+                    if (/auction/i.test(hay)) return "Auction";
+                    return null;
+                  })();
+                  return (
+                    <li
+                      key={issue.companyShareId}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => navigate({ to: "/ipo", search: { tab: "apply" } })}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          navigate({ to: "/ipo", search: { tab: "apply" } });
+                        }
+                      }}
+                      className="flex min-w-0 w-full cursor-pointer flex-col gap-3 overflow-hidden rounded-xl border border-border/60 bg-surface p-3 transition-colors hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:flex-row sm:items-center sm:gap-3 sm:px-3 sm:py-3"
+                    >
+                      <div className="flex min-w-0 w-full flex-1 items-center gap-3 overflow-hidden">
+                        <span className="num flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
+                          {String(issue.companyName ?? issue.scrip ?? "?")
+                            .trim()
+                            .charAt(0)
+                            .toUpperCase() || "?"}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex flex-wrap items-center gap-1.5">
+                            <span
+                              className="min-w-0 flex-1 truncate text-sm font-semibold"
+                              title={issue.companyName ?? ""}
+                            >
+                              {issue.companyName}
+                            </span>
+                            {typeLabel ? (
+                              <span className="num shrink-0 rounded-full border border-border/70 px-2 py-0.5 text-[0.62rem] font-semibold text-muted-foreground">
+                                {typeLabel}
+                              </span>
+                            ) : null}
+                            <span
+                              className={
+                                dLeft !== null && dLeft < 0
+                                  ? "num shrink-0 rounded-full bg-muted px-2 py-0.5 text-[0.62rem] font-semibold text-muted-foreground"
+                                  : urgent
+                                    ? "num shrink-0 rounded-full bg-loss/15 px-2 py-0.5 text-[0.62rem] font-semibold text-loss"
+                                    : "num shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[0.62rem] font-semibold text-primary"
+                              }
+                            >
+                              {chip}
+                            </span>
+                            {applied ? (
+                              <span className="num inline-flex shrink-0 items-center gap-1 rounded-full bg-gain/15 px-2 py-0.5 text-[0.62rem] font-semibold text-gain">
+                                <CheckCircle2 className="size-3" /> Applied
+                              </span>
+                            ) : null}
+                          </span>
+                          <span className="num mt-1 block truncate text-[0.70rem] leading-none text-muted-foreground">
+                            {issue.scrip}
+                            {issue.shareTypeName || issue.shareGroupName
+                              ? ` · ${[issue.shareTypeName, issue.shareGroupName].filter(Boolean).join(" ")}`
+                              : ""}{" "}
+                            · {formatDate(issue.issueOpenDate)} → {formatDate(issue.issueCloseDate)}
+                          </span>
+                        </span>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant={applied ? "outline" : "default"}
+                        className="h-7 w-full shrink-0 px-3 text-xs sm:ml-2 sm:w-auto"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate({ to: "/ipo", search: { tab: "apply" } });
+                        }}
                       >
-                        {issue.scrip} · {issue.shareTypeName} {issue.shareGroupName}
-                      </p>
-                    </div>
-                    <span className="shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[0.68rem] font-semibold text-primary">
-                      {issue.statusName ?? "Open"}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Closes {formatDate(issue.issueCloseDate)}
-                  </p>
-                </Link>
-              </li>
-            ))}
-            {upcomingIssues.map((item) => (
-              <li key={item.key} className="min-w-0">
-                <Link
-                  to="/ipo"
-                  search={{ tab: "calendar" }}
-                  title={`${item.title} - view in IPO calendar`}
-                  className="block rounded-xl border border-dashed border-border/60 bg-surface/60 p-3 transition-colors hover:border-primary/40"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold" title={item.title}>
-                        {item.title}
-                      </p>
-                      <p
-                        className="num mt-0.5 truncate text-xs text-muted-foreground"
-                        title={item.sub}
-                      >
-                        {item.sub}
-                      </p>
-                    </div>
-                    <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[0.68rem] font-semibold text-muted-foreground">
-                      Upcoming
-                    </span>
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
+                        {applied ? "Manage" : "Apply"}
+                      </Button>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : null}
+            {upcomingIssues.length > 0 ? (
+              <div className="min-w-0 space-y-2 overflow-hidden">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Upcoming
+                </h3>
+                <ul className="grid min-w-0 gap-2 overflow-hidden md:grid-cols-2">
+                  {upcomingIssues.map((item) => (
+                    <li
+                      key={item.key}
+                      role="button"
+                      tabIndex={0}
+                      title={`${item.title} - view in IPO calendar`}
+                      onClick={() => navigate({ to: "/ipo", search: { tab: "calendar" } })}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          navigate({ to: "/ipo", search: { tab: "calendar" } });
+                        }
+                      }}
+                      className="block cursor-pointer rounded-xl border border-dashed border-border/60 bg-surface/60 p-3 transition-colors hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold" title={item.title}>
+                            {item.title}
+                          </p>
+                          <p
+                            className="num mt-0.5 truncate text-xs text-muted-foreground"
+                            title={item.sub}
+                          >
+                            {item.sub}
+                          </p>
+                        </div>
+                        <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[0.68rem] font-semibold text-muted-foreground">
+                          Upcoming
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </div>
         )}
       </Panel>
 
       <ScripSheet
         symbol={picked}
+        initialTab={pickedTab}
         onOpenChange={(open) => {
-          if (!open) setPicked(null);
+          if (!open) {
+            setPicked(null);
+            setPickedTab(null);
+          }
         }}
       />
 
@@ -597,6 +849,7 @@ function DashboardPage() {
         onPick={(symbol) => {
           setWatchlistOpen(false);
           setPicked(symbol);
+          setPickedTab(null);
         }}
       />
 
@@ -606,7 +859,7 @@ function DashboardPage() {
         title="NEPSE Index"
         subtitle={
           nepsePoints.length >= 2
-            ? `Today's session, ${chartTimeLabel(nepsePoints[0]!.time)}–${chartTimeLabel(
+            ? `Today's session, ${chartTimeLabel(nepsePoints[0]!.time)}-${chartTimeLabel(
                 nepsePoints[nepsePoints.length - 1]!.time,
               )} NPT`
             : "Today's session (intraday)"

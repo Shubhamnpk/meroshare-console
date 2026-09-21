@@ -304,7 +304,7 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
     pushWatchlist({ data: { symbols } }).catch(() => {});
   }, []);
 
-  // Watchlist helpers — every mutation also pushes to the session cookie.
+  // Watchlist helpers: every mutation also pushes to the session cookie.
   const toggleWatchlist = useCallback(
     (symbol: string) => {
       const upper = symbol.toUpperCase();
@@ -352,7 +352,7 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
         });
       })
       .catch(() => {
-        // Not logged in or network error — local prefs are fine.
+        // Not logged in or network error: local prefs are fine.
       });
   }, [syncWatchlist]);
 

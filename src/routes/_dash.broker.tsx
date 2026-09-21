@@ -5,8 +5,11 @@ import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeftRight, Plug, RefreshCw } from "lucide-react";
+import { ArrowLeftRight, FlaskConical, Plug, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { YoBrokerModal } from "@/components/brokers/yobroker-modal";
+import { loadYoWallet, saveYoWallet } from "@/lib/yobroker/store";
+import { cancelYoOrder } from "@/lib/yobroker/engine";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Panel } from "@/components/ui/panel";
@@ -179,7 +182,7 @@ function FundsMoveRow({
           try {
             window.localStorage.setItem(QUICK_KEY, key);
           } catch {
-            // storage blocked — limit just won't persist
+            // storage blocked: limit just won't persist
           }
         }
         onDone();
@@ -278,7 +281,7 @@ function FundsMoveRow({
                     Max{" "}
                     {method === "quick"
                       ? formatNpr(QUICK_MAX)
-                      : (withdrawable ?? 1_000_000).toLocaleString("en-IN")}
+                      : (withdrawable ?? 1_000_000).toLocaleString("en-NP")}
                   </span>
                 </div>
                 <Input
@@ -293,7 +296,7 @@ function FundsMoveRow({
                     if (method === "quick" && Number.isInteger(v) && v > QUICK_MAX) {
                       setMethod("normal");
                       setArmed(false);
-                      toast.message("Switched to Standard — Quick caps at Rs. 10,000.");
+                      toast.message("Switched to Standard: Quick caps at Rs. 10,000.");
                     }
                   }}
                 />
@@ -305,7 +308,7 @@ function FundsMoveRow({
                 </p>
               ) : over ? (
                 <p className="text-xs font-medium text-destructive">
-                  Above the withdrawable {withdrawable!.toLocaleString("en-IN")}.
+                  Above the withdrawable {withdrawable!.toLocaleString("en-NP")}.
                 </p>
               ) : quickOver ? (
                 <p className="text-xs font-medium text-destructive">
@@ -313,7 +316,7 @@ function FundsMoveRow({
                 </p>
               ) : quickBlockedToday ? (
                 <p className="text-xs font-medium text-destructive">
-                  Quick refund is once a day — already used today. Use Standard instead.
+                  Quick refund is once a day: already used today. Use Standard instead.
                 </p>
               ) : null}
               <Button
@@ -512,10 +515,10 @@ function AmoPanel({ brokerId }: { brokerId: BrokerId }) {
                     >
                       {o.side}
                     </span>{" "}
-                    <span className="num font-semibold">{o.quantity.toLocaleString("en-IN")}</span>{" "}
+                    <span className="num font-semibold">{o.quantity.toLocaleString("en-NP")}</span>{" "}
                     <span className="font-semibold">{o.scrip}</span>{" "}
                     <span className="num text-muted-foreground">
-                      @ {o.price !== null ? o.price.toLocaleString("en-IN") : "-"}
+                      @ {o.price !== null ? o.price.toLocaleString("en-NP") : "-"}
                     </span>
                   </span>
                   <span className="shrink-0 text-xs text-muted-foreground">
@@ -531,7 +534,7 @@ function AmoPanel({ brokerId }: { brokerId: BrokerId }) {
                     <div className="flex justify-between gap-2">
                       <dt className="text-muted-foreground">Trigger</dt>
                       <dd className="num font-medium">
-                        {o.triggerPrice !== null ? o.triggerPrice.toLocaleString("en-IN") : "-"}
+                        {o.triggerPrice !== null ? o.triggerPrice.toLocaleString("en-NP") : "-"}
                       </dd>
                     </div>
                     <div className="flex justify-between gap-2">
@@ -802,7 +805,7 @@ function OrderHistoryBox({ brokerId, orderId }: { brokerId: BrokerId; orderId: s
               {e.status || "Update"}
               {e.price !== null && e.price !== undefined ? (
                 <span className="num font-normal text-muted-foreground">
-                  {` @ ${e.price.toLocaleString("en-IN")}`}
+                  {` @ ${e.price.toLocaleString("en-NP")}`}
                 </span>
               ) : null}
             </p>
@@ -813,7 +816,7 @@ function OrderHistoryBox({ brokerId, orderId }: { brokerId: BrokerId; orderId: s
                 e.remainingQty !== null ? `left ${e.remainingQty}` : null,
               ]
                 .filter(Boolean)
-                .join(" · ") || "—"}
+                .join(" · ") || "-"}
               {[e.date, e.time].filter(Boolean).join(" ").trim()
                 ? ` · ${[e.date, e.time].filter(Boolean).join(" ")}`
                 : ""}
@@ -833,11 +836,35 @@ function OrderHistoryBox({ brokerId, orderId }: { brokerId: BrokerId; orderId: s
 function BrokerPage() {
   const queryClient = useQueryClient();
   const connections = useQuery(brokerConnectionsQuery());
-  // Naasa X data views only until the TMS readers land — a TMS-only link
-  // keeps this page's empty state instead of erroring on every panel.
-  const brokerId = (connections.data?.find((c) => c.brokerId === "naasa-x")?.brokerId ??
-    null) as BrokerId | null;
-  const connection = connections.data?.[0] ?? null;
+  const [yoOpen, setYoOpen] = useState(false);
+  const [yoTick, setYoTick] = useState(0);
+  const [yoSymbol, setYoSymbol] = useState("NABIL");
+  useEffect(() => {
+    const bump = () => setYoTick((v) => v + 1);
+    window.addEventListener("yobroker:change", bump);
+    window.addEventListener("storage", bump);
+    return () => {
+      window.removeEventListener("yobroker:change", bump);
+      window.removeEventListener("storage", bump);
+    };
+  }, []);
+  void yoTick;
+  const yoActive = (() => {
+    try {
+      return loadYoWallet(null).active;
+    } catch {
+      return false;
+    }
+  })();
+  const realId = (connections.data?.find((c) => c.brokerId !== "yobroker")?.brokerId ?? null) as BrokerId | null;
+  const [brokerView, setBrokerView] = useState<"real" | "yobroker">("real");
+  useEffect(() => {
+    if (yoActive && !realId) setBrokerView("yobroker");
+    else if (realId) setBrokerView("real");
+  }, [yoActive, realId]);
+  const brokerId: BrokerId | null =
+    brokerView === "yobroker" && yoActive ? ("yobroker" as BrokerId) : realId;
+  const connection = connections.data?.find((c) => c.brokerId === brokerId) ?? connections.data?.[0] ?? null;
 
   const [tab, setTab] = useState<BrokerTab>("funds");
   const [preset, setPreset] = useState<Preset>("today");
@@ -982,7 +1009,7 @@ function BrokerPage() {
   });
 
   const cancel = useMutation({
-    mutationFn: (o: {
+    mutationFn: async (o: {
       orderId: string;
       tranId: string;
       orderStatus: string;
@@ -992,12 +1019,22 @@ function BrokerPage() {
       price: string;
       quantity: number;
       symbol: string;
-    }) => cancelBrokerOrder({ data: { brokerId: brokerId!, ...o, confirmed: true as const } }),
+    }) => {
+      if (brokerId === "yobroker") {
+        const w = loadYoWallet(null);
+        const next = cancelYoOrder(w, o.orderId || o.tranId);
+        saveYoWallet(null, next);
+        const changed = next.orders.find((x) => x.id === (o.orderId || o.tranId))?.status === "cancelled";
+        return { ok: changed, message: changed ? "Paper order cancelled." : "Order not found or already closed." } as Awaited<ReturnType<typeof cancelBrokerOrder>>;
+      }
+      return cancelBrokerOrder({ data: { brokerId: brokerId!, ...o, confirmed: true as const } });
+    },
     onSuccess: (r) => {
       setArmedCancel(null);
       if (r.ok) {
         toast.success(r.message);
         void queryClient.invalidateQueries({ queryKey: ["broker-order-book"] });
+        if (brokerId === "yobroker") setYoTick((v) => v + 1);
       } else {
         toast.error(r.message);
       }
@@ -1115,7 +1152,7 @@ function BrokerPage() {
     return <p className="text-sm text-muted-foreground">Checking broker connections…</p>;
   }
 
-  if (!brokerId || !connection) {
+  if ((!brokerId || !connection) && !yoActive) {
     return (
       <div className="space-y-4">
         <div>
@@ -1142,6 +1179,30 @@ function BrokerPage() {
             </Link>
           </Button>
         </div>
+
+        <div className="flex flex-col gap-3 rounded-2xl border border-violet-500/20 bg-violet-500/5 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-violet-500/20 bg-violet-500/10 text-violet-600">
+              <FlaskConical className="size-5" />
+            </span>
+            <div>
+              <p className="text-sm font-semibold">Yo Broker — paper trading</p>
+              <p className="text-xs text-muted-foreground">
+                Practice with virtual Rs 1,000,000. No real money, no settlement.
+                {yoActive ? " Active on this device." : ""}
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant={yoActive ? "outline" : "default"}
+            className="shrink-0"
+            onClick={() => setYoOpen(true)}
+          >
+            {yoActive ? "Manage" : "Activate Yo Broker"}
+          </Button>
+        </div>
+        <YoBrokerModal open={yoOpen} onOpenChange={setYoOpen} />
       </div>
     );
   }
@@ -1154,7 +1215,8 @@ function BrokerPage() {
         <div>
           <h1 className="font-display text-2xl font-semibold sm:text-3xl">Broker Account</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {connection.displayName ?? connection.username} · {connection.username}
+            {connection?.displayName ?? connection?.username ?? (brokerId === "yobroker" ? "Yo Broker (Paper)" : "-")} ·{" "}
+            {connection?.username ?? (brokerId === "yobroker" ? "paper@yo.local" : "-")}
           </p>
           <div className="mt-2">
             <MarketStatusPill brokerId={brokerId} />
@@ -1183,6 +1245,14 @@ function BrokerPage() {
             className="gap-1.5 text-xs"
           >
             {retest.isPending ? "Testing…" : "Retest login"}
+          </Button>
+          <Button
+            variant={yoActive ? "default" : "outline"}
+            size="sm"
+            onClick={() => setYoOpen(true)}
+            className="gap-1.5 text-xs"
+          >
+            <FlaskConical className="size-3.5" /> Yo Broker{yoActive ? " · On" : ""}
           </Button>
         </div>
       </div>
@@ -1309,7 +1379,7 @@ function BrokerPage() {
                     <TableRow key={h.symbol}>
                       <TableCell className="py-2 font-semibold">{h.symbol}</TableCell>
                       <TableCell className="num py-2 text-right">
-                        {h.availableQty.toLocaleString("en-IN")}
+                        {h.availableQty.toLocaleString("en-NP")}
                       </TableCell>
                       <TableCell className="num py-2 text-right">
                         {h.closePrice !== null ? money(h.closePrice) : "-"}
@@ -1371,8 +1441,8 @@ function BrokerPage() {
                 <p className="text-sm font-semibold">Orders · {orderSummary.total}</p>
                 <p className="text-[0.7rem] text-muted-foreground">
                   {orderSummary.open} open · {orderSummary.buy} buy (
-                  {orderSummary.buyQty.toLocaleString("en-IN")}) · {orderSummary.sell} sell (
-                  {orderSummary.sellQty.toLocaleString("en-IN")})
+                  {orderSummary.buyQty.toLocaleString("en-NP")}) · {orderSummary.sell} sell (
+                  {orderSummary.sellQty.toLocaleString("en-NP")})
                 </p>
               </div>
               <QueryNote query={orders} />
@@ -1405,11 +1475,11 @@ function BrokerPage() {
                                 {o.side}
                               </span>{" "}
                               <span className="num font-semibold">
-                                {o.quantity.toLocaleString("en-IN")}
+                                {o.quantity.toLocaleString("en-NP")}
                               </span>{" "}
                               <span className="font-semibold">{o.symbol}</span>{" "}
                               <span className="num text-muted-foreground">
-                                @ {o.price !== null ? o.price.toLocaleString("en-IN") : "MKT"}
+                                @ {o.price !== null ? o.price.toLocaleString("en-NP") : "MKT"}
                               </span>
                             </p>
                             <p className="text-[0.7rem] text-muted-foreground">
@@ -1493,7 +1563,7 @@ function BrokerPage() {
                             <div className="space-y-1">
                               <Label htmlFor={`mod-qty-${key}`}>
                                 Quantity (max{" "}
-                                {Math.floor(o.remainingQty || o.quantity).toLocaleString("en-IN")})
+                                {Math.floor(o.remainingQty || o.quantity).toLocaleString("en-NP")})
                               </Label>
                               <Input
                                 id={`mod-qty-${key}`}
@@ -1532,7 +1602,7 @@ function BrokerPage() {
                             ) : null}
                             <p className="col-span-2 text-[0.7rem] text-muted-foreground">
                               Sends a real modify for the remaining{" "}
-                              {Math.floor(o.remainingQty || o.quantity).toLocaleString("en-IN")}{" "}
+                              {Math.floor(o.remainingQty || o.quantity).toLocaleString("en-NP")}{" "}
                               units. If the order changed at the broker meanwhile, you&apos;ll be
                               asked to refresh.
                             </p>
@@ -1576,8 +1646,8 @@ function BrokerPage() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm font-semibold">Trades · {tradeSummary.count}</p>
                 <p className="text-[0.7rem] text-muted-foreground">
-                  Bought {tradeSummary.buyQty.toLocaleString("en-IN")} ({money(tradeSummary.buyVal)}
-                  ) · Sold {tradeSummary.sellQty.toLocaleString("en-IN")} (
+                  Bought {tradeSummary.buyQty.toLocaleString("en-NP")} ({money(tradeSummary.buyVal)}
+                  ) · Sold {tradeSummary.sellQty.toLocaleString("en-NP")} (
                   {money(tradeSummary.sellVal)}) · Net {money(tradeSummary.net)}
                 </p>
               </div>
@@ -1672,10 +1742,10 @@ function BrokerPage() {
                             {t.side}
                           </TableCell>
                           <TableCell className="num py-2 text-right">
-                            {t.quantity.toLocaleString("en-IN")}
+                            {t.quantity.toLocaleString("en-NP")}
                           </TableCell>
                           <TableCell className="num py-2 text-right">
-                            {t.price !== null ? t.price.toLocaleString("en-IN") : "-"}
+                            {t.price !== null ? t.price.toLocaleString("en-NP") : "-"}
                           </TableCell>
                           <TableCell className="num py-2 text-right font-semibold">
                             {money(t.amount)}
@@ -1729,14 +1799,16 @@ function BrokerPage() {
             </div>
           ) : null}
 
-          <FundsMoveRow
-            brokerId={brokerId}
-            withdrawable={funds.data?.availableForWithdraw ?? null}
-            onDone={() => {
-              void queryClient.invalidateQueries({ queryKey: ["broker-funds"] });
-              void queryClient.invalidateQueries({ queryKey: ["broker-fund-txns"] });
-            }}
-          />
+          {brokerId !== "yobroker" ? (
+            <FundsMoveRow
+              brokerId={brokerId!}
+              withdrawable={funds.data?.availableForWithdraw ?? null}
+              onDone={() => {
+                void queryClient.invalidateQueries({ queryKey: ["broker-funds"] });
+                void queryClient.invalidateQueries({ queryKey: ["broker-fund-txns"] });
+              }}
+            />
+          ) : null}
 
           <div className="flex justify-end">
             <Button
@@ -1931,6 +2003,7 @@ function BrokerPage() {
       </p>
 
       <TmsReauthModal open={reauthOpen} onOpenChange={setReauthOpen} />
+      <YoBrokerModal open={yoOpen} onOpenChange={setYoOpen} />
     </div>
   );
 }

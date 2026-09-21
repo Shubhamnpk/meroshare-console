@@ -20,6 +20,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useSettings } from "@/lib/settings";
 import { brokerConnectionsQuery } from "@/lib/queries";
+import { loadYoWallet } from "@/lib/yobroker/store";
 
 export type NavItem = { to: string; label: string; icon: typeof LayoutDashboard };
 
@@ -201,7 +202,14 @@ export function AppSidebar({
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { edisBeta } = useSettings();
   const connections = useQuery(brokerConnectionsQuery());
-  const brokerLinked = (connections.data?.length ?? 0) > 0;
+  const yoActive = (() => {
+    try {
+      return loadYoWallet(null).active;
+    } catch {
+      return false;
+    }
+  })();
+  const brokerLinked = (connections.data?.length ?? 0) > 0 || yoActive;
 
   const handleClick = (e: React.MouseEvent) => {
     const tag = (e.target as HTMLElement).tagName;

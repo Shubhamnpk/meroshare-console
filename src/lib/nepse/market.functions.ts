@@ -4,6 +4,7 @@ import { fetchTransactions, requireAuth } from "../meroshare/api.server";
 import type { AuthContext } from "../meroshare/session.server";
 import type { TransactionItem } from "../meroshare/types";
 import { toNumber } from "../format";
+import { DEMO_TRANSACTIONS } from "../meroshare/demo-data";
 import {
   FEED_ATTRIBUTION,
   getAllFinancials,
@@ -313,6 +314,38 @@ export const getPortfolioHistorySeries = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }): Promise<PortfolioTimeline> => {
     const auth = await requireAuth();
+    if (auth.demo) {
+      const wanted = new Set(data.holdings.map((h) => h.scrip.toUpperCase()));
+      const snapshotsBySymbol = new Map<string, UnitSnapshot[]>();
+      for (const t of DEMO_TRANSACTIONS) {
+        const key = String((t as Record<string, unknown>)["script"] ?? (t as Record<string, unknown>)["scrip"] ?? "").toUpperCase();
+        if (!wanted.has(key)) continue;
+        const time = parseNptEpoch((t as Record<string, unknown>)["transactionDate"] as string);
+        if (time == null) continue;
+        const snap: UnitSnapshot = {
+          time,
+          units: Math.max(0, toNumber((t as Record<string, unknown>)["balanceAfterTransaction"] ?? (t as Record<string, unknown>)["balAfterTrans"])),
+        };
+        const arr = snapshotsBySymbol.get(key);
+        if (arr) arr.push(snap);
+        else snapshotsBySymbol.set(key, [snap]);
+      }
+      for (const arr of snapshotsBySymbol.values()) arr.sort((a, b) => a.time - b.time);
+      const timelines = [...snapshotsBySymbol.entries()].map(([symbol, snapshots]) => ({
+        symbol,
+        snapshots,
+      }));
+      const failed = [...wanted].filter((s) => !snapshotsBySymbol.has(s)).map((symbol) => ({
+        symbol,
+        message: "No transactions found for this scrip in demo portfolio.",
+      }));
+      const points = await getPortfolioHistory(timelines, data.granularity, data.months);
+      return {
+        points,
+        snapshots: Object.fromEntries(timelines.map((t) => [t.symbol, t.snapshots])),
+        failed,
+      };
+    }
     const wanted = new Set(data.holdings.map((h) => h.scrip.toUpperCase()));
 
     let all: TransactionItem[] = [];

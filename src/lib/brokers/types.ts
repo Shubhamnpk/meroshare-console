@@ -2,7 +2,7 @@
 // A "broker" here is an external trading terminal account (e.g. Naasa X)
 // the user optionally links so the server can act on their behalf.
 
-export const BROKER_IDS = ["naasa-x", "tms"] as const;
+export const BROKER_IDS = ["naasa-x", "tms", "yobroker"] as const;
 export type BrokerId = (typeof BROKER_IDS)[number];
 
 export interface BrokerMeta {
@@ -27,6 +27,12 @@ export const BROKERS: BrokerMeta[] = [
     name: "NEPSE TMS",
     tagline: "Classic TMS terminal (captcha login)",
     capabilities: ["Holdings", "Order book & trades"],
+  },
+  {
+    id: "yobroker",
+    name: "Yo Broker",
+    tagline: "Paper trading account — practice with virtual Rs 1,000,000",
+    capabilities: ["Virtual holdings", "Paper orders & trades", "No real settlement"],
   },
 ];
 

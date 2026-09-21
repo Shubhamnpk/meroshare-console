@@ -49,7 +49,7 @@ interface GroupBox {
   key: string;
   label: string;
   count: number;
-  /** Share of total map area, 0–1. */
+  /** Share of total map area, 0-1. */
   share: number;
   x: number;
   y: number;
@@ -58,8 +58,8 @@ interface GroupBox {
 }
 
 /**
- * Squarified treemap in 0–100 space: tiles stay as square as possible and
- * every tile fills the map — no ragged rows. Same approach as the mutual
+ * Squarified treemap in 0-100 space: tiles stay as square as possible and
+ * every tile fills the map: no ragged rows. Same approach as the mutual
  * fund heat map, minus its fund-specific controls.
  */
 function squarify(
@@ -156,7 +156,7 @@ const DARK_BASE: RGB = [41, 48, 66];
 
 /**
  * Pick tile text from the *blended* result, not the overlay alone.
- * NOTE: `dark:` Tailwind classes can't do this job — the app themes via a
+ * NOTE: `dark:` Tailwind classes can't do this job: the app themes via a
  * `.light` class (dark is the default), so `dark:` selectors keyed on
  * `.dark` never fire. Resolved-JS contrast works in every mode, fixing the
  * fund map's text flaw the same way.
@@ -281,7 +281,7 @@ export function Heatmap({
           const r = layout.rects[idx];
           if (!r || r.w <= 0 || r.h <= 0) return null;
           // Fund-map rendering: translucent intensity overlay, full color at
-          // ±6%. Dark mode stays dark — no more glowing pale tiles.
+          // ±6%. Dark mode stays dark: no more glowing pale tiles.
           const isFlat = t.change === 0 || !Number.isFinite(t.change);
           const intensity = isFlat ? 0 : Math.min(1, Math.abs(t.change) / 6);
           const alpha = 0.15 + 0.75 * intensity;

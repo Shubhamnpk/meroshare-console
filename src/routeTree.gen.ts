@@ -20,16 +20,21 @@ import { Route as DashBrokersRouteImport } from './routes/_dash.brokers'
 import { Route as DashCalendarRouteImport } from './routes/_dash.calendar'
 import { Route as DashDashboardRouteImport } from './routes/_dash.dashboard'
 import { Route as DashDebenturesRouteImport } from './routes/_dash.debentures'
+import { Route as DashDividendVsFdRouteImport } from './routes/_dash.dividend-vs-fd'
 import { Route as DashEdisRouteImport } from './routes/_dash.edis'
 import { Route as DashIpoRouteImport } from './routes/_dash.ipo'
 import { Route as DashIpoPipelineRouteImport } from './routes/_dash.ipo-pipeline'
 import { Route as DashMarketRouteImport } from './routes/_dash.market'
+import { Route as DashMarketDepthRouteImport } from './routes/_dash.market-depth'
 import { Route as DashMutualFundsRouteImport } from './routes/_dash.mutual-funds'
 import { Route as DashPortfolioRouteImport } from './routes/_dash.portfolio'
 import { Route as DashProfileRouteImport } from './routes/_dash.profile'
 import { Route as DashReportsRouteImport } from './routes/_dash.reports'
+import { Route as DashSectorHeatmapRouteImport } from './routes/_dash.sector-heatmap'
 import { Route as DashSettingsRouteImport } from './routes/_dash.settings'
+import { Route as DashStockCompareRouteImport } from './routes/_dash.stock-compare'
 import { Route as DashTerminalRouteImport } from './routes/_dash.terminal'
+import { Route as DashTimeMachineRouteImport } from './routes/_dash.time-machine'
 import { Route as DashToolsRouteImport } from './routes/_dash.tools'
 import { Route as DashTransactionsRouteImport } from './routes/_dash.transactions'
 import { Route as DashWaccRouteImport } from './routes/_dash.wacc'
@@ -89,6 +94,11 @@ const DashDebenturesRoute = DashDebenturesRouteImport.update({
   path: '/debentures',
   getParentRoute: () => DashRoute,
 } as any)
+const DashDividendVsFdRoute = DashDividendVsFdRouteImport.update({
+  id: '/dividend-vs-fd',
+  path: '/dividend-vs-fd',
+  getParentRoute: () => DashRoute,
+} as any)
 const DashEdisRoute = DashEdisRouteImport.update({
   id: '/edis',
   path: '/edis',
@@ -107,6 +117,11 @@ const DashIpoPipelineRoute = DashIpoPipelineRouteImport.update({
 const DashMarketRoute = DashMarketRouteImport.update({
   id: '/market',
   path: '/market',
+  getParentRoute: () => DashRoute,
+} as any)
+const DashMarketDepthRoute = DashMarketDepthRouteImport.update({
+  id: '/market-depth',
+  path: '/market-depth',
   getParentRoute: () => DashRoute,
 } as any)
 const DashMutualFundsRoute = DashMutualFundsRouteImport.update({
@@ -129,14 +144,29 @@ const DashReportsRoute = DashReportsRouteImport.update({
   path: '/reports',
   getParentRoute: () => DashRoute,
 } as any)
+const DashSectorHeatmapRoute = DashSectorHeatmapRouteImport.update({
+  id: '/sector-heatmap',
+  path: '/sector-heatmap',
+  getParentRoute: () => DashRoute,
+} as any)
 const DashSettingsRoute = DashSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
   getParentRoute: () => DashRoute,
 } as any)
+const DashStockCompareRoute = DashStockCompareRouteImport.update({
+  id: '/stock-compare',
+  path: '/stock-compare',
+  getParentRoute: () => DashRoute,
+} as any)
 const DashTerminalRoute = DashTerminalRouteImport.update({
   id: '/terminal',
   path: '/terminal',
+  getParentRoute: () => DashRoute,
+} as any)
+const DashTimeMachineRoute = DashTimeMachineRouteImport.update({
+  id: '/time-machine',
+  path: '/time-machine',
   getParentRoute: () => DashRoute,
 } as any)
 const DashToolsRoute = DashToolsRouteImport.update({
@@ -171,16 +201,21 @@ export interface FileRoutesByFullPath {
   '/calendar': typeof DashCalendarRoute
   '/dashboard': typeof DashDashboardRoute
   '/debentures': typeof DashDebenturesRoute
+  '/dividend-vs-fd': typeof DashDividendVsFdRoute
   '/edis': typeof DashEdisRoute
   '/ipo': typeof DashIpoRoute
   '/ipo-pipeline': typeof DashIpoPipelineRoute
   '/market': typeof DashMarketRoute
+  '/market-depth': typeof DashMarketDepthRoute
   '/mutual-funds': typeof DashMutualFundsRoute
   '/portfolio': typeof DashPortfolioRoute
   '/profile': typeof DashProfileRoute
   '/reports': typeof DashReportsRoute
+  '/sector-heatmap': typeof DashSectorHeatmapRoute
   '/settings': typeof DashSettingsRoute
+  '/stock-compare': typeof DashStockCompareRoute
   '/terminal': typeof DashTerminalRoute
+  '/time-machine': typeof DashTimeMachineRoute
   '/tools': typeof DashToolsRoute
   '/transactions': typeof DashTransactionsRoute
   '/wacc': typeof DashWaccRoute
@@ -197,16 +232,21 @@ export interface FileRoutesByTo {
   '/calendar': typeof DashCalendarRoute
   '/dashboard': typeof DashDashboardRoute
   '/debentures': typeof DashDebenturesRoute
+  '/dividend-vs-fd': typeof DashDividendVsFdRoute
   '/edis': typeof DashEdisRoute
   '/ipo': typeof DashIpoRoute
   '/ipo-pipeline': typeof DashIpoPipelineRoute
   '/market': typeof DashMarketRoute
+  '/market-depth': typeof DashMarketDepthRoute
   '/mutual-funds': typeof DashMutualFundsRoute
   '/portfolio': typeof DashPortfolioRoute
   '/profile': typeof DashProfileRoute
   '/reports': typeof DashReportsRoute
+  '/sector-heatmap': typeof DashSectorHeatmapRoute
   '/settings': typeof DashSettingsRoute
+  '/stock-compare': typeof DashStockCompareRoute
   '/terminal': typeof DashTerminalRoute
+  '/time-machine': typeof DashTimeMachineRoute
   '/tools': typeof DashToolsRoute
   '/transactions': typeof DashTransactionsRoute
   '/wacc': typeof DashWaccRoute
@@ -225,16 +265,21 @@ export interface FileRoutesById {
   '/_dash/calendar': typeof DashCalendarRoute
   '/_dash/dashboard': typeof DashDashboardRoute
   '/_dash/debentures': typeof DashDebenturesRoute
+  '/_dash/dividend-vs-fd': typeof DashDividendVsFdRoute
   '/_dash/edis': typeof DashEdisRoute
   '/_dash/ipo': typeof DashIpoRoute
   '/_dash/ipo-pipeline': typeof DashIpoPipelineRoute
   '/_dash/market': typeof DashMarketRoute
+  '/_dash/market-depth': typeof DashMarketDepthRoute
   '/_dash/mutual-funds': typeof DashMutualFundsRoute
   '/_dash/portfolio': typeof DashPortfolioRoute
   '/_dash/profile': typeof DashProfileRoute
   '/_dash/reports': typeof DashReportsRoute
+  '/_dash/sector-heatmap': typeof DashSectorHeatmapRoute
   '/_dash/settings': typeof DashSettingsRoute
+  '/_dash/stock-compare': typeof DashStockCompareRoute
   '/_dash/terminal': typeof DashTerminalRoute
+  '/_dash/time-machine': typeof DashTimeMachineRoute
   '/_dash/tools': typeof DashToolsRoute
   '/_dash/transactions': typeof DashTransactionsRoute
   '/_dash/wacc': typeof DashWaccRoute
@@ -253,16 +298,21 @@ export interface FileRouteTypes {
     | '/calendar'
     | '/dashboard'
     | '/debentures'
+    | '/dividend-vs-fd'
     | '/edis'
     | '/ipo'
     | '/ipo-pipeline'
     | '/market'
+    | '/market-depth'
     | '/mutual-funds'
     | '/portfolio'
     | '/profile'
     | '/reports'
+    | '/sector-heatmap'
     | '/settings'
+    | '/stock-compare'
     | '/terminal'
+    | '/time-machine'
     | '/tools'
     | '/transactions'
     | '/wacc'
@@ -279,16 +329,21 @@ export interface FileRouteTypes {
     | '/calendar'
     | '/dashboard'
     | '/debentures'
+    | '/dividend-vs-fd'
     | '/edis'
     | '/ipo'
     | '/ipo-pipeline'
     | '/market'
+    | '/market-depth'
     | '/mutual-funds'
     | '/portfolio'
     | '/profile'
     | '/reports'
+    | '/sector-heatmap'
     | '/settings'
+    | '/stock-compare'
     | '/terminal'
+    | '/time-machine'
     | '/tools'
     | '/transactions'
     | '/wacc'
@@ -306,16 +361,21 @@ export interface FileRouteTypes {
     | '/_dash/calendar'
     | '/_dash/dashboard'
     | '/_dash/debentures'
+    | '/_dash/dividend-vs-fd'
     | '/_dash/edis'
     | '/_dash/ipo'
     | '/_dash/ipo-pipeline'
     | '/_dash/market'
+    | '/_dash/market-depth'
     | '/_dash/mutual-funds'
     | '/_dash/portfolio'
     | '/_dash/profile'
     | '/_dash/reports'
+    | '/_dash/sector-heatmap'
     | '/_dash/settings'
+    | '/_dash/stock-compare'
     | '/_dash/terminal'
+    | '/_dash/time-machine'
     | '/_dash/tools'
     | '/_dash/transactions'
     | '/_dash/wacc'
@@ -408,6 +468,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashDebenturesRouteImport
       parentRoute: typeof DashRoute
     }
+    '/_dash/dividend-vs-fd': {
+      id: '/_dash/dividend-vs-fd'
+      path: '/dividend-vs-fd'
+      fullPath: '/dividend-vs-fd'
+      preLoaderRoute: typeof DashDividendVsFdRouteImport
+      parentRoute: typeof DashRoute
+    }
     '/_dash/edis': {
       id: '/_dash/edis'
       path: '/edis'
@@ -434,6 +501,13 @@ declare module '@tanstack/react-router' {
       path: '/market'
       fullPath: '/market'
       preLoaderRoute: typeof DashMarketRouteImport
+      parentRoute: typeof DashRoute
+    }
+    '/_dash/market-depth': {
+      id: '/_dash/market-depth'
+      path: '/market-depth'
+      fullPath: '/market-depth'
+      preLoaderRoute: typeof DashMarketDepthRouteImport
       parentRoute: typeof DashRoute
     }
     '/_dash/mutual-funds': {
@@ -464,6 +538,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashReportsRouteImport
       parentRoute: typeof DashRoute
     }
+    '/_dash/sector-heatmap': {
+      id: '/_dash/sector-heatmap'
+      path: '/sector-heatmap'
+      fullPath: '/sector-heatmap'
+      preLoaderRoute: typeof DashSectorHeatmapRouteImport
+      parentRoute: typeof DashRoute
+    }
     '/_dash/settings': {
       id: '/_dash/settings'
       path: '/settings'
@@ -471,11 +552,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashSettingsRouteImport
       parentRoute: typeof DashRoute
     }
+    '/_dash/stock-compare': {
+      id: '/_dash/stock-compare'
+      path: '/stock-compare'
+      fullPath: '/stock-compare'
+      preLoaderRoute: typeof DashStockCompareRouteImport
+      parentRoute: typeof DashRoute
+    }
     '/_dash/terminal': {
       id: '/_dash/terminal'
       path: '/terminal'
       fullPath: '/terminal'
       preLoaderRoute: typeof DashTerminalRouteImport
+      parentRoute: typeof DashRoute
+    }
+    '/_dash/time-machine': {
+      id: '/_dash/time-machine'
+      path: '/time-machine'
+      fullPath: '/time-machine'
+      preLoaderRoute: typeof DashTimeMachineRouteImport
       parentRoute: typeof DashRoute
     }
     '/_dash/tools': {
@@ -518,16 +613,21 @@ interface DashRouteChildren {
   DashCalendarRoute: typeof DashCalendarRoute
   DashDashboardRoute: typeof DashDashboardRoute
   DashDebenturesRoute: typeof DashDebenturesRoute
+  DashDividendVsFdRoute: typeof DashDividendVsFdRoute
   DashEdisRoute: typeof DashEdisRoute
   DashIpoRoute: typeof DashIpoRoute
   DashIpoPipelineRoute: typeof DashIpoPipelineRoute
   DashMarketRoute: typeof DashMarketRoute
+  DashMarketDepthRoute: typeof DashMarketDepthRoute
   DashMutualFundsRoute: typeof DashMutualFundsRoute
   DashPortfolioRoute: typeof DashPortfolioRoute
   DashProfileRoute: typeof DashProfileRoute
   DashReportsRoute: typeof DashReportsRoute
+  DashSectorHeatmapRoute: typeof DashSectorHeatmapRoute
   DashSettingsRoute: typeof DashSettingsRoute
+  DashStockCompareRoute: typeof DashStockCompareRoute
   DashTerminalRoute: typeof DashTerminalRoute
+  DashTimeMachineRoute: typeof DashTimeMachineRoute
   DashToolsRoute: typeof DashToolsRoute
   DashTransactionsRoute: typeof DashTransactionsRoute
   DashWaccRoute: typeof DashWaccRoute
@@ -542,16 +642,21 @@ const DashRouteChildren: DashRouteChildren = {
   DashCalendarRoute: DashCalendarRoute,
   DashDashboardRoute: DashDashboardRoute,
   DashDebenturesRoute: DashDebenturesRoute,
+  DashDividendVsFdRoute: DashDividendVsFdRoute,
   DashEdisRoute: DashEdisRoute,
   DashIpoRoute: DashIpoRoute,
   DashIpoPipelineRoute: DashIpoPipelineRoute,
   DashMarketRoute: DashMarketRoute,
+  DashMarketDepthRoute: DashMarketDepthRoute,
   DashMutualFundsRoute: DashMutualFundsRoute,
   DashPortfolioRoute: DashPortfolioRoute,
   DashProfileRoute: DashProfileRoute,
   DashReportsRoute: DashReportsRoute,
+  DashSectorHeatmapRoute: DashSectorHeatmapRoute,
   DashSettingsRoute: DashSettingsRoute,
+  DashStockCompareRoute: DashStockCompareRoute,
   DashTerminalRoute: DashTerminalRoute,
+  DashTimeMachineRoute: DashTimeMachineRoute,
   DashToolsRoute: DashToolsRoute,
   DashTransactionsRoute: DashTransactionsRoute,
   DashWaccRoute: DashWaccRoute,

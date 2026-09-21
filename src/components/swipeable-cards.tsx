@@ -89,7 +89,7 @@ export function SwipeableCards({
 /**
  * Peeking swipe strip (the Market pattern): horizontal snap scroll with the
  * next card peeking on phones, a plain grid on sm+. Children carry their own
- * widths — wrap them in {@link SwipeItem} or pass equivalent classes.
+ * widths: wrap them in {@link SwipeItem} or pass equivalent classes.
  */
 export function SwipeStrip({
   children,

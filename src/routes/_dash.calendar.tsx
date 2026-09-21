@@ -1,11 +1,18 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { CalendarDays, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { EmptyBlock } from "@/components/states";
 import { Button } from "@/components/ui/button";
-import { dividendsQuery, holdingSymbolsQuery } from "@/lib/queries";
+import { ScripSheet } from "@/components/market/scrip-sheet";
+import {
+  currentIssuesQuery,
+  dividendsQuery,
+  enrichedPortfolioQuery,
+  holdingSymbolsQuery,
+} from "@/lib/queries";
 import { formatDate } from "@/lib/format";
+import { statusGroup } from "@/lib/ipo/status";
 import {
   BS_MONTHS_EN,
   BS_MONTHS_NE,
@@ -20,6 +27,7 @@ import {
   type BsDate,
 } from "@/lib/nepali-dates";
 import { cn } from "@/lib/utils";
+import { canonicalSymbol } from "@/lib/nepse/aliases";
 import { ogImage, canonicalLink } from "@/lib/seo";
 
 export const Route = createFileRoute("/_dash/calendar")({
@@ -46,7 +54,7 @@ export const Route = createFileRoute("/_dash/calendar")({
   component: CalendarPage,
 });
 
-type CalKind = "announce" | "bookclose";
+type CalKind = "announce" | "bookclose" | "ipo_open" | "ipo_close" | "ipo_upcoming";
 
 interface CalEvent {
   key: string;
@@ -57,6 +65,9 @@ interface CalEvent {
   cash: number;
   fy: string | null;
   mine: boolean;
+  /** IPO-only fields: present when kind starts with "ipo_" */
+  companyName?: string;
+  ipoLabel?: string | null;
 }
 
 const KIND_STYLE: Record<CalKind, { dot: string; badge: string; label: string }> = {
@@ -70,13 +81,48 @@ const KIND_STYLE: Record<CalKind, { dot: string; badge: string; label: string }>
     badge: "bg-gain/15 text-gain",
     label: "Book close",
   },
+  ipo_open: {
+    dot: "bg-sky-500",
+    badge: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
+    label: "IPO opens",
+  },
+  ipo_close: {
+    dot: "bg-rose-500",
+    badge: "bg-rose-500/15 text-rose-600 dark:text-rose-400",
+    label: "IPO closes",
+  },
+  ipo_upcoming: {
+    dot: "bg-violet-500",
+    badge: "bg-violet-500/15 text-violet-600 dark:text-violet-400",
+    label: "IPO upcoming",
+  },
 };
 
 function dividendText(e: CalEvent): string {
+  if (e.kind.startsWith("ipo_")) {
+    const parts: string[] = [];
+    if (e.ipoLabel) parts.push(e.ipoLabel);
+    if (e.companyName && e.companyName !== e.symbol) parts.push(e.companyName);
+    return parts.join(" · ") || e.symbol;
+  }
   const parts: string[] = [];
   if (e.bonus > 0) parts.push(`${e.bonus}% bonus`);
   if (e.cash > 0) parts.push(`${e.cash}% cash`);
   return parts.join(" + ") || "Dividend";
+}
+
+function ipoTypeLabel(issue: {
+  shareTypeName?: string | null;
+  shareGroupName?: string | null;
+}): string | null {
+  const hay = `${issue.shareTypeName ?? ""} ${issue.shareGroupName ?? ""}`;
+  if (/right/i.test(hay)) return "Right";
+  if (/fpo/i.test(hay)) return "FPO";
+  if (/\bipo\b/i.test(hay)) return "IPO";
+  if (/mutual|fund/i.test(hay)) return "Fund";
+  if (/debenture|bond/i.test(hay)) return "Bond";
+  if (/auction/i.test(hay)) return "Auction";
+  return null;
 }
 
 function MonthGrid({
@@ -174,25 +220,39 @@ function CalendarPage() {
   const [scope, setScope] = useState<"mine" | "all">("mine");
   // Bottom panels: side-by-side on desktop, tabbed on mobile to avoid scrolling.
   const [panel, setPanel] = useState<"day" | "upcoming">("day");
+  const [picked, setPicked] = useState<string | null>(null);
+  const [pickedTab, setPickedTab] = useState<string | null>(null);
   const navigate = Route.useNavigate();
 
   const dividends = useQuery(dividendsQuery());
-  const holdings = useQuery(holdingSymbolsQuery());
-  const held = useMemo(
-    () => new Set((holdings.data ?? []).map((s) => s.trim().toUpperCase()).filter(Boolean)),
-    [holdings.data],
+  const holdingSymbols = useQuery(holdingSymbolsQuery());
+  const portfolio = useQuery(enrichedPortfolioQuery());
+  const ipoIssues = useQuery(currentIssuesQuery());
+  const focusCanonical = useMemo(
+    () => (focusSymbol ? canonicalSymbol(focusSymbol) : ""),
+    [focusSymbol],
   );
+  // Dashboard's "My holdings" uses enrichedPortfolio holdings, which is more
+  // reliable than the dedicated symbols endpoint (myPurchase/myShare/ is
+  // frequently gated by CDSC's WAF). Merge both so whichever succeeds wins.
+  const held = useMemo(() => {
+    const fromSymbols = (holdingSymbols.data ?? []).map((s) => canonicalSymbol(s)).filter(Boolean);
+    const fromPortfolio = (portfolio.data?.holdings ?? [])
+      .map((h) => canonicalSymbol(h.scrip))
+      .filter(Boolean);
+    return new Set([...fromSymbols, ...fromPortfolio]);
+  }, [holdingSymbols.data, portfolio.data]);
 
   const events = useMemo(() => {
     const map = new Map<string, CalEvent[]>();
     for (const div of dividends.data ?? []) {
-      const symbol = String(div.symbol ?? "")
-        .trim()
-        .toUpperCase();
-      if (!symbol) continue;
-      if (focusSymbol && symbol !== focusSymbol) continue;
-      const mine = held.has(symbol);
-      if (!focusSymbol && scope === "mine" && !mine) continue;
+      const raw = String(div.symbol ?? "").trim();
+      if (!raw) continue;
+      const symbol = raw.toUpperCase();
+      const canon = canonicalSymbol(symbol);
+      if (focusCanonical && canon !== focusCanonical) continue;
+      const mine = held.has(canon);
+      if (!focusCanonical && scope === "mine" && !mine) continue;
       const bonus = Number(div.bonusShare ?? 0) || 0;
       const cash = Number(div.cashDividend ?? 0) || 0;
       const fy = div.fiscalYear ?? null;
@@ -206,10 +266,59 @@ function CalendarPage() {
       push(parseFeedDate(div.bookCloseDate), "bookclose");
       push(parseFeedDate(div.announcementDate), "announce");
     }
+    // IPO open / upcoming: shown regardless of holdings scope, but still
+    // respects the symbol filter so `?symbol=XYZ` focuses the calendar.
+    for (const issue of ipoIssues.data ?? []) {
+      const rawSym = String(issue.scrip ?? "").trim();
+      const symbol = rawSym
+        ? rawSym.toUpperCase()
+        : String(issue.companyName ?? "")
+            .trim()
+            .slice(0, 12)
+            .toUpperCase() || "IPO";
+      if (focusCanonical && canonicalSymbol(symbol) !== focusCanonical) continue;
+      const companyName = String(issue.companyName ?? symbol).trim() || symbol;
+      const ipoLabel = ipoTypeLabel(issue);
+      const group = statusGroup(issue);
+      const open = parseFeedDate(issue.issueOpenDate);
+      const close = parseFeedDate(issue.issueCloseDate);
+      const pushIpo = (date: Date | null, kind: CalKind) => {
+        if (!date) return;
+        const key = adKey(date);
+        const list = map.get(key) ?? [];
+        const k = `${kind}-${symbol}-${key}-${companyName.slice(0, 8)}`;
+        list.push({
+          key: k,
+          date,
+          symbol,
+          kind,
+          bonus: 0,
+          cash: 0,
+          fy: null,
+          mine: false,
+          companyName,
+          ipoLabel,
+        });
+        map.set(key, list);
+      };
+      if (group === "open") {
+        pushIpo(open, "ipo_open");
+        pushIpo(close, "ipo_close");
+      } else if (group === "upcoming") {
+        pushIpo(open, "ipo_upcoming");
+      }
+    }
+    const order: Record<CalKind, number> = {
+      bookclose: 0,
+      announce: 1,
+      ipo_close: 2,
+      ipo_open: 3,
+      ipo_upcoming: 4,
+    };
     for (const list of map.values())
-      list.sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "bookclose" ? -1 : 1));
+      list.sort((a, b) => (order[a.kind] ?? 99) - (order[b.kind] ?? 99));
     return map;
-  }, [dividends.data, held, scope, focusSymbol]);
+  }, [dividends.data, ipoIssues.data, held, scope, focusCanonical]);
 
   const eventsOf = (key: string) => events.get(key) ?? [];
   const todayKey = adKey(now);
@@ -341,7 +450,19 @@ function CalendarPage() {
 
   return (
     <div className="space-y-5">
-      <div>
+      <div className="flex items-center gap-2">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-8 shrink-0"
+          onClick={() => {
+            if (window.history.length > 1) window.history.back();
+            else void navigate({ to: "/dashboard" });
+          }}
+          aria-label="Go back"
+        >
+          <ArrowLeft className="size-4" />
+        </Button>
         <h1 className="flex items-center gap-2 font-display text-2xl font-semibold sm:text-3xl">
           <CalendarDays className="size-6 text-primary" /> Calendar
         </h1>
@@ -429,16 +550,70 @@ function CalendarPage() {
             eventsOf={eventsOf}
           />
 
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-            <span className="inline-flex items-center gap-1.5">
-              <span className="size-2 rounded-full bg-gain" /> Book close
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="size-2 rounded-full bg-amber-500" /> Announced
-            </span>
-            <span className="num">
-              {view === "ad" ? "BS date under each day" : "AD date under each day"}
-            </span>
+          <div className="rounded-2xl border border-border/70 bg-card p-3 sm:p-4">
+            <div className="mt-3 grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <p className="text-xs font-semibold">Dividends</p>
+                <div className="space-y-1.5">
+                  <span className="flex items-start gap-2.5 text-xs leading-snug">
+                    <span className="mt-1 size-2.5 shrink-0 rounded-full bg-gain" aria-hidden />
+                    <span>
+                      <span className="font-semibold">Book close</span>: record date; your holdings
+                      get a{" "}
+                      <span className="rounded bg-primary/10 px-1 py-0.5 text-[0.60rem] font-semibold text-primary">
+                        Holding
+                      </span>{" "}
+                      badge
+                    </span>
+                  </span>
+                  <span className="flex items-start gap-2.5 text-xs leading-snug">
+                    <span
+                      className="mt-1 size-2.5 shrink-0 rounded-full bg-amber-500"
+                      aria-hidden
+                    />
+                    <span>
+                      <span className="font-semibold">Announced</span>: board declares bonus / cash
+                    </span>
+                  </span>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs font-semibold">IPOs</p>
+                <div className="space-y-1.5">
+                  <span className="flex items-start gap-2.5 text-xs leading-snug">
+                    <span className="mt-1 size-2.5 shrink-0 rounded-full bg-sky-500" aria-hidden />
+                    <span>
+                      <span className="font-semibold">IPO opens</span>: subscription starts
+                    </span>
+                  </span>
+                  <span className="flex items-start gap-2.5 text-xs leading-snug">
+                    <span className="mt-1 size-2.5 shrink-0 rounded-full bg-rose-500" aria-hidden />
+                    <span>
+                      <span className="font-semibold">IPO closes</span>: last day to apply
+                    </span>
+                  </span>
+                  <span className="flex items-start gap-2.5 text-xs leading-snug">
+                    <span
+                      className="mt-1 size-2.5 shrink-0 rounded-full bg-violet-500"
+                      aria-hidden
+                    />
+                    <span>
+                      <span className="font-semibold">Upcoming</span>: announced future IPO
+                    </span>
+                  </span>
+                </div>
+              </div>
+            </div>
+            <p className="num mt-3 border-t border-border/40 pt-2 text-[0.62rem] leading-snug text-muted-foreground">
+              Tap any day to see details ·{" "}
+              {view === "ad" ? "BS date under each AD day" : "AD date under each BS day"} ·{" "}
+              <span className="inline-flex items-center gap-1">
+                <span className="size-1.5 rounded-full bg-gain" /> dividends
+              </span>{" "}
+              <span className="inline-flex items-center gap-1">
+                <span className="size-1.5 rounded-full bg-sky-500" /> IPOs
+              </span>
+            </p>
           </div>
         </div>
 
@@ -486,53 +661,88 @@ function CalendarPage() {
                 </span>
               </h3>
               {selectedEvents.length === 0 ? (
-                <EmptyBlock title="No events" description="No dividend activity on this day." />
+                <EmptyBlock title="No events" description="No activity on this day." />
               ) : (
                 <ul className="space-y-2">
-                  {selectedEvents.map((e) => (
-                    <li
-                      key={e.key}
-                      className="flex items-center gap-3 rounded-2xl border border-border/70 bg-card px-4 py-3"
-                    >
-                      <span
+                  {selectedEvents.map((e) => {
+                    const isIpo = e.kind.startsWith("ipo_");
+                    const handleClick = () => {
+                      if (isIpo) {
+                        const tab = e.kind === "ipo_upcoming" ? "calendar" : "apply";
+                        void navigate({ to: "/ipo", search: { tab } });
+                      } else {
+                        setPicked(e.symbol);
+                        setPickedTab("dividend");
+                      }
+                    };
+                    return (
+                      <li
+                        key={e.key}
+                        role="button"
+                        tabIndex={0}
+                        onClick={handleClick}
+                        onKeyDown={(ev) => {
+                          if (ev.key === "Enter" || ev.key === " ") {
+                            ev.preventDefault();
+                            handleClick();
+                          }
+                        }}
                         className={cn(
-                          "num flex size-10 shrink-0 items-center justify-center rounded-full text-xs font-bold",
-                          KIND_STYLE[e.kind].badge,
+                          "flex cursor-pointer items-center gap-3 rounded-2xl border border-border/70 bg-card px-4 py-3 transition-colors hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                         )}
                       >
-                        {e.symbol.slice(0, 2)}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm font-semibold">{e.symbol}</span>
-                          <span
-                            className={cn(
-                              "num rounded-full px-2 py-0.5 text-[0.68rem] font-semibold",
-                              KIND_STYLE[e.kind].badge,
-                            )}
-                          >
-                            {KIND_STYLE[e.kind].label}
-                          </span>
-                          {e.mine ? (
-                            <span className="num rounded-full bg-primary/10 px-2 py-0.5 text-[0.68rem] font-semibold text-primary">
-                              Holding
+                        <span
+                          className={cn(
+                            "num flex size-10 shrink-0 items-center justify-center rounded-full text-xs font-bold",
+                            KIND_STYLE[e.kind].badge,
+                          )}
+                        >
+                          {isIpo
+                            ? (e.companyName ?? e.symbol).slice(0, 2).toUpperCase()
+                            : e.symbol.slice(0, 2)}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-semibold">
+                              {isIpo ? (e.companyName ?? e.symbol) : e.symbol}
                             </span>
-                          ) : null}
+                            <span
+                              className={cn(
+                                "num rounded-full px-2 py-0.5 text-[0.68rem] font-semibold",
+                                KIND_STYLE[e.kind].badge,
+                              )}
+                            >
+                              {KIND_STYLE[e.kind].label}
+                            </span>
+                            {!isIpo && e.mine ? (
+                              <span className="num rounded-full bg-primary/10 px-2 py-0.5 text-[0.68rem] font-semibold text-primary">
+                                Holding
+                              </span>
+                            ) : null}
+                            {isIpo && e.ipoLabel ? (
+                              <span className="num rounded-full border border-border/70 px-2 py-0.5 text-[0.62rem] font-semibold text-muted-foreground">
+                                {e.ipoLabel}
+                              </span>
+                            ) : null}
+                            {isIpo && e.symbol && e.companyName !== e.symbol ? (
+                              <span className="num text-xs text-muted-foreground">{e.symbol}</span>
+                            ) : null}
+                          </span>
+                          <span className="num mt-0.5 block text-xs text-muted-foreground">
+                            {dividendText(e)}
+                            {!isIpo && e.fy ? ` · FY ${e.fy}` : ""}
+                          </span>
+                          <span className="num mt-0.5 block text-xs text-muted-foreground">
+                            {formatDate(e.date)}
+                            {(() => {
+                              const bs = adToBs(e.date);
+                              return bs ? ` · ${formatBs(bs)}` : "";
+                            })()}
+                          </span>
                         </span>
-                        <span className="num mt-0.5 block text-xs text-muted-foreground">
-                          {dividendText(e)}
-                          {e.fy ? ` · FY ${e.fy}` : ""}
-                        </span>
-                        <span className="num mt-0.5 block text-xs text-muted-foreground">
-                          {formatDate(e.date)}
-                          {(() => {
-                            const bs = adToBs(e.date);
-                            return bs ? ` · ${formatBs(bs)}` : "";
-                          })()}
-                        </span>
-                      </span>
-                    </li>
-                  ))}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </section>
@@ -576,6 +786,16 @@ function CalendarPage() {
           </div>
         </div>
       </div>
+      <ScripSheet
+        symbol={picked}
+        initialTab={pickedTab}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPicked(null);
+            setPickedTab(null);
+          }
+        }}
+      />
     </div>
   );
 }

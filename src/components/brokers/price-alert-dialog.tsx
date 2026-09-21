@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * One-tap alert creation for a single scrip. Used by the scrip sheet header
- * and the terminal chart readout bar — wherever a price is on screen, an
+ * and the terminal chart readout bar: wherever a price is on screen, an
  * alert is one click away. Full list management lives in PriceAlertsPanel.
  */
 export function PriceAlertDialog({
@@ -159,7 +159,7 @@ export function PriceAlertDialog({
               >
                 <span>
                   {a.direction === "above" ? "≥" : "≤"}{" "}
-                  <span className="num font-semibold">{a.target.toLocaleString("en-IN")}</span>{" "}
+                  <span className="num font-semibold">{a.target.toLocaleString("en-NP")}</span>{" "}
                   <span className="text-xs text-muted-foreground">
                     · {a.hitAt ? "fired" : "watching"}
                   </span>

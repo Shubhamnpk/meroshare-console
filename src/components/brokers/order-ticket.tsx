@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { ArrowDownRight, ArrowUpRight, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AmountInput } from "@/components/ui/amount-input";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -27,6 +28,8 @@ import {
 import { placeBrokerAmo, placeBrokerOrder } from "@/lib/brokers/brokers.functions";
 import type { BrokerId } from "@/lib/brokers/types";
 import { errorMessage, formatNpr } from "@/lib/format";
+import { loadYoWallet, saveYoWallet } from "@/lib/yobroker/store";
+import { placeYoOrder } from "@/lib/yobroker/engine";
 import { cn } from "@/lib/utils";
 import { useBrokerMarketWs } from "@/hooks/use-broker-ws";
 
@@ -34,7 +37,7 @@ const VALIDITIES = ["DAY", "GTD", "GTC", "IOC", "FOK"] as const;
 
 function num(v: number | null | undefined): string {
   return typeof v === "number" && Number.isFinite(v)
-    ? v.toLocaleString("en-IN", { maximumFractionDigits: 2 })
+    ? v.toLocaleString("en-NP", { maximumFractionDigits: 2 })
     : "-";
 }
 
@@ -132,6 +135,15 @@ export function OrderTicket({
   const px = Number(price);
   const validQty = Number.isInteger(qty) && qty >= 1;
   const validPx = orderType === "MKT" || (Number.isFinite(px) && px > 0);
+  const priceBandError =
+    orderType !== "MKT" && validPx && ltp !== null && ltp > 0
+      ? (() => {
+          const lower = ltp * 0.85;
+          const upper = ltp * 1.15;
+          if (px < lower || px > upper) return `Price must be within ±15% of LTP (Rs ${lower.toFixed(2)} – ${upper.toFixed(2)})`;
+          return null;
+        })()
+      : null;
   const amoOddLot = amo && side === "SELL" && validQty && qty < 10;
   const estimated =
     validQty && (orderType === "MKT" ? ltp !== null : validPx)
@@ -141,7 +153,15 @@ export function OrderTicket({
     side === "SELL" && validQty && holding ? Math.max(0, qty - holding.availableQty) : 0;
 
   const place = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
+      if (brokerId === "yobroker") {
+        const w = loadYoWallet(null);
+        const res = placeYoOrder(w, { symbol, side, qty, price: orderType === "MKT" ? null : px, orderType }, ltp);
+        if (res.error || !res.order) throw new Error(res.error ?? "Paper order failed.");
+        saveYoWallet(null, res.wallet);
+        // mimic PlaceOrderResult shape
+        return { ok: true as const, message: res.wallet.orders[0]?.status === "filled" ? `Filled ${side} ${qty} ${symbol}` : `Paper order placed: ${side} ${qty} ${symbol}`, tranId: res.order.id } as unknown as Awaited<ReturnType<typeof placeBrokerOrder>>;
+      }
       if (amo) {
         const ref = ltp ?? quote.data?.close ?? px;
         return placeBrokerAmo({
@@ -202,7 +222,7 @@ export function OrderTicket({
           <p className="font-display text-base font-semibold">
             {symbol}{" "}
             <span className="text-xs font-normal text-muted-foreground">
-              via {brokerId === "naasa-x" ? "Naasa X" : brokerId}
+              via {brokerId === "yobroker" ? "Yo Broker (paper)" : brokerId === "naasa-x" ? "Naasa X" : brokerId}
             </span>
           </p>
           <div className="flex items-center gap-2">
@@ -269,31 +289,33 @@ export function OrderTicket({
             <Input
               id="ticket-qty"
               inputMode="numeric"
-              placeholder="10"
+              placeholder="e.g. 10"
               value={quantity}
               onChange={(e) => setQuantity(e.target.value.replace(/[^0-9]/g, "").slice(0, 6))}
             />
             {holding ? (
               <p className="text-[0.7rem] text-muted-foreground">
-                You hold {holding.availableQty.toLocaleString("en-IN")} {symbol}
+                You hold {holding.availableQty.toLocaleString("en-NP")} {symbol}
               </p>
             ) : null}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="ticket-price">Price {orderType === "MKT" ? "(market)" : ""}</Label>
-            <Input
+            <AmountInput
               id="ticket-price"
-              inputMode="decimal"
               placeholder={ltp !== null ? String(ltp) : "0.00"}
               value={orderType === "MKT" ? "" : price}
+              onChange={setPrice}
               disabled={orderType === "MKT"}
-              onChange={(e) => setPrice(e.target.value.replace(/[^0-9.]/g, "").slice(0, 12))}
             />
             <p className="text-[0.7rem] text-muted-foreground">
               {orderType === "MKT"
                 ? "Executes at the best available price."
                 : `LTP ${num(ltp)} · Close ${num(quote.data?.close)}`}
             </p>
+            {priceBandError ? (
+              <p className="mt-1 text-xs font-medium text-destructive">{priceBandError}</p>
+            ) : null}
           </div>
         </div>
 
@@ -389,7 +411,7 @@ export function OrderTicket({
               ? "bg-gain hover:bg-gain/90 text-white"
               : "bg-destructive hover:bg-destructive/90 text-white",
           )}
-          disabled={!validQty || !validPx || shortfall > 0 || amoOddLot || place.isPending}
+          disabled={!validQty || !validPx || !!priceBandError || shortfall > 0 || amoOddLot || place.isPending}
           onClick={() => setConfirmOpen(true)}
         >
           {place.isPending
@@ -411,10 +433,10 @@ export function OrderTicket({
                 <span
                   className={cn("font-bold", o.side === "BUY" ? "text-gain" : "text-destructive")}
                 >
-                  {o.side} {o.quantity.toLocaleString("en-IN")}
+                  {o.side} {o.quantity.toLocaleString("en-NP")}
                 </span>
                 <span className="num text-muted-foreground">
-                  @ {o.price !== null ? o.price.toLocaleString("en-IN") : "MKT"} · {o.status}
+                  @ {o.price !== null ? o.price.toLocaleString("en-NP") : "MKT"} · {o.status}
                 </span>
               </div>
             ))}
@@ -434,10 +456,10 @@ export function OrderTicket({
                 <span
                   className={cn("font-bold", o.side === "BUY" ? "text-gain" : "text-destructive")}
                 >
-                  {o.side} {o.quantity.toLocaleString("en-IN")}
+                  {o.side} {o.quantity.toLocaleString("en-NP")}
                 </span>
                 <span className="num text-muted-foreground">
-                  @ {o.price !== null ? o.price.toLocaleString("en-IN") : "-"}
+                  @ {o.price !== null ? o.price.toLocaleString("en-NP") : "-"}
                   {o.validTill ? ` · till ${o.validTill}` : ""}
                 </span>
               </div>
@@ -460,17 +482,17 @@ export function OrderTicket({
                   <span
                     className={cn("font-bold", o.side === "BUY" ? "text-gain" : "text-destructive")}
                   >
-                    {o.side} {o.quantity.toLocaleString("en-IN")}
+                    {o.side} {o.quantity.toLocaleString("en-NP")}
                   </span>
                 </span>
                 <span className="num text-muted-foreground">
-                  @ {o.price !== null ? o.price.toLocaleString("en-IN") : "-"}
+                  @ {o.price !== null ? o.price.toLocaleString("en-NP") : "-"}
                 </span>
               </div>
             ))}
             {otherAmoOrders.length > 5 ? (
               <p className="px-1 pt-1 text-[0.7rem] text-muted-foreground">
-                +{otherAmoOrders.length - 5} more — see Broker → Orders for the full list.
+                +{otherAmoOrders.length - 5} more: see Broker → Orders for the full list.
               </p>
             ) : null}
           </div>
@@ -480,10 +502,18 @@ export function OrderTicket({
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle className={cn(side === "BUY" ? "text-gain" : "text-destructive")}>
-                Confirm {side} {qty.toLocaleString("en-IN")} × {symbol}
+                Confirm {side} {qty.toLocaleString("en-NP")} × {symbol}
               </DialogTitle>
               <DialogDescription>
-                This places a <strong>real order</strong> at your broker. Real money moves.
+                {brokerId === "yobroker" ? (
+                  <>
+                    This is a <strong>paper order</strong> via Yo Broker. No real money moves — fills against live NEPSE prices.
+                  </>
+                ) : (
+                  <>
+                    This places a <strong>real order</strong> at your broker. Real money moves.
+                  </>
+                )}
               </DialogDescription>
             </DialogHeader>
             <div className="grid grid-cols-2 gap-2 rounded-xl bg-muted/40 p-3 text-sm">
@@ -493,7 +523,7 @@ export function OrderTicket({
               <span className="num text-right font-semibold">{symbol}</span>
               <span className="text-muted-foreground">Quantity</span>
               <span className="num text-right font-semibold">
-                {validQty ? qty.toLocaleString("en-IN") : "-"}
+                {validQty ? qty.toLocaleString("en-NP") : "-"}
               </span>
               <span className="text-muted-foreground">Price</span>
               <span className="num text-right font-semibold">
@@ -562,7 +592,7 @@ export function OrderTicket({
             ) : (
               depth.data!.bids.map((r, i) => (
                 <div key={i} className="flex justify-between py-0.5 num">
-                  <span>{r.quantity !== null ? r.quantity.toLocaleString("en-IN") : "-"}</span>
+                  <span>{r.quantity !== null ? r.quantity.toLocaleString("en-NP") : "-"}</span>
                   <span className="font-semibold text-gain">
                     {r.price !== null ? num(r.price) : "-"}
                   </span>
@@ -580,7 +610,7 @@ export function OrderTicket({
                   <span className="font-semibold text-destructive">
                     {r.price !== null ? num(r.price) : "-"}
                   </span>
-                  <span>{r.quantity !== null ? r.quantity.toLocaleString("en-IN") : "-"}</span>
+                  <span>{r.quantity !== null ? r.quantity.toLocaleString("en-NP") : "-"}</span>
                 </div>
               ))
             )}
@@ -603,7 +633,7 @@ export function OrderTicket({
             <span>Volume</span>
             <span className="num">
               {quote.data?.volume !== null && quote.data?.volume !== undefined
-                ? quote.data.volume.toLocaleString("en-IN")
+                ? quote.data.volume.toLocaleString("en-NP")
                 : "-"}
             </span>
           </div>

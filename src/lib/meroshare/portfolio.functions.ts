@@ -78,6 +78,63 @@ export const getPortfolio = createServerFn({ method: "GET" }).handler(
 export const getEnrichedPortfolio = createServerFn({ method: "GET" }).handler(
   async (): Promise<EnrichedPortfolio> => {
     const auth = await requireAuth();
+    if (auth.demo) {
+      const [prices, status] = await Promise.all([getPriceMap(), getMarketStatus()]);
+      const holdings: EnrichedHolding[] = (DEMO_PORTFOLIO.meroShareMyPortfolio ?? []).map((item) => {
+        const scrip = String((item as Record<string, unknown>)["script"] ?? (item as Record<string, unknown>)["scrip"] ?? "").toUpperCase();
+        const units = Math.max(0, toNum((item as Record<string, unknown>)["currentBalance"]));
+        const live = prices.map.get(scrip);
+        const fallbackLtp = toNum((item as Record<string, unknown>)["lastTransactionPrice"]);
+        const fallbackPrev = toNum((item as Record<string, unknown>)["previousClosingPrice"]);
+        const ltp = live && live.ltp > 0 ? live.ltp : fallbackLtp;
+        const previousClose = live && live.previousClose > 0 ? live.previousClose : fallbackPrev;
+        const value = ltp * units;
+        const previousValue = previousClose * units;
+        return {
+          scrip,
+          description: cleanDescription(String((item as Record<string, unknown>)["scriptDesc"] ?? "")),
+          units,
+          ltp,
+          previousClose,
+          change: ltp - previousClose,
+          percentChange: previousClose > 0 ? ((ltp - previousClose) / previousClose) * 100 : 0,
+          value,
+          previousValue,
+          dayChange: value - previousValue,
+          high: live?.high ?? 0,
+          low: live?.low ?? 0,
+          volume: live?.volume ?? 0,
+          sector: live?.sector ?? null,
+          name: live?.name ?? cleanDescription(String((item as Record<string, unknown>)["scriptDesc"] ?? scrip)),
+          live: Boolean(live),
+        };
+      });
+      const totalValue = holdings.reduce((sum, h) => sum + h.value, 0);
+      const totalPreviousValue = holdings.reduce((sum, h) => sum + h.previousValue, 0);
+      const bySector = new Map<string, number>();
+      for (const h of holdings) {
+        const key = h.sector ?? "Unclassified";
+        bySector.set(key, (bySector.get(key) ?? 0) + h.value);
+      }
+      return {
+        holdings,
+        totalValue,
+        totalPreviousValue,
+        dayChange: totalValue - totalPreviousValue,
+        dayChangePercent: totalPreviousValue > 0 ? ((totalValue - totalPreviousValue) / totalPreviousValue) * 100 : 0,
+        totalUnits: holdings.reduce((sum, h) => sum + h.units, 0),
+        liveCount: holdings.filter((h) => h.live).length,
+        marketStale: prices.stale,
+        status,
+        sectors: [...bySector.entries()]
+          .map(([sector, value]) => ({
+            sector,
+            value,
+            weight: totalValue > 0 ? (value / totalValue) * 100 : 0,
+          }))
+          .sort((a, b) => b.value - a.value),
+      };
+    }
     const [portfolio, prices, status] = await Promise.all([
       fetchPortfolio(auth),
       getPriceMap(),
@@ -228,7 +285,11 @@ export const getTransactions = createServerFn({ method: "POST" })
 export const getWaccPending = createServerFn({ method: "POST" })
   .validator((input: unknown) => z.object({ scrip: z.string().trim().min(1).max(24) }).parse(input))
   .handler(async ({ data }): Promise<WaccSearchResponse> => {
-    const res = await fetchWaccPending(await requireAuth(), data.scrip);
+    const auth = await requireAuth();
+    if (auth.demo) {
+      return { waccUpdateResponse: [], waccSummaryResponse: [], viewSummary: false };
+    }
+    const res = await fetchWaccPending(auth, data.scrip);
     return {
       waccUpdateResponse: Array.isArray(res.waccUpdateResponse) ? res.waccUpdateResponse : [],
       waccSummaryResponse: Array.isArray(res.waccSummaryResponse) ? res.waccSummaryResponse : [],
@@ -240,9 +301,11 @@ export const getWaccPending = createServerFn({ method: "POST" })
 
 export const getWaccCalculated = createServerFn({ method: "POST" })
   .validator((input: unknown) => z.object({ scrip: z.string().trim().min(1).max(24) }).parse(input))
-  .handler(async ({ data }): Promise<JsonRecord> =>
-    fetchWaccCalculated(await requireAuth(), data.scrip),
-  );
+  .handler(async ({ data }): Promise<JsonRecord> => {
+    const auth = await requireAuth();
+    if (auth.demo) return {};
+    return fetchWaccCalculated(auth, data.scrip);
+  });
 
 export const getWaccScrips = createServerFn({ method: "POST" }).handler(
   async (): Promise<WaccScripsResult> => {
@@ -531,5 +594,6 @@ export const calculateWacc = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const auth = await requireAuth();
+    if (auth.demo) throw new Error("WACC calculation is not available in demo mode.");
     return submitWacc(auth, data.rows as PurchaseSourceItem[]);
   });

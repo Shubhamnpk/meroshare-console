@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * Local price alerts. Lives on the broker Overview tab because that is where
- * trading decisions happen, but it needs no broker session — it watches the
+ * trading decisions happen, but it needs no broker session: it watches the
  * public live-price snapshot and fires a toast the moment a line is crossed.
  */
 export function PriceAlertsPanel() {
@@ -29,7 +29,7 @@ export function PriceAlertsPanel() {
   }, [snapshot.data]);
 
   // Firing is handled globally by the notification bell (always mounted), so
-  // alerts toast on any page — this panel is manage-only.
+  // alerts toast on any page: this panel is manage-only.
 
   const submit = () => {
     const created = add(symbol, Number(target.replace(/,/g, "")), direction);
@@ -114,7 +114,7 @@ export function PriceAlertsPanel() {
       </div>
       {alerts.length === 0 ? (
         <p className="text-xs text-muted-foreground">
-          No alerts yet. Set one and you&apos;ll get a toast the moment the live price crosses it —
+          No alerts yet. Set one and you&apos;ll get a toast the moment the live price crosses it -
           even without a broker linked.
         </p>
       ) : (
@@ -136,12 +136,12 @@ export function PriceAlertsPanel() {
                     <span className="text-muted-foreground">
                       {a.direction === "above" ? "≥" : "≤"}{" "}
                       <span className="num font-semibold text-foreground">
-                        {a.target.toLocaleString("en-IN")}
+                        {a.target.toLocaleString("en-NP")}
                       </span>
                     </span>
                   </p>
                   <p className="num text-[0.7rem] text-muted-foreground">
-                    Live {ltp != null ? formatNpr(ltp) : "—"} ·{" "}
+                    Live {ltp != null ? formatNpr(ltp) : "-"} ·{" "}
                     {a.hitAt ? "fired" : hit ? "crossed now" : "watching"}
                   </p>
                 </div>

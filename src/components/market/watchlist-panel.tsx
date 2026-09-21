@@ -40,7 +40,7 @@ export function WatchlistPanel({
   const snapshot = useQuery(marketSnapshotQuery());
   const [term, setTerm] = useState("");
 
-  // Broker watchlist sync — reuses existing watchlist, no new panel.
+  // Broker watchlist sync: reuses existing watchlist, no new panel.
   // If a broker is linked, its symbols merge into local on open (and can be pushed back).
   const brokerConns = useQuery({
     queryKey: ["broker-connections"],

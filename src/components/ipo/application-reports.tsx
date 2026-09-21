@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { ErrorBlock, LoadingBlock, EmptyBlock } from "@/components/states";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -45,7 +45,10 @@ import { formatDateTime, formatQty, toNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { ApplicationReportItem, JsonRecord, JsonValue } from "@/lib/meroshare/types";
 
-type Outcome = { kind: "allotted" | "not-allotted" | "blocked" | "applied" | "pending"; label: string };
+type Outcome = {
+  kind: "allotted" | "not-allotted" | "blocked" | "applied" | "pending";
+  label: string;
+};
 
 function str(value: unknown): string | null {
   return typeof value === "string" && value.trim() !== "" ? value : null;
@@ -266,7 +269,8 @@ function detailClosed(detail: JsonRecord | null): { closed: boolean; label: stri
   return { closed: false, label: "" };
 }
 
-function matches(item: ApplicationReportItem, detail: JsonRecord | null, term: string): boolean {  const haystack = [
+function matches(item: ApplicationReportItem, detail: JsonRecord | null, term: string): boolean {
+  const haystack = [
     item.companyName,
     item.scrip,
     item.statusName,
@@ -453,15 +457,6 @@ function ReportList({
   return (
     <div className="space-y-4">
       <Summary details={details} />
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={search}
-          onChange={(e) => onSearch(e.target.value)}
-          placeholder="Search company, scrip, status or remark…"
-          className="h-10 rounded-xl pl-9"
-        />
-      </div>
       {loadingDetails && (
         <p className="text-xs text-muted-foreground">Loading application results…</p>
       )}
@@ -487,16 +482,16 @@ function ReportList({
                   key={`${item.companyShareId}-${item.applicantFormId ?? 0}`}
                   value={`${item.companyShareId}-${item.applicantFormId ?? 0}`}
                 >
-                  <AccordionTrigger className="px-4">
-                    <span className="flex min-w-0 flex-1 items-center justify-between gap-3 pr-2">
-                      <span className="min-w-0 text-left">
-                        <span className="block truncate text-sm font-semibold">
-                          {item.companyName}
-                        </span>
-                        <span className="num block truncate text-xs text-muted-foreground">
-                          {item.scrip} · {item.shareTypeName} {item.shareGroupName}
-                        </span>
+                  <AccordionTrigger className="gap-3 overflow-hidden px-4">
+                    <span className="min-w-0 flex-1 overflow-hidden text-left">
+                      <span className="block w-full truncate text-sm font-semibold">
+                        {item.companyName}
                       </span>
+                      <span className="num block w-full truncate text-xs text-muted-foreground">
+                        {item.scrip} · {item.shareTypeName} {item.shareGroupName}
+                      </span>
+                    </span>
+                    <span className="flex w-[96px] shrink-0 justify-end sm:w-[112px]">
                       {outcome ? (
                         <StatusBadge outcome={outcome} />
                       ) : (
@@ -618,6 +613,9 @@ export function ApplicationReports({
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("appliedDate");
   const [sortCycle, setSortCycle] = useState<SortCycle>("default");
+  const [oldFrom, setOldFrom] = useState("");
+  const [oldTo, setOldTo] = useState("");
+  const [showOld, setShowOld] = useState(false);
   const cycleSort = () =>
     setSortCycle((c) => (c === "asc" ? "desc" : c === "desc" ? "default" : "asc"));
   const currentItems = current.data ?? [];
@@ -636,103 +634,156 @@ export function ApplicationReports({
   });
   return (
     <div className="space-y-5">
-      <Tabs defaultValue="current" onValueChange={() => setSearch("")}>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <TabsList>
-            <TabsTrigger value="current">Current</TabsTrigger>
-            <TabsTrigger value="old">Old</TabsTrigger>
-          </TabsList>
-          <div className="flex items-center gap-2">
-            <SortBar sortKey={sortKey} cycle={sortCycle} onKey={setSortKey} onCycle={cycleSort} />
-            <ExportButton
-              disabled={currentItems.length === 0}
-              formats={[
-                {
-                  title: "CSV",
-                  description: "Applied, allotted, amount and status per application",
-                  filename: "application-report",
-                  extension: "csv",
-                  build: () => reportCsv(currentItems, currentDetails.data ?? []),
-                },
-                {
-                  title: "JSON",
-                  description: "Raw application and detail records",
-                  filename: "application-report",
-                  extension: "json",
-                  build: () =>
-                    JSON.stringify(
-                      (currentItems ?? []).map((item, idx) => ({
-                        application: item,
-                        detail: currentDetails.data?.[idx] ?? null,
-                      })),
-                      null,
-                      2,
-                    ),
-                },
-                {
-                  title: "PDF",
-                  description: "Formatted report for printing or sharing",
-                  filename: "application-report",
-                  extension: "pdf",
-                  build: () => "",
-                  pdf: () => ({
-                    title: "IPO application history",
-                    head: ["SN", "Company", "Scrip", "Applied", "Allotted", "Amount", "Status"],
-                    body: currentItems.map((item, idx) => {
-                      const d = currentDetails.data?.[idx] ?? null;
-                      return [
-                        idx + 1,
-                        String(item.companyName ?? ""),
-                        String(item.scrip ?? ""),
-                        d ? toNumber(d["appliedKitta"]) : "",
-                        d ? toNumber(d["receivedKitta"]) : "",
-                        d ? toNumber(d["amount"]) : "",
-                        d ? String(d["statusName"] ?? "") : String(item.statusName ?? ""),
-                      ];
-                    }),
-                  }),
-                },
-              ]}
-            />
-          </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-[200px] flex-1">
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search company, scrip, status or remark"
+            className="h-9 rounded-xl pl-9"
+          />
         </div>
-        <TabsContent value="current" className="mt-4">
-          {current.isLoading ? (
-            <LoadingBlock label="Loading applications" />
-          ) : current.isError ? (
-            <ErrorBlock error={current.error} retry={() => void current.refetch()} />
-          ) : (
-            <ReportList
-              items={currentItems}
-              details={currentDetails.data ?? []}
-              loadingDetails={currentDetails.isFetching}
-              search={search}
-              onSearch={setSearch}
-              sortKey={sortKey}
-              sortCycle={sortCycle}
-              onEdit={onEdit}
-              onWithdraw={onWithdraw}
-            />
-          )}
-        </TabsContent>
-        <TabsContent value="old" className="mt-4">
-          {old.isLoading ? (
-            <LoadingBlock label="Loading history" />
-          ) : old.isError ? (
-            <ErrorBlock error={old.error} retry={() => void old.refetch()} />
-          ) : (
-            <ReportList
-              items={oldItems}
-              details={oldDetails.data ?? []}
-              loadingDetails={oldDetails.isFetching}
-              search={search}
-              onSearch={setSearch}
-              sortKey={sortKey}
-              sortCycle={sortCycle}
-            />
-          )}
-        </TabsContent>
-      </Tabs>
+        <div className="flex shrink-0 items-center gap-2">
+          <SortBar sortKey={sortKey} cycle={sortCycle} onKey={setSortKey} onCycle={cycleSort} />
+          <ExportButton
+            disabled={currentItems.length === 0}
+            formats={[
+              {
+                title: "CSV",
+                description: "Applied, allotted, amount and status per application",
+                filename: "application-report",
+                extension: "csv",
+                build: () => reportCsv(currentItems, currentDetails.data ?? []),
+              },
+              {
+                title: "JSON",
+                description: "Raw application and detail records",
+                filename: "application-report",
+                extension: "json",
+                build: () =>
+                  JSON.stringify(
+                    (currentItems ?? []).map((item, idx) => ({
+                      application: item,
+                      detail: currentDetails.data?.[idx] ?? null,
+                    })),
+                    null,
+                    2,
+                  ),
+              },
+              {
+                title: "PDF",
+                description: "Formatted report for printing or sharing",
+                filename: "application-report",
+                extension: "pdf",
+                build: () => "",
+                pdf: () => ({
+                  title: "IPO application history",
+                  head: ["SN", "Company", "Scrip", "Applied", "Allotted", "Amount", "Status"],
+                  body: currentItems.map((item, idx) => {
+                    const d = currentDetails.data?.[idx] ?? null;
+                    return [
+                      idx + 1,
+                      String(item.companyName ?? ""),
+                      String(item.scrip ?? ""),
+                      d ? toNumber(d["appliedKitta"]) : "",
+                      d ? toNumber(d["receivedKitta"]) : "",
+                      d ? toNumber(d["amount"]) : "",
+                      d ? String(d["statusName"] ?? "") : String(item.statusName ?? ""),
+                    ];
+                  }),
+                }),
+              },
+            ]}
+          />
+        </div>
+      </div>
+      <div className="space-y-4">
+        {current.isLoading ? (
+          <LoadingBlock label="Loading applications" />
+        ) : current.isError ? (
+          <ErrorBlock error={current.error} retry={() => void current.refetch()} />
+        ) : (
+          <ReportList
+            items={currentItems}
+            details={currentDetails.data ?? []}
+            loadingDetails={currentDetails.isFetching}
+            search={search}
+            onSearch={setSearch}
+            sortKey={sortKey}
+            sortCycle={sortCycle}
+            onEdit={onEdit}
+            onWithdraw={onWithdraw}
+          />
+        )}
+      </div>
+      <div className="rounded-2xl border border-border/70 bg-card p-4">
+        <p className="text-sm font-semibold">Older history</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Pick a date range to load older applications on demand. Current is shown by default.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Input
+            type="date"
+            value={oldFrom}
+            onChange={(e) => setOldFrom(e.target.value)}
+            className="h-8 max-w-[160px] text-xs"
+          />
+          <span className="text-xs text-muted-foreground">to</span>
+          <Input
+            type="date"
+            value={oldTo}
+            onChange={(e) => setOldTo(e.target.value)}
+            className="h-8 max-w-[160px] text-xs"
+          />
+          <Button size="sm" disabled={!oldFrom && !oldTo} onClick={() => setShowOld(true)}>
+            Load
+          </Button>
+          {showOld ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => setShowOld(false)}
+            >
+              Hide
+            </Button>
+          ) : null}
+        </div>
+      </div>
+      {showOld
+        ? (() => {
+            const filtered = (() => {
+              if (!oldFrom && !oldTo) return { items: oldItems, details: oldDetails.data ?? [] };
+              const pairs = oldItems.map((it, i) => ({ it, det: oldDetails.data?.[i] ?? null }));
+              const kept = pairs.filter(({ det }) => {
+                const raw = det
+                  ? String((det as any)["appliedDate"] ?? (det as any)["recordedDate"] ?? "")
+                  : "";
+                const day = raw ? raw.slice(0, 10) : "";
+                if (!day) return true;
+                if (oldFrom && day < oldFrom) return false;
+                if (oldTo && day > oldTo) return false;
+                return true;
+              });
+              return { items: kept.map((p) => p.it), details: kept.map((p) => p.det) };
+            })();
+            if (old.isLoading) return <LoadingBlock label="Loading history" />;
+            if (old.isError)
+              return <ErrorBlock error={old.error} retry={() => void old.refetch()} />;
+            return (
+              <ReportList
+                items={filtered.items}
+                details={filtered.details}
+                loadingDetails={oldDetails.isFetching}
+                search={search}
+                onSearch={setSearch}
+                sortKey={sortKey}
+                sortCycle={sortCycle}
+              />
+            );
+          })()
+        : null}
     </div>
   );
 }

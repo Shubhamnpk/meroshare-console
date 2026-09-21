@@ -323,7 +323,7 @@ export function MarketView({
           <p className="num mt-1 text-xs text-muted-foreground">
             {debentures.count} debentures from {debentures.issuers} issuers
             {debentures.couponMin != null && debentures.couponMax != null
-              ? ` · coupons ${debentures.couponMin.toFixed(2)}–${debentures.couponMax.toFixed(2)}%`
+              ? ` · coupons ${debentures.couponMin.toFixed(2)}-${debentures.couponMax.toFixed(2)}%`
               : ""}
           </p>
           <ul className="mt-3 space-y-2">
