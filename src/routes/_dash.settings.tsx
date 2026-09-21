@@ -48,6 +48,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useSettings, COLOR_OPTIONS, type ThemePref } from "@/lib/settings";
+import { getNumberFormat, setNumberFormat } from "@/components/ui/amount-input";
 import { clearRemembered, loadRemembered } from "@/lib/remember-me";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { APP_VERSION, GITHUB_REPO_URL } from "@/lib/version";
@@ -780,7 +781,7 @@ function BrokerConnectionsCard() {
                       <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
                         Virtual cash
                       </p>
-                      <p className="num font-medium">{yoCash.toLocaleString("en-IN")}</p>
+                      <p className="num font-medium">{yoCash.toLocaleString("en-NP")}</p>
                     </div>
                     <div>
                       <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
@@ -1274,6 +1275,7 @@ function SettingsPage() {
     openPassword,
     openPin,
   } = useSettings();
+  const [numberFormat, setNumberFormatState] = useState<"np" | "us">(() => getNumberFormat() as "np" | "us");
 
   const intervalOptions = [1, 5, 10, 30];
 
@@ -1518,6 +1520,37 @@ function SettingsPage() {
                       onCheckedChange={setCompactNumbers}
                       aria-label="compact-numbers"
                     />
+                  </div>
+
+                  {/* Number System — Nepali vs International */}
+                  <div className="flex items-center justify-between gap-4 rounded-xl border border-border/60 bg-background p-4">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <Hash className="size-4 text-primary" />
+                        <p className="text-sm font-semibold">Number System</p>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {numberFormat === "np" ? "Nepali: 1,00,000 • Rs 12,34,567" : "International: 100,000 • Rs 1,234,567"} — affects all amount inputs.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1 rounded-lg border border-border/60 bg-secondary/60 p-1">
+                      {(["np", "us"] as const).map((fmt) => (
+                        <button
+                          key={fmt}
+                          type="button"
+                          onClick={() => {
+                            setNumberFormat(fmt);
+                            setNumberFormatState(fmt);
+                          }}
+                          className={cn(
+                            "rounded-md px-3 py-1 text-xs font-semibold transition-all",
+                            numberFormat === fmt ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          {fmt === "np" ? "Nepali" : "International"}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </Panel>

@@ -7,6 +7,13 @@ export const DP_CHARGE = 25; // Rs per scrip, per settlement, charged by your DP
 export const SEBON_RATE = 0.00015; // 0.015% regulatory fee
 export const MIN_BROKER_COMMISSION = 10; // Rs
 
+/** Edit these to match a future SEBON/NRB circular — used everywhere for net PnL. */
+export const CGT_RATES = {
+  individualLong: 0.05, // >= 365 days
+  individualShort: 0.075, // < 365 days
+  institution: 0.1,
+} as const;
+
 /** Broker commission slabs for equity, applied on the whole amount at the matching slab rate. */
 export const BROKER_SLABS: { upto: number; rate: number }[] = [
   { upto: 50_000, rate: 0.0036 },
@@ -32,8 +39,8 @@ export function sebonFee(amount: number): number {
 
 /** Capital gains tax band for an individual investor, by holding period. */
 export function cgtRate(holdingDays: number, entity: "individual" | "institution" = "individual") {
-  if (entity === "institution") return 0.1;
-  return holdingDays >= 365 ? 0.05 : 0.075;
+  if (entity === "institution") return CGT_RATES.institution;
+  return holdingDays >= 365 ? CGT_RATES.individualLong : CGT_RATES.individualShort;
 }
 
 export interface BuyCost {
@@ -119,11 +126,11 @@ export function sellProceeds(input: {
  * Price at which selling `units` returns exactly the cost basis after all charges.
  * Solved numerically because commission slabs are piecewise and DP is a flat fee.
  */
-export function breakEvenPrice(units: number, avgCost: number): number {
+export function breakEvenPrice(units: number, avgCost: number, holdingDays = 400): number {
   if (!(units > 0) || !(avgCost > 0)) return 0;
   let lo = avgCost;
   let hi = avgCost * 2 + 100;
-  const net = (p: number) => sellProceeds({ units, price: p, avgCost, holdingDays: 400 }).profit;
+  const net = (p: number) => sellProceeds({ units, price: p, avgCost, holdingDays }).profit;
   for (let i = 0; i < 60; i += 1) {
     const mid = (lo + hi) / 2;
     if (net(mid) >= 0) hi = mid;

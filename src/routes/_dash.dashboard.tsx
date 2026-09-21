@@ -415,7 +415,7 @@ function DashboardPage() {
                 </p>
                 {nepse ? (
                   <p className="num mt-2 flex flex-wrap items-center gap-2 text-3xl font-semibold">
-                    {nepse.close != null ? nepse.close.toLocaleString("en-IN") : "-"}
+                    {nepse.close != null ? nepse.close.toLocaleString("en-NP") : "-"}
                     <DeltaPill value={nepse.percentChange}>
                       {formatPercent(nepse.percentChange)}
                     </DeltaPill>

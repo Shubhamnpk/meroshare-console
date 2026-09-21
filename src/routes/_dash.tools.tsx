@@ -5,6 +5,7 @@ import {
   Building2,
   Calculator,
   ClipboardList,
+  Clock,
   GitCompareArrows,
   Globe,
   Landmark,
@@ -48,16 +49,14 @@ const TOOLS = [
     to: "/stock-compare",
     icon: GitCompareArrows,
     title: "Stock Compare",
-    description:
-      "Side-by-side comparison of P/E, ROE, dividends, scores for up to 4 stocks.",
+    description: "Side-by-side comparison of P/E, ROE, dividends, scores for up to 4 stocks.",
     tag: "Compare",
   },
   {
     to: "/dividend-vs-fd",
     icon: Calculator,
     title: "Dividend vs FD",
-    description:
-      "Compare dividend investing with fixed deposit returns over your time horizon.",
+    description: "Compare dividend investing with fixed deposit returns over your time horizon.",
     tag: "Calculator",
   },
   {
@@ -90,6 +89,14 @@ const TOOLS = [
     title: "Debentures",
     description: "Follow listed debentures, coupons and maturities in one place.",
     tag: "Bonds",
+  },
+  {
+    to: "/time-machine",
+    icon: Clock,
+    title: "Time Machine",
+    description:
+      "What if you had bought then? Backtest SIP, bonus and cash dividends against every close.",
+    tag: "Backtester",
   },
 ] as const;
 

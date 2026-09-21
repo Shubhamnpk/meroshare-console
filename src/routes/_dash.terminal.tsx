@@ -18,6 +18,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DeltaPill } from "@/components/stat-card";
+import { PositionPnlCard } from "@/components/market/position-pnl-card";
 import {
   DEFAULT_INDICATORS,
   TerminalChart,
@@ -1221,7 +1222,7 @@ function TerminalPage() {
             </div>
           ) : (
             <TerminalChart
-              key={`${mode}-${state.symbol}-${state.range}-${state.style}-${light}-${expanded}`}
+              key={`${mode}-${state.symbol}-${state.range}-${state.style}-${light}-${expanded}-${costByScrip.get(state.symbol.toUpperCase())?.rate ?? "na"}` }
               bars={drawnBars}
               intraday={intraday}
               style={state.style}
@@ -1231,6 +1232,12 @@ function TerminalPage() {
               logScale={state.logScale}
               light={light}
               height={chartHeight}
+              wacc={
+                mode === "scrip" && !isIndex
+                  ? (costByScrip.get(state.symbol.toUpperCase())?.rate ?? null)
+                  : null
+              }
+              includeWaccDomain={state.range === "MAX"}
               onHover={setHover}
               onCreateOrder={
                 mode === "scrip" && brokerLinked
@@ -1273,7 +1280,7 @@ function TerminalPage() {
             <span>H {num(spot!.high)}</span>
             <span>L {num(spot!.low)}</span>
             <span className="font-semibold text-foreground">C {num(spot!.close)}</span>
-            {spot!.volume > 0 && <span>Vol {spot!.volume.toLocaleString("en-IN")}</span>}
+            {spot!.volume > 0 && <span>Vol {spot!.volume.toLocaleString("en-NP")}</span>}
             {spot!.pinned ? (
               <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[0.68rem] font-semibold text-primary">
                 Pinned · click again to release
@@ -1335,7 +1342,7 @@ function TerminalPage() {
         <div className="grid grid-cols-2 gap-3 rounded-2xl border border-border/60 bg-surface p-3 sm:grid-cols-4">
           <div>
             <p className="text-xs text-muted-foreground">Your units</p>
-            <p className="num font-semibold">{position.units.toLocaleString("en-IN")}</p>
+            <p className="num font-semibold">{position.units.toLocaleString("en-NP")}</p>
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Market value</p>
@@ -1355,6 +1362,19 @@ function TerminalPage() {
       {mode === "scrip" && !isIndex && (
         <OrderTicket key={state.symbol} symbol={state.symbol} limitPrice={ticketPrice} />
       )}
+
+      {mode === "scrip" && !isIndex && position && costByScrip.get(state.symbol.toUpperCase()) && quote?.ltp ? (
+        <PositionPnlCard
+          symbol={state.symbol}
+          units={position.units}
+          avgCost={costByScrip.get(state.symbol.toUpperCase())!.rate}
+          ltp={quote.ltp}
+          waccStatus={
+            investment.data?.scrips.find((s) => s.scrip.toUpperCase() === state.symbol.toUpperCase())?.status ??
+            "pending"
+          }
+        />
+      ) : null}
 
       {mode === "scrip" && !isIndex && state.symbol ? (
         <PriceAlertDialog
@@ -1410,11 +1430,11 @@ function TerminalPage() {
                           {o.side}
                         </span>{" "}
                         <span className="num font-semibold">
-                          {o.quantity.toLocaleString("en-IN")}
+                          {o.quantity.toLocaleString("en-NP")}
                         </span>{" "}
                         <span className="font-semibold">{o.symbol}</span>{" "}
                         <span className="num text-muted-foreground">
-                          @ {o.price !== null ? o.price.toLocaleString("en-IN") : "MKT"}
+                          @ {o.price !== null ? o.price.toLocaleString("en-NP") : "MKT"}
                         </span>
                       </span>
                       <span className="num mt-0.5 block text-[0.7rem] text-muted-foreground">

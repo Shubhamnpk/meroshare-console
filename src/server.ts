@@ -127,7 +127,7 @@ function addSecurityHeaders(response: Response): Response {
   if (contentType.includes("text/html")) {
     headers.set(
       "Content-Security-Policy",
-      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; font-src 'self' data:; connect-src 'self' https:; frame-src https:; base-uri 'self'; form-action 'self'",
+      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' https: data:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https:; frame-src https:; base-uri 'self'; form-action 'self'",
     );
     headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   }

@@ -33,17 +33,19 @@ export function chartTimeLabel(time: number): string {
   });
 }
 
-/** "12 Aug" in NPT, for daily series. */
+/** "12 Aug 2024" in NPT, for daily series. */
 export function chartDayLabel(time: number): string {
   return new Date(time * 1000).toLocaleDateString("en-GB", {
     day: "2-digit",
     month: "short",
+    year: "numeric",
     timeZone: TZ,
   });
 }
 
 export const SCRIP_RANGES = [
   { key: "1D", label: "1D", days: null as number | null },
+  { key: "1W", label: "1W", days: 5 },
   { key: "1M", label: "1M", days: 22 },
   { key: "3M", label: "3M", days: 66 },
   { key: "6M", label: "6M", days: 132 },

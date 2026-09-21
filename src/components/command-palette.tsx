@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/command";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { DeltaPill } from "@/components/stat-card";
-import { marketSnapshotQuery } from "@/lib/queries";
+import { marketSnapshotQuery, mfSchemesQuery } from "@/lib/queries";
 import { formatNpr, formatPercent } from "@/lib/format";
 import { useWatchlist } from "@/lib/watchlist";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -32,6 +32,7 @@ export function CommandPalette({
   onPick: (symbol: string) => void;
 }) {
   const snapshot = useQuery(marketSnapshotQuery());
+  const schemesQ = useQuery(mfSchemesQuery());
   const watchlist = useWatchlist();
   const isMobile = useIsMobile();
   const [query, setQuery] = useState("");
@@ -42,13 +43,38 @@ export function CommandPalette({
 
   const prices = snapshot.data?.prices ?? [];
 
+  // Merge NEPSE prices + open-ended MF NAV schemes (not in live feed)
+  const searchItems = useMemo(() => {
+    const seen = new Set(prices.map((p) => p.symbol.toUpperCase()));
+    const base = prices.map((p) => ({
+      symbol: p.symbol,
+      name: p.name,
+      ltp: p.ltp,
+      pct: p.percentChange,
+      kind: (p.asset_type === "open_ended_mutual_fund" ? "open_end_mf" : /mutual fund/i.test(p.sector) ? "mutual_fund" : "equity") as "equity" | "mutual_fund" | "open_end_mf",
+    }));
+    for (const s of schemesQ.data ?? []) {
+      const sym = s.symbol.toUpperCase();
+      if (seen.has(sym)) continue;
+      seen.add(sym);
+      base.push({
+        symbol: s.symbol,
+        name: s.name,
+        ltp: null as number | null,
+        pct: null as number | null,
+        kind: (s.fundType === "open_end" ? "open_end_mf" : "mutual_fund") as "equity" | "mutual_fund" | "open_end_mf",
+      });
+    }
+    return base;
+  }, [prices, schemesQ.data]);
+
   const results = useMemo(() => {
     const term = query.trim().toLowerCase();
-    if (!term) return prices.slice(0, 30);
-    return prices
+    if (!term) return searchItems.slice(0, 30);
+    return searchItems
       .filter((p) => p.symbol.toLowerCase().includes(term) || p.name.toLowerCase().includes(term))
       .slice(0, 40);
-  }, [prices, query]);
+  }, [searchItems, query]);
 
   const pick = (symbol: string) => {
     setOpen(false);
@@ -67,22 +93,23 @@ export function CommandPalette({
               : "No scrips in the live feed right now."}
         </CommandEmpty>
         <CommandGroup heading={query ? "Matches" : "Top traded"}>
-          {results.map((price: LivePrice) => (
+          {results.map((item) => (
             <CommandItem
-              key={price.symbol}
-              value={`${price.symbol} ${price.name}`}
-              onSelect={() => pick(price.symbol)}
+              key={item.symbol}
+              value={`${item.symbol} ${item.name}`}
+              onSelect={() => pick(item.symbol)}
             >
               <LineChart className="size-4 text-muted-foreground" aria-hidden />
               <span className="min-w-0 flex-1">
-                <span className="font-semibold">{price.symbol}</span>{" "}
-                <span className="truncate text-xs text-muted-foreground">{price.name}</span>
+                <span className="font-semibold">{item.symbol}</span>{" "}
+                <span className="truncate text-xs text-muted-foreground">{item.name}</span>
+                {item.kind === "open_end_mf" ? (
+                  <span className="ml-1 rounded bg-primary/10 px-1 py-0.5 text-[0.62rem] font-semibold text-primary">Open-End NAV</span>
+                ) : null}
               </span>
-              <span className="num text-sm font-medium">{formatNpr(price.ltp)}</span>
-              <DeltaPill value={price.percentChange}>
-                {formatPercent(price.percentChange)}
-              </DeltaPill>
-              {watchlist.has(price.symbol) ? (
+              <span className="num text-sm font-medium">{item.ltp != null ? formatNpr(item.ltp) : "NAV"}</span>
+              {item.pct != null ? <DeltaPill value={item.pct}>{formatPercent(item.pct)}</DeltaPill> : null}
+              {watchlist.has(item.symbol) ? (
                 <Star
                   className="size-3.5 fill-warning text-warning"
                   aria-label="On your watchlist"

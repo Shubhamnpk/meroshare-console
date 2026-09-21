@@ -33,9 +33,10 @@ import {
 } from "@/components/ui/table";
 import { ScripSheet } from "@/components/market/scrip-sheet";
 import { HistoryPanel } from "@/components/portfolio/history-panel";
-import { enrichedPortfolioQuery, investmentSummaryQuery } from "@/lib/queries";
+import { enrichedPortfolioQuery, investmentSummaryQuery, waccSearchQuery } from "@/lib/queries";
 import { useSettings } from "@/lib/settings";
-import { formatNpr, formatQty } from "@/lib/format";
+import { formatNpr, formatPercent, formatQty } from "@/lib/format";
+import { buyCost, sellProceeds, breakEvenPrice, daysBetween } from "@/lib/calc/fees";
 import { cn } from "@/lib/utils";
 import { ogImage, canonicalLink } from "@/lib/seo";
 import type { EnrichedHolding } from "@/lib/nepse/types";
@@ -69,8 +70,19 @@ function portfolioCsv(
 ) {
   const rows = holdings.map((h, i) => {
     const c = costOf(h.scrip);
+    const wacc = c?.waccRate ?? 0;
     const cost = c?.cost ?? 0;
-    const pl = cost > 0 ? h.value - cost : 0;
+    let pl = 0;
+    let plPct = "";
+    if (cost > 0 && wacc > 0) {
+      const buy = buyCost(h.units, wacc);
+      const net = sellProceeds({ units: h.units, price: h.ltp, avgCost: buy.perUnit, holdingDays: 400 });
+      pl = net.profit;
+      plPct = `${net.profitPercent.toFixed(2)}%`;
+    } else if (cost > 0) {
+      pl = h.value - cost;
+      plPct = `${((pl / cost) * 100).toFixed(2)}%`;
+    }
     return csvRow([
       i + 1,
       h.scrip,
@@ -80,10 +92,10 @@ function portfolioCsv(
       h.previousClose,
       h.value,
       h.previousValue,
-      cost > 0 ? (c?.waccRate ?? 0) : "",
+      cost > 0 ? wacc : "",
       cost > 0 ? cost : "",
       cost > 0 ? pl : "",
-      cost > 0 ? `${((pl / cost) * 100).toFixed(2)}%` : "",
+      cost > 0 ? plPct : "",
       `${h.percentChange.toFixed(2)}%`,
       totals.value > 0 ? `${((h.value / totals.value) * 100).toFixed(2)}%` : "0.00%",
       h.sector ?? "",
@@ -209,17 +221,55 @@ function PortfolioPage() {
 
   const totalInvestment = investment.data?.totalInvestment ?? 0;
   const pendingCount = investment.data?.pendingCount ?? 0;
-  const unrealizedPL = totals.value - totalInvestment;
 
   const costMap = useMemo(
     () => new Map((investment.data?.scrips ?? []).map((s) => [s.scrip, s] as const)),
     [investment.data],
   );
   const costOf = (scrip: string) => costMap.get(scrip);
+  // Real pocket P/L: buy-side commission amortized + sell charges + CGT (same as Position cards)
   const plOf = (h: EnrichedHolding) => {
     const c = costMap.get(h.scrip);
-    return c && c.cost > 0 ? h.value - c.cost : 0;
+    if (!c || c.cost <= 0 || c.waccRate <= 0) return 0;
+    const buy = buyCost(h.units, c.waccRate);
+    const net = sellProceeds({ units: h.units, price: h.ltp, avgCost: buy.perUnit, holdingDays: 400 });
+    return net.profit;
   };
+  const buyOf = (h: EnrichedHolding) => {
+    const c = costMap.get(h.scrip);
+    if (!c || c.waccRate <= 0) return null;
+    return buyCost(h.units, c.waccRate);
+  };
+
+  // Totals for footer: all-in cost and net receivable
+  const totalBuyCost = useMemo(() => {
+    let sum = 0;
+    for (const h of holdings) {
+      const b = buyOf(h);
+      if (b) sum += b.total;
+      else {
+        const c = costMap.get(h.scrip);
+        if (c) sum += c.cost;
+      }
+    }
+    return sum;
+  }, [holdings, costMap]);
+  const totalNetReceivable = useMemo(() => {
+    let sum = 0;
+    for (const h of holdings) {
+      const c = costMap.get(h.scrip);
+      if (!c || c.waccRate <= 0) {
+        sum += h.value;
+        continue;
+      }
+      const buy = buyCost(h.units, c.waccRate);
+      const net = sellProceeds({ units: h.units, price: h.ltp, avgCost: buy.perUnit, holdingDays: 400 });
+      sum += net.netReceivable;
+    }
+    return sum;
+  }, [holdings, costMap]);
+  const unrealizedPL = totalNetReceivable - totalBuyCost;
+  const allInAvgWacc = holdings.length > 0 && totalBuyCost > 0 ? totalBuyCost / totals.units : investment.data?.avgWacc ?? 0;
 
   const items = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -610,12 +660,12 @@ function PortfolioPage() {
           />
           <StatChip
             icon={<PiggyBank className="size-4" />}
-            label={pendingCount > 0 ? `Investment (${pendingCount} pending)` : "Total investment"}
+            label={pendingCount > 0 ? `Investment` : "Total investment"}
             value={
-              investment.isLoading ? "…" : formatNpr(totalInvestment, { compact: compactNumbers })
+              investment.isLoading ? "…" : formatNpr(totalBuyCost, { compact: compactNumbers })
             }
           />
-          {totalInvestment > 0 ? (
+          {totalBuyCost > 0 ? (
             <StatChip
               icon={
                 unrealizedPL >= 0 ? (
@@ -624,7 +674,7 @@ function PortfolioPage() {
                   <TrendingDown className="size-4 text-loss" />
                 )
               }
-              label="Unrealized P/L"
+              label="Net P/L"
               value={`${unrealizedPL >= 0 ? "+" : ""}${formatNpr(unrealizedPL, { compact: compactNumbers })}`}
               valueClass={unrealizedPL >= 0 ? "text-gain" : "text-loss"}
             />
@@ -690,7 +740,7 @@ function PortfolioPage() {
                     align="right"
                   />
                   <SortableTh
-                    label="P/L"
+                    label="Net P/L"
                     active={sort.key === "unrealized"}
                     dir={sort.dir}
                     onClick={() => toggle("unrealized")}
@@ -845,7 +895,7 @@ function PortfolioPage() {
                   align="right"
                 />
                 <SortableTh
-                  label="P/L"
+                  label="Net P/L"
                   active={sort.key === "unrealized"}
                   dir={sort.dir}
                   onClick={() => toggle("unrealized")}
@@ -872,10 +922,11 @@ function PortfolioPage() {
               {items.map((h, idx) => {
                 const weight = totals.value > 0 ? (h.value / totals.value) * 100 : 0;
                 const basis = costOf(h.scrip);
-                const hasBasis = Boolean(basis && basis.cost > 0);
-                const pl = hasBasis ? h.value - (basis?.cost ?? 0) : 0;
-                const plPct =
-                  hasBasis && (basis?.cost ?? 0) > 0 ? (pl / (basis?.cost ?? 1)) * 100 : 0;
+                const hasBasis = Boolean(basis && basis.cost > 0 && basis.waccRate > 0);
+                const buy = hasBasis ? buyCost(h.units, basis!.waccRate) : null;
+                const net = hasBasis && buy ? sellProceeds({ units: h.units, price: h.ltp, avgCost: buy.perUnit, holdingDays: 400 }) : null;
+                const pl = net ? net.profit : hasBasis ? h.value - (basis?.cost ?? 0) : 0;
+                const plPct = net ? net.profitPercent : hasBasis && (basis?.cost ?? 0) > 0 ? (pl / (basis?.cost ?? 1)) * 100 : 0;
                 return (
                   <TableRow
                     key={`${h.scrip}-${idx}`}
@@ -917,15 +968,20 @@ function PortfolioPage() {
                         hasBasis
                           ? basis?.status === "pending"
                             ? "Estimated from purchase price (WACC not confirmed yet)"
-                            : "CDSC-calculated WACC"
+                            : "CDSC-calculated WACC — hover for all-in"
                           : "No cost data (blocked or not available)"
                       }
                     >
                       {hasBasis && (basis?.waccRate ?? 0) > 0 ? (
-                        <>
-                          {basis?.status === "pending" ? "~" : ""}
-                          {formatNpr(basis?.waccRate ?? 0)}
-                        </>
+                        (() => {
+                          const buy = buyCost(h.units, basis!.waccRate);
+                          return (
+                            <span title={`All-in ${formatNpr(buy.perUnit)} incl. broker+SEBON+DP`}>
+                              {basis?.status === "pending" ? "~" : ""}
+                              {formatNpr(basis?.waccRate ?? 0)}
+                            </span>
+                          );
+                        })()
                       ) : (
                         "-"
                       )}
@@ -933,8 +989,8 @@ function PortfolioPage() {
                     <TableCell
                       className="text-right"
                       title={
-                        hasBasis && basis?.status === "pending"
-                          ? "Estimated P/L (WACC not confirmed yet)"
+                        hasBasis
+                          ? `Net after all charges & CGT · Breakeven ${formatNpr(breakEvenPrice(h.units, buyCost(h.units, basis!.waccRate).perUnit, 400))}`
                           : undefined
                       }
                     >
@@ -981,13 +1037,11 @@ function PortfolioPage() {
                   <TableCell className="num text-right font-semibold">
                     {formatNpr(totals.value, { compact: compactNumbers })}
                   </TableCell>
-                  <TableCell className="num text-right font-semibold text-muted-foreground">
-                    {investment.data && investment.data.avgWacc > 0
-                      ? formatNpr(investment.data.avgWacc)
-                      : "-"}
+                  <TableCell className="num text-right font-semibold text-muted-foreground" title={`All-in avg ${formatNpr(allInAvgWacc)}`}>
+                    {allInAvgWacc > 0 ? formatNpr(allInAvgWacc) : "-"}
                   </TableCell>
                   <TableCell className="text-right">
-                    {totalInvestment > 0 ? (
+                    {totalBuyCost > 0 ? (
                       <DeltaPill value={unrealizedPL}>
                         {`${unrealizedPL >= 0 ? "+" : "-"}${formatNpr(Math.abs(unrealizedPL))}`}
                       </DeltaPill>

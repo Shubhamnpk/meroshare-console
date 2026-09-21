@@ -20,6 +20,9 @@ export function AreaChart({
   tooltipExtra,
   onSelect,
   selectedTime,
+  showAxes = false,
+  wacc,
+  includeWaccDomain = false,
   className,
 }: {
   points: PricePoint[];
@@ -32,6 +35,12 @@ export function AreaChart({
   onSelect?: (point: PricePoint) => void;
   /** Time (unix seconds) of the currently pinned point, if any. */
   selectedTime?: number | null;
+  /** Whether to render X-axis time labels and Y-axis amount grid/ticks. */
+  showAxes?: boolean;
+  /** Gray dashed avg-cost line (e.g. WACC) — drawn when in range */
+  wacc?: number | null;
+  /** When true, Y domain expands to include wacc (used for All/Max). Otherwise wacc clamps to edge. */
+  includeWaccDomain?: boolean;
   className?: string;
 }) {
   const W = 320;
@@ -42,20 +51,59 @@ export function AreaChart({
   const geom = useMemo(() => {
     if (points.length < 2) return null;
     const values = points.map((p) => p.value);
-    const min = Math.min(...values);
-    const max = Math.max(...values);
+    const hasWacc = includeWaccDomain && wacc != null && Number.isFinite(wacc);
+    const min = hasWacc ? Math.min(...values, wacc as number) : Math.min(...values);
+    const max = hasWacc ? Math.max(...values, wacc as number) : Math.max(...values);
     const range = max - min || 1;
-    const pad = 6;
+    const pad = showAxes ? 8 : 6;
     const x = (i: number) => (i / (points.length - 1)) * W;
     const y = (v: number) => pad + (1 - (v - min) / range) * (H - pad * 2);
+
+    // Y-axis ticks across range
+    const yTicks = [0, 0.33, 0.66, 1].map((pct) => {
+      const val = min + pct * range;
+      return {
+        pct,
+        y: y(val),
+        value: val,
+      };
+    });
+
+    // X-axis ticks evenly spaced across the time range
+    const count = Math.min(5, points.length);
+    const xTickIndices = Array.from(
+      new Set(
+        Array.from({ length: count }, (_, i) =>
+          Math.round((i / (count - 1)) * (points.length - 1))
+        )
+      )
+    ).sort((a, b) => a - b);
+
+    const xTicks = xTickIndices.map((idx) => ({
+      index: idx,
+      x: x(idx),
+      time: points[idx]!.time,
+    }));
+
     return {
       up: values[values.length - 1]! >= values[0]!,
       min,
       max,
+      yTicks,
+      xTicks,
       line: points.map((p, i) => `${x(i).toFixed(2)},${y(p.value).toFixed(2)}`),
       pts: points.map((p, i) => ({ x: x(i), y: y(p.value), time: p.time, value: p.value })),
     };
-  }, [points]);
+  }, [points, showAxes, wacc, includeWaccDomain]);
+
+  const waccY = useMemo(() => {
+    if (!geom || wacc == null || !Number.isFinite(wacc)) return null;
+    // Other ranges: leave it — don't clamp to border, not realistic
+    if (!includeWaccDomain && (wacc < geom.min || wacc > geom.max)) return null;
+    const range = geom.max - geom.min || 1;
+    const pad = showAxes ? 8 : 6;
+    return pad + (1 - (wacc - geom.min) / range) * (H - pad * 2);
+  }, [geom, wacc, showAxes, includeWaccDomain]);
 
   if (!geom) {
     return (
@@ -118,6 +166,22 @@ export function AreaChart({
             <stop offset="100%" stopColor={stroke} stopOpacity="0" />
           </linearGradient>
         </defs>
+        {showAxes
+          ? geom.yTicks.map((tick, i) => (
+              <line
+                key={i}
+                x1={0}
+                y1={tick.y}
+                x2={W}
+                y2={tick.y}
+                stroke="currentColor"
+                strokeWidth="1"
+                strokeDasharray="3 3"
+                className="text-border/35"
+                vectorEffect="non-scaling-stroke"
+              />
+            ))
+          : null}
         <path d={areaPath} fill={`url(#area-fill-${geom.up ? "up" : "down"})`} />
         <path
           d={linePath}
@@ -128,6 +192,19 @@ export function AreaChart({
           strokeLinecap="round"
           vectorEffect="non-scaling-stroke"
         />
+        {waccY != null ? (
+          <line
+            x1={0}
+            y1={waccY}
+            x2={W}
+            y2={waccY}
+            stroke="#9ca3af"
+            strokeWidth="1.2"
+            strokeDasharray="6 4"
+            opacity="0.95"
+            vectorEffect="non-scaling-stroke"
+          />
+        ) : null}
         {h ? (
           <line
             x1={h.x}
@@ -204,6 +281,41 @@ export function AreaChart({
             document.body,
           )
         : null}
+
+      {showAxes ? (
+        <div className="pointer-events-none absolute inset-y-0 right-1.5 flex flex-col justify-between py-1 text-right select-none z-10">
+          {geom.yTicks
+            .slice()
+            .reverse()
+            .map((tick, i) => (
+              <span
+                key={i}
+                className="font-mono text-[10px] text-muted-foreground/80 bg-background/70 px-1 py-0.5 rounded backdrop-blur-[2px]"
+              >
+                {formatValue(tick.value)}
+              </span>
+            ))}
+        </div>
+      ) : null}
+
+      {showAxes ? (
+        <div className="flex items-center justify-between pt-2 px-1 text-[11px] font-mono text-muted-foreground/80 border-t border-border/40 select-none">
+          {geom.xTicks.map((tick, i) => (
+            <span
+              key={i}
+              className={cn(
+                i === 0
+                  ? "text-left"
+                  : i === geom.xTicks.length - 1
+                    ? "text-right"
+                    : "text-center"
+              )}
+            >
+              {formatLabel(tick.time)}
+            </span>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

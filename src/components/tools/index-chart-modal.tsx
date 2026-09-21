@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import {
   TrendingUp,
   TrendingDown,
   Layers,
   ChartCandlestick,
   SlidersHorizontal,
+  Maximize2,
 } from "lucide-react";
 import {
   Dialog,
@@ -13,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import {
   getIndexGraph,
   getIndexDailyHistory,
@@ -98,9 +101,17 @@ export function IndexChartModal({
   });
   const [showIndicatorMenu, setShowIndicatorMenu] = useState(false);
   const [hover, setHover] = useState<HoverInfo | null>(null);
+  const [pinnedBar, setPinnedBar] = useState<ChartBar | null>(null);
+  const [pinnedPoint, setPinnedPoint] = useState<PricePoint | null>(null);
+  const navigate = useNavigate();
   const light = useResolvedLight();
 
   const activeTargetName = indexName || sectorName || "";
+  useEffect(() => {
+    setPinnedBar(null);
+    setPinnedPoint(null);
+    setHover(null);
+  }, [range, activeTargetName]);
 
   // 1D intraday ticks query
   const intradayQuery = useQuery({
@@ -190,14 +201,6 @@ export function IndexChartModal({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
-                <span
-                  className={cn(
-                    "rounded px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider",
-                    sectorName ? "bg-info/15 text-info" : "bg-primary/15 text-primary",
-                  )}
-                >
-                  {sectorName ? "Sector Index" : "Market Benchmark"}
-                </span>
                 <DialogTitle className="font-display text-lg font-bold sm:text-xl">
                   {title}
                 </DialogTitle>
@@ -212,13 +215,6 @@ export function IndexChartModal({
                 <span className="num text-2xl font-bold">
                   {formatNumber(stats.end)}
                 </span>
-                <div className="flex items-center gap-1 text-sm font-semibold">
-                  <DeltaPill value={stats.change}>
-                    {isUp ? "+" : ""}
-                    {formatNumber(stats.change, { maximumFractionDigits: 2 })} (
-                    {formatPercent(stats.pct)})
-                  </DeltaPill>
-                </div>
               </div>
             )}
           </div>
@@ -355,43 +351,7 @@ export function IndexChartModal({
             </div>
           )}
 
-          {/* Hover detail legend */}
-          {hover && (
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-border/40 bg-surface/50 px-3 py-1 text-xs">
-              <span className="num font-semibold text-foreground">
-                {hover.date.slice(0, 10)}
-              </span>
-              <span className="text-muted-foreground">
-                O: <span className="font-semibold text-foreground">{hover.open.toFixed(2)}</span>
-              </span>
-              <span className="text-muted-foreground">
-                H: <span className="font-semibold text-foreground">{hover.high.toFixed(2)}</span>
-              </span>
-              <span className="text-muted-foreground">
-                L: <span className="font-semibold text-foreground">{hover.low.toFixed(2)}</span>
-              </span>
-              <span className="text-muted-foreground">
-                C: <span className="font-semibold text-foreground">{hover.close.toFixed(2)}</span>
-              </span>
-              <span
-                className={cn(
-                  "num font-semibold",
-                  hover.changePercent >= 0 ? "text-gain" : "text-loss",
-                )}
-              >
-                {hover.changePercent >= 0 ? "+" : ""}
-                {hover.changePercent.toFixed(2)}%
-              </span>
-              {hover.volume > 0 && (
-                <span className="text-muted-foreground">
-                  Vol:{" "}
-                  <span className="font-semibold text-foreground">
-                    {hover.volume.toLocaleString()}
-                  </span>
-                </span>
-              )}
-            </div>
-          )}
+
 
           {/* Chart Display Area */}
           <div className="relative rounded-2xl border border-border/70 bg-card p-1 min-h-[360px]">
@@ -410,6 +370,8 @@ export function IndexChartModal({
                   light={light}
                   height={360}
                   onHover={setHover}
+                  onSelectPoint={(p) => setPinnedPoint((cur) => (cur && p && cur.time === p.time ? null : p))}
+                  onSelectBar={(d) => setPinnedBar(d ? (bars.find((b) => b.date === d) ?? null) : null)}
                 />
               ) : (
                 <div className="flex h-[360px] flex-col items-center justify-center gap-1.5 p-6 text-center text-muted-foreground">
@@ -432,6 +394,8 @@ export function IndexChartModal({
                 light={light}
                 height={360}
                 onHover={setHover}
+                onSelectBar={(d) => setPinnedBar((cur) => (cur && d === cur.date ? null : (bars.find((b) => b.date === d) ?? null)))}
+                onSelectPoint={(p) => setPinnedPoint((cur) => (cur && p && cur.time === p.time ? null : p))}
               />
             ) : (
               <div className="flex h-[360px] flex-col items-center justify-center p-6 text-center text-muted-foreground">
@@ -439,6 +403,141 @@ export function IndexChartModal({
               </div>
             )}
           </div>
+
+          {/* Details below chart — hover shows live, tap pins it. Always below chart with progress + terminal link */}
+          {(pinnedBar || pinnedPoint || hover) && (
+            <div className="space-y-3 rounded-xl border border-border/60 bg-surface p-3">
+              {(() => {
+                const barFromHover =
+                  hover && range !== "1D"
+                    ? ({
+                        date: hover.date.slice(0, 10),
+                        open: hover.open,
+                        high: hover.high,
+                        low: hover.low,
+                        close: hover.close,
+                        volume: hover.volume,
+                      } as ChartBar)
+                    : null;
+                const bar = pinnedBar ?? barFromHover;
+                if (bar) {
+                  const isPinned = Boolean(pinnedBar);
+                  return (
+                    <>
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <p className="num text-sm font-bold text-foreground">
+                            {bar.date}{" "}
+                            <span
+                              className={cn(
+                                "ml-2 rounded-full px-2 py-0.5 text-xs font-semibold",
+                                bar.close >= bar.open ? "bg-gain/15 text-gain" : "bg-loss/15 text-loss",
+                              )}
+                            >
+                              {bar.close >= bar.open ? "+" : ""}
+                              {(((bar.close - bar.open) / (bar.open || 1)) * 100).toFixed(2)}%
+                            </span>
+                            {!isPinned && <span className="ml-2 text-[11px] font-normal text-muted-foreground">hover — tap chart to pin</span>}
+                          </p>
+                          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                            <span className="text-muted-foreground">
+                              O: <span className="font-semibold text-foreground">{bar.open.toFixed(2)}</span>
+                            </span>
+                            <span className="text-muted-foreground">
+                              H: <span className="font-semibold text-foreground">{bar.high.toFixed(2)}</span>
+                            </span>
+                            <span className="text-muted-foreground">
+                              L: <span className="font-semibold text-foreground">{bar.low.toFixed(2)}</span>
+                            </span>
+                            <span className="text-muted-foreground">
+                              C: <span className="font-semibold text-foreground">{bar.close.toFixed(2)}</span>
+                            </span>
+                            {bar.volume > 0 && (
+                              <span className="text-muted-foreground">
+                                Vol: <span className="font-semibold text-foreground">{bar.volume.toLocaleString()}</span>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 gap-1.5 text-xs"
+                          onClick={() => {
+                            onOpenChange(false);
+                            const sym = activeTargetName.replace(/\s*Index$/i, "").trim().toUpperCase() || "NEPSE";
+                            void navigate({ to: "/terminal", search: { symbol: sym } });
+                          }}
+                        >
+                          <Maximize2 className="size-3.5" /> Expand in Terminal
+                        </Button>
+                      </div>
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between text-[11px] text-muted-foreground">
+                          <span>Low {bar.low.toFixed(2)}</span>
+                          <span>High {bar.high.toFixed(2)}</span>
+                        </div>
+                        <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                          <div
+                            className={cn("h-full rounded-full transition-all", bar.close >= bar.open ? "bg-gain" : "bg-loss")}
+                            style={{
+                              width: `${(() => {
+                                const r = bar.high - bar.low;
+                                if (r <= 0) return 50;
+                                const pct = ((bar.close - bar.low) / r) * 100;
+                                return Math.max(4, Math.min(100, pct));
+                              })()}%`,
+                            }}
+                          />
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                          Close within day range ·{" "}
+                          <span className={cn("font-semibold", bar.close >= bar.open ? "text-gain" : "text-loss")}>{bar.close.toFixed(2)}</span>
+                          {isPinned ? " — tap chart again to clear" : ""}
+                        </p>
+                      </div>
+                    </>
+                  );
+                }
+                const pt = pinnedPoint ?? (hover && range === "1D" ? ({ time: String(Math.floor(new Date(hover.date).getTime() / 1000)), value: hover.close } as unknown as PricePoint) : null);
+                if (pt) {
+                  const isPinnedPt = Boolean(pinnedPoint);
+                  return (
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <p className="num text-sm font-bold text-foreground">
+                          {new Date(Number((pt as PricePoint).time) * 1000).toLocaleString("en-GB", {
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                          {!isPinnedPt && <span className="ml-2 text-[11px] font-normal text-muted-foreground">hover — tap to pin</span>}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Price: <span className="font-semibold text-foreground">{(pt as PricePoint).value.toFixed(2)}</span>
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 gap-1.5 text-xs"
+                        onClick={() => {
+                          onOpenChange(false);
+                          const sym = activeTargetName.replace(/\s*Index$/i, "").trim().toUpperCase() || "NEPSE";
+                          void navigate({ to: "/terminal", search: { symbol: sym } });
+                        }}
+                      >
+                        <Maximize2 className="size-3.5" /> Expand in Terminal
+                      </Button>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+            </div>
+          )}
 
           {/* Sector Constituents Section (when looking at a sector index) */}
           {sectorName && sectorConstituents.length > 0 && (

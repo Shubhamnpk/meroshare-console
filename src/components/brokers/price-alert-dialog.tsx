@@ -159,7 +159,7 @@ export function PriceAlertDialog({
               >
                 <span>
                   {a.direction === "above" ? "≥" : "≤"}{" "}
-                  <span className="num font-semibold">{a.target.toLocaleString("en-IN")}</span>{" "}
+                  <span className="num font-semibold">{a.target.toLocaleString("en-NP")}</span>{" "}
                   <span className="text-xs text-muted-foreground">
                     · {a.hitAt ? "fired" : "watching"}
                   </span>

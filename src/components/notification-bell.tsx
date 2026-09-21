@@ -342,7 +342,7 @@ export function NotificationBell() {
                         />
                         <span className="truncate">
                           {a.symbol} {a.direction === "above" ? "≥" : "≤"}{" "}
-                          <span className="num">{a.target.toLocaleString("en-IN")}</span>
+                          <span className="num">{a.target.toLocaleString("en-NP")}</span>
                         </span>
                       </span>
                       <span className="num mt-0.5 block text-[0.68rem] text-muted-foreground">

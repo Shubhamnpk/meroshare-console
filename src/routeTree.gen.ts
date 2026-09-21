@@ -34,6 +34,7 @@ import { Route as DashSectorHeatmapRouteImport } from './routes/_dash.sector-hea
 import { Route as DashSettingsRouteImport } from './routes/_dash.settings'
 import { Route as DashStockCompareRouteImport } from './routes/_dash.stock-compare'
 import { Route as DashTerminalRouteImport } from './routes/_dash.terminal'
+import { Route as DashTimeMachineRouteImport } from './routes/_dash.time-machine'
 import { Route as DashToolsRouteImport } from './routes/_dash.tools'
 import { Route as DashTransactionsRouteImport } from './routes/_dash.transactions'
 import { Route as DashWaccRouteImport } from './routes/_dash.wacc'
@@ -163,6 +164,11 @@ const DashTerminalRoute = DashTerminalRouteImport.update({
   path: '/terminal',
   getParentRoute: () => DashRoute,
 } as any)
+const DashTimeMachineRoute = DashTimeMachineRouteImport.update({
+  id: '/time-machine',
+  path: '/time-machine',
+  getParentRoute: () => DashRoute,
+} as any)
 const DashToolsRoute = DashToolsRouteImport.update({
   id: '/tools',
   path: '/tools',
@@ -209,6 +215,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof DashSettingsRoute
   '/stock-compare': typeof DashStockCompareRoute
   '/terminal': typeof DashTerminalRoute
+  '/time-machine': typeof DashTimeMachineRoute
   '/tools': typeof DashToolsRoute
   '/transactions': typeof DashTransactionsRoute
   '/wacc': typeof DashWaccRoute
@@ -239,6 +246,7 @@ export interface FileRoutesByTo {
   '/settings': typeof DashSettingsRoute
   '/stock-compare': typeof DashStockCompareRoute
   '/terminal': typeof DashTerminalRoute
+  '/time-machine': typeof DashTimeMachineRoute
   '/tools': typeof DashToolsRoute
   '/transactions': typeof DashTransactionsRoute
   '/wacc': typeof DashWaccRoute
@@ -271,6 +279,7 @@ export interface FileRoutesById {
   '/_dash/settings': typeof DashSettingsRoute
   '/_dash/stock-compare': typeof DashStockCompareRoute
   '/_dash/terminal': typeof DashTerminalRoute
+  '/_dash/time-machine': typeof DashTimeMachineRoute
   '/_dash/tools': typeof DashToolsRoute
   '/_dash/transactions': typeof DashTransactionsRoute
   '/_dash/wacc': typeof DashWaccRoute
@@ -303,6 +312,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/stock-compare'
     | '/terminal'
+    | '/time-machine'
     | '/tools'
     | '/transactions'
     | '/wacc'
@@ -333,6 +343,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/stock-compare'
     | '/terminal'
+    | '/time-machine'
     | '/tools'
     | '/transactions'
     | '/wacc'
@@ -364,6 +375,7 @@ export interface FileRouteTypes {
     | '/_dash/settings'
     | '/_dash/stock-compare'
     | '/_dash/terminal'
+    | '/_dash/time-machine'
     | '/_dash/tools'
     | '/_dash/transactions'
     | '/_dash/wacc'
@@ -554,6 +566,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashTerminalRouteImport
       parentRoute: typeof DashRoute
     }
+    '/_dash/time-machine': {
+      id: '/_dash/time-machine'
+      path: '/time-machine'
+      fullPath: '/time-machine'
+      preLoaderRoute: typeof DashTimeMachineRouteImport
+      parentRoute: typeof DashRoute
+    }
     '/_dash/tools': {
       id: '/_dash/tools'
       path: '/tools'
@@ -608,6 +627,7 @@ interface DashRouteChildren {
   DashSettingsRoute: typeof DashSettingsRoute
   DashStockCompareRoute: typeof DashStockCompareRoute
   DashTerminalRoute: typeof DashTerminalRoute
+  DashTimeMachineRoute: typeof DashTimeMachineRoute
   DashToolsRoute: typeof DashToolsRoute
   DashTransactionsRoute: typeof DashTransactionsRoute
   DashWaccRoute: typeof DashWaccRoute
@@ -636,6 +656,7 @@ const DashRouteChildren: DashRouteChildren = {
   DashSettingsRoute: DashSettingsRoute,
   DashStockCompareRoute: DashStockCompareRoute,
   DashTerminalRoute: DashTerminalRoute,
+  DashTimeMachineRoute: DashTimeMachineRoute,
   DashToolsRoute: DashToolsRoute,
   DashTransactionsRoute: DashTransactionsRoute,
   DashWaccRoute: DashWaccRoute,

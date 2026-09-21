@@ -136,7 +136,7 @@ export function PriceAlertsPanel() {
                     <span className="text-muted-foreground">
                       {a.direction === "above" ? "≥" : "≤"}{" "}
                       <span className="num font-semibold text-foreground">
-                        {a.target.toLocaleString("en-IN")}
+                        {a.target.toLocaleString("en-NP")}
                       </span>
                     </span>
                   </p>

@@ -89,6 +89,8 @@ export function TerminalChart({
   logScale,
   light,
   height,
+  wacc,
+  includeWaccDomain = false,
   onHover,
   onSelectBar,
   onSelectPoint,
@@ -104,6 +106,8 @@ export function TerminalChart({
   logScale: boolean;
   light: boolean;
   height: number;
+  wacc?: number | null | undefined;
+  includeWaccDomain?: boolean;
   onHover?: (info: HoverInfo | null) => void;
   /** Fired when a bar is clicked (bar date) or empty space is clicked (null). */
   onSelectBar?: ((date: string | null) => void) | undefined;
@@ -392,6 +396,40 @@ export function TerminalChart({
         });
       }
 
+      // Holdings avg cost (WACC) — gray dashed line. Only on MAX it expands Y to include wacc; otherwise hide if far outside
+      if (wacc && wacc > 0 && mainSeries && !isIntraday) {
+        const vals = sanitizedBars.map((b) => b.close);
+        const min = vals.length ? Math.min(...vals) : 0;
+        const max = vals.length ? Math.max(...vals) : 0;
+        const outOfRange = vals.length > 0 && (wacc < min || wacc > max);
+        if (!includeWaccDomain && outOfRange) {
+          // leave hidden on short ranges
+        } else {
+          mainSeries.createPriceLine({
+            price: wacc,
+            color: "#9ca3af",
+            lineWidth: 1,
+            lineStyle: LineStyle.Dashed,
+            axisLabelVisible: true,
+            title: "Cost",
+          });
+          // On MAX, force priceScale to include wacc even when far below/above bars
+          if (includeWaccDomain && outOfRange && sanitizedBars.length >= 2) {
+            const waccSeries = chart.addSeries(LineSeries, {
+              color: "rgba(0,0,0,0)",
+              lineWidth: 1,
+              priceLineVisible: false,
+              lastValueVisible: false,
+              crosshairMarkerVisible: false,
+            });
+            waccSeries.setData([
+              { time: sanitizedBars[0]!.date as Time, value: wacc },
+              { time: sanitizedBars[sanitizedBars.length - 1]!.date as Time, value: wacc },
+            ]);
+          }
+        }
+      }
+
       let pane = 1;
       if (indicators.volume) {
         const volumeSeries = chart.addSeries(
@@ -630,6 +668,8 @@ export function TerminalChart({
     light,
     height,
     isIntraday,
+    wacc,
+    includeWaccDomain,
   ]);
 
   // "+" quick-order follows the mouse anywhere over the chart body (the
@@ -751,7 +791,7 @@ export function TerminalChart({
               }}
               className="num flex items-center gap-1.5 rounded-full border border-primary/50 bg-card/95 py-1 pl-2.5 pr-1 text-[0.68rem] font-bold text-primary shadow-lg backdrop-blur transition-colors hover:border-primary hover:bg-primary/10"
             >
-              <span>{orderAt.price.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</span>
+              <span>{orderAt.price.toLocaleString("en-NP", { maximumFractionDigits: 2 })}</span>
               <span className="flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
                 <Plus className="size-3.5" />
               </span>
@@ -776,7 +816,7 @@ export function TerminalChart({
                       >
                         <span className={cls}>{side} limit</span>
                         <span className="num text-muted-foreground">
-                          @ {orderAt.price.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                          @ {orderAt.price.toLocaleString("en-NP", { maximumFractionDigits: 2 })}
                         </span>
                       </button>
                     ))
@@ -794,7 +834,7 @@ export function TerminalChart({
                       <BellPlus className="size-3.5" /> Remind
                     </span>
                     <span className="num text-muted-foreground">
-                      @ {orderAt.price.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                      @ {orderAt.price.toLocaleString("en-NP", { maximumFractionDigits: 2 })}
                     </span>
                   </button>
                 ) : null}

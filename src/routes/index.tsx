@@ -140,16 +140,31 @@ function LoginPage() {
   const [capitalOpen, setCapitalOpen] = useState(false);
   const [capitalSearch, setCapitalSearch] = useState("");
   const [remembered] = useState(() => loadRemembered());
-  const [capitalId, setCapitalId] = useState<number | null>(remembered?.capitalId ?? null);
-  const [username, setUsername] = useState(remembered?.username ?? "");
+  const [capitalId, setCapitalId] = useState<number | null>(null);
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [rememberMe, setRememberMe] = useState(() => remembered !== null);
-  const [bioEnrolled] = useState(() => isBiometricEnrolled());
-  const [saveBio, setSaveBio] = useState(() => isBiometricEnrolled());
+  const [rememberMe, setRememberMe] = useState(false);
+  const [bioEnrolled, setBioEnrolled] = useState(false);
+  const [saveBio, setSaveBio] = useState(false);
   const [bioBusy, setBioBusy] = useState(false);
   const bioAttempt = useRef(false);
   const [showPassword, setShowPassword] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Hydrate remembered values after mount to avoid SSR/client mismatch.
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => {
+    if (hydrated) return;
+    setHydrated(true);
+    const bio = isBiometricEnrolled();
+    setBioEnrolled(bio);
+    setSaveBio(bio);
+    if (remembered) {
+      setCapitalId(remembered.capitalId);
+      setUsername(remembered.username);
+      setRememberMe(true);
+    }
+  }, [hydrated, remembered]);
 
   const capitals = useQuery({
     queryKey: ["capitals"],
@@ -529,7 +544,6 @@ function LoginPage() {
                   id="password"
                   type={showPassword ? "text" : "password"}
                   autoComplete="current-password"
-                  placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="h-11 pr-11"

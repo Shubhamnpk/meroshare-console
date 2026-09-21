@@ -9,11 +9,14 @@ import {
   Building2,
   Calculator,
   ChartCandlestick,
+  ChevronRight,
   ExternalLink,
   FileText,
   Info,
   Maximize2,
   Star,
+  TrendingDown,
+  TrendingUp,
 } from "lucide-react";
 import {
   Sheet,
@@ -39,6 +42,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { DeltaPill } from "@/components/stat-card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AreaChart } from "@/components/market/area-chart";
 import { RangeBar } from "@/components/market/range-bar";
@@ -48,14 +52,15 @@ import {
   buildScripRanges,
   chartDayLabel,
   chartTimeLabel,
+  SCRIP_RANGES,
 } from "@/components/market/chart-modal";
 import { useDocViewer } from "@/components/ui/use-doc-viewer";
 import { OrderTicket } from "@/components/brokers/order-ticket";
-import { YoOrderTicket } from "@/components/brokers/yobroker-ticket";
 import { PriceAlertDialog } from "@/components/brokers/price-alert-dialog";
 import { usePriceAlerts } from "@/lib/price-alerts";
 import { loadYoWallet } from "@/lib/yobroker/store";
 import { Panel } from "@/components/ui/panel";
+import { breakEvenPrice, buyCost, cgtRate, daysBetween, DP_CHARGE, sellProceeds } from "@/lib/calc/fees";
 import {
   dividendsQuery,
   brokerConnectionsQuery,
@@ -69,6 +74,7 @@ import {
   transactionsQuery,
   udfHistoryQuery,
   waccReportQuery,
+  waccSearchQuery,
 } from "@/lib/queries";
 import { formatDate, formatNpr, formatPercent, formatQty, toNumber } from "@/lib/format";
 import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
@@ -89,7 +95,7 @@ function resolveFaceValue(
   if (apiFaceValue != null && apiFaceValue > 0) return apiFaceValue;
   return 100;
 }
-/** Unrealized P/L against a cost basis (CDSC WACC, or purchase-source estimate). */
+/** Unrealized P/L against a cost basis — now with actual net after broker/SEBON/DP/CGT. */
 function PositionCard({
   scrip,
   units,
@@ -105,53 +111,155 @@ function PositionCard({
   ltp: number;
   basisLabel?: string;
 }) {
+  const [open, setOpen] = useState(false);
+  const avgCost = waccRate > 0 ? waccRate : totalCost > 0 && units > 0 ? totalCost / units : 0;
+  const costBasis = totalCost > 0 ? totalCost : units * avgCost;
   const currentValue = units * ltp;
-  const pl = currentValue - (totalCost || units * waccRate);
-  const plPct = pl && totalCost ? (pl / totalCost) * 100 : 0;
-  const up = pl >= 0;
+  const rawPl = currentValue - costBasis;
+  const rawPct = costBasis > 0 ? (rawPl / costBasis) * 100 : 0;
+  const rawUp = rawPl >= 0;
+
+  const purchaseQ = useQuery(waccSearchQuery(scrip));
+  const holdingDays = useMemo(() => {
+    const items = (purchaseQ.data as { waccUpdateResponse?: { transactionDate?: string }[] } | undefined)?.waccUpdateResponse ?? [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const dates = (items as any[]).map((r) => (r as { transactionDate?: string }).transactionDate).filter(Boolean) as string[];
+    if (dates.length === 0) return 400;
+    const earliest = dates.sort()[0] as string;
+    const d = daysBetween(earliest, new Date());
+    return d > 0 ? d : 400;
+  }, [purchaseQ.data]);
+  const buy = useMemo(() => buyCost(units, avgCost), [units, avgCost]);
+  const commissionWacc = buy.perUnit;
+  const proceeds = useMemo(() => {
+    if (!(units > 0) || !(commissionWacc > 0) || !(ltp > 0)) return null;
+    return sellProceeds({ units, price: ltp, avgCost: commissionWacc, holdingDays });
+  }, [units, commissionWacc, ltp, holdingDays]);
+  const be = useMemo(() => (units > 0 && commissionWacc > 0 ? breakEvenPrice(units, commissionWacc, holdingDays) : 0), [units, commissionWacc, holdingDays]);
+  const netUp = (proceeds?.profit ?? rawPl) >= 0;
+
   return (
-    <Panel padding="sm">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="font-display text-sm font-semibold">Your position</h3>
-        <span className="rounded-full bg-muted px-2 py-0.5 text-[0.68rem] font-medium text-muted-foreground">
-          {basisLabel}
-        </span>
-      </div>
-      <Link
-        to="/wacc"
-        search={{ scrip }}
-        className="mt-1 inline-block text-[0.7rem] font-medium text-primary hover:underline"
-      >
-        View full WACC detail →
-      </Link>
-      <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
-        <div>
-          <p className="text-[0.65rem] uppercase tracking-wide text-muted-foreground">Units</p>
-          <p className="num text-sm font-medium">{formatQty(units)}</p>
-        </div>
-        <div>
-          <p className="text-[0.65rem] uppercase tracking-wide text-muted-foreground">WACC</p>
-          <p className="num text-sm font-medium">{formatNpr(waccRate)}</p>
-        </div>
-        <div>
-          <p className="text-[0.65rem] uppercase tracking-wide text-muted-foreground">Cost</p>
-          <p className="num text-sm font-medium">{formatNpr(totalCost)}</p>
-        </div>
-        <div>
-          <p className="text-[0.65rem] uppercase tracking-wide text-muted-foreground">Value</p>
-          <p className="num text-sm font-medium">{formatNpr(currentValue)}</p>
-        </div>
-      </div>
-      <div className="mt-3 flex items-baseline justify-between gap-2 border-t border-border/60 pt-3">
-        <span className="text-xs text-muted-foreground">
-          Unrealized P/L, in cash if sold at LTP
-        </span>
-        <span className={cn("num text-right font-semibold", up ? "text-gain" : "text-loss")}>
-          {up ? "+" : ""}
-          {formatNpr(pl)} <span className="text-xs">({formatPercent(plPct / 100)})</span>
-        </span>
-      </div>
-    </Panel>
+    <>
+      <button type="button" onClick={() => setOpen(true)} className="w-full text-left">
+        <Panel padding="sm" className="hover:border-primary/20 transition-colors">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="font-display text-sm font-semibold">Your position</h3>
+            <span className="flex items-center gap-1.5">
+              <span className="rounded-full bg-muted px-2 py-0.5 text-[0.68rem] font-medium text-muted-foreground">
+                {basisLabel}
+              </span>
+              <ChevronRight className="size-3.5 text-muted-foreground" />
+            </span>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
+            <div>
+              <p className="text-[0.65rem] uppercase tracking-wide text-muted-foreground">Units</p>
+              <p className="num text-sm font-medium">{formatQty(units)}</p>
+            </div>
+            <div>
+              <p className="text-[0.65rem] uppercase tracking-wide text-muted-foreground">WACC</p>
+              <p className="num text-sm font-medium">{formatNpr(avgCost)}</p>
+            </div>
+            <div>
+              <p className="text-[0.65rem] uppercase tracking-wide text-muted-foreground">Cost</p>
+              <p className="num text-sm font-medium">{formatNpr(costBasis)}</p>
+            </div>
+            <div>
+              <p className="text-[0.65rem] uppercase tracking-wide text-muted-foreground">Value</p>
+              <p className="num text-sm font-medium">{formatNpr(currentValue)}</p>
+            </div>
+          </div>
+          <div className="mt-3 flex items-center justify-between gap-2 border-t border-border/60 pt-3">
+            <span className="text-xs text-muted-foreground">Unrealized P/L (before charges)</span>
+            <span className={cn("num text-right text-xs font-semibold", rawUp ? "text-gain" : "text-loss")}>
+              {rawUp ? "+" : ""}
+              {formatNpr(rawPl)} <span className="text-[0.7rem]">({formatPercent(rawPct)})</span>
+            </span>
+          </div>
+          {proceeds ? (
+            <div className="mt-2 flex items-center justify-between gap-2 rounded-xl bg-muted/20 px-3 py-2">
+              <span className="text-xs font-medium text-muted-foreground">Net in pocket if sold @ {formatNpr(ltp)}</span>
+              <span className={cn("num inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold", netUp ? "bg-gain/10 text-gain" : "bg-loss/10 text-loss")}>
+                {netUp ? <TrendingUp className="size-3" /> : <TrendingDown className="size-3" />}
+                {proceeds.profit >= 0 ? "+" : ""}
+                {formatNpr(proceeds.profit)} ({formatPercent(proceeds.profitPercent)})
+              </span>
+            </div>
+          ) : null}
+          <p className="mt-2 text-[0.68rem] text-muted-foreground">Tap for breakdown incl. broker, SEBON, DP &amp; CGT</p>
+        </Panel>
+      </button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto rounded-2xl sm:max-w-[480px] p-0 gap-0">
+          <DialogHeader className="px-4 pt-4 pb-2">
+            <DialogTitle className="text-[15px] font-bold leading-none">{scrip} · Sell breakdown</DialogTitle>
+          </DialogHeader>
+          {proceeds ? (
+            <div className="px-4 pb-4 space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-xl bg-muted/15 px-3 py-2.5 flex items-center justify-between gap-2">
+                  <span className="text-xs text-muted-foreground">Gross</span>
+                  <span className="num text-sm font-bold">{formatNpr(proceeds.amount)}</span>
+                </div>
+                <div className="rounded-xl bg-muted/15 px-3 py-2.5 flex items-center justify-between gap-2">
+                  <span className="text-xs text-muted-foreground">All-in cost</span>
+                  <span className="num text-sm font-bold">{formatNpr(proceeds.costBasis)}</span>
+                </div>
+              </div>
+              <div className="rounded-xl border border-border/60 overflow-hidden">
+                <div className="divide-y divide-border/30">
+                  <div className="flex items-center justify-between px-3 py-2">
+                    <span className="text-xs text-muted-foreground">Broker commission</span>
+                    <span className="num text-xs font-medium">− {formatNpr(proceeds.commission)}</span>
+                  </div>
+                  <div className="flex items-center justify-between px-3 py-2">
+                    <span className="text-xs text-muted-foreground">SEBON 0.015%</span>
+                    <span className="num text-xs font-medium">− {formatNpr(proceeds.sebon)}</span>
+                  </div>
+                  <div className="flex items-center justify-between px-3 py-2">
+                    <span className="text-xs text-muted-foreground">DP charge</span>
+                    <span className="num text-xs font-medium">− {formatNpr(proceeds.dp)}</span>
+                  </div>
+                  <div className="flex items-center justify-between px-3 py-2 bg-muted/15">
+                    <span className="text-xs font-semibold">Charges</span>
+                    <span className="num text-xs font-bold">− {formatNpr(proceeds.charges)}</span>
+                  </div>
+                  <div className="flex items-center justify-between px-3 py-2">
+                    <span className="text-xs text-muted-foreground">Net before tax</span>
+                    <span className="num text-xs font-semibold">{formatNpr(proceeds.netBeforeTax)}</span>
+                  </div>
+                  <div className="flex items-center justify-between px-3 py-2">
+                    <span className="text-xs text-muted-foreground">CGT {(proceeds.cgtRate * 100).toFixed(1)}% · {holdingDays}d {holdingDays >= 365 ? "long" : "short"}</span>
+                    <span className="num text-xs font-medium">− {formatNpr(proceeds.cgt)}</span>
+                  </div>
+                  <div className="flex items-center justify-between px-3 py-2.5 bg-muted/15">
+                    <span className="text-xs font-bold">Net receivable</span>
+                    <span className="num text-sm font-bold">{formatNpr(proceeds.netReceivable)}</span>
+                  </div>
+                  <div className="flex items-center justify-between px-3 py-2">
+                    <span className="text-xs font-semibold">Net profit</span>
+                    <span className={cn("num text-xs font-bold", netUp ? "text-gain" : "text-loss")}>
+                      {proceeds.profit >= 0 ? "+" : ""}
+                      {formatNpr(proceeds.profit)} ({formatPercent(proceeds.profitPercent)})
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between px-3 py-2 bg-muted/10">
+                    <span className="text-xs text-muted-foreground">Breakeven</span>
+                    <span className="num text-xs font-bold">{formatNpr(be)}</span>
+                  </div>
+                </div>
+              </div>
+              <Link to="/wacc" search={{ scrip }} className="inline-flex text-xs font-medium text-primary hover:underline" onClick={() => setOpen(false)}>
+                View full WACC detail →
+              </Link>
+            </div>
+          ) : (
+            <div className="px-4 pb-4 text-xs text-muted-foreground">No sell breakdown — missing avg cost or LTP.</div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -709,10 +817,9 @@ export function ScripSheet({
         .sort((a, b) => a.time - b.time),
     [detail.data],
   );
-  // Whole-archive history is heavy, so it loads lazily only when "All" is picked.
   const fullHistory = useQuery({
     ...scripFullHistoryQuery(upper || null),
-    enabled: Boolean(symbol) && rangeKey === "All",
+    enabled: Boolean(symbol),
   });
   const fullPoints: PricePoint[] = useMemo(
     () =>
@@ -724,7 +831,8 @@ export function ScripSheet({
         .sort((a, b) => a.time - b.time),
     [fullHistory.data],
   );
-  const dailyPoints = rangeKey === "All" && fullPoints.length >= 2 ? fullPoints : historyPoints;
+  // Use full archive for all daily ranges so 1M/3M/6M/1Y don't duplicate the truncated historyPoints
+  const dailyPoints = fullPoints.length >= 2 ? fullPoints : historyPoints;
   const udf = useQuery({
     ...udfHistoryQuery(
       upper || null,
@@ -748,19 +856,18 @@ export function ScripSheet({
 
   const ranges = useMemo(() => {
     const built = buildScripRanges(intradayPoints, dailyPoints);
-    // Keep "All" tappable even before the archive loads; selecting it starts the fetch.
-    if (!built.some((r) => r.key === "All")) built.push({ key: "All", label: "All", points: [] });
-    return built;
+    // Keep every range button visible while loading so user doesn't see only "All"
+    const byKey = new Map(built.map((r) => [r.key, r]));
+    return SCRIP_RANGES.map((r) => byKey.get(r.key) ?? { key: r.key, label: r.label, points: [] as never[] });
   }, [intradayPoints, dailyPoints]);
   const activeRange = ranges.find((r) => r.key === rangeKey) ?? ranges[0];
 
-  // If the current range isn't available (e.g. no intraday data for 1D),
-  // auto-select the first available range.
+  // Prefer 1D if intraday exists, else 1W — keep 1D selected while loading so only All isn't shown
   useEffect(() => {
-    if (ranges.length > 0 && !ranges.some((r) => r.key === rangeKey)) {
-      setRangeKey(ranges[0]!.key);
-    }
-  }, [ranges, rangeKey]);
+    if (!activeRange || activeRange.points.length >= 2) return;
+    const firstWithData = ranges.find((r) => r.points.length >= 2);
+    if (firstWithData && firstWithData.key !== rangeKey) setRangeKey(firstWithData.key);
+  }, [ranges, rangeKey, activeRange]);
   const fullSince = fullPoints.length > 0 ? new Date(fullPoints[0]!.time * 1000) : null;
 
   const stats: { label: string; value: string }[] = price
@@ -954,16 +1061,11 @@ export function ScripSheet({
               {newsItems.length > 0 ? <TabsTrigger value="news">News</TabsTrigger> : null}
             </TabsList>
 
-            {brokerOn || yoActive ? (
+            {brokerOn ? (
               <TabsContent value="trade" className="space-y-4">
-                {yoActive ? <YoOrderTicket symbol={upper} /> : null}
-                {brokerOn ? <OrderTicket symbol={upper} /> : null}
+                <OrderTicket symbol={upper} />
                 <p className="text-[0.7rem] leading-relaxed text-muted-foreground">
-                  {yoActive && !brokerOn
-                    ? `Paper trading via Yo Broker for ${upper}. Fills against live NEPSE prices, no real money moves.`
-                    : yoActive && brokerOn
-                      ? `Yo Broker on top is paper, Naasa X below is real for ${upper}.`
-                      : `Live broker quote, market depth and order placement for ${upper}. Orders placed here are real.`}
+                  Live broker quote, market depth and order placement for {upper} via your connected broker.
                 </p>
               </TabsContent>
             ) : null}
@@ -1011,21 +1113,26 @@ export function ScripSheet({
                 {ranges.length > 0 ? (
                   <>
                     <div className="mt-3 flex flex-wrap gap-1.5">
-                      {ranges.map((range) => (
-                        <button
-                          key={range.key}
-                          type="button"
-                          onClick={() => setRangeKey(range.key)}
-                          className={cn(
-                            "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-                            activeRange?.key === range.key
-                              ? "border-primary/50 bg-primary/15 text-primary"
-                              : "border-border/60 bg-surface text-muted-foreground hover:border-primary/30",
-                          )}
-                        >
-                          {range.label}
-                        </button>
-                      ))}
+                      {ranges.map((range) => {
+                        const empty = range.points.length < 2 && range.key !== "All";
+                        return (
+                          <button
+                            key={range.key}
+                            type="button"
+                            disabled={empty}
+                            onClick={() => setRangeKey(range.key)}
+                            className={cn(
+                              "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                              activeRange?.key === range.key
+                                ? "border-primary/50 bg-primary/15 text-primary"
+                                : "border-border/60 bg-surface text-muted-foreground hover:border-primary/30",
+                              empty && "opacity-50 cursor-not-allowed",
+                            )}
+                          >
+                            {range.label}
+                          </button>
+                        );
+                      })}
                     </div>
                     <div className="mt-3">
                       {rangeKey === "All" && fullHistory.isLoading ? (
@@ -1047,6 +1154,14 @@ export function ScripSheet({
                         <AreaChart
                           points={activeRange?.points ?? []}
                           height={200}
+                          wacc={
+                            (waccEntry && toNumber(waccEntry.averageBuyRate) > 0
+                              ? toNumber(waccEntry.averageBuyRate)
+                              : hasInvBasis && invEntry && invEntry.waccRate > 0
+                                ? invEntry.waccRate
+                                : null)
+                          }
+                          includeWaccDomain={activeRange?.key === "All"}
                           formatValue={(v) => formatNpr(v)}
                           formatLabel={(t) =>
                             activeRange?.key === "1D" ? chartTimeLabel(t) : chartDayLabel(t)
