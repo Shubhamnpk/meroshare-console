@@ -41,6 +41,7 @@ import {
   brokerOrderHistoryQuery,
   brokerQuoteQuery,
   brokerTradeBookQuery,
+  brokerTriggersQuery,
   brokerWatchlistsQuery,
   type BrokerRange,
 } from "@/lib/queries";
@@ -374,10 +375,9 @@ function AmoPanel({ brokerId }: { brokerId: BrokerId }) {
   const [eprice, setEprice] = useState("");
 
   const rows = amos.data ?? [];
-  const editing =
-    rows.find(
-      (r) => (r.alertName || `${r.scrip}-${r.side}-${r.price}-${r.quantity}`) === editKey,
-    ) ?? null;
+  const keyOf = (o: (typeof rows)[number], i: number) =>
+    o.alertName || `${o.scrip}-${o.side}-${o.price}-${o.quantity}-${i}`;
+  const editing = rows.find((r, i) => keyOf(r, i) === editKey) ?? null;
   const editQuote = useQuery({
     ...brokerQuoteQuery(brokerId, editing?.scrip ?? ""),
     enabled: Boolean(editing),
@@ -459,10 +459,17 @@ function AmoPanel({ brokerId }: { brokerId: BrokerId }) {
     onError: (err) => toast.error(errorMessage(err, "Replace failed.")),
   });
 
-  const keyOf = (o: (typeof rows)[number], i: number) =>
-    o.alertName || `${o.scrip}-${o.side}-${o.price}-${o.quantity}-${i}`;
   const buy = rows.filter((r) => r.side === "BUY").length;
   const sell = rows.filter((r) => r.side === "SELL").length;
+  const amoIsActive = (o: (typeof rows)[number]) =>
+    (o.side === "BUY" || o.side === "SELL") &&
+    (!o.status ||
+      !/DISABLE|INACTIVE|EXPIRED|CANCEL|REJECT|EXECUTED|COMPLETE|FILLED|CLOSED|DONE|FALSE/i.test(
+        o.status,
+      ));
+  const amoIndexed = rows.map((o, i) => ({ o, i }));
+  const amoActiveList = amoIndexed.filter(({ o }) => amoIsActive(o));
+  const amoDisabledList = amoIndexed.filter(({ o }) => !amoIsActive(o));
 
   return (
     <Panel padding="lg" shadow className="space-y-3">
@@ -474,7 +481,9 @@ function AmoPanel({ brokerId }: { brokerId: BrokerId }) {
           </span>
         </p>
         <p className="text-[0.7rem] text-muted-foreground">
-          {buy} buy · {sell} sell
+          {buy} buy · {sell} sell ·{" "}
+          {rows.reduce((s, r) => s + (r.quantity || 0), 0).toLocaleString("en-NP")} units
+          {amoDisabledList.length > 0 ? ` · ${amoDisabledList.length} disabled` : ""}
         </p>
       </div>
       <QueryNote query={amos} />
@@ -484,11 +493,12 @@ function AmoPanel({ brokerId }: { brokerId: BrokerId }) {
         </p>
       ) : (
         <div className="space-y-2">
-          {rows.map((o, i) => {
+          {amoActiveList.map(({ o, i }) => {
             const key = keyOf(o, i);
             const open = openKey === key;
             const armed = armedKey === key;
             const editingThis = editKey === key;
+            const active = true;
             return (
               <div
                 key={key}
@@ -545,6 +555,10 @@ function AmoPanel({ brokerId }: { brokerId: BrokerId }) {
                       <dt className="text-muted-foreground">Side</dt>
                       <dd className="font-medium">{o.side}</dd>
                     </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-muted-foreground">Status</dt>
+                      <dd className="font-medium">{o.status ?? "Active"}</dd>
+                    </div>
                   </dl>
                 ) : null}
                 {editingThis ? (
@@ -594,7 +608,7 @@ function AmoPanel({ brokerId }: { brokerId: BrokerId }) {
                       </Button>
                     </div>
                   </div>
-                ) : (
+                ) : active ? (
                   <div className="mt-2 flex flex-wrap gap-2 border-t border-border/60 pt-2">
                     <Button
                       size="sm"
@@ -642,10 +656,101 @@ function AmoPanel({ brokerId }: { brokerId: BrokerId }) {
                       </Button>
                     ) : null}
                   </div>
+                ) : (
+                  <p className="mt-2 border-t border-border/60 pt-2 text-[0.7rem] text-muted-foreground">
+                    {o.status ? `No actions — order is ${o.status}.` : "No actions available."}
+                  </p>
                 )}
               </div>
             );
           })}
+          {amoDisabledList.length > 0 ? (
+            <div className="border-t border-border/60 pt-2">
+              <p className="text-[0.7rem] font-semibold text-muted-foreground">
+                Disabled · {amoDisabledList.length}
+              </p>
+              <div className="mt-2 space-y-2 opacity-60">
+                {amoDisabledList.map(({ o, i }) => {
+                  const key = keyOf(o, i);
+                  return (
+                    <div
+                      key={key}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-background px-3 py-2.5"
+                    >
+                      <span className="min-w-0 text-sm">
+                        <span className="font-bold text-muted-foreground">{o.side}</span>{" "}
+                        <span className="num font-semibold">
+                          {o.quantity.toLocaleString("en-NP")}
+                        </span>{" "}
+                        <span className="font-semibold">{o.scrip}</span>{" "}
+                        <span className="num text-muted-foreground">
+                          @ {o.price !== null ? o.price.toLocaleString("en-NP") : "-"}
+                          {o.validTill ? ` · till ${o.validTill}` : ""}
+                        </span>
+                      </span>
+                      <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[0.68rem] font-semibold text-muted-foreground">
+                        {o.status ?? "Disabled"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function TriggerPanel({ brokerId }: { brokerId: BrokerId }) {
+  const triggers = useQuery(brokerTriggersQuery(brokerId));
+  const rows = triggers.data ?? [];
+  return (
+    <Panel padding="lg" shadow className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-semibold">Trigger / stop orders · {rows.length}</p>
+        <p className="text-[0.7rem] text-muted-foreground">BLAZE TriggerOrder book</p>
+      </div>
+      {triggers.isPending ? (
+        <p className="text-xs text-muted-foreground">Loading…</p>
+      ) : triggers.isError ? (
+        <p className="text-xs text-destructive">
+          {errorMessage(triggers.error, "Could not load triggers.")}
+        </p>
+      ) : rows.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          No pending trigger orders.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {rows.map((t) => (
+            <div
+              key={t.id || `${t.symbol}-${t.orderQty}-${t.orderPrice}`}
+              className="rounded-xl border border-border/60 bg-background px-3 py-2.5 text-xs"
+            >
+              <p className="text-sm">
+                <span
+                  className={cn(
+                    "font-bold",
+                    t.side === "BUY" ? "text-gain" : "text-destructive",
+                  )}
+                >
+                  {t.side}
+                </span>{" "}
+                <span className="num font-semibold">{t.orderQty.toLocaleString("en-NP")}</span>{" "}
+                <span className="font-semibold">{t.symbol}</span>{" "}
+                <span className="num text-muted-foreground">
+                  @ {t.orderPrice !== null ? t.orderPrice.toLocaleString("en-NP") : "-"}
+                </span>
+              </p>
+              <p className="mt-0.5 text-[0.7rem] text-muted-foreground">
+                Trigger {t.triggerPrice !== null ? t.triggerPrice.toLocaleString("en-NP") : "-"} ·{" "}
+                {t.status || "-"}
+                {t.validTill ? ` · till ${t.validTill}` : ""}
+              </p>
+            </div>
+          ))}
         </div>
       )}
     </Panel>
@@ -765,35 +870,107 @@ function MarketStatusPill({ brokerId }: { brokerId: BrokerId | null }) {
   );
 }
 
-function OrderHistoryBox({ brokerId, orderId }: { brokerId: BrokerId; orderId: string }) {
+function DetailGrid({ rows }: { rows: [string, string][] }) {
+  if (rows.length === 0) return null;
+  return (
+    <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+      {rows.map(([k, v]) => (
+        <div key={k} className="flex justify-between gap-2">
+          <dt className="text-muted-foreground">{k}</dt>
+          <dd className="truncate text-right font-medium" title={v}>
+            {v}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function OrderHistoryBox({
+  brokerId,
+  orderId,
+  order,
+}: {
+  brokerId: BrokerId;
+  orderId: string;
+  order?: {
+    symbol: string;
+    side: string;
+    quantity: number;
+    price: number | null;
+    status: string;
+    orderType: string;
+    validity: string;
+    orderId: string;
+    tranId: string;
+    remainingQty: number;
+    tradedQty?: number | null;
+    amount?: number | null;
+    exchangeOrderNo?: string;
+    date: string;
+    time: string;
+  };
+}) {
   const history = useQuery(brokerOrderHistoryQuery(brokerId, orderId));
+  const detailRows: [string, string][] = order
+    ? (
+        [
+          ["Scrip", order.symbol],
+          ["Side", order.side],
+          ["Quantity", String(order.quantity)],
+          ["Price", order.price !== null ? String(order.price) : "MKT"],
+          ["Filled", order.tradedQty != null && order.tradedQty > 0 ? String(order.tradedQty) : ""],
+          ["Remaining", String(order.remainingQty)],
+          ["Amount", order.amount != null ? String(order.amount) : ""],
+          ["Status", order.status],
+          ["Type", `${order.orderType} · ${order.validity}`],
+          ["Date", [order.date, order.time].filter(Boolean).join(" ") || "-"],
+          ["Exch. order", order.exchangeOrderNo || ""],
+          ["Order ID", order.orderId || orderId],
+          ["Tran ID", order.tranId || orderId],
+        ] as [string, string][]
+      ).filter(([, v]) => v !== "")
+    : [];
   if (history.isPending) {
-    return <p className="mt-2 text-[0.7rem] text-muted-foreground">Loading timeline…</p>;
+    return (
+      <div className="mt-2 border-t border-border/60 pt-2">
+        <DetailGrid rows={detailRows} />
+        <p className="mt-2 text-[0.7rem] text-muted-foreground">Loading timeline…</p>
+      </div>
+    );
   }
   if (history.isError) {
     return (
-      <p className="mt-2 text-[0.7rem] text-muted-foreground">
-        Timeline unavailable.{" "}
-        <button
-          type="button"
-          className="font-semibold text-primary hover:underline"
-          onClick={() => void history.refetch()}
-        >
-          Retry
-        </button>
-      </p>
+      <div className="mt-2 border-t border-border/60 pt-2">
+        <DetailGrid rows={detailRows} />
+        <p className="mt-2 text-[0.7rem] text-muted-foreground">
+          Timeline unavailable.{" "}
+          <button
+            type="button"
+            className="font-semibold text-primary hover:underline"
+            onClick={() => void history.refetch()}
+          >
+            Retry
+          </button>
+        </p>
+      </div>
     );
   }
   const events = history.data ?? [];
   if (events.length === 0) {
     return (
-      <p className="mt-2 text-[0.7rem] text-muted-foreground">
-        No lifecycle events returned for this order.
-      </p>
+      <div className="mt-2 border-t border-border/60 pt-2">
+        <DetailGrid rows={detailRows} />
+        <p className="mt-2 text-[0.7rem] text-muted-foreground">
+          No lifecycle events returned — details above are from the order book.
+        </p>
+      </div>
     );
   }
   return (
-    <ol className="mt-2 space-y-0 border-t border-border/60 pt-2">
+    <div className="mt-2 border-t border-border/60 pt-2">
+      <DetailGrid rows={detailRows} />
+      <ol className="mt-2 space-y-0 border-t border-border/60 pt-2">
       {events.map((e, i) => (
         <li key={i} className="flex gap-2.5 text-[0.7rem]">
           <span className="flex flex-col items-center" aria-hidden>
@@ -829,7 +1006,8 @@ function OrderHistoryBox({ brokerId, orderId }: { brokerId: BrokerId; orderId: s
           </div>
         </li>
       ))}
-    </ol>
+      </ol>
+    </div>
   );
 }
 
@@ -1080,6 +1258,113 @@ function BrokerPage() {
     onError: (err) => toast.error(errorMessage(err, "Modify failed.")),
   });
 
+  const [armedAll, setArmedAll] = useState(false);
+  const cancelAll = useMutation({
+    mutationFn: async () => {
+      const rows = (orders.data ?? []).filter((o) =>
+        /OPEN|PARTIALLY|ACCEPTED|QUEUED|PENDING/.test(o.status.toUpperCase()),
+      );
+      const targets = rows.filter((o) => o.orderId || o.tranId || o.id);
+      // AMO orders live outside the order book — include the cached AMO list
+      // so "Cancel all" actually clears them too.
+      const amoCached =
+        queryClient.getQueryData<{ alertName: string | null; scrip: string }[] | undefined>([
+          "broker-amo-list",
+          brokerId,
+        ]) ?? [];
+      if (targets.length === 0 && amoCached.length === 0)
+        throw new Error("No open or AMO orders to cancel.");
+      let ok = 0;
+      let total = 0;
+      const failed: string[] = [];
+      for (const o of targets) {
+        total++;
+        const cid = o.orderId || o.tranId || o.id;
+        try {
+          const r =
+            brokerId === "yobroker"
+              ? (() => {
+                  const w = loadYoWallet(null);
+                  const next = cancelYoOrder(w, cid);
+                  saveYoWallet(null, next);
+                  const changed =
+                    next.orders.find((x) => x.id === cid)?.status === "cancelled";
+                  return { ok: changed, message: changed ? "cancelled" : "not found" };
+                })()
+              : await cancelBrokerOrder({
+                  data: {
+                    brokerId: brokerId!,
+                    orderId: o.orderId || cid,
+                    tranId: o.tranId || cid,
+                    orderStatus: o.orderStatus || o.status,
+                    buySellType: o.side === "SELL" ? "Sell" : ("Buy" as const),
+                    deliveryFlag: o.deliveryFlag,
+                    orderTerms: o.validity,
+                    price: o.price !== null ? String(o.price) : "0",
+                    quantity: Math.max(1, Math.floor(o.remainingQty || o.quantity)),
+                    symbol: o.symbol,
+                    confirmed: true as const,
+                  },
+                });
+          if (r.ok) ok++;
+          else failed.push(o.symbol);
+        } catch {
+          failed.push(o.symbol);
+        }
+      }
+      if (brokerId !== "yobroker") {
+        const amoRows =
+          queryClient.getQueryData<
+            {
+              alertName: string | null;
+              scrip: string;
+              price: number | null;
+              triggerPrice: number | null;
+              quantity: number;
+              side: "BUY" | "SELL" | "UNKNOWN";
+              validTill: string | null;
+            }[]
+          >(["broker-amo-list", brokerId]) ?? [];
+        for (const a of amoRows) {
+          if (a.side !== "BUY" && a.side !== "SELL") continue;
+          total++;
+          try {
+            const r = await cancelBrokerAmo({
+              data: {
+                brokerId: brokerId!,
+                alertName: a.alertName,
+                scrip: a.scrip,
+                price: a.price,
+                triggerPrice: a.triggerPrice,
+                quantity: a.quantity,
+                side: a.side,
+                validTill: a.validTill,
+                confirmed: true as const,
+              },
+            });
+            if (r.ok) ok++;
+            else failed.push(`AMO:${a.scrip}`);
+          } catch {
+            failed.push(`AMO:${a.scrip}`);
+          }
+        }
+      }
+      return { ok, total, failed };
+    },
+    onSuccess: ({ ok, total, failed }) => {
+      setArmedAll(false);
+      void queryClient.invalidateQueries({ queryKey: ["broker-order-book"] });
+      void queryClient.invalidateQueries({ queryKey: ["broker-amo-list"] });
+      if (brokerId === "yobroker") setYoTick((v) => v + 1);
+      if (ok === total) toast.success(`Cancelled ${ok} order${ok === 1 ? "" : "s"} (incl. AMO).`);
+      else toast.error(`Cancelled ${ok}/${total}. Failed: ${failed.join(", ") || "-"}.`);
+    },
+    onError: (err) => {
+      setArmedAll(false);
+      toast.error(errorMessage(err, "Cancel-all failed."));
+    },
+  });
+
   const [modKey, setModKey] = useState<string | null>(null);
   const [mqty, setMqty] = useState("");
   const [mprice, setMprice] = useState("");
@@ -1107,7 +1392,10 @@ function BrokerPage() {
   }, [holdings.data, holdingSearch, holdingSort]);
 
   const openOrders = useMemo(
-    () => (orders.data ?? []).filter((o) => /OPEN|PARTIALLY/.test(o.status.toUpperCase())),
+    () =>
+      (orders.data ?? []).filter((o) =>
+        /OPEN|PARTIALLY|ACCEPTED|QUEUED|PENDING/.test(o.status.toUpperCase()),
+      ),
     [orders.data],
   );
 
@@ -1307,21 +1595,9 @@ function BrokerPage() {
               </div>
             ))}
           </div>
-
           {f && !funds.isPending ? <CollateralBreakdown funds={f} /> : null}
-
           <PriceAlertsPanel />
-
           <BrokerTicketsPanel brokerId={brokerId} />
-
-          <div className="rounded-2xl border border-border/60 bg-surface p-4">
-            <p className="text-xs font-semibold">Orders vs trades: different things</p>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Orders are instructions you placed (open, partially filled, cancelled). Trades are
-              executions that actually happened. Use the Orders tab to manage instructions and the
-              Trades tab for what filled, each with its own date filter.
-            </p>
-          </div>
         </div>
       ) : null}
 
@@ -1419,7 +1695,13 @@ function BrokerPage() {
                 <Input
                   type="date"
                   value={custom.from}
-                  onChange={(e) => setCustom((c) => ({ ...c, from: e.target.value }))}
+                    onChange={(e) =>
+                      setCustom((c) => ({
+                        ...c,
+                        from: e.target.value,
+                        to: c.to || (e.target.value ? isoDay(new Date()) : c.to),
+                      }))
+                    }
                   className="h-8 text-xs"
                   aria-label="From date"
                 />
@@ -1439,11 +1721,35 @@ function BrokerPage() {
             <Panel padding="lg" shadow className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm font-semibold">Orders · {orderSummary.total}</p>
-                <p className="text-[0.7rem] text-muted-foreground">
-                  {orderSummary.open} open · {orderSummary.buy} buy (
-                  {orderSummary.buyQty.toLocaleString("en-NP")}) · {orderSummary.sell} sell (
-                  {orderSummary.sellQty.toLocaleString("en-NP")})
-                </p>
+                <div className="flex items-center gap-2">
+                  <p className="text-[0.7rem] text-muted-foreground">
+                    {orderSummary.open} open · {orderSummary.buy} buy (
+                    {orderSummary.buyQty.toLocaleString("en-NP")}) · {orderSummary.sell} sell (
+                    {orderSummary.sellQty.toLocaleString("en-NP")})
+                  </p>
+                  {orderSummary.open > 0 ? (
+                    <Button
+                      variant={armedAll ? "destructive" : "outline"}
+                      size="sm"
+                      disabled={cancelAll.isPending}
+                      className="text-xs"
+                      onClick={() => {
+                        if (!armedAll) {
+                          setArmedAll(true);
+                          setTimeout(() => setArmedAll(false), 4000);
+                          return;
+                        }
+                        cancelAll.mutate();
+                      }}
+                    >
+                      {cancelAll.isPending
+                        ? "Cancelling…"
+                        : armedAll
+                          ? `Tap again: cancel ${orderSummary.open}`
+                          : "Cancel all"}
+                    </Button>
+                  ) : null}
+                </div>
               </div>
               <QueryNote query={orders} />
               {(orders.data ?? []).length === 0 && !orders.isPending && !orders.isError ? (
@@ -1454,8 +1760,11 @@ function BrokerPage() {
                     const key = o.id || `${o.symbol}-${o.side}-${o.price}`;
                     const armed = armedCancel === key;
                     const modifying = modKey === key;
+                    const canonicalId = o.orderId || o.tranId || o.id;
                     const cancellable = Boolean(
-                      o.orderId && o.tranId && /OPEN|PARTIALLY/.test(o.status.toUpperCase()),
+                      canonicalId &&
+                        (o.remainingQty || o.quantity) > 0 &&
+                        /OPEN|PARTIALLY|ACCEPTED|QUEUED|PENDING/.test(o.status.toUpperCase()),
                     );
                     const isMktRow = o.orderType === "MKT" || o.orderType === "MARKET";
                     return (
@@ -1484,6 +1793,9 @@ function BrokerPage() {
                             </p>
                             <p className="text-[0.7rem] text-muted-foreground">
                               {o.status} · {o.orderType} · {o.validity}
+                              {o.tradedQty != null && o.tradedQty > 0
+                                ? ` · filled ${o.tradedQty.toLocaleString("en-NP")}`
+                                : ""}
                               {o.date ? ` · ${o.date}` : ""}
                               {o.time ? ` ${o.time}` : ""}
                             </p>
@@ -1526,8 +1838,8 @@ function BrokerPage() {
                                     return;
                                   }
                                   cancel.mutate({
-                                    orderId: o.orderId,
-                                    tranId: o.tranId,
+                                    orderId: o.orderId || canonicalId,
+                                    tranId: o.tranId || canonicalId,
                                     orderStatus: o.orderStatus || o.status,
                                     buySellType: o.side === "SELL" ? "Sell" : "Buy",
                                     deliveryFlag: o.deliveryFlag,
@@ -1542,7 +1854,7 @@ function BrokerPage() {
                               </Button>
                             </div>
                           ) : null}
-                          {o.orderId ? (
+                          {canonicalId ? (
                             <div className="flex shrink-0">
                               <Button
                                 variant="ghost"
@@ -1550,13 +1862,13 @@ function BrokerPage() {
                                 className="text-xs text-muted-foreground"
                                 onClick={() => setHistKey((cur) => (cur === key ? null : cur))}
                               >
-                                {histKey === key ? "Hide timeline" : "Timeline"}
+                                {histKey === key ? "Hide details" : "Details"}
                               </Button>
                             </div>
                           ) : null}
                         </div>
-                        {histKey === key && o.orderId && brokerId ? (
-                          <OrderHistoryBox brokerId={brokerId} orderId={o.orderId} />
+                        {histKey === key && canonicalId && brokerId ? (
+                          <OrderHistoryBox brokerId={brokerId} orderId={canonicalId} order={o} />
                         ) : null}
                         {modifying && cancellable && o.side !== "UNKNOWN" ? (
                           <div className="mt-2 grid grid-cols-2 gap-2 border-t border-border/60 pt-2">
@@ -1616,8 +1928,8 @@ function BrokerPage() {
                                   const qty = Math.floor(Number(mqty));
                                   const px = Number(mprice);
                                   modify.mutate({
-                                    tranId: o.tranId,
-                                    orderId: o.orderId,
+                                    tranId: o.tranId || canonicalId,
+                                    orderId: o.orderId || canonicalId,
                                     orderStatus: o.orderStatus || o.status,
                                     remainingQty: o.remainingQty || o.quantity,
                                     side: o.side,
@@ -1768,6 +2080,9 @@ function BrokerPage() {
       ) : null}
 
       {tab === "orders" && brokerId ? <AmoPanel brokerId={brokerId} /> : null}
+      {tab === "orders" && brokerId && brokerId !== "yobroker" ? (
+        <TriggerPanel brokerId={brokerId} />
+      ) : null}
 
       {tab === "funds" ? (
         <Panel padding="lg" shadow className="space-y-3">
@@ -1878,7 +2193,13 @@ function BrokerPage() {
                   <Input
                     type="date"
                     value={txnCustom.from}
-                    onChange={(e) => setTxnCustom((c) => ({ ...c, from: e.target.value }))}
+                    onChange={(e) =>
+                      setTxnCustom((c) => ({
+                        ...c,
+                        from: e.target.value,
+                        to: c.to || (e.target.value ? isoDay(new Date()) : c.to),
+                      }))
+                    }
                     className="h-8 text-xs"
                     aria-label="From date"
                   />

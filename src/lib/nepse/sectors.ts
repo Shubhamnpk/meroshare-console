@@ -615,6 +615,49 @@ export function sectorOf(symbol: string | null | undefined): string | null {
   return SECTOR_BY_SYMBOL[upper] ?? SECTOR_BY_SYMBOL[canonicalSymbol(upper)] ?? null;
 }
 
+/**
+ * Constituent-group name → official BITNEPAL sub-index display name.
+ * Needed because the two feeds name things differently ("Commercial Banks"
+ * vs "Banking SubIndex", "Tradings" vs "Trading Index", hyphen variants…).
+ * Keys/values are matched through normalizeSectorKey (case, hyphen and
+ * whitespace insensitive), so only the words matter here.
+ */
+const SUBINDEX_ALIASES: Record<string, string> = {
+  "commercial banks": "banking subindex",
+  "development bank": "development bank index",
+  "development bank limited": "development bank index",
+  "development banks": "development bank index",
+  "finance": "finance index",
+  "hotels and tourism": "hotels and tourism index",
+  "hydro power": "hydropower index",
+  "investment": "investment index",
+  "investment index": "investment index",
+  "life insurance": "life insurance",
+  "manufacturing and processing": "manufacturing and processing",
+  "microfinance": "microfinance index",
+  "mutual fund": "mutual fund",
+  "non-life insurance": "non life insurance",
+  "non life insurance": "non life insurance",
+  "others": "others index",
+  "tradings": "trading index",
+  "trading": "trading index",
+};
+
+/** Lowercase, hyphens/underscores → spaces, collapsed whitespace. */
+export function normalizeSectorKey(name: string | null | undefined): string {
+  return (name ?? "").toLowerCase().replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Official sub-index display name (normalized) for a constituent group name,
+ * e.g. "Commercial Banks" → "banking subindex". Falls back to the normalized
+ * input when no alias is known.
+ */
+export function subindexKeyFor(sector: string | null | undefined): string {
+  const norm = normalizeSectorKey(sector);
+  return SUBINDEX_ALIASES[norm] ?? norm;
+}
+
 /** Fresh Map copy of the vendored snapshot (server fallback chain). Includes alias keys (GYSM/GSYM → same sector as GYSA). */
 export function vendoredSectorMap(): Map<string, string> {
   const map = new Map<string, string>(Object.entries(SECTOR_BY_SYMBOL));

@@ -7,10 +7,15 @@ export const DP_CHARGE = 25; // Rs per scrip, per settlement, charged by your DP
 export const SEBON_RATE = 0.00015; // 0.015% regulatory fee
 export const MIN_BROKER_COMMISSION = 10; // Rs
 
-/** Edit these to match a future SEBON/NRB circular — used everywhere for net PnL. */
+/**
+ * CGT history (equity, individual):
+ *  - Before Sep 2026: 5% long (≥365d) / 7.5% short (<365d) — used in v0.4.0
+ *  - From Sep 2026 (emergency): 3.75% long / 5% short — current; institution stays 10%
+ * Keep old rates in git history; edit only on next SEBON/NRB circular.
+ */
 export const CGT_RATES = {
-  individualLong: 0.05, // >= 365 days
-  individualShort: 0.075, // < 365 days
+  individualLong: 0.0375, // >= 365 days
+  individualShort: 0.05, // < 365 days
   institution: 0.1,
 } as const;
 
@@ -53,7 +58,11 @@ export interface BuyCost {
   perUnit: number;
 }
 
-export function buyCost(units: number, price: number): BuyCost {
+export function buyCost(units: number, price: number, opts?: { isOpenEnd?: boolean }): BuyCost {
+  if (opts?.isOpenEnd) {
+    const amount = Math.max(0, units) * Math.max(0, price);
+    return { amount, commission: 0, sebon: 0, dp: 0, total: amount, perUnit: units > 0 ? amount / units : 0 };
+  }
   const amount = Math.max(0, units) * Math.max(0, price);
   const commission = brokerCommission(amount);
   const sebon = sebonFee(amount);
@@ -88,7 +97,31 @@ export function sellProceeds(input: {
   avgCost?: number;
   holdingDays?: number;
   entity?: "individual" | "institution";
+  isOpenEnd?: boolean;
 }): SellResult {
+  if (input.isOpenEnd) {
+    const units = Math.max(0, input.units);
+    const price = Math.max(0, input.price);
+    const amount = units * price;
+    const costBasis = (input.avgCost ?? 0) * units;
+    return {
+      units,
+      price,
+      amount,
+      commission: 0,
+      sebon: 0,
+      dp: 0,
+      charges: 0,
+      netBeforeTax: amount,
+      costBasis,
+      taxableGain: 0,
+      cgtRate: 0,
+      cgt: 0,
+      netReceivable: amount,
+      profit: costBasis > 0 ? amount - costBasis : amount,
+      profitPercent: costBasis > 0 ? ((amount - costBasis) / costBasis) * 100 : 0,
+    };
+  }
   const units = Math.max(0, input.units);
   const price = Math.max(0, input.price);
   const amount = units * price;
@@ -126,11 +159,12 @@ export function sellProceeds(input: {
  * Price at which selling `units` returns exactly the cost basis after all charges.
  * Solved numerically because commission slabs are piecewise and DP is a flat fee.
  */
-export function breakEvenPrice(units: number, avgCost: number, holdingDays = 400): number {
+export function breakEvenPrice(units: number, avgCost: number, holdingDays = 400, opts?: { isOpenEnd?: boolean }): number {
   if (!(units > 0) || !(avgCost > 0)) return 0;
+  if (opts?.isOpenEnd) return avgCost;
   let lo = avgCost;
   let hi = avgCost * 2 + 100;
-  const net = (p: number) => sellProceeds({ units, price: p, avgCost, holdingDays }).profit;
+  const net = (p: number) => sellProceeds({ units, price: p, avgCost, holdingDays, isOpenEnd: opts?.isOpenEnd }).profit;
   for (let i = 0; i < 60; i += 1) {
     const mid = (lo + hi) / 2;
     if (net(mid) >= 0) hi = mid;

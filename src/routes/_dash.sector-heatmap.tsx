@@ -13,13 +13,13 @@ import { LoadingBlock } from "@/components/states";
 export const Route = createFileRoute("/_dash/sector-heatmap")({
   head: () => ({
     meta: [
-      { title: "Market Depth & Heatmap | MeroShare Investor Console" },
+      { title: "Market Depth | MeroShare Investor Console" },
       {
         name: "description",
         content:
           "NEPSE market depth console: live marquee ticker, indices with full-range charts, sector depth matrix, and heatmaps.",
       },
-      { property: "og:title", content: "Market Depth & Heatmap | MeroShare" },
+      { property: "og:title", content: "Market Depth | MeroShare" },
     ],
   }),
   component: MarketOverviewPage,
@@ -39,7 +39,7 @@ function MarketOverviewPage() {
 
   const indexGraphQueries: Record<
     string,
-    { data?: import("@/lib/nepse/types").PricePoint[]; isLoading: boolean }
+    { data: import("@/lib/nepse/types").PricePoint[] | undefined; isLoading: boolean }
   > = {
     NEPSE: { data: nepseGraph.data, isLoading: nepseGraph.isLoading },
     SENSITIVE: {

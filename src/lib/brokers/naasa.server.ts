@@ -802,6 +802,35 @@ export interface NaasaAmoOrder {
   price: number | null;
   triggerPrice: number | null;
   validTill: string | null;
+  /** Broker lifecycle state, when sent. Null = broker sent none → treat as active. */
+  status: string | null;
+}
+
+/** AMO rows without an active-like status can't be modified/cancelled. */
+export function isAmoActive(status: string | null | undefined): boolean {
+  if (status === null || status === undefined) return true;
+  const s = String(status).trim();
+  if (!s) return true;
+  // Broker sends boolean-like lifecycle flags: Status=false means the queued
+  // row is no longer live (cancelled/disabled).
+  if (/^(false|0|no|off)$/i.test(s)) return false;
+  if (/^(true|1|yes|on)$/i.test(s)) return true;
+  return !/DISABLE|INACTIVE|EXPIRED|CANCEL|REJECT|EXECUTED|COMPLETE|FILLED|CLOSED|DONE/i.test(s);
+}
+
+/** Normalize broker lifecycle flags (boolean or string) to a display status. */
+function amoStatusOf(v: unknown): string | null {
+  if (v === false) return "Disabled";
+  if (v === true) return "Active";
+  if (typeof v === "number") return v === 0 ? "Disabled" : String(v);
+  if (typeof v === "string") {
+    const t = v.trim();
+    if (!t) return null;
+    if (/^(false|0|no|off)$/i.test(t)) return "Disabled";
+    if (/^(true|1|yes|on)$/i.test(t)) return "Active";
+    return t;
+  }
+  return null;
 }
 
 /** List pending after-market orders (`POST /api/trading/amo/list`). */
@@ -810,30 +839,57 @@ export async function getNaasaAmoList(session: NaasaSession): Promise<NaasaAmoOr
     method: "POST",
     body: {},
   });
-  const rows = (Array.isArray(json["data"]) ? (json["data"] as unknown[]) : []) as Record<
-    string,
-    unknown
-  >[];
+  // Broker double-encodes like other endpoints: {data: [...] | "[...]"}.
+  let raw: unknown = json["data"] ?? json["Data"] ?? [];
+  if (typeof raw === "string") {
+    try {
+      raw = raw.trim() ? (JSON.parse(raw) as unknown) : [];
+    } catch {
+      raw = [];
+    }
+  }
+  const rows = (Array.isArray(raw) ? raw : []) as Record<string, unknown>[];
 
   const numOrNull = (v: unknown): number | null => {
     const n = typeof v === "number" ? v : Number(String(v ?? "").replace(/,/g, ""));
     return Number.isFinite(n) ? n : null;
   };
+  const strOrNull = (v: unknown): string | null =>
+    typeof v === "string" && v.trim() ? v : typeof v === "number" ? String(v) : null;
   return rows.map((r) => {
-    const sideRaw = String(r["BuySellInd"] ?? r["BuySellType"] ?? "").toUpperCase();
+    const sideRaw = String(
+      r["BuySellInd"] ?? r["BuySellType"] ?? r["B/S"] ?? r["Side"] ?? r["side"] ?? "",
+    ).toUpperCase();
+    const scripRaw = String(
+      r["Scrip"] ?? r["scrip"] ?? r["Symbol"] ?? r["symbol"] ?? r["Ticker"] ?? r["ticker"] ?? "",
+    ).toUpperCase();
     return {
-      alertName: typeof r["AlertName"] === "string" ? (r["AlertName"] as string) : null,
-      scrip: String(r["Scrip"] ?? r["symbol"] ?? "").toUpperCase(),
+      alertName:
+        strOrNull(r["AlertName"]) ??
+        strOrNull(r["alertName"]) ??
+        strOrNull(r["TriggerName"]) ??
+        strOrNull(r["triggerName"]) ??
+        strOrNull(r["Name"]) ??
+        strOrNull(r["OrderId"]) ??
+        null,
+      scrip: scripRaw.replace(/^25\.1!/, "").replace(/^NEPSE\./, ""),
       side: sideRaw.startsWith("S") ? "SELL" : sideRaw.startsWith("B") ? "BUY" : "UNKNOWN",
-      quantity: numOrNull(r["OrderQty"] ?? r["Quantity"]) ?? 0,
-      price: numOrNull(r["OrderPrice"] ?? r["Price"]),
-      triggerPrice: numOrNull(r["TriggerPrice"]),
+      quantity: numOrNull(r["OrderQty"] ?? r["Quantity"] ?? r["quantity"] ?? r["OrderQuantity"]) ?? 0,
+      price: numOrNull(r["OrderPrice"] ?? r["Price"] ?? r["price"]),
+      triggerPrice: numOrNull(r["TriggerPrice"] ?? r["triggerPrice"]),
       validTill:
-        typeof r["ValidTill"] === "string"
-          ? (r["ValidTill"] as string)
-          : typeof r["validTill"] === "string"
-            ? (r["validTill"] as string)
-            : null,
+        strOrNull(r["ValidTill"]) ??
+        strOrNull(r["validTill"]) ??
+        strOrNull(r["ValidUntil"]) ??
+        null,
+      status:
+        amoStatusOf(r["Status"]) ??
+        amoStatusOf(r["status"]) ??
+        amoStatusOf(r["OrderStatus"]) ??
+        amoStatusOf(r["orderStatus"]) ??
+        amoStatusOf(r["State"]) ??
+        amoStatusOf(r["state"]) ??
+        null,
     };
   });
 }
@@ -853,10 +909,14 @@ export async function cancelNaasaAmo(
   session: NaasaSession,
   input: NaasaAmoCancelInput,
 ): Promise<{ ok: boolean; message: string }> {
-  const sym = input.scrip.trim().toUpperCase();
+  const sym = input.scrip.trim().toUpperCase().replace(/^25\.1!/, "").replace(/^NEPSE\./, "");
+  if (!sym) throw new Error("Scrip missing — refresh the AMO list.");
+  if (!Number.isInteger(input.quantity) || input.quantity < 1) {
+    throw new Error("Quantity missing — refresh the AMO list.");
+  }
   const body = {
     AlertName: input.alertName ?? "",
-    Scrip: sym.replace(/^25\.1!/, ""),
+    Scrip: sym,
     OrderPrice: input.price ?? 0,
     TriggerPrice: input.triggerPrice ?? input.price ?? 0,
     OrderQty: input.quantity,
@@ -868,25 +928,32 @@ export async function cancelNaasaAmo(
     method: "POST",
     body,
   });
-  const err = json["error"];
-  const success = json["Success"];
-  const ec = json["ErrorCode"];
+  const err = json["error"] ?? json["Error"];
+  const success = json["Success"] ?? json["success"] ?? json["isSuccess"];
+  const ec = json["ErrorCode"] ?? json["errorCode"] ?? json["statusCode"];
+  const msgRaw =
+    (typeof json["Message"] === "string" && json["Message"]) ||
+    (typeof json["message"] === "string" && json["message"]) ||
+    "";
+  // Broker success is a Message with no error flags; failure carries
+  // error/Success=false/ErrorCode!=0/isSuccess=false, or a Message that
+  // reads like a rejection ("not found", "fail", "reject", "error").
+  const msgFailed = /fail|reject|error|cannot|could not|not found|no .*order|invalid/i.test(msgRaw);
   const bad =
-    err !== undefined || success === false || (ec !== undefined && ec !== 0 && ec !== "0");
+    err !== undefined ||
+    success === false ||
+    (ec !== undefined && ec !== 0 && ec !== "0" && ec !== 200 && ec !== "200") ||
+    (msgRaw !== "" && msgFailed && success !== true);
   if (bad) {
     const msg =
       (typeof err === "string" && err) ||
-      (typeof json["Message"] === "string" && json["Message"]) ||
-      (typeof json["message"] === "string" && json["message"]) ||
-      "AMO cancel rejected by broker.";
+      msgRaw ||
+      "AMO cancel rejected by broker. Check Alert/Scrip/Price match the queued row.";
     return { ok: false, message: msg };
   }
   return {
     ok: true,
-    message:
-      (typeof json["Message"] === "string" && json["Message"]) ||
-      (typeof json["message"] === "string" && json["message"]) ||
-      `AMO order for ${sym} cancelled.`,
+    message: msgRaw || `AMO order for ${sym} cancelled.`,
   };
 }
 

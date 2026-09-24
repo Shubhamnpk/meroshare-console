@@ -1579,7 +1579,11 @@ Backtested with MeroShare Console 🇳🇵`;
                     id="tm-compare-from"
                     type="date"
                     value={from}
-                    onChange={(e) => setFrom(e.target.value)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setFrom(v);
+                      if (v) setTo((t) => t || new Date().toISOString().slice(0, 10));
+                    }}
                     className="h-9 font-mono text-xs rounded-lg"
                   />
                 </div>

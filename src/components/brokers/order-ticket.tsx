@@ -24,6 +24,7 @@ import {
   brokerOrderBookQuery,
   brokerQuoteQuery,
   marketSnapshotQuery,
+  mfSchemesQuery,
 } from "@/lib/queries";
 import { placeBrokerAmo, placeBrokerOrder } from "@/lib/brokers/brokers.functions";
 import type { BrokerId } from "@/lib/brokers/types";
@@ -66,11 +67,19 @@ export function OrderTicket({
   const book = useQuery(brokerOrderBookQuery(brokerId));
   const amoList = useQuery(brokerAmoListQuery(brokerId));
   const market = useQuery(marketSnapshotQuery());
+  const schemesQ = useQuery(mfSchemesQuery());
 
   // After-market orders: when NEPSE is closed, only limit orders with
   // standing validity queue for the next session (no market/IOC/FOK).
   const marketOpen = market.data?.status.isOpen ?? true;
   const amo = !marketOpen;
+
+  // Open-end mutual funds are bought/redeemed with the fund manager at NAV —
+  // they are never traded on the exchange, so no broker order may be placed.
+  const isOpenEnd =
+    schemesQ.data?.some(
+      (s) => s.symbol.toUpperCase() === symbol.toUpperCase() && s.fundType === "open_end",
+    ) ?? false;
 
   const [side, setSide] = useState<"BUY" | "SELL">("BUY");
   const [quantity, setQuantity] = useState("");
@@ -118,7 +127,9 @@ export function OrderTicket({
   const openOrders = useMemo(
     () =>
       (book.data ?? []).filter(
-        (o) => o.symbol === symbol && /OPEN|PARTIALLY/.test(o.status.toUpperCase()),
+        (o) =>
+          o.symbol === symbol &&
+          /OPEN|PARTIALLY|ACCEPTED|QUEUED|PENDING/.test(o.status.toUpperCase()),
       ),
     [book.data, symbol],
   );
@@ -154,6 +165,11 @@ export function OrderTicket({
 
   const place = useMutation({
     mutationFn: async () => {
+      if (isOpenEnd) {
+        throw new Error(
+          "Open-end mutual funds aren't traded on the exchange. Buy or redeem directly with the fund manager at NAV.",
+        );
+      }
       if (brokerId === "yobroker") {
         const w = loadYoWallet(null);
         const res = placeYoOrder(w, { symbol, side, qty, price: orderType === "MKT" ? null : px, orderType }, ltp);
@@ -404,6 +420,13 @@ export function OrderTicket({
           </div>
         ) : null}
 
+        {isOpenEnd ? (
+          <p className="mt-3 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2.5 text-xs leading-relaxed">
+            <span className="font-semibold">Not tradable.</span> {symbol} is an open-end mutual
+            fund — it has no market price and can&apos;t be bought or sold through a broker.
+            Transact directly with the fund manager at NAV instead.
+          </p>
+        ) : null}
         <Button
           className={cn(
             "mt-3 w-full font-bold",
@@ -411,7 +434,7 @@ export function OrderTicket({
               ? "bg-gain hover:bg-gain/90 text-white"
               : "bg-destructive hover:bg-destructive/90 text-white",
           )}
-          disabled={!validQty || !validPx || !!priceBandError || shortfall > 0 || amoOddLot || place.isPending}
+          disabled={!validQty || !validPx || !!priceBandError || shortfall > 0 || amoOddLot || isOpenEnd || place.isPending}
           onClick={() => setConfirmOpen(true)}
         >
           {place.isPending
@@ -440,61 +463,6 @@ export function OrderTicket({
                 </span>
               </div>
             ))}
-          </div>
-        ) : null}
-
-        {symbolAmoOrders.length > 0 ? (
-          <div className="mt-3 rounded-xl border border-warning/40 bg-warning/5 p-2.5">
-            <p className="px-1 pb-1.5 text-xs font-semibold text-muted-foreground">
-              Queued AMO orders · {symbol}
-            </p>
-            {symbolAmoOrders.map((o, i) => (
-              <div
-                key={o.alertName || `${o.side}-${o.price}-${o.quantity}-${i}`}
-                className="flex items-center justify-between px-1 py-1 text-xs"
-              >
-                <span
-                  className={cn("font-bold", o.side === "BUY" ? "text-gain" : "text-destructive")}
-                >
-                  {o.side} {o.quantity.toLocaleString("en-NP")}
-                </span>
-                <span className="num text-muted-foreground">
-                  @ {o.price !== null ? o.price.toLocaleString("en-NP") : "-"}
-                  {o.validTill ? ` · till ${o.validTill}` : ""}
-                </span>
-              </div>
-            ))}
-          </div>
-        ) : null}
-
-        {otherAmoOrders.length > 0 ? (
-          <div className="mt-3 rounded-xl border border-border/60 p-2.5">
-            <p className="px-1 pb-1.5 text-xs font-semibold text-muted-foreground">
-              Today&apos;s other AMO orders · {otherAmoOrders.length}
-            </p>
-            {otherAmoOrders.slice(0, 5).map((o, i) => (
-              <div
-                key={o.alertName || `${o.scrip}-${o.side}-${o.price}-${o.quantity}-${i}`}
-                className="flex items-center justify-between px-1 py-1 text-xs"
-              >
-                <span>
-                  <span className="font-semibold">{o.scrip}</span>{" "}
-                  <span
-                    className={cn("font-bold", o.side === "BUY" ? "text-gain" : "text-destructive")}
-                  >
-                    {o.side} {o.quantity.toLocaleString("en-NP")}
-                  </span>
-                </span>
-                <span className="num text-muted-foreground">
-                  @ {o.price !== null ? o.price.toLocaleString("en-NP") : "-"}
-                </span>
-              </div>
-            ))}
-            {otherAmoOrders.length > 5 ? (
-              <p className="px-1 pt-1 text-[0.7rem] text-muted-foreground">
-                +{otherAmoOrders.length - 5} more: see Broker → Orders for the full list.
-              </p>
-            ) : null}
           </div>
         ) : null}
 

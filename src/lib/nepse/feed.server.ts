@@ -888,10 +888,62 @@ export async function getPortfolioIntraday(
   return { points, ticks };
 }
 
+/**
+ * BITNEPAL graph keys, probed live: single words pass through, multi-word
+ * names need underscores ("Life_Insurance", "Non_Life_Insurance",
+ * "Mutual_Fund", "Sensitive_Float", "Hotel_Tourism") and a few need their
+ * short form ("Banking" not "Banking Sub", "Hydro" not "HydroPower",
+ * "Dev_Bank", "Manufacturing"). Keys are matched on the normalized name
+ * (lowercased, "index"/"subindex" stripped, separators collapsed).
+ */
+const INDEX_GRAPH_KEYS: Record<string, string> = {
+  nepse: "NEPSE",
+  sensitive: "SENSITIVE",
+  float: "FLOAT",
+  "sensitive float": "Sensitive_Float",
+  senfloat: "Sensitive_Float",
+  banking: "Banking",
+  "commercial banks": "Banking",
+  hydro: "Hydro",
+  hydropower: "Hydro",
+  "hydro power": "Hydro",
+  finance: "Finance",
+  "development bank": "Dev_Bank",
+  "development bank limited": "Dev_Bank",
+  "development banks": "Dev_Bank",
+  microfinance: "Microfinance",
+  "life insurance": "Life_Insurance",
+  "mutual fund": "Mutual_Fund",
+  investment: "Investment",
+  "hotels and tourism": "Hotel_Tourism",
+  "hotel and tourism": "Hotel_Tourism",
+  manufacturing: "Manufacturing",
+  "manufacturing and processing": "Manufacturing",
+  "non life insurance": "Non_Life_Insurance",
+  others: "Others",
+  trading: "Trading",
+  tradings: "Trading",
+};
+
+/** Display/group name → working BITNEPAL graph key. Unknown names pass through. */
+export function indexGraphKey(indexName: string): string {
+  const norm = indexName
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\b(subindex|index)\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return INDEX_GRAPH_KEYS[norm] ?? indexName.trim();
+}
+
 /** Index value history for a mini-chart, e.g. "NEPSE" or "Sensitive". Points are [unixSeconds, value]. */
 export async function getIndexHistory(indexName: string): Promise<PricePoint[]> {
+  // Callers pass display names ("NEPSE Index", "Banking SubIndex", sector
+  // group names); the mirror only answers its own short keys.
+  const clean = indexGraphKey(indexName) || indexName.trim();
   const { data } = await bitnepalJson<unknown[][]>(
-    `/indices/graph/${encodeURIComponent(indexName)}`,
+    `/indices/graph/${encodeURIComponent(clean)}`,
     TTL.medium,
   );
   return (data ?? []).flatMap((point): PricePoint[] => {

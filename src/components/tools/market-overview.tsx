@@ -1,10 +1,16 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import {
   AreaChart,
   Area,
   ResponsiveContainer,
   Tooltip,
+  XAxis,
+  YAxis,
 } from "recharts";
+import { indexDailyQuery, indexGraphQuery } from "@/lib/queries";
+import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
 import {
   Activity,
   Layers,
@@ -14,8 +20,6 @@ import {
   TableProperties,
   PieChart,
   Search,
-  ChevronDown,
-  ChevronRight,
   ArrowUpRight,
   Flame,
   BarChart2,
@@ -26,10 +30,13 @@ import {
 } from "lucide-react";
 import { formatNpr, formatNumber, formatPercent, formatQty } from "@/lib/format";
 import type { LivePrice, MarketIndex, PricePoint, SectorIndex } from "@/lib/nepse/types";
+import { normalizeSectorKey, subindexKeyFor } from "@/lib/nepse/sectors";
 import { ScripSheet } from "@/components/market/scrip-sheet";
 import { IndexChartModal } from "@/components/tools/index-chart-modal";
 import { MarketMarquee } from "@/components/market/market-marquee";
 import { Heatmap, type HeatTile } from "@/components/market/heatmap";
+import { SectorBadge } from "@/components/market/sector-icon";
+import { CompactNpr, CompactQty } from "@/components/market/compact-value";
 import { cn } from "@/lib/utils";
 
 
@@ -81,26 +88,70 @@ function chartGradientId(name: string) {
   return `grad-${name.replace(/\s+/g, "-").toLowerCase()}`;
 }
 
+export function ordinal(n: number): string {
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
+  switch (n % 10) {
+    case 1:
+      return `${n}st`;
+    case 2:
+      return `${n}nd`;
+    case 3:
+      return `${n}rd`;
+    default:
+      return `${n}th`;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Sentiment Arc Gauge (SVG)
 // ---------------------------------------------------------------------------
 
-function SentimentGauge({ score }: { score: number }) {
+export function SentimentGauge({ score, compact = false }: { score: number; compact?: boolean }) {
   // score: 0 = extreme bear, 50 = neutral, 100 = extreme bull
   const clamped = Math.max(0, Math.min(100, score));
+
+  // Tween the needle toward each new score so every per-number move is
+  // visible instead of jumping between readings.
+  const [display, setDisplay] = useState(clamped);
+  const targetRef = useRef(clamped);
+  useEffect(() => {
+    const from = targetRef.current;
+    targetRef.current = clamped;
+    if (from === clamped) {
+      setDisplay(clamped);
+      return;
+    }
+    let raf = 0;
+    const t0 = performance.now();
+    const dur = 650;
+    const tick = (t: number) => {
+      const k = Math.min(1, (t - t0) / dur);
+      const eased = 1 - Math.pow(1 - k, 3);
+      setDisplay(from + (clamped - from) * eased);
+      if (k < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [clamped]);
 
   const cx = 80;
   const cy = 80;
   const r = 58;
 
   const toRad = (deg: number) => (deg * Math.PI) / 180;
+  // Screen Y grows downward, so the dial uses y = cy − R·sin(deg).
+  const pt = (deg: number, rad: number) => ({
+    x: cx + rad * Math.cos(toRad(deg)),
+    y: cy - rad * Math.sin(toRad(deg)),
+  });
 
   const arcPath = (from: number, to: number, innerR: number, outerR: number) => {
-    const s1 = { x: cx + outerR * Math.cos(toRad(from)), y: cy + outerR * Math.sin(toRad(from)) };
-    const e1 = { x: cx + outerR * Math.cos(toRad(to)), y: cy + outerR * Math.sin(toRad(to)) };
-    const s2 = { x: cx + innerR * Math.cos(toRad(to)), y: cy + innerR * Math.sin(toRad(to)) };
-    const e2 = { x: cx + innerR * Math.cos(toRad(from)), y: cy + innerR * Math.sin(toRad(from)) };
-    return `M ${s1.x} ${s1.y} A ${outerR} ${outerR} 0 0 0 ${e1.x} ${e1.y} L ${s2.x} ${s2.y} A ${innerR} ${innerR} 0 0 1 ${e2.x} ${e2.y} Z`;
+    const s1 = pt(from, outerR);
+    const e1 = pt(to, outerR);
+    const s2 = pt(to, innerR);
+    const e2 = pt(from, innerR);
+    return `M ${s1.x} ${s1.y} A ${outerR} ${outerR} 0 0 1 ${e1.x} ${e1.y} L ${s2.x} ${s2.y} A ${innerR} ${innerR} 0 0 0 ${e2.x} ${e2.y} Z`;
   };
 
   const zones = [
@@ -111,69 +162,117 @@ function SentimentGauge({ score }: { score: number }) {
     { from: 36, to: 0, color: "#22c55e" },
   ];
 
+  // Zone the score sits in: lights up while the rest dim.
+  const activeZone = Math.max(0, Math.min(4, Math.floor((display / 100) * zones.length)));
+
   // Needle angle: 180 (bear) → 0 (bull)
-  const needleAngleDeg = 180 - (clamped / 100) * 180;
-  const needleEnd = {
-    x: cx + (r - 6) * Math.cos(toRad(needleAngleDeg)),
-    y: cy + (r - 6) * Math.sin(toRad(needleAngleDeg)),
-  };
-  const nb1 = {
-    x: cx + 4 * Math.cos(toRad(needleAngleDeg + 90)),
-    y: cy + 4 * Math.sin(toRad(needleAngleDeg + 90)),
-  };
-  const nb2 = {
-    x: cx + 4 * Math.cos(toRad(needleAngleDeg - 90)),
-    y: cy + 4 * Math.sin(toRad(needleAngleDeg - 90)),
-  };
+  const needleAngleDeg = 180 - (display / 100) * 180;
+  const needleEnd = pt(needleAngleDeg, r - 6);
+  const nb1 = pt(needleAngleDeg + 90, 4);
+  const nb2 = pt(needleAngleDeg - 90, 4);
 
   const labelColor =
-    clamped >= 80
+    display >= 80
       ? "#22c55e"
-      : clamped >= 60
+      : display >= 60
         ? "#84cc16"
-        : clamped >= 40
+        : display >= 40
           ? "#eab308"
-          : clamped >= 20
+          : display >= 20
             ? "#f97316"
             : "#ef4444";
 
   const label =
-    clamped >= 80
+    display >= 80
       ? "Strong Bull"
-      : clamped >= 60
+      : display >= 60
         ? "Mild Bull"
-        : clamped >= 40
+        : display >= 40
           ? "Neutral"
-          : clamped >= 20
+          : display >= 20
             ? "Mild Bear"
             : "Strong Bear";
 
   return (
     <div className="flex flex-col items-center">
-      <svg viewBox="0 0 160 90" className="w-40 select-none" aria-label={`Sentiment: ${label}`}>
+      <svg
+        viewBox="0 0 160 112"
+        className={compact ? "w-16 select-none" : "w-40 select-none"}
+        aria-label={`Sentiment: ${label}`}
+      >
+        <title>{`${label} ${Math.round(display)}`}</title>
         {zones.map((z, i) => (
-          <path key={i} d={arcPath(z.from, z.to, 40, 58)} fill={z.color} opacity={0.3} />
+          <path
+            key={i}
+            d={arcPath(z.from, z.to, 40, 58)}
+            fill={z.color}
+            opacity={i === activeZone ? 0.95 : 0.22}
+          />
         ))}
-        <path d={arcPath(180, 0, 56, 58)} fill="none" stroke="hsl(var(--border))" strokeWidth="0.5" />
+        {[180, 144, 108, 72, 36, 0].map((deg) => {
+          const a = pt(deg, 58);
+          const b = pt(deg, 63);
+          return (
+            <line
+              key={deg}
+              x1={a.x}
+              y1={a.y}
+              x2={b.x}
+              y2={b.y}
+              stroke="hsl(var(--muted-foreground))"
+              strokeWidth="1"
+              opacity={0.6}
+            />
+          );
+        })}
+        {[162, 126, 90, 54, 18].map((deg) => {
+          const a = pt(deg, 58);
+          const b = pt(deg, 60.5);
+          return (
+            <line
+              key={deg}
+              x1={a.x}
+              y1={a.y}
+              x2={b.x}
+              y2={b.y}
+              stroke="hsl(var(--muted-foreground))"
+              strokeWidth="1"
+              opacity={0.35}
+            />
+          );
+        })}
         <polygon
           points={`${needleEnd.x},${needleEnd.y} ${nb1.x},${nb1.y} ${nb2.x},${nb2.y}`}
           fill={labelColor}
           opacity={0.95}
         />
+        {/* Pivot knob, layered above the needle: soft halo ring + cap + inset dot. */}
+        <circle cx={cx} cy={cy} r={8.5} fill={labelColor} opacity={0.18} />
         <circle cx={cx} cy={cy} r={6} fill={labelColor} />
         <circle cx={cx} cy={cy} r={3.5} fill="hsl(var(--card))" />
-        <text x={cx} y={cy - 14} textAnchor="middle" fontSize="14" fontWeight="bold" fill={labelColor}>
-          {Math.round(clamped)}
-        </text>
+        {/* Score sits below the pivot: the needle only ever sweeps the upper
+            half (y <= cy), so the two can never overlap. */}
+        {!compact && (
+          <text x={cx} y={cy + 24} textAnchor="middle" fontSize="15" fontWeight="bold" fill={labelColor}>
+            {Math.round(display)}
+          </text>
+        )}
       </svg>
-      <span
-        className="mt-0.5 rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide"
-        style={{ background: `${labelColor}22`, color: labelColor }}
-      >
-        {label}
-      </span>
+      {!compact && (
+        <span
+          className="mt-0.5 rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide"
+          style={{ background: `${labelColor}22`, color: labelColor }}
+        >
+          {label}
+        </span>
+      )}
     </div>
   );
+}
+
+/** Header-slot mini dial: same gauge geometry, dial only (label lives beside it). */
+export function MiniMood({ score }: { score: number }) {
+  return <SentimentGauge score={score} compact />;
 }
 
 // ---------------------------------------------------------------------------
@@ -212,11 +311,15 @@ function IndexCard({
   data,
   chartPoints,
   onClick,
+  loadError,
+  onRetry,
 }: {
   name: string;
   data: MarketIndex | undefined;
   chartPoints: PricePoint[];
   onClick: () => void;
+  loadError?: boolean | undefined;
+  onRetry?: (() => void) | undefined;
 }) {
   const change = data?.percentChange ?? 0;
   const pointChange = data?.change ?? 0;
@@ -224,14 +327,37 @@ function IndexCard({
   const isUp = change >= 0;
   const color = isUp ? "#22c55e" : "#ef4444";
 
-  const chartData = useMemo(
-    () =>
-      chartPoints.map((p) => ({
-        t: p.time * 1000,
+  const chartData = useMemo(() => {
+    const pts = chartPoints
+      .filter((p) => Number.isFinite(p.value) && p.value > 0)
+      .map((p) => ({
+        t: p.time > 1e12 ? Math.floor(p.time) : p.time * 1000,
         v: p.value,
-      })),
-    [chartPoints],
-  );
+      }))
+      .sort((a, b) => a.t - b.t);
+    return pts;
+  }, [chartPoints]);
+
+  // Tight Y domain so a ~2,600-point index with ±20 intraday movement
+  // actually shows shape. Recharts defaults the Y domain to [0, auto],
+  // which squashes index sparklines into a visually flat line even though
+  // hover values are correct.
+  const yDomain: [number, number] | undefined = useMemo(() => {
+    if (chartData.length < 2) return undefined;
+    let min = Infinity;
+    let max = -Infinity;
+    for (const d of chartData) {
+      if (d.v < min) min = d.v;
+      if (d.v > max) max = d.v;
+    }
+    if (!Number.isFinite(min) || !Number.isFinite(max)) return undefined;
+    if (max - min <= 0) {
+      const pad = Math.abs(max) * 0.005 || 1;
+      return [max - pad, max + pad];
+    }
+    const pad = (max - min) * 0.15;
+    return [min - pad, max + pad];
+  }, [chartData]);
 
   return (
     <button
@@ -257,7 +383,7 @@ function IndexCard({
           {data && (
             <div className="flex items-center gap-1">
               <span className={cn("num text-xs font-bold", isUp ? "text-emerald-400" : "text-red-400")}>
-                {isUp ? "+" : ""}{formatPercent(change)}
+                {formatPercent(change)}
               </span>
               <ArrowUpRight className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
             </div>
@@ -285,6 +411,13 @@ function IndexCard({
                     <stop offset="100%" stopColor={color} stopOpacity={0} />
                   </linearGradient>
                 </defs>
+                <XAxis dataKey="t" type="number" domain={["dataMin", "dataMax"]} hide />
+                <YAxis
+                  type="number"
+                  domain={yDomain ?? ["dataMin", "dataMax"]}
+                  hide
+                  allowDataOverflow={false}
+                />
                 <Area
                   type="monotone"
                   dataKey="v"
@@ -308,6 +441,27 @@ function IndexCard({
                 />
               </AreaChart>
             </ResponsiveContainer>
+          ) : loadError && onRetry ? (
+            <div className="flex h-full items-center justify-center text-[0.6rem] text-muted-foreground/50">
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRetry();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onRetry();
+                  }
+                }}
+                className="cursor-pointer rounded px-2 py-1 hover:text-foreground hover:underline"
+              >
+                Couldn&apos;t load — tap to retry
+              </span>
+            </div>
           ) : (
             <div className="flex h-full items-center justify-center text-[0.6rem] text-muted-foreground/50">
               Click to load full history
@@ -331,10 +485,368 @@ function IndexCard({
 }
 
 // ---------------------------------------------------------------------------
+// Benchmarks section: majors + sub-indices with user-selectable cards
+// ---------------------------------------------------------------------------
+
+interface BenchmarkOption {
+  key: string;
+  label: string;
+  kind: "major" | "sub";
+  /** Key for the intraday graph endpoint. */
+  graphKey: string;
+  /** Key for the daily-bars fallback (YONEPSE archive understands sector names). */
+  dailyKey: string;
+  quote: MarketIndex | undefined;
+  indexName?: string;
+  sectorName?: string;
+}
+
+function toQuote(
+  name: string,
+  close: number | null | undefined,
+  change: number | null | undefined,
+  percentChange: number | null | undefined,
+): MarketIndex | undefined {
+  if (close == null) return undefined;
+  const ch = change ?? 0;
+  return {
+    name,
+    close,
+    high: close,
+    low: close,
+    previousClose: close - ch,
+    change: ch,
+    percentChange: percentChange ?? 0,
+    fiftyTwoWeekHigh: null,
+    fiftyTwoWeekLow: null,
+    generatedTime: null,
+  };
+}
+
+function BenchmarkCard({
+  option,
+  preloaded,
+  onOpen,
+}: {
+  option: BenchmarkOption;
+  preloaded?: PricePoint[] | undefined;
+  onOpen: () => void;
+}) {
+  const intraday = useQuery(indexGraphQuery(option.graphKey));
+  const intradayPoints = (intraday.data ?? []).length >= 2 ? (intraday.data ?? []) : (preloaded ?? []);
+  const needFallback = !intraday.isLoading && intradayPoints.length < 2;
+  const daily = useQuery(indexDailyQuery(option.dailyKey, 90, needFallback));
+
+  const chartPoints: PricePoint[] = useMemo(() => {
+    if (intradayPoints.length >= 2) return intradayPoints;
+    const bars = daily.data ?? [];
+    return bars
+      .filter((b) => b.close > 0)
+      .map((b) => {
+        const ms = Date.parse(`${b.date}T00:00:00+05:45`);
+        return {
+          time: Number.isFinite(ms) ? Math.floor(ms / 1000) : 0,
+          value: b.close,
+        };
+      })
+      .filter((p) => p.time > 0);
+  }, [intradayPoints, daily.data]);
+
+  const showError = chartPoints.length < 2 && (intraday.isError || daily.isError);
+
+  return (
+    <IndexCard
+      name={option.label}
+      data={option.quote}
+      chartPoints={chartPoints}
+      onClick={onOpen}
+      loadError={showError}
+      onRetry={() => {
+        void intraday.refetch();
+        void daily.refetch();
+      }}
+    />
+  );
+}
+
+function BenchmarksSection({
+  indices,
+  sectorIndices,
+  indexGraphQueries,
+  onOpen,
+}: {
+  indices: MarketIndex[];
+  sectorIndices: SectorIndex[];
+  indexGraphQueries?: Record<string, { data: PricePoint[] | undefined; isLoading: boolean }> | undefined;
+  onOpen: (opt: BenchmarkOption) => void;
+}) {
+  const [filter, setFilter] = useState<"all" | "major" | "sub">("all");
+  const [selected, setSelected] = useState<string[] | null>(null);
+
+  const options = useMemo<BenchmarkOption[]>(() => {
+    const majors: BenchmarkOption[] = indices.map((idx) => {
+      const clean = idx.name.replace(/\s*Index$/i, "").trim() || idx.name;
+      const upper = clean.toUpperCase();
+      const graphKey =
+        /nepse/i.test(clean) && !/sensitive|float/i.test(clean)
+          ? "NEPSE"
+          : /sensitive\s*float|sen\s*float/i.test(clean)
+            ? "SENFLOAT"
+            : /sensitive/i.test(clean)
+              ? "SENSITIVE"
+              : /float/i.test(clean)
+                ? "FLOAT"
+                : clean;
+      void upper;
+      return {
+        key: `major:${clean.toUpperCase()}`,
+        label: clean,
+        kind: "major" as const,
+        graphKey,
+        dailyKey: clean,
+        quote: idx,
+        indexName: graphKey,
+      };
+    });
+
+    const subs: BenchmarkOption[] = sectorIndices
+      .filter((si) => (si.close ?? 0) > 0 || si.code || si.name)
+      .map((si) => {
+        const label = (si.sector ?? si.name).replace(/\s*Index$/i, "").trim() || si.name;
+        return {
+          key: `sub:${(si.code || si.name).toUpperCase()}`,
+          label,
+          kind: "sub" as const,
+          graphKey: si.code || si.name,
+          dailyKey: si.sector ?? si.name,
+          quote: toQuote(si.name, si.close, si.change, si.percentChange),
+          sectorName: label,
+        };
+      })
+      .sort((a, b) => sectorSortKey(a.label) - sectorSortKey(b.label));
+
+    // De-dupe majors vs subs sharing a label (e.g. "Sensitive").
+    const seen = new Set(majors.map((m) => m.label.toLowerCase()));
+    return [...majors, ...subs.filter((s) => !seen.has(s.label.toLowerCase()))];
+  }, [indices, sectorIndices]);
+
+  const visible = useMemo(
+    () => options.filter((o) => (filter === "all" ? true : o.kind === filter)),
+    [options, filter],
+  );
+
+  const activeKeys = useMemo(() => {
+    if (selected) return selected.filter((k) => options.some((o) => o.key === k));
+    const preferred = ["major:NEPSE", "major:SENSITIVE", "major:FLOAT"];
+    const avail = preferred.filter((k) => options.some((o) => o.key === k));
+    if (avail.length > 0) return avail.slice(0, 3);
+    return options.slice(0, 3).map((o) => o.key);
+  }, [selected, options]);
+
+  const toggle = (key: string) => {
+    setSelected((prev) => {
+      const base = prev ?? activeKeys;
+      if (base.includes(key)) {
+        if (base.length <= 1) return base;
+        return base.filter((k) => k !== key);
+      }
+      if (base.length >= 6) return [...base.slice(1), key];
+      return [...base, key];
+    });
+  };
+
+  const active = activeKeys
+    .map((k) => options.find((o) => o.key === k))
+    .filter((o): o is BenchmarkOption => Boolean(o));
+
+  return (
+    <div>
+      <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          <TrendingUp className="size-3.5 text-primary" />
+          <span>Benchmarks</span>
+          <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground">
+            {active.length}/{options.length}
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          <div className="flex items-center rounded-lg border border-border/60 bg-surface p-0.5 text-[11px] font-medium">
+            {(
+              [
+                { v: "all", l: "All" },
+                { v: "major", l: "Majors" },
+                { v: "sub", l: "Sub-indices" },
+              ] as const
+            ).map((t) => (
+              <button
+                key={t.v}
+                type="button"
+                onClick={() => setFilter(t.v)}
+                className={cn(
+                  "rounded-md px-2 py-0.5 transition-colors cursor-pointer",
+                  filter === t.v
+                    ? "bg-primary text-primary-foreground font-semibold"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {t.l}
+              </button>
+            ))}
+          </div>
+          <span className="hidden text-[11px] text-muted-foreground/70 sm:inline">
+            Click a card for the full chart
+          </span>
+        </div>
+      </div>
+
+      {/* Picker chips */}
+      <div className="mb-2.5 flex gap-1.5 overflow-x-auto pb-1">
+        {visible.map((o) => {
+          const isOn = activeKeys.includes(o.key);
+          const pct = o.quote?.percentChange ?? 0;
+          const up = pct >= 0;
+          return (
+            <button
+              key={o.key}
+              type="button"
+              onClick={() => toggle(o.key)}
+              title={`${o.label} · ${formatPercent(pct)} — click to ${isOn ? "remove" : "add"}`}
+              className={cn(
+                "flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors cursor-pointer",
+                isOn
+                  ? "border-primary/60 bg-primary/15 text-primary"
+                  : "border-border/60 bg-surface text-muted-foreground hover:border-primary/40 hover:text-foreground",
+              )}
+            >
+              <span className={cn("size-1.5 rounded-full", up ? "bg-emerald-500" : "bg-red-500")} />
+              {o.label}
+              <span className={cn("num", up ? "text-emerald-400" : "text-red-400")}>
+                {formatPercent(pct)}
+              </span>
+            </button>
+          );
+        })}
+        {visible.length === 0 && (
+          <span className="text-[11px] text-muted-foreground">No benchmarks in this group yet.</span>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {active.map((o) => (
+          <BenchmarkCard
+            key={o.key}
+            option={o}
+            preloaded={indexGraphQueries?.[o.graphKey]?.data ?? indexGraphQueries?.[o.graphKey.toUpperCase()]?.data}
+            onOpen={() => onOpen(o)}
+          />
+        ))}
+      </div>
+      {active.length === 0 && (
+        <p className="rounded-xl border border-dashed border-border/60 p-4 text-center text-xs text-muted-foreground">
+          No benchmarks selected — pick from the chips above.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Ranked mover lists shared by the sector detail page.
+// ---------------------------------------------------------------------------
+
+export function MoverRows({
+  title,
+  rows,
+  emptyLabel,
+  tone,
+  onPick,
+  stat,
+}: {
+  title: string;
+  rows: LivePrice[];
+  emptyLabel: string;
+  tone: "gain" | "flat" | "loss";
+  onPick: (symbol: string) => void;
+  stat?: ReactNode | undefined;
+}) {
+  return (
+    <div className="min-w-0 rounded-xl border border-border/50 bg-surface/60 p-2.5">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p
+          className={cn(
+            "text-[11px] font-bold uppercase tracking-wider",
+            tone === "gain"
+              ? "text-emerald-400"
+              : tone === "loss"
+                ? "text-red-400"
+                : "text-muted-foreground",
+          )}
+        >
+          {title}
+        </p>
+        {stat && (
+          <span className="num text-[11px] font-semibold text-muted-foreground" title="Combined turnover">
+            {stat}
+          </span>
+        )}
+      </div>
+      {rows.length === 0 ? (
+        <p className="py-3 text-center text-[11px] text-muted-foreground">{emptyLabel}</p>
+      ) : (
+        <ul className="max-h-60 space-y-1 overflow-y-auto pr-0.5">
+          {rows.map((p, i) => (
+            <li key={p.symbol}>
+              <button
+                type="button"
+                onClick={() => onPick(p.symbol)}
+                className="flex w-full items-center gap-2 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-surface cursor-pointer"
+              >
+                <span className="num w-7 shrink-0 rounded bg-muted px-1 py-0.5 text-center text-[10px] font-bold text-muted-foreground">
+                  {ordinal(i + 1)}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-xs font-bold text-foreground">
+                    {p.symbol}
+                  </span>
+                  <span className="num block truncate text-[10px] text-muted-foreground">
+                    {formatNpr(p.ltp)} · <CompactNpr value={p.turnover} />
+                  </span>
+                </span>
+                <span
+                  className={cn(
+                    "num shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-bold",
+                    tone === "gain"
+                      ? "bg-emerald-500/15 text-emerald-400"
+                      : tone === "loss"
+                        ? "bg-red-500/15 text-red-400"
+                        : "bg-muted text-muted-foreground",
+                  )}
+                >
+                  {formatPercent(p.percentChange)}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main component: Market Overview & Market Depth
 // ---------------------------------------------------------------------------
 
 export type MarketDepthViewMode = "matrix" | "grid" | "treemap";
+
+type DepthSortKey =
+  | "sector"
+  | "points"
+  | "turnover"
+  | "share"
+  | "breadth"
+  | "performer"
+  | "traded";
 
 export function MarketOverview({
   prices,
@@ -345,13 +857,13 @@ export function MarketOverview({
   prices: LivePrice[];
   indices: MarketIndex[];
   sectorIndices: SectorIndex[];
-  indexGraphQueries: Record<string, { data?: PricePoint[]; isLoading: boolean }>;
+  indexGraphQueries?: Record<string, { data: PricePoint[] | undefined; isLoading: boolean }> | undefined;
 }) {
+  const navigate = useNavigate();
   const [viewMode, setViewMode] = useState<MarketDepthViewMode>("matrix");
   const [pickedScrip, setPickedScrip] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [treemapMetric, setTreemapMetric] = useState<"turnover" | "volume">("turnover");
-  const [expandedSectors, setExpandedSectors] = useState<Set<string>>(new Set());
   const [chartModal, setChartModal] = useState<{
     open: boolean;
     title: string;
@@ -359,9 +871,9 @@ export function MarketOverview({
     sectorName?: string;
   }>({ open: false, title: "" });
 
-  const nepseIndex = indices.find((i) => /nepse/i.test(i.name));
-  const sensitiveIndex = indices.find((i) => /sensitive/i.test(i.name));
-  const floatIndex = indices.find((i) => /float/i.test(i.name));
+  const nepseIndex = indices.find(
+    (i) => /nepse/i.test(i.name) && !/sensitive|float/i.test(i.name),
+  );
 
   // Build sector map for fast code/name lookups
   const sectorIndexMap = useMemo(() => {
@@ -376,8 +888,18 @@ export function MarketOverview({
 
   const findSectorIndex = (sectorName: string): SectorIndex | undefined => {
     const lower = sectorName.toLowerCase();
+    // Constituent groups and the sub-index feed name things differently
+    // ("Commercial Banks" vs "Banking SubIndex") — resolve via the alias map.
+    const aliased = subindexKeyFor(sectorName);
     return (
       sectorIndexMap.get(lower) ??
+      sectorIndexMap.get(aliased) ??
+      [...sectorIndexMap.values()].find(
+        (si) =>
+          normalizeSectorKey(si.name) === aliased ||
+          normalizeSectorKey(si.code) === aliased ||
+          (si.sector != null && normalizeSectorKey(si.sector) === aliased),
+      ) ??
       [...sectorIndexMap.values()].find((si) =>
         si.name.toLowerCase().includes(lower.split(" ")[0] ?? ""),
       )
@@ -534,15 +1056,6 @@ export function MarketOverview({
       });
   }, [prices, treemapMetric]);
 
-  const toggleExpandSector = (sector: string) => {
-    setExpandedSectors((prev) => {
-      const next = new Set(prev);
-      if (next.has(sector)) next.delete(sector);
-      else next.add(sector);
-      return next;
-    });
-  };
-
   const filteredSectors = useMemo(() => {
     if (!searchQuery.trim()) return sectors;
     const term = searchQuery.toLowerCase().trim();
@@ -556,6 +1069,55 @@ export function MarketOverview({
         ),
     );
   }, [sectors, searchQuery]);
+
+  // Scrips matching the search term, shown directly so a scrip search
+  // always surfaces visible results (not just its sector row).
+  const matchingScrips = useMemo(() => {
+    const term = searchQuery.toLowerCase().trim();
+    if (!term) return [];
+    return [...prices]
+      .filter(
+        (p) =>
+          p.symbol.toLowerCase().includes(term) || p.name.toLowerCase().includes(term),
+      )
+      .sort((a, b) => b.turnover - a.turnover)
+      .slice(0, 12);
+  }, [prices, searchQuery]);
+
+  const { sort: depthSort, toggle: toggleDepthSort } = useSort<DepthSortKey>(
+    { key: "sector", dir: "default" },
+    {
+      sector: "text",
+      points: "number",
+      turnover: "number",
+      share: "number",
+      breadth: "number",
+      performer: "number",
+      traded: "number",
+    },
+  );
+
+  const sortedSectors = useMemo(() => {
+    const getter = (s: (typeof filteredSectors)[number]): number | string => {
+      switch (depthSort.key) {
+        case "sector":
+          return s.sector;
+        case "points":
+          return s.sectorPoints ?? Number.NEGATIVE_INFINITY;
+        case "turnover":
+          return s.totalTurnover;
+        case "share":
+          return s.marketSharePct;
+        case "breadth":
+          return s.advancers - s.decliners;
+        case "performer":
+          return s.topGainer?.percentChange ?? Number.NEGATIVE_INFINITY;
+        case "traded":
+          return s.topTraded?.turnover ?? Number.NEGATIVE_INFINITY;
+      }
+    };
+    return sortBy(filteredSectors, getter, depthSort.dir);
+  }, [filteredSectors, depthSort]);
 
   const sentiment =
     breadth.avgChange >= 1
@@ -581,65 +1143,26 @@ export function MarketOverview({
           })
         }
         onSelectSector={(sec) =>
-          setChartModal({
-            open: true,
-            title: `${sec} Index`,
-            sectorName: sec,
-          })
+          void navigate({ to: "/sectors/$sectorName", params: { sectorName: sec } })
         }
         onSelectScrip={(sym) => setPickedScrip(sym)}
       />
 
-      {/* 2. Major Indices Cards */}
-      <div>
-        <div className="mb-2.5 flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            <TrendingUp className="size-3.5 text-primary" />
-            <span>Major Benchmarks</span>
-          </div>
-          <span className="text-[11px] text-muted-foreground/70">
-            Click any index card to launch all-time chart
-          </span>
-        </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <IndexCard
-            name="NEPSE"
-            data={nepseIndex}
-            chartPoints={indexGraphQueries["NEPSE"]?.data ?? []}
-            onClick={() =>
-              setChartModal({
-                open: true,
-                title: "NEPSE Index",
-                indexName: "NEPSE",
-              })
-            }
-          />
-          <IndexCard
-            name="Sensitive"
-            data={sensitiveIndex}
-            chartPoints={indexGraphQueries["SENSITIVE"]?.data ?? []}
-            onClick={() =>
-              setChartModal({
-                open: true,
-                title: "Sensitive Index",
-                indexName: "SENSITIVE",
-              })
-            }
-          />
-          <IndexCard
-            name="Float"
-            data={floatIndex}
-            chartPoints={indexGraphQueries["FLOAT"]?.data ?? []}
-            onClick={() =>
-              setChartModal({
-                open: true,
-                title: "Float Index",
-                indexName: "FLOAT",
-              })
-            }
-          />
-        </div>
-      </div>
+      {/* 2. Benchmarks (majors + sub-indices, user-selectable) */}
+      <BenchmarksSection
+        indices={indices}
+        sectorIndices={sectorIndices}
+        indexGraphQueries={indexGraphQueries}
+        onOpen={(o) =>
+          setChartModal({
+            open: true,
+            title: `${o.label} Index`,
+            ...(o.kind === "sub" || o.sectorName
+              ? { sectorName: o.sectorName ?? o.label }
+              : { indexName: o.indexName ?? o.graphKey }),
+          })
+        }
+      />
 
       {/* 3. Market Breadth & Depth Barometer */}
       <div className="rounded-2xl border border-border/70 bg-card/70 p-4 shadow-xs">
@@ -664,53 +1187,58 @@ export function MarketOverview({
           <div className="flex items-center gap-4 text-xs">
             <span className="text-muted-foreground">
               Turnover:{" "}
-              <strong className="text-foreground">
-                {formatNpr(totalMarketTurnover, { compact: true })}
-              </strong>
+              <CompactNpr value={totalMarketTurnover} className="font-bold text-foreground" />
             </span>
             <span className="text-muted-foreground">
               Volume:{" "}
-              <strong className="text-foreground">
-                {formatQty(totalMarketVolume)}
-              </strong>
+              <CompactQty value={totalMarketVolume} className="font-bold text-foreground" />
             </span>
           </div>
         </div>
 
-        {/* Breadth Bar */}
-        <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted/40">
-          <div
-            className="bg-emerald-500 transition-all"
-            style={{ width: `${breadth.advPct}%` }}
-            title={`${breadth.advancers} Advancers`}
-          />
-          <div
-            className="bg-muted-foreground/30 transition-all"
-            style={{
-              width: `${breadth.total > 0 ? Math.round((breadth.unchanged / breadth.total) * 100) : 0}%`,
-            }}
-            title={`${breadth.unchanged} Unchanged`}
-          />
-          <div
-            className="bg-red-500 transition-all"
-            style={{
-              width: `${breadth.total > 0 ? Math.round((breadth.decliners / breadth.total) * 100) : 0}%`,
-            }}
-            title={`${breadth.decliners} Decliners`}
-          />
-        </div>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+          <div className="min-w-0 flex-1">
+            {/* Breadth Bar */}
+            <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted/40">
+              <div
+                className="bg-emerald-500 transition-all"
+                style={{ width: `${breadth.advPct}%` }}
+                title={`${breadth.advancers} Advancers`}
+              />
+              <div
+                className="bg-muted-foreground/30 transition-all"
+                style={{
+                  width: `${breadth.total > 0 ? Math.round((breadth.unchanged / breadth.total) * 100) : 0}%`,
+                }}
+                title={`${breadth.unchanged} Unchanged`}
+              />
+              <div
+                className="bg-red-500 transition-all"
+                style={{
+                  width: `${breadth.total > 0 ? Math.round((breadth.decliners / breadth.total) * 100) : 0}%`,
+                }}
+                title={`${breadth.decliners} Decliners`}
+              />
+            </div>
 
-        <div className="mt-2 flex justify-between text-xs text-muted-foreground">
-          <span className="font-semibold text-emerald-400">
-            ▲ {breadth.advancers} Advancing ({breadth.advPct}%)
-          </span>
-          <span className="text-muted-foreground/80">
-            ▬ {breadth.unchanged} Unchanged
-          </span>
-          <span className="font-semibold text-red-400">
-            ▼ {breadth.decliners} Declining (
-            {breadth.total > 0 ? Math.round((breadth.decliners / breadth.total) * 100) : 0}%)
-          </span>
+            <div className="mt-2 flex justify-between text-xs text-muted-foreground">
+              <span className="font-semibold text-emerald-400">
+                ▲ {breadth.advancers} Advancing ({breadth.advPct}%)
+              </span>
+              <span className="text-muted-foreground/80">
+                - {breadth.unchanged} Unchanged
+              </span>
+              <span className="font-semibold text-red-400">
+                ▼ {breadth.decliners} Declining (
+                {breadth.total > 0 ? Math.round((breadth.decliners / breadth.total) * 100) : 0}%)
+              </span>
+            </div>
+          </div>
+
+          {/* Whole-NEPSE sentiment gauge */}
+          <div className="flex shrink-0 items-center justify-center border-t border-border/50 pt-3 sm:border-t-0 sm:border-l sm:pl-4 sm:pt-0">
+            <SentimentGauge score={sentimentScore} />
+          </div>
         </div>
       </div>
 
@@ -783,6 +1311,43 @@ export function MarketOverview({
           </div>
         </div>
 
+        {/* Scrip search results — visible matches, click opens the scrip */}
+        {searchQuery.trim() && (
+          <div className="rounded-2xl border border-border/70 bg-card/60 p-3.5 shadow-xs">
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+              {matchingScrips.length > 0
+                ? `Scrips matching “${searchQuery.trim()}” (${matchingScrips.length})`
+                : `No scrips match “${searchQuery.trim()}”`}
+            </p>
+            {matchingScrips.length > 0 && (
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                {matchingScrips.map((p) => {
+                  const up = p.percentChange >= 0;
+                  return (
+                    <button
+                      key={p.symbol}
+                      type="button"
+                      onClick={() => setPickedScrip(p.symbol)}
+                      className="rounded-lg border border-border/50 bg-surface p-2 text-left transition-colors hover:border-primary/40 cursor-pointer"
+                    >
+                      <div className="flex items-baseline justify-between gap-1">
+                        <p className="truncate text-xs font-bold text-foreground">{p.symbol}</p>
+                        <span className={cn("num shrink-0 text-[11px] font-semibold", up ? "text-gain" : "text-loss")}>
+                          {formatPercent(p.percentChange)}
+                        </span>
+                      </div>
+                      <p className="truncate text-[10px] text-muted-foreground">{p.name}</p>
+                      <p className="num mt-0.5 text-[11px] text-muted-foreground">
+                        {formatNpr(p.ltp)} · {p.sector ?? "Others"}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* View Mode 1: Market Depth Matrix (Institutional Table) */}
         {viewMode === "matrix" && (
           <div className="overflow-hidden rounded-2xl border border-border/70 bg-card/80 shadow-xs">
@@ -790,34 +1355,42 @@ export function MarketOverview({
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-border/60 bg-surface/80 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                    <th className="py-2.5 pl-4 pr-2">Sector</th>
-                    <th className="py-2.5 px-3 text-right">Index Points</th>
-                    <th className="py-2.5 px-3 text-right">Turnover</th>
-                    <th className="py-2.5 px-3 text-right">Mkt Share</th>
-                    <th className="py-2.5 px-3 text-center min-w-[120px]">Breadth</th>
-                    <th className="py-2.5 px-3 text-left">Top Performer</th>
-                    <th className="py-2.5 px-3 text-left">Heaviest Scrip</th>
+                    <SortableTh label="Sector" active={depthSort.key === "sector"} dir={depthSort.dir} onClick={() => toggleDepthSort("sector")} kind="text" className="py-2.5 pl-4 pr-2 font-semibold" />
+                    <SortableTh label="Index Points" active={depthSort.key === "points"} dir={depthSort.dir} onClick={() => toggleDepthSort("points")} align="right" className="py-2.5 px-3 font-semibold" />
+                    <SortableTh label="Turnover" active={depthSort.key === "turnover"} dir={depthSort.dir} onClick={() => toggleDepthSort("turnover")} align="right" className="py-2.5 px-3 font-semibold" />
+                    <SortableTh label="Mkt Share" active={depthSort.key === "share"} dir={depthSort.dir} onClick={() => toggleDepthSort("share")} align="right" className="py-2.5 px-3 font-semibold" />
+                    <SortableTh label="Breadth" active={depthSort.key === "breadth"} dir={depthSort.dir} onClick={() => toggleDepthSort("breadth")} className="py-2.5 px-3 text-center min-w-[120px] font-semibold" />
+                    <SortableTh label="Top Performer" active={depthSort.key === "performer"} dir={depthSort.dir} onClick={() => toggleDepthSort("performer")} className="py-2.5 px-3 font-semibold" />
+                    <SortableTh label="Heaviest Scrip" active={depthSort.key === "traded"} dir={depthSort.dir} onClick={() => toggleDepthSort("traded")} className="py-2.5 px-3 font-semibold" />
                     <th className="py-2.5 pr-4 pl-2 text-right">Chart</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/40">
-                  {filteredSectors.map((s) => {
-                    const isExpanded = expandedSectors.has(s.sector);
+                  {sortedSectors.map((s) => {
                     const isUp = (s.sectorPercentChange ?? s.avgChange) >= 0;
+                    const openSector = () =>
+                      void navigate({
+                        to: "/sectors/$sectorName",
+                        params: { sectorName: s.sector },
+                      });
 
                     return (
-                      <tr key={s.sector} className="group hover:bg-surface/50 transition-colors">
+                      <tr
+                        key={s.sector}
+                        onClick={openSector}
+                        title={`Open ${s.sector} sector page`}
+                        className="group hover:bg-surface/50 transition-colors cursor-pointer"
+                      >
                         <td className="py-3 pl-4 pr-2">
                           <button
                             type="button"
-                            onClick={() => toggleExpandSector(s.sector)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openSector();
+                            }}
                             className="flex items-center gap-2 font-semibold text-foreground hover:text-primary transition-colors cursor-pointer text-left"
                           >
-                            {isExpanded ? (
-                              <ChevronDown className="size-3.5 text-muted-foreground" />
-                            ) : (
-                              <ChevronRight className="size-3.5 text-muted-foreground" />
-                            )}
+                            <SectorBadge sector={s.sector} />
                             <span>{s.sector}</span>
                             <span className="rounded bg-muted px-1.5 py-0.2 text-[10px] text-muted-foreground font-normal">
                               {s.items.length}
@@ -827,7 +1400,14 @@ export function MarketOverview({
 
                         <td className="py-3 px-3 text-right">
                           <div className="flex flex-col items-end">
-                            <span className="num font-bold text-foreground">
+                            <span
+                              className="num font-bold text-foreground"
+                              title={
+                                s.sectorPoints == null
+                                  ? "NEPSE publishes no official sub-index for this group — % is the average of its stocks"
+                                  : undefined
+                              }
+                            >
                               {s.sectorPoints != null
                                 ? formatNumber(s.sectorPoints)
                                 : "—"}
@@ -838,20 +1418,18 @@ export function MarketOverview({
                                 isUp ? "text-gain" : "text-loss",
                               )}
                             >
-                              {s.sectorPercentChange != null
-                                ? `${s.sectorPercentChange >= 0 ? "+" : ""}${formatPercent(s.sectorPercentChange)}`
-                                : formatPercent(s.avgChange)}
+                              {s.sectorPercentChange != null && s.sectorPointChange != null
+                                ? `${s.sectorPointChange >= 0 ? "+" : ""}${formatNumber(s.sectorPointChange)} (${formatPercent(s.sectorPercentChange)})`
+                                : formatPercent(s.sectorPercentChange ?? s.avgChange)}
                             </span>
                           </div>
                         </td>
 
                         <td className="py-3 px-3 text-right">
                           <div className="flex flex-col items-end">
-                            <span className="num font-semibold text-foreground">
-                              {formatNpr(s.totalTurnover, { compact: true })}
-                            </span>
+                            <CompactNpr value={s.totalTurnover} className="num font-semibold text-foreground" />
                             <span className="num text-[10px] text-muted-foreground">
-                              {formatQty(s.totalVolume)} shares
+                              <CompactQty value={s.totalVolume} /> shares
                             </span>
                           </div>
                         </td>
@@ -897,7 +1475,7 @@ export function MarketOverview({
                             </div>
                             <span className="text-[10px] text-muted-foreground">
                               <span className="text-emerald-400 font-semibold">{s.advancers}↑</span>{" "}
-                              <span>{s.unchanged}▬</span>{" "}
+                              <span>{s.unchanged}-</span>{" "}
                               <span className="text-red-400 font-semibold">{s.decliners}↓</span>
                             </span>
                           </div>
@@ -907,14 +1485,17 @@ export function MarketOverview({
                           {s.topGainer ? (
                             <button
                               type="button"
-                              onClick={() => setPickedScrip(s.topGainer!.symbol)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPickedScrip(s.topGainer!.symbol);
+                              }}
                               className="text-left group/top hover:underline cursor-pointer"
                             >
                               <span className="font-bold text-foreground group-hover/top:text-primary">
                                 {s.topGainer.symbol}
                               </span>{" "}
                               <span className="num text-gain font-semibold text-[11px]">
-                                +{formatPercent(s.topGainer.percentChange)}
+                                {formatPercent(s.topGainer.percentChange)}
                               </span>
                             </button>
                           ) : (
@@ -926,15 +1507,16 @@ export function MarketOverview({
                           {s.topTraded ? (
                             <button
                               type="button"
-                              onClick={() => setPickedScrip(s.topTraded!.symbol)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPickedScrip(s.topTraded!.symbol);
+                              }}
                               className="text-left group/trade hover:underline cursor-pointer"
                             >
                               <span className="font-bold text-foreground group-hover/trade:text-primary">
                                 {s.topTraded.symbol}
                               </span>{" "}
-                              <span className="num text-[10px] text-muted-foreground">
-                                {formatNpr(s.topTraded.turnover, { compact: true })}
-                              </span>
+                              <CompactNpr value={s.topTraded.turnover} className="num text-[10px] text-muted-foreground" />
                             </button>
                           ) : (
                             <span className="text-muted-foreground/60">—</span>
@@ -944,13 +1526,14 @@ export function MarketOverview({
                         <td className="py-3 pr-4 pl-2 text-right">
                           <button
                             type="button"
-                            onClick={() =>
+                            onClick={(e) => {
+                              e.stopPropagation();
                               setChartModal({
                                 open: true,
                                 title: `${s.sector} Index`,
                                 sectorName: s.sector,
-                              })
-                            }
+                              });
+                            }}
                             className="rounded-lg border border-border/60 bg-surface px-2 py-1 text-[11px] font-semibold text-primary hover:border-primary/40 hover:bg-primary/10 transition-colors cursor-pointer"
                           >
                             Chart
@@ -962,60 +1545,6 @@ export function MarketOverview({
                 </tbody>
               </table>
             </div>
-
-            {/* Expanded Sector Details Drawer */}
-            {expandedSectors.size > 0 && (
-              <div className="border-t border-border/60 bg-surface/40 p-4 space-y-4">
-                {[...expandedSectors].map((secName) => {
-                  const sec = sectors.find((s) => s.sector === secName);
-                  if (!sec) return null;
-
-                  return (
-                    <div key={secName} className="space-y-2 rounded-xl border border-border/50 bg-card p-3">
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-xs text-foreground">
-                          {secName} Constituents ({sec.items.length} stocks)
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => toggleExpandSector(secName)}
-                          className="text-[11px] text-muted-foreground hover:text-foreground cursor-pointer"
-                        >
-                          Collapse
-                        </button>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
-                        {sec.items.map((p) => {
-                          const up = p.percentChange >= 0;
-                          return (
-                            <button
-                              key={p.symbol}
-                              type="button"
-                              onClick={() => setPickedScrip(p.symbol)}
-                              className="rounded-lg border border-border/50 bg-surface p-2 text-left hover:border-primary/40 transition-colors cursor-pointer"
-                            >
-                              <p className="truncate font-bold text-xs text-foreground">
-                                {p.symbol}
-                              </p>
-                              <div className="flex items-baseline justify-between text-[11px]">
-                                <span className="num text-muted-foreground">
-                                  {formatNpr(p.ltp)}
-                                </span>
-                                <span className={cn("num font-semibold", up ? "text-gain" : "text-loss")}>
-                                  {up ? "+" : ""}
-                                  {formatPercent(p.percentChange)}
-                                </span>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
           </div>
         )}
 
@@ -1033,28 +1562,31 @@ export function MarketOverview({
                     sectorBorderColor(s.avgChange),
                   )}
                 >
-                  {/* Sector header — clickable for full chart */}
+                  {/* Sector header — opens the dedicated sector detail page */}
                   <button
                     type="button"
                     onClick={() =>
-                      setChartModal({
-                        open: true,
-                        title: `${s.sector} Index`,
-                        sectorName: s.sector,
+                      void navigate({
+                        to: "/sectors/$sectorName",
+                        params: { sectorName: s.sector },
                       })
                     }
-                    className="mb-2.5 flex w-full items-baseline justify-between border-b border-border/40 pb-2 text-left group cursor-pointer hover:border-primary/40 transition-colors"
+                    title={`Open ${s.sector} sector page`}
+                    className="mb-2.5 flex w-full items-center justify-between gap-2 border-b border-border/40 pb-2 text-left group cursor-pointer hover:border-primary/40 transition-colors"
                   >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1">
-                        <p className="truncate text-xs font-bold text-foreground group-hover:text-primary transition-colors">
-                          {s.sector}
-                        </p>
-                        <ArrowUpRight className="size-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </div>
-                      <p className="text-[10px] text-muted-foreground">
-                        {s.items.length} stocks · {formatNpr(s.totalTurnover, { compact: true })} vol
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <SectorBadge sector={s.sector} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1">
+                          <p className="truncate text-xs font-bold text-foreground group-hover:text-primary transition-colors">
+                            {s.sector}
+                          </p>
+                          <ArrowUpRight className="size-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
+                      <p className="truncate text-[10px] text-muted-foreground">
+                        {s.items.length} stocks · <CompactNpr value={s.totalTurnover} /> vol
                       </p>
+                      </div>
                     </div>
 
                     <div className="ml-2 text-right">
@@ -1065,7 +1597,7 @@ export function MarketOverview({
                         )}
                       >
                         {s.sectorPercentChange != null
-                          ? `${s.sectorPercentChange >= 0 ? "+" : ""}${formatPercent(s.sectorPercentChange)}`
+                          ? formatPercent(s.sectorPercentChange)
                           : formatPercent(s.avgChange)}
                       </p>
                       {s.sectorPoints != null && (
@@ -1162,11 +1694,6 @@ export function MarketOverview({
         title={chartModal.title}
         indexName={chartModal.indexName}
         sectorName={chartModal.sectorName}
-        prices={prices}
-        onSelectScrip={(sym) => {
-          setChartModal((s) => ({ ...s, open: false }));
-          setPickedScrip(sym);
-        }}
       />
 
       {/* Stock detail sheet */}

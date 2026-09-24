@@ -31,7 +31,7 @@ export const BROKERS: BrokerMeta[] = [
   {
     id: "yobroker",
     name: "Yo Broker",
-    tagline: "Paper trading account — practice with virtual Rs 1,000,000",
+    tagline: "Paper trading account (no real settlement)",
     capabilities: ["Virtual holdings", "Paper orders & trades", "No real settlement"],
   },
 ];
@@ -124,6 +124,12 @@ export interface BrokerOrder {
   orderId: string;
   tranId: string;
   remainingQty: number;
+  /** Filled qty (doc §16 TradedQuantity), null when the broker sent none. */
+  tradedQty: number | null;
+  /** Order value (doc §16 Amount), null when the broker sent none. */
+  amount: number | null;
+  /** Exchange-side order number (doc §16 ExchangeOrderNo). */
+  exchangeOrderNo: string;
   orderStatus: string;
   deliveryFlag: string;
   date: string;

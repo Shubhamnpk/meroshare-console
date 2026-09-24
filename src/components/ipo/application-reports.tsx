@@ -726,7 +726,11 @@ export function ApplicationReports({
           <Input
             type="date"
             value={oldFrom}
-            onChange={(e) => setOldFrom(e.target.value)}
+            onChange={(e) => {
+              const v = e.target.value;
+              setOldFrom(v);
+              if (v) setOldTo((t) => t || new Date().toISOString().slice(0, 10));
+            }}
             className="h-8 max-w-[160px] text-xs"
           />
           <span className="text-xs text-muted-foreground">to</span>

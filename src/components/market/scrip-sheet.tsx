@@ -68,6 +68,8 @@ import {
   exchangeMessagesQuery,
   investmentSummaryQuery,
   marketSnapshotQuery,
+  mfSchemesQuery,
+  mfSchemeQuery,
   scripDetailQuery,
   scripFinancialsQuery,
   scripFullHistoryQuery,
@@ -76,7 +78,7 @@ import {
   waccReportQuery,
   waccSearchQuery,
 } from "@/lib/queries";
-import { formatDate, formatNpr, formatPercent, formatQty, toNumber } from "@/lib/format";
+import { formatDate, formatHoldingTime, formatNpr, formatPercent, formatQty, toNumber } from "@/lib/format";
 import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
 import { useWatchlist } from "@/lib/watchlist";
 import { sectorOf } from "@/lib/nepse/sectors";
@@ -102,6 +104,7 @@ function PositionCard({
   waccRate,
   totalCost,
   ltp,
+  previousClose,
   basisLabel = "vs CDSC WACC",
 }: {
   scrip: string;
@@ -109,39 +112,148 @@ function PositionCard({
   waccRate: number;
   totalCost: number;
   ltp: number;
+  previousClose?: number | null;
   basisLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const avgCost = waccRate > 0 ? waccRate : totalCost > 0 && units > 0 ? totalCost / units : 0;
+  const hasCost = avgCost > 0;
   const costBasis = totalCost > 0 ? totalCost : units * avgCost;
   const currentValue = units * ltp;
-  const rawPl = currentValue - costBasis;
-  const rawPct = costBasis > 0 ? (rawPl / costBasis) * 100 : 0;
+  const rawPl = hasCost ? currentValue - costBasis : 0;
+  const rawPct = hasCost && costBasis > 0 ? (rawPl / costBasis) * 100 : 0;
   const rawUp = rawPl >= 0;
 
   const purchaseQ = useQuery(waccSearchQuery(scrip));
+  const schemesQ = useQuery(mfSchemesQuery());
+  const isOpenEnd = useMemo(
+    () => schemesQ.data?.some((s) => s.symbol.toUpperCase() === scrip.toUpperCase() && s.fundType === "open_end") ?? false,
+    [schemesQ.data, scrip],
+  );
+  const fundDetailQ = useQuery(mfSchemeQuery(isOpenEnd ? scrip : null));
+  const [holdingOpen, setHoldingOpen] = useState(false);
+  const txnQ = useQuery(transactionsQuery(scrip));
   const holdingDays = useMemo(() => {
-    const items = (purchaseQ.data as { waccUpdateResponse?: { transactionDate?: string }[] } | undefined)?.waccUpdateResponse ?? [];
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const dates = (items as any[]).map((r) => (r as { transactionDate?: string }).transactionDate).filter(Boolean) as string[];
+    const items = (txnQ.data as unknown as { items?: { transactionDate?: string; creditQuantity?: number; debitQuantity?: number; balanceAfterTransaction?: number }[] } | undefined)?.items ?? []
+    if (items.length > 0) {
+      const sorted = [...items].sort((a, b) => String(a.transactionDate ?? "").localeCompare(String(b.transactionDate ?? "")))
+      const lots: { qty: number; date: string }[] = []
+      for (const t of sorted) {
+        const credit = Number((t as Record<string, unknown>)["creditQuantity"] ?? (t as Record<string, unknown>)["creditQty"] ?? 0)
+        const debit = Number((t as Record<string, unknown>)["debitQuantity"] ?? (t as Record<string, unknown>)["debitQty"] ?? 0)
+        const date = String(t.transactionDate ?? "")
+        if (credit > 0 && date) lots.push({ qty: credit, date })
+        if (debit > 0) {
+          let remaining = debit
+          while (remaining > 0 && lots.length > 0) {
+            const first = lots[0]!
+            if (first.qty > remaining) {
+              first.qty -= remaining
+              remaining = 0
+            } else {
+              remaining -= first.qty
+              lots.shift()
+            }
+          }
+        }
+      }
+      if (lots.length > 0) {
+        const earliest = lots.map((l) => l.date).sort()[0] as string
+        const d = daysBetween(earliest, new Date())
+        if (d > 0) return d
+      }
+    }
+    const raw = purchaseQ.data as unknown as { waccUpdateResponse?: { transactionDate?: string; postDate?: string }[]; waccSummaryResponse?: { transactionDate?: string; postDate?: string }[] } | undefined;
+    const all = [...(raw?.waccUpdateResponse ?? []), ...(raw?.waccSummaryResponse ?? [])];
+    const dates = all
+      .map((r) => r.transactionDate || r.postDate)
+      .filter(Boolean) as string[];
     if (dates.length === 0) return 400;
     const earliest = dates.sort()[0] as string;
     const d = daysBetween(earliest, new Date());
     return d > 0 ? d : 400;
-  }, [purchaseQ.data]);
-  const buy = useMemo(() => buyCost(units, avgCost), [units, avgCost]);
-  const commissionWacc = buy.perUnit;
+  }, [txnQ.data, purchaseQ.data]);
+  const { avgHoldingDays, lots } = useMemo(() => {
+    const items = (txnQ.data as unknown as { items?: { transactionDate?: string; creditQuantity?: number; debitQuantity?: number }[] } | undefined)?.items ?? []
+    if (items.length > 0) {
+      const sorted = [...items].sort((a, b) => String(a.transactionDate ?? "").localeCompare(String(b.transactionDate ?? "")))
+      const lotsArr: { qty: number; date: string }[] = []
+      for (const t of sorted) {
+        const credit = Number((t as Record<string, unknown>)["creditQuantity"] ?? (t as Record<string, unknown>)["creditQty"] ?? 0)
+        const debit = Number((t as Record<string, unknown>)["debitQuantity"] ?? (t as Record<string, unknown>)["debitQty"] ?? 0)
+        const date = String(t.transactionDate ?? "")
+        if (credit > 0 && date) lotsArr.push({ qty: credit, date })
+        if (debit > 0) {
+          let remaining = debit
+          while (remaining > 0 && lotsArr.length > 0) {
+            const first = lotsArr[0]!
+            if (first.qty > remaining) {
+              first.qty -= remaining
+              remaining = 0
+            } else {
+              remaining -= first.qty
+              lotsArr.shift()
+            }
+          }
+        }
+      }
+      if (lotsArr.length > 0) {
+        let totalUnits = 0
+        let weighted = 0
+        const withDays: { date: string; qty: number; days: number }[] = []
+        for (const lot of lotsArr) {
+          const d = daysBetween(lot.date, new Date())
+          if (!(d > 0)) continue
+          withDays.push({ date: lot.date, qty: lot.qty, days: d })
+          weighted += d * lot.qty
+          totalUnits += lot.qty
+        }
+        withDays.sort((a, b) => b.days - a.days)
+        const avg = totalUnits > 0 ? Math.round(weighted / totalUnits) : holdingDays
+        return { avgHoldingDays: avg, lots: withDays }
+      }
+    }
+    const raw = purchaseQ.data as unknown as {
+      waccUpdateResponse?: { transactionDate?: string; postDate?: string; quantity?: number; transactionQuantity?: number }[];
+      waccSummaryResponse?: { transactionDate?: string; postDate?: string; quantity?: number; transactionQuantity?: number }[];
+    } | undefined;
+    const all = [...(raw?.waccUpdateResponse ?? []), ...(raw?.waccSummaryResponse ?? [])];
+    if (all.length === 0) return { avgHoldingDays: holdingDays, lots: [] as { date: string; qty: number; days: number }[] };
+    let totalUnits = 0;
+    let weighted = 0;
+    const arr: { date: string; qty: number; days: number }[] = [];
+    for (const r of all) {
+      const dateStr = (r.transactionDate || r.postDate) as string | undefined;
+      if (!dateStr) continue;
+      const qty = Number((r as Record<string, unknown>)["quantity"] ?? (r as Record<string, unknown>)["transactionQuantity"] ?? 0);
+      if (!(qty > 0)) continue;
+      const d = daysBetween(dateStr, new Date());
+      if (!(d > 0)) continue;
+      arr.push({ date: dateStr, qty, days: d });
+      weighted += d * qty;
+      totalUnits += qty;
+    }
+    arr.sort((a, b) => b.days - a.days);
+    const avg = totalUnits > 0 ? Math.round(weighted / totalUnits) : holdingDays;
+    return { avgHoldingDays: avg, lots: arr };
+  }, [txnQ.data, purchaseQ.data, holdingDays]);
+  const buy = useMemo(() => buyCost(units, avgCost, { isOpenEnd }), [units, avgCost, isOpenEnd]);
+  const commissionWacc = hasCost ? buy.perUnit : 0;
   const proceeds = useMemo(() => {
-    if (!(units > 0) || !(commissionWacc > 0) || !(ltp > 0)) return null;
-    return sellProceeds({ units, price: ltp, avgCost: commissionWacc, holdingDays });
-  }, [units, commissionWacc, ltp, holdingDays]);
-  const be = useMemo(() => (units > 0 && commissionWacc > 0 ? breakEvenPrice(units, commissionWacc, holdingDays) : 0), [units, commissionWacc, holdingDays]);
+    const safeLtp = Number.isFinite(ltp) ? (ltp as number) : 0;
+    return sellProceeds({ units: Math.max(0, units), price: safeLtp, avgCost: commissionWacc, holdingDays, isOpenEnd });
+  }, [units, commissionWacc, ltp, holdingDays, isOpenEnd]);
+  const be = useMemo(() => (units > 0 && commissionWacc > 0 ? breakEvenPrice(units, commissionWacc, holdingDays, { isOpenEnd }) : 0), [units, commissionWacc, holdingDays, isOpenEnd]);
+
   const netUp = (proceeds?.profit ?? rawPl) >= 0;
+  const dayChange = previousClose != null && previousClose > 0 ? (ltp - previousClose) * units : 0;
+  const dayPercent = previousClose != null && previousClose > 0 ? ((ltp - previousClose) / previousClose) * 100 : 0;
+  const dayUp = dayChange >= 0;
 
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)} className="w-full text-left">
-        <Panel padding="sm" className="hover:border-primary/20 transition-colors">
+      <div className="w-full text-left">
+        <Panel padding="sm">
           <div className="flex items-center justify-between gap-2">
             <h3 className="font-display text-sm font-semibold">Your position</h3>
             <span className="flex items-center gap-1.5">
@@ -158,98 +270,169 @@ function PositionCard({
             </div>
             <div>
               <p className="text-[0.65rem] uppercase tracking-wide text-muted-foreground">WACC</p>
-              <p className="num text-sm font-medium">{formatNpr(avgCost)}</p>
+              <p className="num text-sm font-medium">
+                {hasCost ? formatNpr(avgCost) : <span className="text-muted-foreground italic text-xs">Pending</span>}
+              </p>
             </div>
             <div>
               <p className="text-[0.65rem] uppercase tracking-wide text-muted-foreground">Cost</p>
-              <p className="num text-sm font-medium">{formatNpr(costBasis)}</p>
+              <p className="num text-sm font-medium">
+                {hasCost ? formatNpr(costBasis) : <span className="text-muted-foreground italic text-xs">Pending</span>}
+              </p>
             </div>
             <div>
               <p className="text-[0.65rem] uppercase tracking-wide text-muted-foreground">Value</p>
               <p className="num text-sm font-medium">{formatNpr(currentValue)}</p>
             </div>
           </div>
-          <div className="mt-3 flex items-center justify-between gap-2 border-t border-border/60 pt-3">
-            <span className="text-xs text-muted-foreground">Unrealized P/L (before charges)</span>
-            <span className={cn("num text-right text-xs font-semibold", rawUp ? "text-gain" : "text-loss")}>
-              {rawUp ? "+" : ""}
-              {formatNpr(rawPl)} <span className="text-[0.7rem]">({formatPercent(rawPct)})</span>
-            </span>
-          </div>
-          {proceeds ? (
-            <div className="mt-2 flex items-center justify-between gap-2 rounded-xl bg-muted/20 px-3 py-2">
-              <span className="text-xs font-medium text-muted-foreground">Net in pocket if sold @ {formatNpr(ltp)}</span>
-              <span className={cn("num inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold", netUp ? "bg-gain/10 text-gain" : "bg-loss/10 text-loss")}>
-                {netUp ? <TrendingUp className="size-3" /> : <TrendingDown className="size-3" />}
-                {proceeds.profit >= 0 ? "+" : ""}
-                {formatNpr(proceeds.profit)} ({formatPercent(proceeds.profitPercent)})
+          <div className="mt-3 rounded-xl border border-border/40 overflow-hidden">
+            <div className="flex items-center justify-between gap-2 px-3 py-2.5">
+              <span className="text-xs font-medium text-foreground">Day change</span>
+              <span className={cn("num text-xs font-semibold", dayUp ? "text-gain" : "text-loss")}>
+                {dayUp ? "+" : ""}{formatNpr(dayChange)} ({formatPercent(dayPercent)})
               </span>
             </div>
-          ) : null}
-          <p className="mt-2 text-[0.68rem] text-muted-foreground">Tap for breakdown incl. broker, SEBON, DP &amp; CGT</p>
+            {proceeds ? (
+              <div className="flex items-center justify-between gap-2 border-t border-border/30 px-3 py-2.5">
+                <span className="text-xs font-medium text-foreground">Return</span>
+                {hasCost ? (
+                  <button
+                    type="button"
+                    onClick={() => setOpen(true)}
+                    className={cn("num text-sm font-bold hover:underline decoration-primary/30 underline-offset-4 decoration-dotted", netUp ? "text-gain" : "text-loss")}
+                  >
+                    {proceeds.profit >= 0 ? "+" : ""}
+                    {formatNpr(proceeds.profit)} ({formatPercent(proceeds.profitPercent)})
+                  </button>
+                ) : (
+                  <Link
+                    to="/wacc"
+                    search={{ scrip }}
+                    className="text-xs font-medium text-amber-600 dark:text-amber-400 hover:underline"
+                  >
+                    Pending WACC · Calculate →
+                  </Link>
+                )}
+              </div>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setHoldingOpen(true)}
+              className="flex w-full items-center justify-between gap-2 border-t border-border/30 bg-muted/10 px-3 py-2 hover:bg-muted/20"
+            >
+              <span className="text-[0.65rem] font-medium uppercase tracking-wide text-muted-foreground">Holding</span>
+              <span className="num text-xs font-medium text-foreground hover:underline decoration-primary/30 underline-offset-2 decoration-dotted">
+                {formatHoldingTime(avgHoldingDays)} avg
+              </span>
+            </button>
+          </div>
         </Panel>
-      </button>
+      </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto rounded-2xl sm:max-w-[480px] p-0 gap-0">
-          <DialogHeader className="px-4 pt-4 pb-2">
-            <DialogTitle className="text-[15px] font-bold leading-none">{scrip} · Sell breakdown</DialogTitle>
+        <DialogContent className="max-h-[85vh] overflow-y-auto rounded-2xl sm:max-w-[520px] p-0 gap-0">
+          <DialogHeader className="px-5 pt-5 pb-3">
+            <DialogTitle className="text-base font-bold leading-none">{scrip} · Sell breakdown</DialogTitle>
+            <p className="mt-1.5 text-xs text-muted-foreground">What you actually pocket if you sell all {units.toLocaleString("en-NP")} units at {formatNpr(ltp)}</p>
           </DialogHeader>
           {proceeds ? (
-            <div className="px-4 pb-4 space-y-3">
-              <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-xl bg-muted/15 px-3 py-2.5 flex items-center justify-between gap-2">
-                  <span className="text-xs text-muted-foreground">Gross</span>
-                  <span className="num text-sm font-bold">{formatNpr(proceeds.amount)}</span>
+            <div className="px-5 pb-5 space-y-4">
+              {!hasCost ? (
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
+                  <p className="font-semibold">WACC not yet calculated in CDSC</p>
+                  <p className="mt-1 text-muted-foreground">
+                    Your purchase price / cost basis is not recorded in MeroShare yet. Gross sale proceeds and sell charges are calculated below, and capital gains tax will apply once WACC is submitted.
+                  </p>
+                  <Link
+                    to="/wacc"
+                    search={{ scrip }}
+                    onClick={() => setOpen(false)}
+                    className="mt-2 inline-flex items-center gap-1 font-semibold text-primary hover:underline"
+                  >
+                    Open WACC Calculator →
+                  </Link>
                 </div>
-                <div className="rounded-xl bg-muted/15 px-3 py-2.5 flex items-center justify-between gap-2">
-                  <span className="text-xs text-muted-foreground">All-in cost</span>
-                  <span className="num text-sm font-bold">{formatNpr(proceeds.costBasis)}</span>
+              ) : null}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl bg-muted/10 border border-border/40 px-4 py-3">
+                  <p className="text-xs font-medium text-muted-foreground">Gross sale</p>
+                  <p className="num mt-1 text-base font-bold">{formatNpr(proceeds.amount)}</p>
+                </div>
+                <div className="rounded-xl bg-muted/10 border border-border/40 px-4 py-3">
+                  <p className="text-xs font-medium text-muted-foreground">Total cost</p>
+                  <p className="num mt-1 text-base font-bold">
+                    {hasCost ? formatNpr(proceeds.costBasis) : <span className="text-muted-foreground text-xs italic">Pending WACC</span>}
+                  </p>
                 </div>
               </div>
+
               <div className="rounded-xl border border-border/60 overflow-hidden">
+                <p className="bg-muted/20 px-4 py-2 text-xs font-semibold text-muted-foreground">Sell charges</p>
                 <div className="divide-y divide-border/30">
-                  <div className="flex items-center justify-between px-3 py-2">
-                    <span className="text-xs text-muted-foreground">Broker commission</span>
-                    <span className="num text-xs font-medium">− {formatNpr(proceeds.commission)}</span>
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <span className="text-sm text-muted-foreground">Broker commission</span>
+                    <span className="num text-sm font-medium">− {formatNpr(proceeds.commission)}</span>
                   </div>
-                  <div className="flex items-center justify-between px-3 py-2">
-                    <span className="text-xs text-muted-foreground">SEBON 0.015%</span>
-                    <span className="num text-xs font-medium">− {formatNpr(proceeds.sebon)}</span>
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <span className="text-sm text-muted-foreground">SEBON 0.015%</span>
+                    <span className="num text-sm font-medium">− {formatNpr(proceeds.sebon)}</span>
                   </div>
-                  <div className="flex items-center justify-between px-3 py-2">
-                    <span className="text-xs text-muted-foreground">DP charge</span>
-                    <span className="num text-xs font-medium">− {formatNpr(proceeds.dp)}</span>
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <span className="text-sm text-muted-foreground">DP charge</span>
+                    <span className="num text-sm font-medium">− {formatNpr(proceeds.dp)}</span>
                   </div>
-                  <div className="flex items-center justify-between px-3 py-2 bg-muted/15">
-                    <span className="text-xs font-semibold">Charges</span>
-                    <span className="num text-xs font-bold">− {formatNpr(proceeds.charges)}</span>
+                  <div className="flex items-center justify-between bg-muted/10 px-4 py-3">
+                    <span className="text-sm font-semibold">Total charges</span>
+                    <span className="num text-sm font-bold">− {formatNpr(proceeds.charges)}</span>
                   </div>
-                  <div className="flex items-center justify-between px-3 py-2">
-                    <span className="text-xs text-muted-foreground">Net before tax</span>
-                    <span className="num text-xs font-semibold">{formatNpr(proceeds.netBeforeTax)}</span>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-border/60 overflow-hidden">
+                <p className="bg-muted/20 px-4 py-2 text-xs font-semibold text-muted-foreground">After charges & tax</p>
+                <div className="divide-y divide-border/30">
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <span className="text-sm text-muted-foreground">Net before tax</span>
+                    <span className="num text-sm font-semibold">{formatNpr(proceeds.netBeforeTax)}</span>
                   </div>
-                  <div className="flex items-center justify-between px-3 py-2">
-                    <span className="text-xs text-muted-foreground">CGT {(proceeds.cgtRate * 100).toFixed(1)}% · {holdingDays}d {holdingDays >= 365 ? "long" : "short"}</span>
-                    <span className="num text-xs font-medium">− {formatNpr(proceeds.cgt)}</span>
+                  {hasCost ? (
+                    <div className="flex items-center justify-between px-4 py-3">
+                      <div>
+                        <p className="text-sm text-muted-foreground">Capital gains tax</p>
+                        <p className="text-xs text-muted-foreground">{(proceeds.cgtRate * 100).toFixed(1)}% · {formatHoldingTime(holdingDays)} {holdingDays >= 365 ? "long term" : "short term"}</p>
+                      </div>
+                      <span className="num text-sm font-medium">− {formatNpr(proceeds.cgt)}</span>
+                    </div>
+                  ) : null}
+                  <div className="flex items-center justify-between bg-primary/5 px-4 py-3">
+                    <span className="text-sm font-bold">Net receivable</span>
+                    <span className="num text-base font-bold">{formatNpr(hasCost ? proceeds.netReceivable : proceeds.netBeforeTax)}</span>
                   </div>
-                  <div className="flex items-center justify-between px-3 py-2.5 bg-muted/15">
-                    <span className="text-xs font-bold">Net receivable</span>
-                    <span className="num text-sm font-bold">{formatNpr(proceeds.netReceivable)}</span>
+                </div>
+              </div>
+
+              {hasCost ? (
+                <div className="rounded-xl bg-card border border-gain/20 px-4 py-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Unrealized before charges</span>
+                    <span className={cn("num text-sm font-semibold", rawUp ? "text-gain" : "text-loss")}>
+                      {rawUp ? "+" : ""}
+                      {formatNpr(rawPl)} ({formatPercent(rawPct)})
+                    </span>
                   </div>
-                  <div className="flex items-center justify-between px-3 py-2">
-                    <span className="text-xs font-semibold">Net profit</span>
-                    <span className={cn("num text-xs font-bold", netUp ? "text-gain" : "text-loss")}>
+                  <div className="flex items-center justify-between border-t border-border/40 pt-2">
+                    <span className="text-sm font-bold">Net profit</span>
+                    <span className={cn("num text-base font-bold", netUp ? "text-gain" : "text-loss")}>
                       {proceeds.profit >= 0 ? "+" : ""}
                       {formatNpr(proceeds.profit)} ({formatPercent(proceeds.profitPercent)})
                     </span>
                   </div>
-                  <div className="flex items-center justify-between px-3 py-2 bg-muted/10">
-                    <span className="text-xs text-muted-foreground">Breakeven</span>
-                    <span className="num text-xs font-bold">{formatNpr(be)}</span>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">Breakeven price</span>
+                    <span className="num font-semibold">{formatNpr(be)}</span>
                   </div>
                 </div>
-              </div>
+              ) : null}
               <Link to="/wacc" search={{ scrip }} className="inline-flex text-xs font-medium text-primary hover:underline" onClick={() => setOpen(false)}>
                 View full WACC detail →
               </Link>
@@ -257,6 +440,50 @@ function PositionCard({
           ) : (
             <div className="px-4 pb-4 text-xs text-muted-foreground">No sell breakdown — missing avg cost or LTP.</div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={holdingOpen} onOpenChange={setHoldingOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto rounded-2xl sm:max-w-[520px] p-0 gap-0">
+          <DialogHeader className="px-5 pt-5 pb-3">
+            <DialogTitle className="text-base font-bold leading-none">{scrip} · Holding age</DialogTitle>
+            <p className="mt-1.5 text-xs text-muted-foreground">
+            </p>
+          </DialogHeader>
+          <div className="px-5 pb-5 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-xl bg-muted/10 border border-border/40 px-4 py-3">
+                <p className="text-xs font-medium text-muted-foreground">Average holding</p>
+                <p className="num mt-1 text-base font-bold">{formatHoldingTime(avgHoldingDays)}</p>
+                <p className="text-[0.68rem] text-muted-foreground">display only</p>
+              </div>
+              <div className="rounded-xl bg-muted/10 border border-border/40 px-4 py-3">
+                <p className="text-xs font-medium text-muted-foreground">Oldest lot (tax)</p>
+                <p className="num mt-1 text-base font-bold">{formatHoldingTime(holdingDays)}</p>
+                <p className="text-[0.68rem] text-muted-foreground">{holdingDays >= 365 ? "long term" : "short term"}</p>
+              </div>
+            </div>
+            {lots.length > 0 ? (
+              <div className="rounded-xl border border-border/60 overflow-hidden">
+                <p className="bg-muted/20 px-4 py-2 text-xs font-semibold text-muted-foreground">Per-lot age from transaction history (FIFO)</p>
+                <div className="divide-y divide-border/30 max-h-64 overflow-y-auto">
+                  {lots.map((lot, i) => (
+                    <div key={`${lot.date}-${i}`} className="flex items-center justify-between px-4 py-2.5">
+                      <div>
+                        <p className="num text-sm font-medium">{formatQty(lot.qty)} × {lot.date.slice(0, 10)}</p>
+                        <p className="text-[0.68rem] text-muted-foreground">{lot.date}</p>
+                      </div>
+                      <span className={`num rounded-full px-2 py-0.5 text-xs font-semibold ${lot.days >= 365 ? "bg-gain/15 text-gain" : "bg-loss/15 text-loss"}`}>
+                        {formatHoldingTime(lot.days)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">No per-lot dates available — using WACC purchase source.</p>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </>
@@ -752,11 +979,60 @@ export function ScripSheet({
     setTab(initialTab ?? "overview");
   }, [symbol, initialTab]);
 
-  const upper = symbol?.toUpperCase() ?? "";
+  const upper = symbol?.trim().toUpperCase() ?? "";
   const priceAlerts = usePriceAlerts();
   const hasAlert = upper ? priceAlerts.alerts.some((a) => a.symbol === upper) : false;
   const price = snapshot.data?.prices.find((p) => p.symbol === upper) ?? null;
-  const holding = portfolio.data?.holdings.find((h) => h.scrip === upper) ?? null;
+  const schemesQ = useQuery(mfSchemesQuery());
+
+  const matchedScheme = useMemo(() => {
+    if (!upper || !schemesQ.data) return null;
+    return (
+      schemesQ.data.find(
+        (s) =>
+          s.symbol.trim().toUpperCase() === upper ||
+          s.aliases?.some((a) => a.trim().toUpperCase() === upper) ||
+          s.name.trim().toUpperCase() === upper,
+      ) ?? null
+    );
+  }, [upper, schemesQ.data]);
+
+  const holding = useMemo(() => {
+    if (!upper || !portfolio.data?.holdings) return null;
+    const direct = portfolio.data.holdings.find(
+      (h) => h.scrip.trim().toUpperCase() === upper,
+    );
+    if (direct) return direct;
+    if (matchedScheme) {
+      const schemeSym = matchedScheme.symbol.trim().toUpperCase();
+      const schemeAliases = (matchedScheme.aliases ?? []).map((a) => a.trim().toUpperCase());
+      const schemeMatch = portfolio.data.holdings.find((h) => {
+        const hs = h.scrip.trim().toUpperCase();
+        return hs === schemeSym || schemeAliases.includes(hs);
+      });
+      if (schemeMatch) return schemeMatch;
+    }
+    const cleanAlpha = upper.replace(/[^A-Z0-9]/g, "");
+    if (cleanAlpha) {
+      return (
+        portfolio.data.holdings.find(
+          (h) => h.scrip.trim().toUpperCase().replace(/[^A-Z0-9]/g, "") === cleanAlpha,
+        ) ?? null
+      );
+    }
+    return null;
+  }, [upper, portfolio.data?.holdings, matchedScheme]);
+
+  const yoHolding = useMemo(() => {
+    if (!yoActive || !upper) return null;
+    try {
+      const w = loadYoWallet(null);
+      return w.holdings.find((h) => h.symbol.trim().toUpperCase() === upper) ?? null;
+    } catch {
+      return null;
+    }
+  }, [yoActive, upper]);
+
   const watched = upper ? watchlist.has(upper) : false;
   const myHistory = useQuery({
     ...transactionsQuery(upper),
@@ -766,13 +1042,183 @@ export function ScripSheet({
   const investment = useQuery(investmentSummaryQuery());
 
   const overview = detail.data?.overview ?? null;
+  const companyName = useMemo(() => {
+    if (overview?.name) return overview.name;
+    if (price?.name) return price.name;
+    if (matchedScheme?.name) return matchedScheme.name;
+    const list = schemesQ.data as unknown as { symbol: string; name?: string; schemeName?: string }[] | undefined;
+    const found = list?.find((s) => s.symbol.toUpperCase() === upper);
+    if (found) return (found.name ?? found.schemeName ?? null) as string | null;
+    return null;
+  }, [overview?.name, price?.name, matchedScheme, schemesQ.data, upper]);
+
+  const isOpenEnd = useMemo(() => {
+    if (matchedScheme) {
+      const ft = String(matchedScheme.fundType ?? "").toLowerCase();
+      if (ft.includes("open")) return true;
+    }
+    const fromSchemes = (schemesQ.data as unknown as { symbol: string; fundType?: string }[] | undefined)?.some(
+      (s) => s.symbol.trim().toUpperCase() === upper && String((s as Record<string, unknown>)["fundType"] ?? (s as Record<string, unknown>)["type"] ?? (s as Record<string, unknown>)["assetType"] ?? "").toLowerCase().includes("open"),
+    );
+    if (fromSchemes) return true;
+    const liveAsset = (price as unknown as { assetType?: string })?.assetType;
+    if (liveAsset && liveAsset.toLowerCase().includes("open")) return true;
+    const instr = overview?.instrumentType?.toLowerCase() ?? "";
+    if (instr.includes("open")) return true;
+    const sector = (overview?.sector ?? (price as unknown as { sector?: string })?.sector ?? "").toLowerCase();
+    if (sector.includes("mutual fund")) {
+      const liveSym = (schemesQ.data as unknown as { symbol: string }[] | undefined)?.some((s) => s.symbol.trim().toUpperCase() === upper);
+      if (liveSym) return true;
+    }
+    return false;
+  }, [matchedScheme, schemesQ.data, upper, price, overview]);
+
+  const [holdingsUnlocked, setHoldingsUnlocked] = useState(false);
+  useEffect(() => {
+    setHoldingsUnlocked(false);
+  }, [upper]);
+
+  const fundSymbol = matchedScheme?.symbol ?? upper;
+  const fundDetailQ = useQuery(mfSchemeQuery(isOpenEnd ? fundSymbol : null));
+
+  // Open-end funds can't be traded: never leave the sheet sitting on the Trade tab.
+  useEffect(() => {
+    if (isOpenEnd && tab === "trade") setTab("overview");
+  }, [isOpenEnd, tab]);
   const dividend = detail.data?.dividend ?? null;
-  const waccEntry =
-    (waccReport.data?.waccReportResponse ?? []).find((h) => h.scrip === upper) ?? null;
-  // Fallback for scrips missing from the WACC report (pending/missing WACC):
-  // cost basis estimated from the per-scrip purchase source.
-  const invEntry = (investment.data?.scrips ?? []).find((s) => s.scrip === upper) ?? null;
+
+  const waccEntry = useMemo(() => {
+    const list = waccReport.data?.waccReportResponse ?? [];
+    const direct = list.find((h) => h.scrip?.trim().toUpperCase() === upper);
+    if (direct) return direct;
+    if (matchedScheme) {
+      const sym = matchedScheme.symbol.trim().toUpperCase();
+      const aliases = (matchedScheme.aliases ?? []).map((a) => a.trim().toUpperCase());
+      const m = list.find((h) => {
+        const hs = h.scrip?.trim().toUpperCase();
+        return hs === sym || aliases.includes(hs);
+      });
+      if (m) return m;
+    }
+    const cleanAlpha = upper.replace(/[^A-Z0-9]/g, "");
+    if (cleanAlpha) {
+      return (
+        list.find((h) => (h.scrip ?? "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "") === cleanAlpha) ?? null
+      );
+    }
+    return null;
+  }, [waccReport.data, upper, matchedScheme]);
+
+  const invEntry = useMemo(() => {
+    const list = investment.data?.scrips ?? [];
+    const direct = list.find((s) => s.scrip.trim().toUpperCase() === upper);
+    if (direct) return direct;
+    if (matchedScheme) {
+      const sym = matchedScheme.symbol.trim().toUpperCase();
+      const aliases = (matchedScheme.aliases ?? []).map((a) => a.trim().toUpperCase());
+      const m = list.find((s) => {
+        const hs = s.scrip.trim().toUpperCase();
+        return hs === sym || aliases.includes(hs);
+      });
+      if (m) return m;
+    }
+    const cleanAlpha = upper.replace(/[^A-Z0-9]/g, "");
+    if (cleanAlpha) {
+      return (
+        list.find((s) => s.scrip.trim().toUpperCase().replace(/[^A-Z0-9]/g, "") === cleanAlpha) ?? null
+      );
+    }
+    return null;
+  }, [investment.data, upper, matchedScheme]);
+
   const hasInvBasis = Boolean(invEntry && invEntry.cost > 0 && invEntry.units > 0);
+
+  const navFromScheme = useMemo(() => {
+    if (!isOpenEnd) return null;
+    const perf = fundDetailQ.data?.performance;
+    if (perf && (perf.weeklyNav ?? perf.monthlyNav ?? perf.ltp)) {
+      return perf.weeklyNav ?? perf.monthlyNav ?? perf.ltp ?? null;
+    }
+    const navList = fundDetailQ.data?.nav;
+    if (navList && navList.length > 0) {
+      return navList[navList.length - 1]?.nav ?? null;
+    }
+    return null;
+  }, [isOpenEnd, fundDetailQ.data]);
+
+  const faceVal = resolveFaceValue(overview?.faceValue, overview?.sector, upper);
+
+  const effectiveLtp = useMemo(() => {
+    if (price && price.ltp > 0) return price.ltp;
+    if (holding && holding.ltp > 0) return holding.ltp;
+    if (navFromScheme != null && navFromScheme > 0) return navFromScheme;
+    if (detail.data?.overview?.lastTradedPrice && detail.data.overview.lastTradedPrice > 0) {
+      return detail.data.overview.lastTradedPrice;
+    }
+    const hist = detail.data?.history;
+    if (hist && hist.length > 0 && hist[hist.length - 1]!.close > 0) {
+      return hist[hist.length - 1]!.close;
+    }
+    return faceVal > 0 ? faceVal : 100;
+  }, [price, holding, navFromScheme, detail.data, faceVal]);
+
+  const effectivePreviousClose = useMemo(() => {
+    if (price && price.previousClose != null && price.previousClose > 0) return price.previousClose;
+    if (holding && holding.previousClose != null && holding.previousClose > 0) return holding.previousClose;
+    const hist = detail.data?.history;
+    if (hist && hist.length >= 2 && hist[hist.length - 2]!.close > 0) {
+      return hist[hist.length - 2]!.close;
+    }
+    return effectiveLtp;
+  }, [price, holding, detail.data, effectiveLtp]);
+
+  const effectivePercentChange = useMemo(() => {
+    if (price && price.percentChange != null && Number.isFinite(price.percentChange)) {
+      return price.percentChange;
+    }
+    if (holding && holding.percentChange != null && Number.isFinite(holding.percentChange)) {
+      return holding.percentChange;
+    }
+    if (effectivePreviousClose > 0 && effectiveLtp > 0) {
+      return ((effectiveLtp - effectivePreviousClose) / effectivePreviousClose) * 100;
+    }
+    return 0;
+  }, [price, holding, effectivePreviousClose, effectiveLtp]);
+
+  const isHeld = Boolean(
+    (holding && holding.units > 0) ||
+    (waccEntry && toNumber(waccEntry.totalQuantity) > 0) ||
+    (invEntry && invEntry.units > 0) ||
+    (yoHolding && yoHolding.qty > 0)
+  );
+
+  const positionUnits =
+    holding?.units ??
+    (invEntry?.units && invEntry.units > 0 ? invEntry.units : null) ??
+    (waccEntry ? toNumber(waccEntry.totalQuantity) : null) ??
+    yoHolding?.qty ??
+    0;
+
+  const positionWaccRate =
+    (waccEntry && toNumber(waccEntry.averageBuyRate) > 0 ? toNumber(waccEntry.averageBuyRate) : 0) ||
+    (invEntry && invEntry.waccRate > 0 ? invEntry.waccRate : 0) ||
+    (yoHolding ? yoHolding.avgCost : 0);
+
+  const positionTotalCost =
+    (waccEntry && toNumber(waccEntry.totalCost) > 0 ? toNumber(waccEntry.totalCost) : 0) ||
+    (invEntry && invEntry.cost > 0 ? invEntry.cost : 0) ||
+    (yoHolding && yoHolding.avgCost > 0 && positionUnits > 0 ? positionUnits * yoHolding.avgCost : 0);
+
+  const positionBasisLabel =
+    yoHolding && !holding && (!waccEntry || toNumber(waccEntry.totalQuantity) <= 0)
+      ? "vs Yo Broker (Paper)"
+      : waccEntry && toNumber(waccEntry.averageBuyRate) > 0
+        ? "vs CDSC WACC"
+        : invEntry && invEntry.waccRate > 0
+          ? invEntry.status === "pending"
+            ? "vs purchase source · pending WACC"
+            : "vs purchase source"
+          : "Pending WACC";
 
   const yearlyDividends = useMemo(
     () =>
@@ -1007,9 +1453,9 @@ export function ScripSheet({
                     </>
                   ) : null}
                 </span>
-                {price || overview ? (
+                {companyName ? (
                   <SheetDescription className="truncate text-left">
-                    {overview?.name ?? price?.name}
+                    {companyName}
                   </SheetDescription>
                 ) : null}
               </div>
@@ -1021,6 +1467,15 @@ export function ScripSheet({
                 </p>
                 <DeltaPill value={price.percentChange}>
                   {formatPercent(price.percentChange)}
+                </DeltaPill>
+              </div>
+            ) : effectiveLtp > 0 ? (
+              <div className="shrink-0 text-right">
+                <p className="num font-display text-2xl font-semibold leading-none">
+                  {formatNpr(effectiveLtp)}
+                </p>
+                <DeltaPill value={effectivePercentChange}>
+                  {formatPercent(effectivePercentChange)}
                 </DeltaPill>
               </div>
             ) : null}
@@ -1043,7 +1498,7 @@ export function ScripSheet({
           ) : null}
         </SheetHeader>
         <div className="space-y-5 px-4 pb-8">
-          {!price ? (
+          {!price && !isOpenEnd && !holding && !yoHolding ? (
             <p className="mt-2 text-sm text-muted-foreground">
               No live market data for this scrip right now.
             </p>
@@ -1052,7 +1507,9 @@ export function ScripSheet({
           <Tabs value={tab} onValueChange={setTab}>
             <TabsList className="w-full justify-start">
               <TabsTrigger value="overview">Overview</TabsTrigger>
-              {brokerOn || yoActive ? <TabsTrigger value="trade">Trade</TabsTrigger> : null}
+              {!isOpenEnd && (brokerOn || yoActive) ? (
+                <TabsTrigger value="trade">Trade</TabsTrigger>
+              ) : null}
               {financials.data ? <TabsTrigger value="financials">Financials</TabsTrigger> : null}
               {dividend || yearlyDividends.length > 0 ? (
                 <TabsTrigger value="dividend">Dividend</TabsTrigger>
@@ -1061,7 +1518,7 @@ export function ScripSheet({
               {newsItems.length > 0 ? <TabsTrigger value="news">News</TabsTrigger> : null}
             </TabsList>
 
-            {brokerOn ? (
+            {brokerOn && !isOpenEnd ? (
               <TabsContent value="trade" className="space-y-4">
                 <OrderTicket symbol={upper} />
                 <p className="text-[0.7rem] leading-relaxed text-muted-foreground">
@@ -1071,26 +1528,15 @@ export function ScripSheet({
             ) : null}
 
             <TabsContent value="overview" className="space-y-4">
-              {waccEntry && toNumber(waccEntry.averageBuyRate) > 0 && price?.ltp ? (
+              {isHeld && positionUnits > 0 ? (
                 <PositionCard
                   scrip={upper}
-                  units={toNumber(waccEntry.totalQuantity)}
-                  waccRate={toNumber(waccEntry.averageBuyRate)}
-                  totalCost={toNumber(waccEntry.totalCost)}
-                  ltp={price.ltp}
-                />
-              ) : hasInvBasis && invEntry && price?.ltp ? (
-                <PositionCard
-                  scrip={upper}
-                  units={invEntry.units}
-                  waccRate={invEntry.waccRate}
-                  totalCost={invEntry.cost}
-                  ltp={price.ltp}
-                  basisLabel={
-                    invEntry.status === "pending"
-                      ? "vs purchase source · pending WACC"
-                      : "vs purchase source"
-                  }
+                  units={positionUnits}
+                  waccRate={positionWaccRate}
+                  totalCost={positionTotalCost}
+                  ltp={effectiveLtp}
+                  previousClose={effectivePreviousClose}
+                  basisLabel={positionBasisLabel}
                 />
               ) : null}
               <Panel padding="sm">
@@ -1276,33 +1722,6 @@ export function ScripSheet({
                 </Panel>
               ) : null}
 
-              {holding ? (
-                <Panel padding="sm">
-                  <h3 className="font-display text-sm font-semibold">Your holding</h3>
-                  <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <dt className="text-xs text-muted-foreground">Units</dt>
-                      <dd className="num font-medium">{formatQty(holding.units)}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs text-muted-foreground">Market value</dt>
-                      <dd className="num font-medium">{formatNpr(holding.value)}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs text-muted-foreground">Day change</dt>
-                      <dd className="num font-medium">
-                        <DeltaPill value={holding.dayChange}>
-                          {formatNpr(holding.dayChange)}
-                        </DeltaPill>
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs text-muted-foreground">Prev close value</dt>
-                      <dd className="num font-medium">{formatNpr(holding.previousValue)}</dd>
-                    </div>
-                  </dl>
-                </Panel>
-              ) : null}
             </TabsContent>
 
             <TabsContent value="financials" className="space-y-4">

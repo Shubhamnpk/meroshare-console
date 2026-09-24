@@ -12,4 +12,11 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  vite: {
+    server: {
+      // Allow ngrok tunnel hosts (free ngrok URLs change on every restart,
+      // so allow the whole ngrok domain instead of a single hostname).
+      allowedHosts: ["localhost", "127.0.0.1", ".ngrok-free.app", ".ngrok.io", ".loca.lt"],
+    },
+  },
 });

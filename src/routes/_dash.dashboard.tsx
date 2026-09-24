@@ -17,9 +17,9 @@ import {
 import { Panel } from "@/components/ui/panel";
 import { Button } from "@/components/ui/button";
 import { StatCard, DeltaPill } from "@/components/stat-card";
+import { AdaptiveNpr, CompactQty } from "@/components/market/compact-value";
 import { WatchlistPanel } from "@/components/market/watchlist-panel";
 import { useWatchlist } from "@/lib/watchlist";
-import { SwipeableCards } from "@/components/swipeable-cards";
 import { ErrorBlock, LoadingBlock, EmptyBlock, SkeletonCards } from "@/components/states";
 import { ScripSheet } from "@/components/market/scrip-sheet";
 import { ChartModal, chartTimeLabel } from "@/components/market/chart-modal";
@@ -114,8 +114,8 @@ function MoverCard({
               {formatPercent(holding.percentChange)}
             </DeltaPill>
           </div>
-          <p className="num mt-0.5 text-xs text-muted-foreground">
-            {formatQty(holding.units)} units · {formatNpr(holding.value)}
+          <p className="num mt-0.5 truncate text-xs text-muted-foreground">
+            <CompactQty value={holding.units} /> units · <AdaptiveNpr value={holding.value} />
           </p>
         </button>
       ) : (
@@ -258,7 +258,7 @@ function DashboardPage() {
     <StatCard
       key="live"
       label="Portfolio value (live)"
-      value={formatNpr(data?.totalValue ?? 0)}
+      value={<AdaptiveNpr value={data?.totalValue ?? 0} />}
       tone="brand"
       icon={<Briefcase className="size-4" />}
       sub={
@@ -278,13 +278,18 @@ function DashboardPage() {
     <StatCard
       key="prev"
       label="Value at previous close"
-      value={formatNpr(data?.totalPreviousValue ?? 0)}
+      value={<AdaptiveNpr value={data?.totalPreviousValue ?? 0} />}
       sub="Yesterday's closing valuation"
     />,
     <StatCard
       key="change"
       label="Day change"
-      value={`${change > 0 ? "+" : change < 0 ? "-" : ""}${formatNpr(Math.abs(change))}`}
+      value={
+        <>
+          {change > 0 ? "+" : change < 0 ? "-" : ""}
+          <AdaptiveNpr value={Math.abs(change)} />
+        </>
+      }
       tone={change > 0 ? "gain" : change < 0 ? "loss" : "neutral"}
       sub={
         change > 0
@@ -298,12 +303,16 @@ function DashboardPage() {
       key="scrips"
       label="Scrips held"
       value={holdings.length}
-      sub={`${formatQty(data?.totalUnits ?? 0)} total units`}
+      sub={
+        <>
+          <CompactQty value={data?.totalUnits ?? 0} /> total units
+        </>
+      }
     />,
     <StatCard
       key="investment"
       label="Total investment"
-      value={formatNpr(totalInvestment)}
+      value={<AdaptiveNpr value={totalInvestment} />}
       icon={<Wallet className="size-4" />}
       sub={
         investment.isLoading
@@ -359,7 +368,13 @@ function DashboardPage() {
         <>
           <div className="hidden gap-3 sm:grid sm:grid-cols-2 xl:grid-cols-5">{statCards}</div>
           <div className="sm:hidden">
-            <SwipeableCards cards={statCards} />
+            <div className="flex snap-x gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {statCards.map((card, i) => (
+                <div key={i} className="w-[16rem] shrink-0 snap-start">
+                  {card}
+                </div>
+              ))}
+            </div>
           </div>
 
           <Panel

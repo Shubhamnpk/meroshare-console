@@ -39,6 +39,7 @@ import { Route as DashToolsRouteImport } from './routes/_dash.tools'
 import { Route as DashTransactionsRouteImport } from './routes/_dash.transactions'
 import { Route as DashWaccRouteImport } from './routes/_dash.wacc'
 import { Route as ApiPdfRouteImport } from './routes/api.pdf'
+import { Route as DashSectorsSectorNameRouteImport } from './routes/_dash.sectors.$sectorName'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -189,6 +190,11 @@ const ApiPdfRoute = ApiPdfRouteImport.update({
   path: '/api/pdf',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DashSectorsSectorNameRoute = DashSectorsSectorNameRouteImport.update({
+  id: '/sectors/$sectorName',
+  path: '/sectors/$sectorName',
+  getParentRoute: () => DashRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -220,6 +226,7 @@ export interface FileRoutesByFullPath {
   '/transactions': typeof DashTransactionsRoute
   '/wacc': typeof DashWaccRoute
   '/api/pdf': typeof ApiPdfRoute
+  '/sectors/$sectorName': typeof DashSectorsSectorNameRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -251,6 +258,7 @@ export interface FileRoutesByTo {
   '/transactions': typeof DashTransactionsRoute
   '/wacc': typeof DashWaccRoute
   '/api/pdf': typeof ApiPdfRoute
+  '/sectors/$sectorName': typeof DashSectorsSectorNameRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -284,6 +292,7 @@ export interface FileRoutesById {
   '/_dash/transactions': typeof DashTransactionsRoute
   '/_dash/wacc': typeof DashWaccRoute
   '/api/pdf': typeof ApiPdfRoute
+  '/_dash/sectors/$sectorName': typeof DashSectorsSectorNameRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -317,6 +326,7 @@ export interface FileRouteTypes {
     | '/transactions'
     | '/wacc'
     | '/api/pdf'
+    | '/sectors/$sectorName'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -348,6 +358,7 @@ export interface FileRouteTypes {
     | '/transactions'
     | '/wacc'
     | '/api/pdf'
+    | '/sectors/$sectorName'
   id:
     | '__root__'
     | '/'
@@ -380,6 +391,7 @@ export interface FileRouteTypes {
     | '/_dash/transactions'
     | '/_dash/wacc'
     | '/api/pdf'
+    | '/_dash/sectors/$sectorName'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -601,6 +613,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPdfRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_dash/sectors/$sectorName': {
+      id: '/_dash/sectors/$sectorName'
+      path: '/sectors/$sectorName'
+      fullPath: '/sectors/$sectorName'
+      preLoaderRoute: typeof DashSectorsSectorNameRouteImport
+      parentRoute: typeof DashRoute
+    }
   }
 }
 
@@ -631,6 +650,7 @@ interface DashRouteChildren {
   DashToolsRoute: typeof DashToolsRoute
   DashTransactionsRoute: typeof DashTransactionsRoute
   DashWaccRoute: typeof DashWaccRoute
+  DashSectorsSectorNameRoute: typeof DashSectorsSectorNameRoute
 }
 
 const DashRouteChildren: DashRouteChildren = {
@@ -660,6 +680,7 @@ const DashRouteChildren: DashRouteChildren = {
   DashToolsRoute: DashToolsRoute,
   DashTransactionsRoute: DashTransactionsRoute,
   DashWaccRoute: DashWaccRoute,
+  DashSectorsSectorNameRoute: DashSectorsSectorNameRoute,
 }
 
 const DashRouteWithChildren = DashRoute._addFileChildren(DashRouteChildren)

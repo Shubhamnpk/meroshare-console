@@ -274,6 +274,9 @@ export const getTmsOrderBook = createServerFn({ method: "GET" })
         orderId: String(r["orderId"] ?? ""),
         tranId: String(r["tranId"] ?? ""),
         remainingQty: Number(r["remainingQty"] ?? r["quantity"] ?? 0) || 0,
+        tradedQty: null,
+        amount: null,
+        exchangeOrderNo: "",
         orderStatus: String(r["orderStatus"] ?? r["status"] ?? ""),
         deliveryFlag: String(r["deliveryFlag"] ?? "DEL"),
         date: String(r["date"] ?? ""),
@@ -379,6 +382,117 @@ const numOrNull = (v: unknown): number | null => {
 };
 
 const strOrNull = (v: unknown): string | null => (typeof v === "string" && v.length > 0 ? v : null);
+
+const MON_IDX: Record<string, string> = {
+  JAN: "01", FEB: "02", MAR: "03", APR: "04", MAY: "05", JUN: "06",
+  JUL: "07", AUG: "08", SEP: "09", OCT: "10", NOV: "11", DEC: "12",
+};
+
+/** Split one datetime-ish value into {date, time}; "" when unrecognized. */
+function splitDateTimeValue(v: unknown): { date: string; time: string } {
+  const none = { date: "", time: "" };
+  if (typeof v === "number" && Number.isFinite(v)) {
+    // unix timestamp (seconds or ms) → Kathmandu calendar day + time
+    const ms = v > 1e12 ? v : v > 1e9 ? v * 1000 : NaN;
+    if (!Number.isFinite(ms)) return none;
+    try {
+      const d = new Date(ms as number);
+      const date = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Kathmandu", year: "numeric", month: "2-digit", day: "2-digit",
+      }).format(d);
+      const time = new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Asia/Kathmandu", hour: "2-digit", minute: "2-digit", hour12: false,
+      }).format(d);
+      return { date, time };
+    } catch {
+      return none;
+    }
+  }
+  if (typeof v !== "string") return none;
+  const s = v.trim();
+  if (!s) return none;
+  // 2026-09-12[THH:mm[:ss]]
+  let m = /(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?/.exec(s);
+  if (m) {
+    return {
+      date: `${m[1]}-${m[2]}-${m[3]}`,
+      time: m[4] ? `${m[4]}:${m[5]}${m[6] ? `:${m[6]}` : ""}` : "",
+    };
+  }
+  // 12-Sep-26 / 12-Sep-2026 [+ HH:mm[:ss]] (broker's own ValidTill family)
+  m = /(\d{1,2})-([A-Za-z]{3})-(\d{2,4})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?/.exec(s);
+  if (m && MON_IDX[m[2]!.toUpperCase()]) {
+    const yyyy = m[3]!.length === 2 ? `20${m[3]}` : m[3]!;
+    return {
+      date: `${yyyy}-${MON_IDX[m[2]!.toUpperCase()]}-${m[1]!.padStart(2, "0")}`,
+      time: m[4] ? `${m[4]}:${m[5]}${m[6] ? `:${m[6]}` : ""}` : "",
+    };
+  }
+  // DD/MM/YYYY or MM/DD/YYYY [+ time] — Nepali convention + doc §18 use DD/MM,
+  // so treat as DD/MM unless the middle part exceeds 12.
+  m = /(\d{1,2})\/(\d{1,2})\/(\d{2,4})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?/.exec(s);
+  if (m) {
+    const first = m[1]!;
+    const second = m[2]!;
+    const dd = (Number(second) > 12 ? second : first).padStart(2, "0");
+    const mm = (Number(second) > 12 ? first : second).padStart(2, "0");
+    const yyyy = m[3]!.length === 2 ? `20${m[3]}` : m[3]!;
+    return {
+      date: `${yyyy}-${mm}-${dd}`,
+      time: m[4] ? `${m[4]}:${m[5]}${m[6] ? `:${m[6]}` : ""}` : "",
+    };
+  }
+  // HH:mm[:ss] alone → time only
+  m = /^(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(s);
+  if (m) return { date: "", time: s };
+  return none;
+}
+
+/**
+ * Tolerant date/time pull from a broker report row. The ORDERBOOK/TRADEBOOK
+ * shapes were never live-verified (docs §16/§21 — only field vocabulary from
+ * code), so besides known keys we scan every key for date-like names and
+ * every value for date-like content. First date wins, first time wins.
+ */
+function extractDateTime(row: Record<string, unknown>): { date: string; time: string } {
+  const knownDate = [
+    "Date", "OrderDate", "TradeDate", "BusinessDate", "EntryDate", "CreatedDate",
+    "TransactionDate", "LastModifiedDate", "ExpiryDate", "ValidTill",
+  ];
+  const knownDateTime = [
+    "DateTime", "OrderDateTime", "TradeDateTime", "EntryDateTime", "CreatedDateTime",
+    "BusinessDateTime", "TransactionDateTime", "LastModifiedDateTime", "LastTradeTime", "LogTime",
+  ];
+  const knownTime = ["Time", "OrderTime", "TradeTime", "EntryTime", "TransactionTime"];
+  let date = "";
+  let time = "";
+  const feed = (v: unknown) => {
+    const p = splitDateTimeValue(v);
+    if (p.date && !date) date = p.date;
+    if (p.time && !time) time = p.time;
+  };
+  for (const k of [...knownDateTime, ...knownDate]) {
+    if (date && time) break;
+    const v = row[k];
+    if (v !== undefined && v !== null && v !== "") feed(v);
+  }
+  if (!time) {
+    for (const k of knownTime) {
+      const v = row[k];
+      if (v !== undefined && v !== null && v !== "") feed(v);
+      if (time) break;
+    }
+  }
+  if (!date || !time) {
+    for (const [k, v] of Object.entries(row)) {
+      if (date && time) break;
+      if (!/date|time|day|expir|valid|creat|enter|modif|updat|stamp|session|business|log/i.test(k)) continue;
+      if (v === undefined || v === null || v === "") continue;
+      feed(v);
+    }
+  }
+  return { date, time };
+}
 
 async function withSavedSession(
   brokerId: BrokerId,
@@ -609,41 +723,49 @@ export const getBrokerOrderBook = createServerFn({ method: "GET" })
             r["TranId"] ??
             "",
         ).trim();
+        const qty = numOrNull(r["Quantity"]) ?? 0;
+        const traded =
+          numOrNull(r["TradedQuantity"] ?? r["TradedQty"] ?? r["TradedQtyTotal"]) ?? 0;
         const remaining =
-          numOrNull(r["RemainingQty"]) ??
-          (numOrNull(r["Quantity"]) !== null && numOrNull(r["TradedQuantity"]) !== null
-            ? Math.max(0, (numOrNull(r["Quantity"]) ?? 0) - (numOrNull(r["TradedQuantity"]) ?? 0))
-            : (numOrNull(r["Quantity"]) ?? 0));
-        const rawDate =
-          r["Date"] ??
-          r["OrderDate"] ??
-          r["BusinessDate"] ??
-          r["EntryDate"] ??
-          r["CreatedDate"] ??
-          r["DateTime"] ??
-          "";
-        const rawTime = r["Time"] ?? r["OrderTime"] ?? r["EntryTime"] ?? r["LastTradeTime"] ?? "";
-        let date = String(rawDate ?? "");
-        let time = String(rawTime ?? "");
-        const combined = date || time;
-        const m = /(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}(?::\d{2})?)/.exec(String(combined));
-        if (m) {
-          if (!date || /T/.test(String(rawDate ?? ""))) date = m[1]!;
-          if (!time) time = m[2]!;
+          numOrNull(r["RemainingQty"] ?? r["RemainingQuantity"]) ??
+          (numOrNull(r["Quantity"]) !== null && traded !== null
+            ? Math.max(0, qty - traded)
+            : qty);
+        // Broker reports open orders as ACCEPTED; normalize so the UI can
+        // treat ACCEPTED as OPEN (or PARTIALLY COMPLETE when partly filled).
+        // See docs/tms-bundles/xnasa-api-reference.md §14.3.
+        const rawStatus = String(r["OrderStatus"] ?? r["Status"] ?? "");
+        const upper = rawStatus.trim().toUpperCase();
+        let status = rawStatus;
+        if (upper === "ACCEPTED" || upper === "QUEUED" || upper === "PENDING") {
+          status = traded > 0 || (remaining > 0 && remaining < qty) ? "PARTIALLY COMPLETE" : "OPEN";
+        } else if (upper.includes("PARTIAL")) {
+          status = "PARTIALLY COMPLETE";
+        } else if (/(^|\b)(TRADED|FILLED|EXECUTED|COMPLETE)\b/.test(upper)) {
+          status = "COMPLETE";
         }
+        const { date, time } = extractDateTime(r);
+        // Canonical id covers all broker key variants; orderId/tranId fall
+        // back to it so cancel/modify/timeline work even when the broker
+        // only sends one of the two keys.
+        const orderId = String(r["LatestOrderID"] ?? r["OrderId"] ?? r["OrderNo"] ?? id ?? "").trim();
+        const tranId = String(r["BrokerTranID"] ?? r["TranId"] ?? id ?? "").trim();
         return {
           id,
           symbol: String(r["Scrip"] ?? ""),
           side: sideRaw.startsWith("S") ? "SELL" : sideRaw.startsWith("B") ? "BUY" : "UNKNOWN",
-          quantity: numOrNull(r["Quantity"]) ?? 0,
+          quantity: qty,
           price: numOrNull(r["Price"]),
-          status: String(r["OrderStatus"] ?? ""),
+          status,
           orderType: String(r["OrderType"] ?? ""),
           validity: String(r["OrderTerms"] ?? "DAY"),
-          orderId: String(r["LatestOrderID"] ?? r["OrderId"] ?? r["OrderNo"] ?? ""),
-          tranId: String(r["BrokerTranID"] ?? r["TranId"] ?? ""),
+          orderId,
+          tranId,
           remainingQty: remaining,
-          orderStatus: String(r["OrderStatus"] ?? ""),
+          tradedQty: traded > 0 ? traded : null,
+          amount: numOrNull(r["Amount"]),
+          exchangeOrderNo: String(r["ExchangeOrderNo"] ?? r["OrderNo"] ?? "").trim(),
+          orderStatus: rawStatus,
           deliveryFlag: String(r["DeliveryFlag"] ?? "DEL"),
           date,
           time,
@@ -844,25 +966,7 @@ export const getBrokerTradeBook = createServerFn({ method: "GET" })
 
       return rows.map((r) => {
         const sideRaw = String(r["B/S"] ?? r["BuySellType"] ?? "").toUpperCase();
-        // Date/time keys vary by report: prefer explicit fields, else split a
-        // combined datetime ("2026-09-12T14:30:00" or "... 14:30:00").
-        const rawDate =
-          r["Date"] ??
-          r["TradeDate"] ??
-          r["BusinessDate"] ??
-          r["TransactionDate"] ??
-          r["DateTime"] ??
-          "";
-        const rawTime =
-          r["Time"] ?? r["TradeTime"] ?? r["TransactionTime"] ?? r["LastTradeTime"] ?? "";
-        let date = String(rawDate ?? "");
-        let time = String(rawTime ?? "");
-        const combined = date || time;
-        const m = /(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}(?::\d{2})?)/.exec(String(combined));
-        if (m) {
-          if (!date || /T/.test(String(rawDate ?? ""))) date = m[1]!;
-          if (!time) time = m[2]!;
-        }
+        const { date, time } = extractDateTime(r);
         return {
           id: String(r["ExchangeTradeID"] ?? "").trim(),
           orderNo: String(r["ExchangeOrderNo"] ?? r["OrderNo"] ?? "").trim(),
@@ -1180,17 +1284,15 @@ export const getBrokerOrderHistory = createServerFn({ method: "GET" })
     return withBrokerSession(data.brokerId, async (session) => {
       const rows = await getNaasaOrderHistory(session, data.orderId);
       return rows.map((r) => {
-        const rawDate =
-          r["Date"] ?? r["OrderDate"] ?? r["BusinessDate"] ?? r["EntryDate"] ?? r["DateTime"] ?? "";
-        const rawTime = r["Time"] ?? r["OrderTime"] ?? r["EntryTime"] ?? "";
+        const { date, time } = extractDateTime(r);
         return {
           status: String(r["OrderStatus"] ?? r["Status"] ?? ""),
           quantity: numOrNull(r["Quantity"]),
           price: numOrNull(r["Price"]),
           tradedQty: numOrNull(r["TradedQuantity"] ?? r["TradedQty"]),
           remainingQty: numOrNull(r["RemainingQty"] ?? r["RemainingQuantity"]),
-          date: String(rawDate ?? ""),
-          time: String(rawTime ?? ""),
+          date,
+          time,
           message: String(r["Message"] ?? r["Remarks"] ?? r["Remark"] ?? ""),
         };
       });

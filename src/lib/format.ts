@@ -15,9 +15,13 @@ export function toNumber(value: unknown): number {
 
 export function formatNpr(value: unknown, opts?: { compact?: boolean }): string {
   const n = toNumber(value);
-  if (opts?.compact && Math.abs(n) >= 1_00_000) {
-    if (Math.abs(n) >= 1_00_00_000) return `\u0930\u0941 ${NUM2.format(n / 1_00_00_000)} Cr`;
-    return `\u0930\u0941 ${NUM2.format(n / 1_00_000)} L`;
+  if (opts?.compact) {
+    const abs = Math.abs(n);
+    if (abs >= 1_00_00_00_00_000) return `\u0930\u0941 ${NUM2.format(n / 1_00_00_00_00_000)} Kharba`;
+    if (abs >= 1_00_00_00_000) return `\u0930\u0941 ${NUM2.format(n / 1_00_00_00_000)} Arba`;
+    if (abs >= 1_00_00_000) return `\u0930\u0941 ${NUM2.format(n / 1_00_00_000)} Cr`;
+    if (abs >= 1_00_000) return `\u0930\u0941 ${NUM2.format(n / 1_00_000)} L`;
+    if (abs >= 1_000) return `\u0930\u0941 ${NUM2.format(n / 1_000)} K`;
   }
   return `\u0930\u0941 ${NUM2.format(n)}`;
 }
@@ -26,8 +30,15 @@ export function formatNumber(value: unknown): string {
   return NUM.format(toNumber(value));
 }
 
-export function formatQty(value: unknown): string {
-  return NUM.format(Math.round(toNumber(value)));
+export function formatQty(value: unknown, opts?: { compact?: boolean }): string {
+  const n = toNumber(value);
+  if (opts?.compact) {
+    const abs = Math.abs(n);
+    if (abs >= 1_00_00_000) return `${NUM.format(n / 1_00_00_000)} Cr`;
+    if (abs >= 1_00_000) return `${NUM.format(n / 1_00_000)} L`;
+    if (abs >= 1_000) return `${NUM.format(n / 1_000)} K`;
+  }
+  return NUM.format(Math.round(n));
 }
 
 export function formatPercent(value: number): string {
@@ -75,6 +86,26 @@ export function daysUntil(value: unknown): number | null {
   const date = new Date(raw.includes("T") ? raw : raw.replace(" ", "T"));
   if (Number.isNaN(date.getTime())) return null;
   return Math.ceil((date.getTime() - Date.now()) / 86_400_000);
+}
+
+export function formatHoldingTime(days: number): string {
+  if (!Number.isFinite(days) || days <= 0) return "-";
+  if (days < 7) return `${days} day${days === 1 ? "" : "s"}`;
+  if (days < 30) {
+    const w = Math.round(days / 7);
+    return `${w} week${w === 1 ? "" : "s"}`;
+  }
+  if (days < 365) {
+    const m = Math.round(days / 30);
+    return `${m} month${m === 1 ? "" : "s"}`;
+  }
+  const y = Math.floor(days / 365);
+  const rem = days % 365;
+  if (rem >= 30) {
+    const m = Math.round(rem / 30);
+    return m > 0 ? `${y} year${y === 1 ? "" : "s"} ${m} month${m === 1 ? "" : "s"}` : `${y} year${y === 1 ? "" : "s"}`;
+  }
+  return `${y} year${y === 1 ? "" : "s"}`;
 }
 
 export function errorMessage(error: unknown, fallback = "Something went wrong."): string {

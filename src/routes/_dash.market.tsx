@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
+import { MiniMood } from "@/components/tools/market-overview";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -324,6 +325,16 @@ function MarketPage() {
   const nepse =
     snapshot.data?.indices.find((i) => /nepse/i.test(i.name)) ?? snapshot.data?.indices[0];
 
+  // Whole-NEPSE mood for the heatmap header: advancer breadth + index move.
+  const marketScore = useMemo(() => {
+    const total = prices.length;
+    const adv = prices.filter((p) => p.percentChange > 0).length;
+    const breadthPct = total > 0 ? (adv / total) * 100 : 50;
+    const chg = nepse?.percentChange ?? 0;
+    const chgSignal = Math.max(0, Math.min(100, 50 + (chg / 3) * 50));
+    return breadthPct * 0.6 + chgSignal * 0.4;
+  }, [prices, nepse]);
+
   const indices = useMemo(() => {
     const all = snapshot.data?.indices ?? [];
     if (!nepse) return all;
@@ -403,11 +414,7 @@ function MarketPage() {
           })
         }
         onSelectSector={(sec) =>
-          setChartModal({
-            open: true,
-            title: `${sec} Index`,
-            sectorName: sec,
-          })
+          void navigate({ to: "/sectors/$sectorName", params: { sectorName: sec } })
         }
         onSelectScrip={(sym) => setPicked(sym)}
       />
@@ -494,6 +501,15 @@ function MarketPage() {
                   value={heatGrouped ? "grouped" : "mixed"}
                   onChange={(v) => setHeatGrouped(v === "grouped")}
                 />
+                <div
+                  className="hidden shrink-0 items-center gap-2 rounded-xl border border-border/60 bg-surface px-2.5 py-1 md:flex"
+                  title="Whole-NEPSE sentiment: advancer breadth blended with the NEPSE move"
+                >
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Mood
+                  </span>
+                  <MiniMood score={marketScore} />
+                </div>
               </div>
             </div>
             <CategoryDropdown
@@ -742,11 +758,6 @@ function MarketPage() {
         title={chartModal.title}
         indexName={chartModal.indexName}
         sectorName={chartModal.sectorName}
-        prices={prices}
-        onSelectScrip={(sym) => {
-          setChartModal((s) => ({ ...s, open: false }));
-          setPicked(sym);
-        }}
       />
     </div>
   );

@@ -78,7 +78,7 @@ export function YoBrokerModal({
             Yo Broker
           </DialogTitle>
           <DialogDescription>
-            Paper trading account — practice without real money or settlement.
+           practice without real money or settlement.
           </DialogDescription>
         </DialogHeader>
 
