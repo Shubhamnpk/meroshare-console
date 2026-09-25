@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery, useQueries } from "@tanstack/react-query";
 import {
@@ -38,6 +38,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { AreaChart } from "@/components/market/area-chart";
 import { TimeMachineTerminalChart } from "@/components/tools/time-machine-terminal-chart";
 import { TimeMachineCompareChart } from "@/components/tools/time-machine-compare-chart";
@@ -600,6 +608,11 @@ export interface UnifiedSearchAsset {
 }
 
 function TimeMachinePage() {
+  const navigate = useNavigate();
+  const goBackToTools = () => {
+    if (window.history.length > 1) window.history.back();
+    else void navigate({ to: "/tools" });
+  };
   const [mode, setMode] = useState<"single" | "compare">("single");
 
   // Single mode state
@@ -1058,6 +1071,17 @@ Backtested with MeroShare Console 🇳🇵`;
         </div>
 
         {/* Header */}
+        <div className="flex justify-start">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8 shrink-0"
+            onClick={goBackToTools}
+            aria-label="Back to tools"
+          >
+            <ArrowLeft className="size-4" />
+          </Button>
+        </div>
         <div className="text-center space-y-2">
           <div className="mx-auto flex size-12 items-center justify-center rounded-2xl border border-primary/25 bg-primary/10 text-primary shadow-sm">
             <Clock className="size-6" />
@@ -1802,39 +1826,39 @@ Backtested with MeroShare Console 🇳🇵`;
                 </div>
               </div>
 
-              <div className="overflow-x-auto rounded-xl border border-border/60">
-                <table className="w-full text-xs">
-                  <thead className="bg-muted/20 text-muted-foreground border-b border-border/60">
-                    <tr>
-                      <th className="py-2.5 px-3 text-left font-semibold">Rank</th>
-                      <th className="py-2.5 px-3 text-left font-semibold">Asset</th>
-                      <th className="py-2.5 px-3 text-right font-semibold">Invested</th>
-                      <th className="py-2.5 px-3 text-right font-semibold">Final Value</th>
-                      <th className="py-2.5 px-3 text-right font-semibold">Total Gain</th>
-                      <th className="py-2.5 px-3 text-right font-semibold">Annualized (XIRR)</th>
-                      <th className="py-2.5 px-3 text-right font-semibold">Units Held</th>
-                      <th className="py-2.5 px-3 text-right font-semibold">Cash Div</th>
-                      <th className="py-2.5 px-3 text-right font-semibold">vs Bank FD</th>
-                      <th className="py-2.5 px-3 text-center font-semibold">Deep Dive</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/40 font-mono">
+              <div className="overflow-x-auto rounded-xl border border-border/60 xl:overflow-x-clip">
+                <Table className="text-xs">
+                  <TableHeader className="bg-muted/20 text-muted-foreground border-b border-border/60">
+                    <TableRow className="bg-muted/40 hover:bg-muted/40">
+                      <TableHead className="py-2.5 px-3 text-left font-semibold">Rank</TableHead>
+                      <TableHead className="py-2.5 px-3 text-left font-semibold">Asset</TableHead>
+                      <TableHead className="py-2.5 px-3 text-right font-semibold">Invested</TableHead>
+                      <TableHead className="py-2.5 px-3 text-right font-semibold">Final Value</TableHead>
+                      <TableHead className="py-2.5 px-3 text-right font-semibold">Total Gain</TableHead>
+                      <TableHead className="py-2.5 px-3 text-right font-semibold">Annualized (XIRR)</TableHead>
+                      <TableHead className="py-2.5 px-3 text-right font-semibold">Units Held</TableHead>
+                      <TableHead className="py-2.5 px-3 text-right font-semibold">Cash Div</TableHead>
+                      <TableHead className="py-2.5 px-3 text-right font-semibold">vs Bank FD</TableHead>
+                      <TableHead className="py-2.5 px-3 text-center font-semibold">Deep Dive</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody className="divide-y divide-border/40 font-mono">
                     {rankedCompareResults.map((item, idx) => {
                       const medal = idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `#${idx + 1}`;
                       const isTop = idx === 0;
 
                       return (
-                        <tr
+                        <TableRow
                           key={item.symbol}
                           className={cn(
                             "hover:bg-muted/20 transition-colors",
                             isTop ? "bg-amber-500/5 font-medium" : ""
                           )}
                         >
-                          <td className="py-3 px-3 font-bold text-foreground text-sm">
+                          <TableCell className="py-3 px-3 font-bold text-foreground text-sm">
                             {medal}
-                          </td>
-                          <td className="py-3 px-3 font-sans">
+                          </TableCell>
+                          <TableCell className="py-3 px-3 font-sans">
                             <div className="flex items-center gap-2">
                               <span
                                 className="size-2.5 rounded-full shrink-0"
@@ -1854,14 +1878,14 @@ Backtested with MeroShare Console 🇳🇵`;
                                 </p>
                               </div>
                             </div>
-                          </td>
-                          <td className="py-3 px-3 text-right text-muted-foreground">
+                          </TableCell>
+                          <TableCell className="py-3 px-3 text-right text-muted-foreground">
                             {formatNpr(item.result.invested)}
-                          </td>
-                          <td className="py-3 px-3 text-right font-bold text-foreground text-sm">
+                          </TableCell>
+                          <TableCell className="py-3 px-3 text-right font-bold text-foreground text-sm">
                             {formatNpr(item.result.finalValue)}
-                          </td>
-                          <td className="py-3 px-3 text-right">
+                          </TableCell>
+                          <TableCell className="py-3 px-3 text-right">
                             <span
                               className={cn(
                                 "font-semibold",
@@ -1874,22 +1898,22 @@ Backtested with MeroShare Console 🇳🇵`;
                               {item.result.totalGain >= 0 ? "+" : ""}
                               {formatNpr(item.result.totalGain)}
                             </div>
-                          </td>
-                          <td className="py-3 px-3 text-right text-primary font-semibold">
+                          </TableCell>
+                          <TableCell className="py-3 px-3 text-right text-primary font-semibold">
                             {item.result.annualizedReturn !== null
                               ? `${item.result.annualizedReturn.toFixed(1)}%`
                               : "-"}
-                          </td>
-                          <td className="py-3 px-3 text-right">
+                          </TableCell>
+                          <TableCell className="py-3 px-3 text-right">
                             <span>{item.result.held.toLocaleString()}</span>
                             <div className="text-[0.68rem] text-gain">
                               {item.result.shareMultiplier.toFixed(2)}x (+{item.result.bonusUnits} bonus)
                             </div>
-                          </td>
-                          <td className="py-3 px-3 text-right text-muted-foreground">
+                          </TableCell>
+                          <TableCell className="py-3 px-3 text-right text-muted-foreground">
                             {formatNpr(item.result.cashReceived)}
-                          </td>
-                          <td className="py-3 px-3 text-right">
+                          </TableCell>
+                          <TableCell className="py-3 px-3 text-right">
                             <span
                               className={cn(
                                 "font-semibold",
@@ -1903,8 +1927,8 @@ Backtested with MeroShare Console 🇳🇵`;
                               {item.result.alphaPct >= 0 ? "+" : ""}
                               {item.result.alphaPct.toFixed(1)}%
                             </div>
-                          </td>
-                          <td className="py-3 px-3 text-center">
+                          </TableCell>
+                          <TableCell className="py-3 px-3 text-center">
                             <Button
                               variant="ghost"
                               size="sm"
@@ -1917,12 +1941,12 @@ Backtested with MeroShare Console 🇳🇵`;
                               <span>Inspect</span>
                               <ExternalLink className="size-3" />
                             </Button>
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       );
                     })}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
             </Panel>
           </>
@@ -1939,6 +1963,15 @@ Backtested with MeroShare Console 🇳🇵`;
       {/* Top Navigation & Profile Bar */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8 shrink-0"
+            onClick={goBackToTools}
+            aria-label="Back to tools"
+          >
+            <ArrowLeft className="size-4" />
+          </Button>
           <Button
             variant="ghost"
             size="sm"
@@ -2547,53 +2580,53 @@ Backtested with MeroShare Console 🇳🇵`;
                 </div>
 
                 {/* Desktop Table View */}
-                <div className="hidden sm:block overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead className="text-muted-foreground border-b border-border/60">
-                      <tr>
-                        <th className="py-2.5 px-3 text-left font-semibold">Year</th>
-                        <th className="py-2.5 px-3 text-right font-semibold">Buys</th>
-                        <th className="py-2.5 px-3 text-right font-semibold">Invested</th>
-                        <th className="py-2.5 px-3 text-right font-semibold">Bonus %</th>
-                        <th className="py-2.5 px-3 text-right font-semibold">Cash %</th>
-                        <th className="py-2.5 px-3 text-right font-semibold">Bonus Units</th>
-                        <th className="py-2.5 px-3 text-right font-semibold">Year-End Units</th>
-                        <th className="py-2.5 px-3 text-right font-semibold">Year-End Close</th>
-                        <th className="py-2.5 px-3 text-right font-semibold">Year-End Value</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/40 font-mono">
+                <div className="hidden sm:block overflow-x-auto xl:overflow-x-clip">
+                  <Table className="text-xs">
+                    <TableHeader className="text-muted-foreground border-b border-border/60">
+                      <TableRow className="bg-muted/40 hover:bg-muted/40">
+                        <TableHead className="py-2.5 px-3 text-left font-semibold">Year</TableHead>
+                        <TableHead className="py-2.5 px-3 text-right font-semibold">Buys</TableHead>
+                        <TableHead className="py-2.5 px-3 text-right font-semibold">Invested</TableHead>
+                        <TableHead className="py-2.5 px-3 text-right font-semibold">Bonus %</TableHead>
+                        <TableHead className="py-2.5 px-3 text-right font-semibold">Cash %</TableHead>
+                        <TableHead className="py-2.5 px-3 text-right font-semibold">Bonus Units</TableHead>
+                        <TableHead className="py-2.5 px-3 text-right font-semibold">Year-End Units</TableHead>
+                        <TableHead className="py-2.5 px-3 text-right font-semibold">Year-End Close</TableHead>
+                        <TableHead className="py-2.5 px-3 text-right font-semibold">Year-End Value</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody className="divide-y divide-border/40 font-mono">
                       {result.yearlyBreakdown.map((row) => (
-                        <tr key={row.year} className="hover:bg-muted/20 transition-colors">
-                          <td className="py-2.5 px-3 font-bold text-foreground">{row.year}</td>
-                          <td className="py-2.5 px-3 text-right text-muted-foreground">{row.buysCount}</td>
-                          <td className="py-2.5 px-3 text-right">{formatNpr(row.invested)}</td>
-                          <td className="py-2.5 px-3 text-right">
+                        <TableRow key={row.year} className="hover:bg-muted/20 transition-colors">
+                          <TableCell className="py-2.5 px-3 font-bold text-foreground">{row.year}</TableCell>
+                          <TableCell className="py-2.5 px-3 text-right text-muted-foreground">{row.buysCount}</TableCell>
+                          <TableCell className="py-2.5 px-3 text-right">{formatNpr(row.invested)}</TableCell>
+                          <TableCell className="py-2.5 px-3 text-right">
                             {row.bonusPct > 0 ? (
                               <span className="text-gain font-semibold">+{row.bonusPct}%</span>
                             ) : (
                               "-"
                             )}
-                          </td>
-                          <td className="py-2.5 px-3 text-right">
+                          </TableCell>
+                          <TableCell className="py-2.5 px-3 text-right">
                             {row.cashPct > 0 ? `${row.cashPct}%` : "-"}
-                          </td>
-                          <td className="py-2.5 px-3 text-right text-gain">
+                          </TableCell>
+                          <TableCell className="py-2.5 px-3 text-right text-gain">
                             {row.bonusUnits > 0 ? `+${row.bonusUnits}` : "-"}
-                          </td>
-                          <td className="py-2.5 px-3 text-right font-semibold">
+                          </TableCell>
+                          <TableCell className="py-2.5 px-3 text-right font-semibold">
                             {row.yearEndUnits.toLocaleString()}
-                          </td>
-                          <td className="py-2.5 px-3 text-right text-muted-foreground">
+                          </TableCell>
+                          <TableCell className="py-2.5 px-3 text-right text-muted-foreground">
                             {formatNpr(row.yearEndPrice)}
-                          </td>
-                          <td className="py-2.5 px-3 text-right font-bold text-foreground">
+                          </TableCell>
+                          <TableCell className="py-2.5 px-3 text-right font-bold text-foreground">
                             {formatNpr(row.yearEndValue)}
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       ))}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </div>
 
                 {/* Mobile Cards View */}
@@ -2849,32 +2882,32 @@ Backtested with MeroShare Console 🇳🇵`;
                 </div>
 
                 <div className="max-h-96 overflow-y-auto overflow-x-auto rounded-xl border border-border/50">
-                  <table className="w-full text-xs">
-                    <thead className="sticky top-0 bg-surface text-muted-foreground border-b border-border/60">
-                      <tr>
-                        <th className="py-2.5 px-3 text-left font-semibold">#</th>
-                        <th className="py-2.5 px-3 text-left font-semibold">Date</th>
-                        <th className="py-2.5 px-3 text-right font-semibold">Buy Price</th>
-                        <th className="py-2.5 px-3 text-right font-semibold">Amount</th>
-                        <th className="py-2.5 px-3 text-right font-semibold">Units Bought</th>
-                        <th className="py-2.5 px-3 text-right font-semibold">Cumulative Units</th>
-                        <th className="py-2.5 px-3 text-right font-semibold">Cumulative Cost</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/40 font-mono">
+                  <Table className="text-xs">
+                    <TableHeader className="sticky top-0 bg-surface text-muted-foreground border-b border-border/60">
+                      <TableRow className="bg-muted/40 hover:bg-muted/40">
+                        <TableHead className="py-2.5 px-3 text-left font-semibold">#</TableHead>
+                        <TableHead className="py-2.5 px-3 text-left font-semibold">Date</TableHead>
+                        <TableHead className="py-2.5 px-3 text-right font-semibold">Buy Price</TableHead>
+                        <TableHead className="py-2.5 px-3 text-right font-semibold">Amount</TableHead>
+                        <TableHead className="py-2.5 px-3 text-right font-semibold">Units Bought</TableHead>
+                        <TableHead className="py-2.5 px-3 text-right font-semibold">Cumulative Units</TableHead>
+                        <TableHead className="py-2.5 px-3 text-right font-semibold">Cumulative Cost</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody className="divide-y divide-border/40 font-mono">
                       {result.buyLedger.map((buy, idx) => (
-                        <tr key={idx} className="hover:bg-muted/20 transition-colors">
-                          <td className="py-2 px-3 text-muted-foreground text-[0.7rem]">{idx + 1}</td>
-                          <td className="py-2 px-3 font-medium text-foreground">{formatDate(buy.date)}</td>
-                          <td className="py-2 px-3 text-right">{formatNpr(buy.price)}</td>
-                          <td className="py-2 px-3 text-right text-muted-foreground">{formatNpr(buy.amount)}</td>
-                          <td className="py-2 px-3 text-right font-semibold text-foreground">+{buy.units}</td>
-                          <td className="py-2 px-3 text-right font-bold text-primary">{buy.cumulativeUnits.toLocaleString()}</td>
-                          <td className="py-2 px-3 text-right text-muted-foreground">{formatNpr(buy.cumulativeInvested)}</td>
-                        </tr>
+                        <TableRow key={idx} className="hover:bg-muted/20 transition-colors">
+                          <TableCell className="py-2 px-3 text-muted-foreground text-[0.7rem]">{idx + 1}</TableCell>
+                          <TableCell className="py-2 px-3 font-medium text-foreground">{formatDate(buy.date)}</TableCell>
+                          <TableCell className="py-2 px-3 text-right">{formatNpr(buy.price)}</TableCell>
+                          <TableCell className="py-2 px-3 text-right text-muted-foreground">{formatNpr(buy.amount)}</TableCell>
+                          <TableCell className="py-2 px-3 text-right font-semibold text-foreground">+{buy.units}</TableCell>
+                          <TableCell className="py-2 px-3 text-right font-bold text-primary">{buy.cumulativeUnits.toLocaleString()}</TableCell>
+                          <TableCell className="py-2 px-3 text-right text-muted-foreground">{formatNpr(buy.cumulativeInvested)}</TableCell>
+                        </TableRow>
                       ))}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </div>
               </Panel>
             </TabsContent>

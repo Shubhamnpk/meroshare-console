@@ -28,6 +28,13 @@ import { canonicalLink, ogImage } from "@/lib/seo";
 import { ErrorBlock, LoadingBlock, EmptyBlock } from "@/components/states";
 import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
   DEFAULT_INDICATORS,
   TerminalChart,
   type ChartStyle,
@@ -825,17 +832,17 @@ function SectorDetailPage() {
       </div>
 
       {/* All constituents */}
-      <div className="overflow-hidden rounded-2xl border border-border/70 bg-card/80 shadow-xs">
+        <div className="overflow-clip rounded-2xl border border-border/70 bg-card/80 shadow-xs">
         <div className="flex items-center gap-2 border-b border-border/60 px-4 py-3">
           <ListOrdered className="size-4 text-primary" />
           <h3 className="font-display text-sm font-semibold">
             All Constituents ({stats.items.length})
           </h3>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="border-b border-border/60 bg-surface/80 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+        <div className="overflow-x-auto xl:overflow-x-clip">
+          <Table className="text-left text-xs">
+            <TableHeader>
+              <TableRow className="bg-muted/40 hover:bg-muted/40">
                 <SortableTh label="Symbol" active={sort.key === "symbol"} dir={sort.dir} onClick={() => toggle("symbol")} kind="text" className="py-2.5 pl-4 pr-2" />
                 <SortableTh label="LTP" active={sort.key === "ltp"} dir={sort.dir} onClick={() => toggle("ltp")} align="right" className="py-2.5 px-3" />
                 <SortableTh label="Change" active={sort.key === "change"} dir={sort.dir} onClick={() => toggle("change")} align="right" className="py-2.5 px-3" />
@@ -846,62 +853,62 @@ function SectorDetailPage() {
                 <SortableTh label="Volume" active={sort.key === "volume"} dir={sort.dir} onClick={() => toggle("volume")} align="right" className="py-2.5 px-3" />
                 <SortableTh label="Turnover" active={sort.key === "turnover"} dir={sort.dir} onClick={() => toggle("turnover")} align="right" className="py-2.5 px-3" />
                 <SortableTh label="Trades" active={sort.key === "trades"} dir={sort.dir} onClick={() => toggle("trades")} align="right" className="py-2.5 px-3 pr-4" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/40">
+                </TableRow>
+            </TableHeader>
+            <TableBody className="divide-y divide-border/40">
               {rows.map((p) => {
                 const upRow = p.percentChange >= 0;
                 const fund = fundamentals.get(p.symbol);
                 return (
-                  <tr
+                  <TableRow
                     key={p.symbol}
                     onClick={() => setPicked(p.symbol)}
                     className="cursor-pointer transition-colors hover:bg-surface/50"
                   >
-                    <td className="py-2.5 pl-4 pr-2">
+                    <TableCell className="py-2.5 pl-4 pr-2">
                       <p className="font-bold text-foreground">{p.symbol}</p>
                       <p className="max-w-[220px] truncate text-[10px] text-muted-foreground">
                         {p.name}
                       </p>
-                    </td>
-                    <td className="num py-2.5 px-3 text-right font-semibold text-foreground">
+                    </TableCell>
+                    <TableCell className="num py-2.5 px-3 text-right font-semibold text-foreground">
                       {formatNpr(p.ltp)}
-                    </td>
-                    <td className={cn("num py-2.5 px-3 text-right font-semibold", upRow ? "text-gain" : "text-loss")}>
+                    </TableCell>
+                    <TableCell className={cn("num py-2.5 px-3 text-right font-semibold", upRow ? "text-gain" : "text-loss")}>
                       {formatPercent(p.percentChange)}
-                    </td>
-                    <td
+                    </TableCell>
+                    <TableCell
                       className="num py-2.5 px-3 text-right font-semibold text-primary"
                       title={fund?.yieldPct != null ? "Latest dividend yield on LTP" : "No dividend on record"}
                     >
                       {fund?.yieldPct != null ? `${fund.yieldPct.toFixed(2)}%` : "—"}
-                    </td>
-                    <td
+                    </TableCell>
+                    <TableCell
                       className="num py-2.5 px-3 text-right text-muted-foreground"
                       title={fund?.eps != null ? "Latest reported EPS" : "No financials on record"}
                     >
                       {fund?.eps != null ? formatNumber(fund.eps) : "—"}
-                    </td>
-                    <td className="num py-2.5 px-3 text-right text-muted-foreground">
+                    </TableCell>
+                    <TableCell className="num py-2.5 px-3 text-right text-muted-foreground">
                       {formatNpr(p.high)}
-                    </td>
-                    <td className="num py-2.5 px-3 text-right text-muted-foreground">
+                    </TableCell>
+                    <TableCell className="num py-2.5 px-3 text-right text-muted-foreground">
                       {formatNpr(p.low)}
-                    </td>
-                    <td className="num py-2.5 px-3 text-right text-muted-foreground">
+                    </TableCell>
+                    <TableCell className="num py-2.5 px-3 text-right text-muted-foreground">
                       {formatQty(p.volume)}
-                    </td>
-                    <td className="num py-2.5 px-3 text-right text-foreground">
+                    </TableCell>
+                    <TableCell className="num py-2.5 px-3 text-right text-foreground">
                       {formatNpr(p.turnover, { compact: true })}
-                    </td>
-                    <td className="num py-2.5 px-3 pr-4 text-right text-muted-foreground">
+                    </TableCell>
+                    <TableCell className="num py-2.5 px-3 pr-4 text-right text-muted-foreground">
                       {formatQty(p.trades)}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 );
               })}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       </div>
 

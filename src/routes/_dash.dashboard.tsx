@@ -343,11 +343,9 @@ function DashboardPage() {
         <div>
           <h1 className="font-display text-2xl font-semibold sm:text-3xl">Dashboard</h1>
           <p className="mt-1 hidden text-sm text-muted-foreground sm:block">
-            Your holdings valued at live NEPSE prices
             {data && data.marketStale
               ? ", showing MeroShare prices (feed temporarily unreachable)"
               : ""}
-            .
           </p>
         </div>
         <button
@@ -491,7 +489,7 @@ function DashboardPage() {
             </div>
             {watchlist.symbols.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                Star any scrip on the Market page and it will wait for you here.
+                Star any company stock on the Market page and it will wait for you here.
               </p>
             ) : (
               <div className="flex snap-x gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -599,9 +597,7 @@ function DashboardPage() {
           <SkeletonCards count={1} />
         ) : upcomingClosures.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No upcoming book closures for your holdings. Announced dividends land here: flip to{" "}
-            <span className="font-medium text-foreground">All scrips</span> in the calendar to
-            browse the feed.
+            No upcoming book closures for your holdings.
           </p>
         ) : (
           <ul className="grid gap-2 md:grid-cols-3">

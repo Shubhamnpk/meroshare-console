@@ -9,6 +9,14 @@ import {
   edisWaccLeftQuery,
 } from "@/lib/queries";
 import { useSort, sortBy, SortableTh } from "@/components/sortable-table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { EmptyBlock, LoadingBlock } from "@/components/states";
 import { formatQty } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -189,10 +197,10 @@ export function EdisTransferList() {
         </Button>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-border/70">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border/70 bg-muted/50">
+      <div className="overflow-x-auto rounded-xl border border-border/70 xl:overflow-x-clip">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/40 hover:bg-muted/40">
               <SortableTh
                 label="Settlement"
                 active={sort.key === "settleDate"}
@@ -215,41 +223,41 @@ export function EdisTransferList() {
                 kind="number"
                 align="right"
               />
-              <th className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              <TableHead className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 Status
-              </th>
-              <th className="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              </TableHead>
+              <TableHead className="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 Details
-              </th>
-            </tr>
-          </thead>
-          <tbody>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {sorted.map((item, i) => {
               const reqStatus = item["requestStatus"] as Record<string, unknown> | undefined;
               return (
-                <tr
+                <TableRow
                   key={item["id"] ?? i}
                   className="border-b border-border/50 transition-colors hover:bg-muted/30 last:border-0"
                 >
-                  <td className="whitespace-nowrap px-4 py-3 font-medium">
+                  <TableCell className="whitespace-nowrap px-4 py-3 font-medium">
                     {String(
                       item["settleDate"] ?? getObligationField(item, "settlementDate") ?? "-",
                     )}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3">
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap px-4 py-3">
                     <span className="font-mono text-xs font-semibold">
                       {String(item["scriptCode"] ?? getObligationField(item, "scriptCode") ?? "-")}
                     </span>
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right font-mono">
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap px-4 py-3 text-right font-mono">
                     {formatQty(
                       Number(item["quantity"] ?? getObligationField(item, "quantity") ?? 0),
                     )}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3">
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap px-4 py-3">
                     <StatusBadge status={String(reqStatus?.["name"] ?? item["statusName"] ?? "")} />
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right">
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap px-4 py-3 text-right">
                     <button
                       type="button"
                       onClick={() => setDetailItem(item)}
@@ -258,12 +266,12 @@ export function EdisTransferList() {
                       View
                       <ChevronRight className="size-3" />
                     </button>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               );
             })}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
 
       {data.total > 50 && (
@@ -350,10 +358,10 @@ export function EdisNodelTrades() {
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-border/70">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border/70 bg-muted/50">
+      <div className="overflow-x-auto rounded-xl border border-border/70 xl:overflow-x-clip">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/40 hover:bg-muted/40">
               <SortableTh
                 label="Trade Date"
                 active={sort.key === "tradeDate"}
@@ -376,41 +384,41 @@ export function EdisNodelTrades() {
                 kind="number"
                 align="right"
               />
-              <th className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              <TableHead className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 Contract ID
-              </th>
-              <th className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              </TableHead>
+              <TableHead className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 Broker
-              </th>
-            </tr>
-          </thead>
-          <tbody>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {sorted.map((item, i) => (
-              <tr
+              <TableRow
                 key={item["id"] ?? i}
                 className="border-b border-border/50 transition-colors hover:bg-muted/30 last:border-0"
               >
-                <td className="whitespace-nowrap px-4 py-3 font-medium">
+                <TableCell className="whitespace-nowrap px-4 py-3 font-medium">
                   {String(item["tradeDate"] ?? item["settleDate"] ?? "-")}
-                </td>
-                <td className="whitespace-nowrap px-4 py-3">
+                </TableCell>
+                <TableCell className="whitespace-nowrap px-4 py-3">
                   <span className="font-mono text-xs font-semibold">
                     {String(item["scriptCode"] ?? "-")}
                   </span>
-                </td>
-                <td className="whitespace-nowrap px-4 py-3 text-right font-mono">
+                </TableCell>
+                <TableCell className="whitespace-nowrap px-4 py-3 text-right font-mono">
                   {formatQty(Number(item["quantity"] ?? 0))}
-                </td>
-                <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
+                </TableCell>
+                <TableCell className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
                   {String(item["contractId"] ?? "-")}
-                </td>
-                <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
+                </TableCell>
+                <TableCell className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
                   {String(item["brokerCode"] ?? "-")}
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
 
       {data.total > 50 && (

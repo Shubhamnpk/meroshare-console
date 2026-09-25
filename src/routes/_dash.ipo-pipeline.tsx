@@ -223,8 +223,8 @@ function IpoPipelinePage() {
           }
         />
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-border/70 bg-card">
-          <div className="overflow-x-auto">
+        <div className="overflow-clip rounded-2xl border border-border/70 bg-card">
+          <div className="overflow-x-auto xl:overflow-x-clip">
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/40 hover:bg-muted/40">

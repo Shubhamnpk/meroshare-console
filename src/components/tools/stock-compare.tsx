@@ -6,6 +6,15 @@ import { computeLongTermScore, type LongTermScore } from "@/lib/nepse/screener";
 import { formatNpr, formatPercent } from "@/lib/format";
 import { ScripSheet } from "@/components/market/scrip-sheet";
 import { cn } from "@/lib/utils";
+import { Panel } from "@/components/ui/panel";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 interface CompareRow {
   symbol: string;
@@ -187,44 +196,44 @@ export function StockCompare() {
       </div>
 
       {rows.length > 0 && (
-        <div className="overflow-x-auto rounded-xl border border-border/70">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border/50 bg-muted/30">
-                <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
+        <Panel padding="none" className="overflow-clip">
+          <Table className="min-w-[760px]">
+            <TableHeader className="bg-muted">
+              <TableRow className="bg-muted/40 hover:bg-muted/40">
+                <TableHead className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
                   Metric
-                </th>
+                </TableHead>
                 {rows.map((r) => (
-                  <th
+                  <TableHead
                     key={r.symbol}
                     className="px-3 py-2 text-right text-xs font-medium text-muted-foreground"
                   >
                     {r.symbol}
-                  </th>
+                  </TableHead>
                 ))}
-              </tr>
-            </thead>
-            <tbody>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {rows.length > 0 && (
-                <tr className="border-b border-border/30 bg-muted/10">
-                  <td className="px-3 py-1.5 text-xs text-muted-foreground">
+                <TableRow className="border-b border-border/30 bg-muted/10">
+                  <TableCell className="px-3 py-1.5 text-xs text-muted-foreground">
                     Name
-                  </td>
+                  </TableCell>
                   {rows.map((r) => (
-                    <td
+                    <TableCell
                       key={r.symbol}
                       className="px-3 py-1.5 text-right text-xs"
                     >
                       {r.name}
-                    </td>
+                    </TableCell>
                   ))}
-                </tr>
+                </TableRow>
               )}
               {metrics.map((m) => (
-                <tr key={m.key} className="border-b border-border/20">
-                  <td className="px-3 py-2 text-xs text-muted-foreground">
+                <TableRow key={m.key} className="border-b border-border/20">
+                  <TableCell className="px-3 py-2 text-xs text-muted-foreground">
                     {m.label}
-                  </td>
+                  </TableCell>
                   {rows.map((r) => {
                     const val = r[m.key as keyof CompareRow];
                     const numVal =
@@ -234,7 +243,7 @@ export function StockCompare() {
                       .filter((v): v is number => typeof v === "number");
                     const maxVal = Math.max(...allVals.map(Math.abs), 1);
                     return (
-                      <td
+                      <TableCell
                         key={r.symbol}
                         className={cn(
                           "px-3 py-2 text-right text-xs font-medium",
@@ -268,14 +277,14 @@ export function StockCompare() {
                               />
                             </div>
                           )}
-                      </td>
+                      </TableCell>
                     );
                   })}
-                </tr>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </Panel>
       )}
 
       {rows.length === 0 && (

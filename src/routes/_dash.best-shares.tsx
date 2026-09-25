@@ -2,9 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
-  ArrowUpDown,
   BarChart3,
-  ChevronUp,
   Coins,
   Filter,
   Flame,
@@ -30,6 +28,16 @@ import {
 import type { DividendRow } from "@/lib/nepse/types";
 import { formatNpr, formatPercent, formatNumber, formatQty } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { SortableTh, sortBy, useSort, type SortKind } from "@/components/sortable-table";
+import { Panel } from "@/components/ui/panel";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { ogImage, canonicalLink } from "@/lib/seo";
 
 export const Route = createFileRoute("/_dash/best-shares")({
@@ -92,26 +100,40 @@ const RED_FLAG_SHORT: Record<RedFlag, string> = {
 };
 
 // ---------------------------------------------------------------------------
-// Sort helpers
+// Sort model: one shared key set across tabs, driven by the inbuilt
+// useSort/sortBy (same mechanism + arrows as market/portfolio).
 // ---------------------------------------------------------------------------
 
-type ShortTermSortKey = "score" | "percentChange" | "volume" | "rsi" | "turnover";
-type LongTermSortKey =
-  "score" | "pe" | "pb" | "roe" | "dividendYield" | "dividendStreak" | "volume";
-type DividendSortKey = "dividendYield" | "dividendStreak" | "score" | "volume";
+type SortKey =
+  | "symbol"
+  | "ltp"
+  | "change"
+  | "score"
+  | "rsi"
+  | "volume"
+  | "pe"
+  | "pb"
+  | "roe"
+  | "yield"
+  | "streak"
+  | "signal"
+  | "records";
 
-function sortStocks<T extends RankedStock>(
-  stocks: T[],
-  key: string,
-  dir: "asc" | "desc",
-  getter: (s: T) => number | null,
-): T[] {
-  return [...stocks].sort((a, b) => {
-    const av = getter(a) ?? (dir === "asc" ? Infinity : -Infinity);
-    const bv = getter(b) ?? (dir === "asc" ? Infinity : -Infinity);
-    return dir === "asc" ? av - bv : bv - av;
-  });
-}
+const SORT_KINDS: Record<SortKey, SortKind> = {
+  symbol: "text",
+  ltp: "number",
+  change: "number",
+  score: "number",
+  rsi: "number",
+  volume: "number",
+  pe: "number",
+  pb: "number",
+  roe: "number",
+  yield: "number",
+  streak: "number",
+  signal: "text",
+  records: "number",
+};
 
 // ---------------------------------------------------------------------------
 // Dividend stock with history
@@ -129,8 +151,10 @@ interface DividendStock extends RankedStock {
 function BestSharesPage() {
   const [tab, setTab] = useState<"short" | "long" | "dividends">("short");
   const [signalFilter, setSignalFilter] = useState<string>("ALL");
-  const [sortKey, setSortKey] = useState<string>("score");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const { sort, toggle, reset } = useSort<SortKey>(
+    { key: "score", dir: "desc" },
+    SORT_KINDS,
+  );
   const [picked, setPicked] = useState<string | null>(null);
   const [simulatorStock, setSimulatorStock] = useState<string | null>(null);
 
@@ -218,64 +242,42 @@ function BestSharesPage() {
     });
   }, [ranked, signalFilter, tab]);
 
-  // Apply sort
+  // Apply sort (shared sortBy; nulls coalesced so numbers stay numeric)
   const sorted = useMemo(() => {
-    const getter = (s: RankedStock) => {
-      if (tab === "dividends") {
-        const lt = s.longTerm!;
-        switch (sortKey) {
-          case "dividendYield":
-            return lt.dividendYield ?? 0;
-          case "dividendStreak":
-            return lt.dividendStreak;
-          case "score":
-            return lt.score;
-          case "volume":
-            return s.volume;
-          default:
-            return lt.dividendYield ?? 0;
-        }
-      }
-      if (tab === "short") {
-        const st = s.shortTerm!;
-        switch (sortKey) {
-          case "score":
-            return st.score;
-          case "percentChange":
-            return s.percentChange;
-          case "volume":
-            return s.volume;
-          case "rsi":
-            return st.rsi ?? 50;
-          case "turnover":
-            return s.turnover;
-          default:
-            return st.score;
-        }
-      } else {
-        const lt = s.longTerm!;
-        switch (sortKey) {
-          case "score":
-            return lt.score;
-          case "pe":
-            return lt.pe ?? 999;
-          case "pb":
-            return lt.pb ?? 999;
-          case "roe":
-            return lt.roe ?? 0;
-          case "dividendYield":
-            return lt.dividendYield ?? 0;
-          case "dividendStreak":
-            return lt.dividendStreak;
-          case "volume":
-            return s.volume;
-          default:
-            return lt.score;
-        }
+    const getter = (s: RankedStock): string | number => {
+      switch (sort.key) {
+        case "symbol":
+          return s.symbol;
+        case "ltp":
+          return s.ltp;
+        case "change":
+          return s.percentChange;
+        case "score":
+          return tab === "short" ? (s.shortTerm?.score ?? 0) : (s.longTerm?.score ?? 0);
+        case "rsi":
+          return s.shortTerm?.rsi ?? 50;
+        case "volume":
+          return s.volume;
+        case "pe":
+          return s.longTerm?.pe ?? 999;
+        case "pb":
+          return s.longTerm?.pb ?? 999;
+        case "roe":
+          return s.longTerm?.roe ?? 0;
+        case "yield":
+          return s.longTerm?.dividendYield ?? 0;
+        case "streak":
+          return s.longTerm?.dividendStreak ?? 0;
+        case "signal":
+          return (tab === "short" ? s.shortTerm?.signal : s.longTerm?.signal) ?? "";
+        case "records":
+          return (dividends[s.symbol] ?? []).length;
+        default:
+          return 0;
       }
     };
-    return sortStocks(filtered, sortKey, sortDir, getter);
-  }, [filtered, sortKey, sortDir, tab]);
+    return sortBy(filtered, getter, sort.dir);
+  }, [filtered, sort, tab, dividends]);
 
   // Stats
   const stats = useMemo(() => {
@@ -303,22 +305,6 @@ function BestSharesPage() {
     };
   }, [ranked]);
 
-  // Sort toggle
-  const toggleSort = (key: string) => {
-    if (sortKey === key) {
-      setSortDir((d) => (d === "desc" ? "asc" : "desc"));
-    } else {
-      setSortKey(key);
-      setSortDir("desc");
-    }
-  };
-
-  const SortIcon = ({ active, dir }: { active: boolean; dir: "asc" | "desc" }) => (
-    <ArrowUpDown
-      className={cn("ml-1 inline size-3", active ? "text-primary" : "text-muted-foreground/50")}
-    />
-  );
-
   return (
     <div className="space-y-5">
       <BackButton fallback="/tools" />
@@ -334,11 +320,11 @@ function BestSharesPage() {
       <div className="flex gap-1 rounded-xl border border-border/70 bg-card p-1">
         <button
           type="button"
-          onClick={() => {
-            setTab("short");
-            setSignalFilter("ALL");
-            setSortKey("score");
-          }}
+            onClick={() => {
+              setTab("short");
+              setSignalFilter("ALL");
+              reset({ key: "score", dir: "desc" });
+            }}
           className={cn(
             "flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors",
             tab === "short"
@@ -352,11 +338,11 @@ function BestSharesPage() {
         </button>
         <button
           type="button"
-          onClick={() => {
-            setTab("long");
-            setSignalFilter("ALL");
-            setSortKey("score");
-          }}
+            onClick={() => {
+              setTab("long");
+              setSignalFilter("ALL");
+              reset({ key: "score", dir: "desc" });
+            }}
           className={cn(
             "flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors",
             tab === "long"
@@ -370,11 +356,11 @@ function BestSharesPage() {
         </button>
         <button
           type="button"
-          onClick={() => {
-            setTab("dividends");
-            setSignalFilter("ALL");
-            setSortKey("dividendYield");
-          }}
+            onClick={() => {
+              setTab("dividends");
+              setSignalFilter("ALL");
+              reset({ key: "yield", dir: "desc" });
+            }}
           className={cn(
             "flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors",
             tab === "dividends"
@@ -555,130 +541,51 @@ function BestSharesPage() {
             </div>
           )}
 
-          {/* Sort controls */}
-          <div className="flex flex-wrap gap-2">
-            {tab === "short"
-              ? (["score", "percentChange", "volume", "rsi", "turnover"] as ShortTermSortKey[]).map(
-                  (key) => (
-                    <SortButton
-                      key={key}
-                      label={
-                        key === "score"
-                          ? "Score"
-                          : key === "percentChange"
-                            ? "Change%"
-                            : key === "volume"
-                              ? "Volume"
-                              : key === "rsi"
-                                ? "RSI"
-                                : "Turnover"
-                      }
-                      active={sortKey === key}
-                      dir={sortDir}
-                      onClick={() => toggleSort(key)}
-                    />
-                  ),
-                )
-              : tab === "long"
-                ? (
-                    [
-                      "score",
-                      "pe",
-                      "pb",
-                      "roe",
-                      "dividendYield",
-                      "dividendStreak",
-                      "volume",
-                    ] as LongTermSortKey[]
-                  ).map((key) => (
-                    <SortButton
-                      key={key}
-                      label={
-                        key === "score"
-                          ? "Score"
-                          : key === "pe"
-                            ? "P/E"
-                            : key === "pb"
-                              ? "P/B"
-                              : key === "roe"
-                                ? "ROE"
-                                : key === "dividendYield"
-                                  ? "Yield"
-                                  : key === "dividendStreak"
-                                    ? "Streak"
-                                    : "Volume"
-                      }
-                      active={sortKey === key}
-                      dir={sortDir}
-                      onClick={() => toggleSort(key)}
-                    />
-                  ))
-                : (["dividendYield", "dividendStreak", "score", "volume"] as DividendSortKey[]).map(
-                    (key) => (
-                      <SortButton
-                        key={key}
-                        label={
-                          key === "dividendYield"
-                            ? "Yield"
-                            : key === "dividendStreak"
-                              ? "Streak"
-                              : key === "score"
-                                ? "Score"
-                                : "Volume"
-                        }
-                        active={sortKey === key}
-                        dir={sortDir}
-                        onClick={() => toggleSort(key)}
-                      />
-                    ),
-                  )}
-          </div>
-
-          {/* Table */}
-          <div className="overflow-x-auto rounded-xl border border-border/70">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border/70 bg-card/50 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  <th className="px-3 py-3 pl-4 sm:pl-4">#</th>
-                  <th className="px-3 py-3">Scrip</th>
-                  <th className="num px-3 py-3 text-right">LTP</th>
-                  <th className="num px-3 py-3 text-right">Chg%</th>
+          {/* Table (headers sort via the shared SortableTh) */}
+          <Panel padding="none" className="overflow-clip">
+            <Table className="min-w-[760px]">
+              <TableHeader className="bg-muted">
+                <TableRow className="bg-muted/40 hover:bg-muted/40">
+                  <TableHead className="px-3 py-3 pl-4 sm:pl-4">#</TableHead>
+                  <SortableTh label="Scrip" active={sort.key === "symbol"} dir={sort.dir} kind="text" align="left" onClick={() => toggle("symbol")} className="px-3 py-3" />
+                  <SortableTh label="LTP" active={sort.key === "ltp"} dir={sort.dir} kind="number" align="right" onClick={() => toggle("ltp")} className="num px-3 py-3 text-right" />
+                  <SortableTh label="Chg%" active={sort.key === "change"} dir={sort.dir} kind="number" align="right" onClick={() => toggle("change")} className="num px-3 py-3 text-right" />
                   {tab === "dividends" ? (
                     <>
-                      <th className="num px-3 py-3 text-right">Yield</th>
-                      <th className="num px-3 py-3 text-right hidden sm:table-cell">Streak</th>
-                      <th className="px-3 py-3 text-center hidden md:table-cell">Cash/Bonus</th>
-                      <th className="px-3 py-3 text-center">Signal</th>
+                      <SortableTh label="Yield" active={sort.key === "yield"} dir={sort.dir} kind="number" align="right" onClick={() => toggle("yield")} className="num px-3 py-3 text-right" />
+                      <SortableTh label="Streak" active={sort.key === "streak"} dir={sort.dir} kind="number" align="right" onClick={() => toggle("streak")} className="num px-3 py-3 text-right hidden sm:table-cell" />
+                      <SortableTh label="Cash/Bonus" active={sort.key === "records"} dir={sort.dir} kind="number" align="left" onClick={() => toggle("records")} className="px-3 py-3 text-center hidden md:table-cell" />
+                      <SortableTh label="Signal" active={sort.key === "signal"} dir={sort.dir} kind="text" align="left" onClick={() => toggle("signal")} className="px-3 py-3 text-center" />
                     </>
                   ) : (
                     <>
-                      <th className="num px-3 py-3 text-right">Score</th>
+                      <SortableTh label="Score" active={sort.key === "score"} dir={sort.dir} kind="number" align="right" onClick={() => toggle("score")} className="num px-3 py-3 text-right" />
                       {tab === "short" ? (
                         <>
-                          <th className="num px-3 py-3 text-right">RSI</th>
-                          <th className="num px-3 py-3 text-right hidden sm:table-cell">Volume</th>
-                          <th className="px-3 py-3 text-center">Signal</th>
+                          <SortableTh label="RSI" active={sort.key === "rsi"} dir={sort.dir} kind="number" align="right" onClick={() => toggle("rsi")} className="num px-3 py-3 text-right" />
+                          <SortableTh label="Volume" active={sort.key === "volume"} dir={sort.dir} kind="number" align="right" onClick={() => toggle("volume")} className="num px-3 py-3 text-right hidden sm:table-cell" />
+                          <SortableTh label="Signal" active={sort.key === "signal"} dir={sort.dir} kind="text" align="left" onClick={() => toggle("signal")} className="px-3 py-3 text-center" />
                         </>
                       ) : (
                         <>
-                          <th className="num px-3 py-3 text-right">P/E</th>
-                          <th className="num px-3 py-3 text-right hidden sm:table-cell">P/B</th>
-                          <th className="num px-3 py-3 text-right hidden md:table-cell">ROE</th>
-                          <th className="num px-3 py-3 text-right hidden sm:table-cell">Yield</th>
-                          <th className="num px-3 py-3 text-right hidden md:table-cell">Streak</th>
-                          <th className="px-3 py-3 text-center">Signal</th>
+                          <SortableTh label="P/E" active={sort.key === "pe"} dir={sort.dir} kind="number" align="right" onClick={() => toggle("pe")} className="num px-3 py-3 text-right" />
+                          <SortableTh label="P/B" active={sort.key === "pb"} dir={sort.dir} kind="number" align="right" onClick={() => toggle("pb")} className="num px-3 py-3 text-right hidden sm:table-cell" />
+                          <SortableTh label="ROE" active={sort.key === "roe"} dir={sort.dir} kind="number" align="right" onClick={() => toggle("roe")} className="num px-3 py-3 text-right hidden md:table-cell" />
+                          <SortableTh label="Yield" active={sort.key === "yield"} dir={sort.dir} kind="number" align="right" onClick={() => toggle("yield")} className="num px-3 py-3 text-right hidden sm:table-cell" />
+                          <SortableTh label="Streak" active={sort.key === "streak"} dir={sort.dir} kind="number" align="right" onClick={() => toggle("streak")} className="num px-3 py-3 text-right hidden md:table-cell" />
+                          <SortableTh label="Signal" active={sort.key === "signal"} dir={sort.dir} kind="text" align="left" onClick={() => toggle("signal")} className="px-3 py-3 text-center" />
                         </>
                       )}
                     </>
                   )}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/50">
+                </TableRow>
+              </TableHeader>
+              <TableBody className="divide-y divide-border/50">
                 {sorted.slice(0, 100).map((stock, i) => {
                   const isDividendTab = tab === "dividends";
                   const divHistory = isDividendTab ? (dividends[stock.symbol] ?? []) : [];
                   return (
-                    <tr
+                    <TableRow
                       key={stock.symbol}
                       className={cn(
                         "transition-colors hover:bg-accent/10",
@@ -692,24 +599,24 @@ function BestSharesPage() {
                         if (isDividendTab) setSimulatorStock(stock.symbol);
                       }}
                     >
-                      <td className="px-3 py-3 pl-4 text-xs text-muted-foreground">{i + 1}</td>
-                      <td className="px-3 py-3">
+                      <TableCell className="px-3 py-3 pl-4 text-xs text-muted-foreground">{i + 1}</TableCell>
+                      <TableCell className="px-3 py-3">
                         <p className="font-semibold">{stock.symbol}</p>
                         <p className="max-w-[120px] truncate text-xs text-muted-foreground sm:max-w-none">
                           {stock.name}
                         </p>
-                      </td>
-                      <td className="num px-3 py-3 text-right font-medium">
+                      </TableCell>
+                      <TableCell className="num px-3 py-3 text-right font-medium">
                         {formatNpr(stock.ltp)}
-                      </td>
-                      <td className="px-3 py-3 text-right">
+                      </TableCell>
+                      <TableCell className="px-3 py-3 text-right">
                         <DeltaPill value={stock.percentChange} className="inline-flex">
                           {formatPercent(stock.percentChange)}
                         </DeltaPill>
-                      </td>
+                      </TableCell>
                       {isDividendTab ? (
                         <>
-                          <td className="num px-3 py-3 text-right text-xs">
+                          <TableCell className="num px-3 py-3 text-right text-xs">
                             {stock.longTerm?.dividendYield != null ? (
                               <span
                                 className={cn(
@@ -726,8 +633,8 @@ function BestSharesPage() {
                             ) : (
                               <span className="text-muted-foreground/50">-</span>
                             )}
-                          </td>
-                          <td className="num hidden px-3 py-3 text-right text-xs sm:table-cell">
+                          </TableCell>
+                          <TableCell className="num hidden px-3 py-3 text-right text-xs sm:table-cell">
                             {stock.longTerm?.dividendStreak != null &&
                             stock.longTerm.dividendStreak > 0 ? (
                               <span
@@ -744,8 +651,8 @@ function BestSharesPage() {
                             ) : (
                               <span className="text-muted-foreground/50">-</span>
                             )}
-                          </td>
-                          <td className="hidden px-3 py-3 text-center md:table-cell">
+                          </TableCell>
+                          <TableCell className="hidden px-3 py-3 text-center md:table-cell">
                             <div className="flex flex-col items-center gap-0.5">
                               {stock.longTerm?.dividendYield != null && (
                                 <span className="text-[0.65rem] text-amber-400">
@@ -758,11 +665,11 @@ function BestSharesPage() {
                                 </span>
                               )}
                             </div>
-                          </td>
+                          </TableCell>
                         </>
                       ) : (
                         <>
-                          <td className="num px-3 py-3 text-right">
+                          <TableCell className="num px-3 py-3 text-right">
                             <span
                               className={cn(
                                 "inline-flex size-8 items-center justify-center rounded-full text-xs font-bold",
@@ -779,10 +686,10 @@ function BestSharesPage() {
                             >
                               {tab === "short" ? stock.shortTerm?.score : stock.longTerm?.score}
                             </span>
-                          </td>
+                          </TableCell>
                           {tab === "short" ? (
                             <>
-                              <td className="num px-3 py-3 text-right text-xs">
+                              <TableCell className="num px-3 py-3 text-right text-xs">
                                 {stock.shortTerm?.rsi != null ? (
                                   <span
                                     className={cn(
@@ -799,14 +706,14 @@ function BestSharesPage() {
                                 ) : (
                                   <span className="text-muted-foreground/50">-</span>
                                 )}
-                              </td>
-                              <td className="num hidden px-3 py-3 text-right text-xs text-muted-foreground sm:table-cell">
+                              </TableCell>
+                              <TableCell className="num hidden px-3 py-3 text-right text-xs text-muted-foreground sm:table-cell">
                                 {formatQty(stock.volume)}
-                              </td>
+                              </TableCell>
                             </>
                           ) : (
                             <>
-                              <td className="num px-3 py-3 text-right text-xs">
+                              <TableCell className="num px-3 py-3 text-right text-xs">
                                 {stock.longTerm?.pe != null ? (
                                   <span
                                     className={cn(
@@ -822,11 +729,11 @@ function BestSharesPage() {
                                 ) : (
                                   <span className="text-muted-foreground/50">-</span>
                                 )}
-                              </td>
-                              <td className="num hidden px-3 py-3 text-right text-xs text-muted-foreground sm:table-cell">
+                              </TableCell>
+                              <TableCell className="num hidden px-3 py-3 text-right text-xs text-muted-foreground sm:table-cell">
                                 {stock.longTerm?.pb != null ? stock.longTerm.pb : "-"}
-                              </td>
-                              <td className="num hidden px-3 py-3 text-right text-xs md:table-cell">
+                              </TableCell>
+                              <TableCell className="num hidden px-3 py-3 text-right text-xs md:table-cell">
                                 {stock.longTerm?.roe != null ? (
                                   <span
                                     className={cn(
@@ -842,8 +749,8 @@ function BestSharesPage() {
                                 ) : (
                                   <span className="text-muted-foreground/50">-</span>
                                 )}
-                              </td>
-                              <td className="num hidden px-3 py-3 text-right text-xs sm:table-cell">
+                              </TableCell>
+                              <TableCell className="num hidden px-3 py-3 text-right text-xs sm:table-cell">
                                 {stock.longTerm?.dividendYield != null ? (
                                   <span className="text-amber-400">
                                     {stock.longTerm.dividendYield}%
@@ -851,8 +758,8 @@ function BestSharesPage() {
                                 ) : (
                                   <span className="text-muted-foreground/50">-</span>
                                 )}
-                              </td>
-                              <td className="num hidden px-3 py-3 text-right text-xs md:table-cell">
+                              </TableCell>
+                              <TableCell className="num hidden px-3 py-3 text-right text-xs md:table-cell">
                                 {stock.longTerm?.dividendStreak != null &&
                                 stock.longTerm.dividendStreak > 0 ? (
                                   <span
@@ -869,12 +776,12 @@ function BestSharesPage() {
                                 ) : (
                                   <span className="text-muted-foreground/50">-</span>
                                 )}
-                              </td>
+                              </TableCell>
                             </>
                           )}
                         </>
                       )}
-                      <td className="px-3 py-3 text-center">
+                      <TableCell className="px-3 py-3 text-center">
                         <div className="flex flex-col items-center gap-1">
                           {isDividendTab ? (
                             <span
@@ -915,13 +822,13 @@ function BestSharesPage() {
                             </>
                           )}
                         </div>
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   );
                 })}
-              </tbody>
-            </table>
-          </div>
+              </TableBody>
+            </Table>
+          </Panel>
 
           {sorted.length === 0 && (
             <div className="rounded-xl border border-border/70 bg-card py-12 text-center text-sm text-muted-foreground">
@@ -973,36 +880,4 @@ function StatCard({
   );
 }
 
-function SortButton({
-  label,
-  active,
-  dir,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  dir: "asc" | "desc";
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "flex items-center rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
-        active
-          ? "border-primary/50 bg-primary/10 text-primary"
-          : "border-border/70 bg-card text-muted-foreground hover:text-foreground",
-      )}
-    >
-      {label}
-      <ChevronUp
-        className={cn(
-          "ml-1 size-3 transition-transform",
-          active && dir === "asc" ? "rotate-180" : "",
-          !active && "opacity-30",
-        )}
-      />
-    </button>
-  );
-}
+

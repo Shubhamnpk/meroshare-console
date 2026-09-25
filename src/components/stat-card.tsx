@@ -48,17 +48,21 @@ export function DeltaPill({
   value,
   children,
   className,
+  title,
 }: {
   value: number;
   children: ReactNode;
   className?: string;
+  title?: string;
 }) {
   return (
     <span
+      title={title}
       className={cn(
         // text-center + leading-snug keep the stadium shape clean when long
         // values wrap onto a 2nd/3rd row in squeezed table cells.
         "num inline-flex max-w-full items-center justify-center gap-1 rounded-full px-2 py-0.5 text-center text-xs font-semibold leading-snug",
+        title && "cursor-help",
         value > 0
           ? "bg-gain/15 text-gain"
           : value < 0

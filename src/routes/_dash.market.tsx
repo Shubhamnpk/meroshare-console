@@ -589,7 +589,7 @@ function MarketPage() {
             {filtered.length === 0 ? (
               <EmptyBlock title="No matches" description="No listed scrip matches that search." />
             ) : (
-              <Panel padding="none" className="overflow-hidden">
+              <Panel padding="none" className="overflow-clip">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/40 hover:bg-muted/40">

@@ -9,15 +9,12 @@ import {
   Clock,
   ExternalLink,
   History,
-  LayoutGrid,
-  List,
   MapPin,
   Phone,
   Search,
   ShieldCheck,
   Star,
   Store,
-  TableIcon,
   TrendingUp,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -37,6 +34,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { EmptyBlock } from "@/components/states";
+import { ViewToggle } from "@/components/ui/view-toggle";
 import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
 import { formatNpr, formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -737,9 +735,9 @@ function BrokerTable({
   }, [brokers, sort]);
 
   return (
-    <div className="max-h-[520px] overflow-auto rounded-2xl border border-border/60 bg-surface">
+    <div className="overflow-x-auto rounded-2xl border border-border/60 bg-surface xl:overflow-x-clip">
       <Table>
-        <TableHeader className="sticky top-0 z-10 bg-surface">
+        <TableHeader className="bg-surface">
           <TableRow>
             <SortableTh
               label="#"
@@ -1009,31 +1007,7 @@ export function BrokerLeaderboard({
               </button>
             ))}
           </div>
-          <div className="inline-flex items-center gap-0.5 rounded-full border bg-muted/60 p-0.5 shadow-sm">
-            {(["cards", "list", "table"] as const).map((v) => (
-              <button
-                key={v}
-                type="button"
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-full px-3 py-1 text-[11px] font-medium transition-all",
-                  view === v
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-                onClick={() => setView(v)}
-                aria-label={`${v} view`}
-              >
-                {v === "cards" ? (
-                  <LayoutGrid className="size-3.5" aria-hidden />
-                ) : v === "list" ? (
-                  <List className="size-3.5" aria-hidden />
-                ) : (
-                  <TableIcon className="size-3.5" aria-hidden />
-                )}
-                {v === "cards" ? "Cards" : v === "list" ? "List" : "Table"}
-              </button>
-            ))}
-          </div>
+          <ViewToggle value={view} onChange={setView} modes={["cards", "list", "table"]} />
         </div>
       </div>
 

@@ -1616,10 +1616,10 @@ function BrokerPage() {
           {(holdingRows ?? []).length === 0 && !holdings.isPending && !holdings.isError ? (
             <p className="text-xs text-muted-foreground">No holdings match.</p>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto xl:overflow-x-clip">
               <Table>
-                <TableHeader className="sticky top-0 z-10 bg-surface">
-                  <TableRow>
+                <TableHeader className="bg-surface">
+                  <TableRow className="bg-muted/40 hover:bg-muted/40">
                     <SortableTh
                       label="Scrip"
                       active={holdingSort.key === "symbol"}
@@ -1967,10 +1967,10 @@ function BrokerPage() {
               {(trades.data ?? []).length === 0 && !trades.isPending && !trades.isError ? (
                 <p className="text-xs text-muted-foreground">No trades in this range.</p>
               ) : (
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto xl:overflow-x-clip">
                   <Table>
-                    <TableHeader className="sticky top-0 z-10 bg-surface">
-                      <TableRow>
+                    <TableHeader className="bg-surface">
+                      <TableRow className="bg-muted/40 hover:bg-muted/40">
                         <SortableTh
                           label="Trade ID"
                           active={tradeSort.key === "id"}
@@ -2220,10 +2220,10 @@ function BrokerPage() {
             {sortedTxns.length === 0 && !fundTxns.isPending && !fundTxns.isError ? (
               <p className="text-xs text-muted-foreground">No fund movements in this range.</p>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto xl:overflow-x-clip">
                 <Table>
-                  <TableHeader className="sticky top-0 z-10 bg-surface">
-                    <TableRow>
+                  <TableHeader className="bg-surface">
+                    <TableRow className="bg-muted/40 hover:bg-muted/40">
                       <SortableTh
                         label="Date"
                         active={txnSort.key === "date"}

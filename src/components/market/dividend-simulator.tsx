@@ -460,10 +460,10 @@ export function DividendSimulator({
                 : "No rows to display."}
             </p>
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-border/60">
+            <div className="overflow-x-auto rounded-xl border border-border/60 xl:overflow-x-clip">
               <Table>
                 <TableHeader>
-                  <TableRow className="bg-muted/30 hover:bg-muted/30">
+                  <TableRow className="bg-muted/40 hover:bg-muted/40">
                     <TableHead className="pl-3">FY</TableHead>
                     <TableHead className="text-right">Units held</TableHead>
                     <TableHead className="text-right">Cash %</TableHead>

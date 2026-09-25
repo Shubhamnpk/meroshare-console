@@ -247,7 +247,7 @@ function TransactionsPage() {
           description="Nothing matches your search. Try a different scrip or description."
         />
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-border/70 bg-card">
+        <div className="overflow-clip rounded-2xl border border-border/70 bg-card">
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/40 hover:bg-muted/40">

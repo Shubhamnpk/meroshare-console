@@ -12,6 +12,14 @@ import {
 import { indexDailyQuery, indexGraphQuery } from "@/lib/queries";
 import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
   Activity,
   Layers,
   TrendingUp,
@@ -1350,11 +1358,11 @@ export function MarketOverview({
 
         {/* View Mode 1: Market Depth Matrix (Institutional Table) */}
         {viewMode === "matrix" && (
-          <div className="overflow-hidden rounded-2xl border border-border/70 bg-card/80 shadow-xs">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-border/60 bg-surface/80 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+          <div className="overflow-clip rounded-2xl border border-border/70 bg-card/80 shadow-xs">
+            <div className="overflow-x-auto xl:overflow-x-clip">
+              <Table className="text-left text-xs">
+                <TableHeader>
+                  <TableRow className="bg-muted/40 hover:bg-muted/40">
                     <SortableTh label="Sector" active={depthSort.key === "sector"} dir={depthSort.dir} onClick={() => toggleDepthSort("sector")} kind="text" className="py-2.5 pl-4 pr-2 font-semibold" />
                     <SortableTh label="Index Points" active={depthSort.key === "points"} dir={depthSort.dir} onClick={() => toggleDepthSort("points")} align="right" className="py-2.5 px-3 font-semibold" />
                     <SortableTh label="Turnover" active={depthSort.key === "turnover"} dir={depthSort.dir} onClick={() => toggleDepthSort("turnover")} align="right" className="py-2.5 px-3 font-semibold" />
@@ -1362,10 +1370,10 @@ export function MarketOverview({
                     <SortableTh label="Breadth" active={depthSort.key === "breadth"} dir={depthSort.dir} onClick={() => toggleDepthSort("breadth")} className="py-2.5 px-3 text-center min-w-[120px] font-semibold" />
                     <SortableTh label="Top Performer" active={depthSort.key === "performer"} dir={depthSort.dir} onClick={() => toggleDepthSort("performer")} className="py-2.5 px-3 font-semibold" />
                     <SortableTh label="Heaviest Scrip" active={depthSort.key === "traded"} dir={depthSort.dir} onClick={() => toggleDepthSort("traded")} className="py-2.5 px-3 font-semibold" />
-                    <th className="py-2.5 pr-4 pl-2 text-right">Chart</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/40">
+                    <TableHead className="py-2.5 pr-4 pl-2 text-right">Chart</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody className="divide-y divide-border/40">
                   {sortedSectors.map((s) => {
                     const isUp = (s.sectorPercentChange ?? s.avgChange) >= 0;
                     const openSector = () =>
@@ -1375,13 +1383,13 @@ export function MarketOverview({
                       });
 
                     return (
-                      <tr
+                      <TableRow
                         key={s.sector}
                         onClick={openSector}
                         title={`Open ${s.sector} sector page`}
                         className="group hover:bg-surface/50 transition-colors cursor-pointer"
                       >
-                        <td className="py-3 pl-4 pr-2">
+                        <TableCell className="py-3 pl-4 pr-2">
                           <button
                             type="button"
                             onClick={(e) => {
@@ -1396,9 +1404,9 @@ export function MarketOverview({
                               {s.items.length}
                             </span>
                           </button>
-                        </td>
+                        </TableCell>
 
-                        <td className="py-3 px-3 text-right">
+                        <TableCell className="py-3 px-3 text-right">
                           <div className="flex flex-col items-end">
                             <span
                               className="num font-bold text-foreground"
@@ -1423,18 +1431,18 @@ export function MarketOverview({
                                 : formatPercent(s.sectorPercentChange ?? s.avgChange)}
                             </span>
                           </div>
-                        </td>
+                        </TableCell>
 
-                        <td className="py-3 px-3 text-right">
+                        <TableCell className="py-3 px-3 text-right">
                           <div className="flex flex-col items-end">
                             <CompactNpr value={s.totalTurnover} className="num font-semibold text-foreground" />
                             <span className="num text-[10px] text-muted-foreground">
                               <CompactQty value={s.totalVolume} /> shares
                             </span>
                           </div>
-                        </td>
+                        </TableCell>
 
-                        <td className="py-3 px-3 text-right">
+                        <TableCell className="py-3 px-3 text-right">
                           <div className="flex flex-col items-end gap-1">
                             <span className="num font-semibold text-foreground">
                               {s.marketSharePct.toFixed(1)}%
@@ -1446,9 +1454,9 @@ export function MarketOverview({
                               />
                             </div>
                           </div>
-                        </td>
+                        </TableCell>
 
-                        <td className="py-3 px-3 text-center">
+                        <TableCell className="py-3 px-3 text-center">
                           <div className="flex flex-col items-center gap-1">
                             <div className="flex h-2 w-28 overflow-hidden rounded-full bg-muted">
                               <div
@@ -1479,9 +1487,9 @@ export function MarketOverview({
                               <span className="text-red-400 font-semibold">{s.decliners}↓</span>
                             </span>
                           </div>
-                        </td>
+                        </TableCell>
 
-                        <td className="py-3 px-3 text-left">
+                        <TableCell className="py-3 px-3 text-left">
                           {s.topGainer ? (
                             <button
                               type="button"
@@ -1501,9 +1509,9 @@ export function MarketOverview({
                           ) : (
                             <span className="text-muted-foreground/60">—</span>
                           )}
-                        </td>
+                        </TableCell>
 
-                        <td className="py-3 px-3 text-left">
+                        <TableCell className="py-3 px-3 text-left">
                           {s.topTraded ? (
                             <button
                               type="button"
@@ -1521,9 +1529,9 @@ export function MarketOverview({
                           ) : (
                             <span className="text-muted-foreground/60">—</span>
                           )}
-                        </td>
+                        </TableCell>
 
-                        <td className="py-3 pr-4 pl-2 text-right">
+                        <TableCell className="py-3 pr-4 pl-2 text-right">
                           <button
                             type="button"
                             onClick={(e) => {
@@ -1538,12 +1546,12 @@ export function MarketOverview({
                           >
                             Chart
                           </button>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     );
                   })}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           </div>
         )}

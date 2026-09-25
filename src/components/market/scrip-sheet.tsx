@@ -866,10 +866,10 @@ function ScripHistoryTable({ items }: { items: TransactionItem[] }) {
     return sortBy(items, getter, sort.dir);
   }, [items, sort]);
   return (
-    <div className="overflow-hidden rounded-xl border border-border/60 bg-surface">
+    <div className="overflow-clip rounded-xl border border-border/60 bg-surface">
       <Table>
         <TableHeader>
-          <TableRow className="bg-muted/30 hover:bg-muted/30">
+          <TableRow className="bg-muted/40 hover:bg-muted/40">
             <SortableTh
               label="Date"
               active={sort.key === "date"}

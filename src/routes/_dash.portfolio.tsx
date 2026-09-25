@@ -904,7 +904,7 @@ function PortfolioPage() {
         ) : yoItems.length === 0 ? (
           <EmptyBlock title="No matches" description="Nothing matches your search." />
         ) : (
-          <Panel padding="none" className="overflow-hidden">
+          <Panel padding="none" className="overflow-clip">
             <Table className="min-w-[760px]">
               <TableHeader>
                 <TableRow className="bg-muted/40 hover:bg-muted/40">
@@ -1014,7 +1014,8 @@ function PortfolioPage() {
                       <TableCell className="text-right">
                         <DeltaPill
                           value={pl}
-                        >{`${pl >= 0 ? "+" : "-"}${formatNpr(Math.abs(pl))} (${plPct.toFixed(1)}%)`}</DeltaPill>
+                          title={`${pl >= 0 ? "+" : "-"}${formatNpr(Math.abs(pl))} net P/L`}
+                        >{`${pl >= 0 ? "+" : ""}${plPct.toFixed(2)}%`}</DeltaPill>
                       </TableCell>
                       <TableCell className="text-right">
                         <DeltaPill
@@ -1062,7 +1063,7 @@ function PortfolioPage() {
         ) : brokerItems.length === 0 ? (
           <EmptyBlock title="No matches" description="Nothing matches your search." />
         ) : (
-          <Panel padding="none" className="overflow-hidden">
+          <Panel padding="none" className="overflow-clip">
             <Table className="min-w-[760px]">
               <TableHeader>
                 <TableRow className="bg-muted/40 hover:bg-muted/40">
@@ -1230,7 +1231,7 @@ function PortfolioPage() {
           description="Nothing matches your search. Try a different scrip or company."
         />
       ) : (
-        <Panel padding="none" className="overflow-hidden">
+        <Panel padding="none" className="overflow-clip">
           <Table className="min-w-[760px]">
             <TableHeader>
               <TableRow className="bg-muted/40 hover:bg-muted/40">
@@ -1380,8 +1381,11 @@ function PortfolioPage() {
                       }
                     >
                       {hasBasis ? (
-                        <DeltaPill value={pl}>
-                          {`${pl >= 0 ? "+" : "-"}${formatNpr(Math.abs(pl))} (${plPct.toFixed(1)}%)`}
+                        <DeltaPill
+                          value={pl}
+                          title={`${pl >= 0 ? "+" : "-"}${formatNpr(Math.abs(pl))} net · Breakeven ${formatNpr(breakEvenPrice(h.units, buyCost(h.units, basis!.waccRate).perUnit, 400))}`}
+                        >
+                          {`${pl >= 0 ? "+" : ""}${plPct.toFixed(2)}%`}
                         </DeltaPill>
                       ) : (
                         <span className="text-xs text-muted-foreground">-</span>
@@ -1427,8 +1431,11 @@ function PortfolioPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     {totalBuyCost > 0 ? (
-                      <DeltaPill value={unrealizedPL}>
-                        {`${unrealizedPL >= 0 ? "+" : "-"}${formatNpr(Math.abs(unrealizedPL))}`}
+                      <DeltaPill
+                        value={unrealizedPL}
+                        title={`${unrealizedPL >= 0 ? "+" : "-"}${formatNpr(Math.abs(unrealizedPL))} net total`}
+                      >
+                        {`${unrealizedPL >= 0 ? "+" : ""}${((unrealizedPL / totalBuyCost) * 100).toFixed(2)}%`}
                       </DeltaPill>
                     ) : (
                       <span className="text-xs text-muted-foreground">-</span>

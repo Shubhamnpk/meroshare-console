@@ -536,9 +536,9 @@ function BrokerLeaderboard({
   );
   const sorted = useMemo(() => sortBy(rows, (r) => r[sort.key], sort.dir), [rows, sort]);
   return (
-    <div className="max-h-[520px] overflow-auto">
+    <div className="overflow-x-auto xl:overflow-x-clip">
       <Table>
-        <TableHeader className="sticky top-0 z-10 bg-surface">
+        <TableHeader className="bg-surface">
           <TableRow>
             <SortableTh
               label="Broker"
@@ -671,9 +671,9 @@ function SymbolLeaderboard({
   );
   const sorted = useMemo(() => sortBy(rows, (r) => r[sort.key], sort.dir), [rows, sort]);
   return (
-    <div className="max-h-[520px] overflow-auto">
+    <div className="overflow-x-auto xl:overflow-x-clip">
       <Table>
-        <TableHeader className="sticky top-0 z-10 bg-surface">
+        <TableHeader className="bg-surface">
           <TableRow>
             <SortableTh
               label="Scrip"
@@ -942,9 +942,9 @@ function TradeTrail({
               />
             </div>
           ) : null}
-          <div className="max-h-[520px] overflow-auto">
+          <div className="overflow-x-auto xl:overflow-x-clip">
             <Table>
-              <TableHeader className="sticky top-0 z-10 bg-surface">
+              <TableHeader className="bg-surface">
                 <TableRow>
                   {multiDay ? (
                     <SortableTh

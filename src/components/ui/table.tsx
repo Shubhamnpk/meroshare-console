@@ -2,20 +2,42 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
-const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableElement>>(
-  ({ className, ...props }, ref) => (
-    <div className="relative w-full overflow-auto">
-      <table ref={ref} className={cn("w-full caption-bottom text-sm", className)} {...props} />
-    </div>
-  ),
-);
+const Table = React.forwardRef<
+  HTMLTableElement,
+  React.HTMLAttributes<HTMLTableElement> & {
+    /**
+     * Pass-through wrapper (default): below xl it keeps horizontal
+     * scrolling; at xl+ it stops being a scroll container so sticky
+     * headers ride the page scroll (`clip` still guards against blowout).
+     * Set false to force the legacy always-trapping wrapper (e.g. tables
+     * inside tight custom scrollers). Headers still need trap-free
+     * ancestors: prefer `overflow-clip` over `overflow-hidden` on hosts.
+     */
+    viewportSticky?: boolean;
+  }
+>(({ className, viewportSticky = true, ...props }, ref) => (
+  <div className={cn("relative w-full overflow-x-auto", viewportSticky && "xl:overflow-x-clip")}>
+    <table ref={ref} className={cn("w-full caption-bottom text-sm", className)} {...props} />
+  </div>
+));
 Table.displayName = "Table";
 
 const TableHeader = React.forwardRef<
   HTMLTableSectionElement,
   React.HTMLAttributes<HTMLTableSectionElement>
 >(({ className, ...props }, ref) => (
-  <thead ref={ref} className={cn("[&_tr]:border-b", className)} {...props} />
+  <thead
+    ref={ref}
+    className={cn(
+      // Sticky by default: parks under the navbar (4rem) and releases at the
+      // table end. Inner scroll contexts override the offset with
+      // `[--sticky-top:0]` (see Dialog/Drawer/Sheet content). `bg-card`
+      // keeps rows from showing through while stuck.
+      "sticky top-[var(--sticky-top,4rem)] z-10 bg-card [&_tr]:border-b",
+      className,
+    )}
+    {...props}
+  />
 ));
 TableHeader.displayName = "TableHeader";
 
@@ -60,7 +82,9 @@ const TableHead = React.forwardRef<
   <th
     ref={ref}
     className={cn(
-      "h-10 px-2 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+      // Canonical header cell: explicit per-cell classes (align, responsive
+      // visibility, custom padding) always win via merge.
+      "h-10 px-4 py-2.5 text-left align-middle text-xs font-medium uppercase tracking-wider text-muted-foreground [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
       className,
     )}
     {...props}
@@ -75,7 +99,8 @@ const TableCell = React.forwardRef<
   <td
     ref={ref}
     className={cn(
-      "p-2 align-middle [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+      // Canonical body cell; explicit per-cell classes always win via merge.
+      "px-4 py-2.5 align-middle [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
       className,
     )}
     {...props}

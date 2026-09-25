@@ -2,6 +2,14 @@ import { useMemo, useState } from "react";
 import { Calculator } from "lucide-react";
 import { formatNpr } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 export function DividendVsFd() {
   const [investment, setInvestment] = useState(100_000);
@@ -58,13 +66,6 @@ export function DividendVsFd() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Calculator className="size-4 text-muted-foreground" />
-        <span className="text-xs text-muted-foreground">
-          Compare dividend investing vs fixed deposit over time.
-        </span>
-      </div>
-
       {/* Inputs */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {[
@@ -207,31 +208,31 @@ export function DividendVsFd() {
       </div>
 
       {activeTab === "yearly" && (
-        <div className="overflow-x-auto rounded-xl border border-border/70">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-border/50 bg-muted/30">
-                <th className="px-3 py-1.5 text-left">Year</th>
-                <th className="px-3 py-1.5 text-right">Stock Value</th>
-                <th className="px-3 py-1.5 text-right">FD Value</th>
-                <th className="px-3 py-1.5 text-right">Dividend</th>
-                <th className="px-3 py-1.5 text-right">Diff</th>
-              </tr>
-            </thead>
-            <tbody>
+        <div className="overflow-x-auto rounded-xl border border-border/70 xl:overflow-x-clip">
+          <Table className="text-xs">
+            <TableHeader>
+              <TableRow className="bg-muted/40 hover:bg-muted/40">
+                <TableHead className="px-3 py-1.5 text-left">Year</TableHead>
+                <TableHead className="px-3 py-1.5 text-right">Stock Value</TableHead>
+                <TableHead className="px-3 py-1.5 text-right">FD Value</TableHead>
+                <TableHead className="px-3 py-1.5 text-right">Dividend</TableHead>
+                <TableHead className="px-3 py-1.5 text-right">Diff</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {results.stockValues.map((sv, i) => (
-                <tr key={i} className="border-b border-border/20">
-                  <td className="px-3 py-1.5">{i + 1}</td>
-                  <td className="px-3 py-1.5 text-right text-emerald-400">
+                <TableRow key={i} className="border-b border-border/20">
+                  <TableCell className="px-3 py-1.5">{i + 1}</TableCell>
+                  <TableCell className="px-3 py-1.5 text-right text-emerald-400">
                     {formatNpr(sv)}
-                  </td>
-                  <td className="px-3 py-1.5 text-right text-blue-400">
+                  </TableCell>
+                  <TableCell className="px-3 py-1.5 text-right text-blue-400">
                     {formatNpr(results.fdValues[i])}
-                  </td>
-                  <td className="px-3 py-1.5 text-right">
+                  </TableCell>
+                  <TableCell className="px-3 py-1.5 text-right">
                     {formatNpr(results.stockDividends[i])}
-                  </td>
-                  <td
+                  </TableCell>
+                  <TableCell
                     className={cn(
                       "px-3 py-1.5 text-right font-medium",
                       sv > results.fdValues[i]
@@ -241,11 +242,11 @@ export function DividendVsFd() {
                   >
                     {sv > results.fdValues[i] ? "+" : ""}
                     {formatNpr(sv - results.fdValues[i])}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
     </div>

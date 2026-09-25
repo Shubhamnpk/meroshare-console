@@ -380,7 +380,7 @@ export function PointBreakdown({
   const totalCost = rows.reduce((sum, b) => sum + (b.cost ?? 0), 0);
   const totalProfit = rows.reduce((sum, b) => sum + (b.profit ?? 0), 0);
   return (
-    <div className="overflow-hidden rounded-xl border border-border/60 bg-surface">
+    <div className="overflow-clip rounded-xl border border-border/60 bg-surface">
       <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 px-3 py-2">
         <h4 className="text-xs font-semibold">Held on {formatLabel(point.time)}</h4>
         <span className="num text-xs text-muted-foreground">
@@ -397,7 +397,7 @@ export function PointBreakdown({
       </header>
       <Table>
         <TableHeader>
-          <TableRow className="bg-muted/30 hover:bg-muted/30">
+          <TableRow className="bg-muted/40 hover:bg-muted/40">
             <SortableTh
               label="Symbol"
               active={sort.key === "symbol"}
@@ -605,10 +605,10 @@ function DividendTable({ rows, scrip }: { rows: DivRow[]; scrip: string }) {
     />
   );
   return (
-    <div className="overflow-x-auto rounded-lg border border-border/60">
+    <div className="overflow-x-auto rounded-lg border border-border/60 xl:overflow-x-clip">
       <Table>
         <TableHeader>
-          <TableRow className="bg-muted/30 hover:bg-muted/30">
+          <TableRow className="bg-muted/40 hover:bg-muted/40">
             {th("Dividend", "year", "left", "pl-3")}
             {th("Cash", "cash")}
             {th("Bonus", "bonus")}
@@ -670,10 +670,10 @@ function CreditTable({ rows, scrip }: { rows: TransactionItem[]; scrip: string }
     return sortBy(rows, getter, sort.dir);
   }, [rows, sort]);
   return (
-    <div className="overflow-x-auto rounded-lg border border-border/60">
+    <div className="overflow-x-auto rounded-lg border border-border/60 xl:overflow-x-clip">
       <Table>
         <TableHeader>
-          <TableRow className="bg-muted/30 hover:bg-muted/30">
+          <TableRow className="bg-muted/40 hover:bg-muted/40">
             <SortableTh
               label="Credited"
               active={sort.key === "date"}

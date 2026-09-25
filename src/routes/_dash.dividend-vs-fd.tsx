@@ -1,5 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { Calculator } from "lucide-react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { ArrowLeft, Calculator } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { DividendVsFd } from "@/components/tools/dividend-vs-fd";
 
 export const Route = createFileRoute("/_dash/dividend-vs-fd")({
@@ -18,9 +19,22 @@ export const Route = createFileRoute("/_dash/dividend-vs-fd")({
 });
 
 function DividendVsFdPage() {
+  const navigate = useNavigate();
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-3">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-8 shrink-0"
+          onClick={() => {
+            if (window.history.length > 1) window.history.back();
+            else void navigate({ to: "/tools" });
+          }}
+          aria-label="Back to tools"
+        >
+          <ArrowLeft className="size-4" />
+        </Button>
         <span className="flex size-11 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary">
           <Calculator className="size-5" />
         </span>
