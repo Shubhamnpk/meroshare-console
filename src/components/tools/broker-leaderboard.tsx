@@ -682,7 +682,7 @@ function BuySellBars({
       </div>
       {topStock ? (
         <p className="text-[11px] text-muted-foreground">
-          Busiest scrip today: <span className="num font-semibold text-foreground">{topStock}</span>
+          Busiest stock today: <span className="num font-semibold text-foreground">{topStock}</span>
         </p>
       ) : null}
     </div>

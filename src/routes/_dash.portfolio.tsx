@@ -50,13 +50,13 @@ export const Route = createFileRoute("/_dash/portfolio")({
       {
         name: "description",
         content:
-          "Every scrip in your demat account valued at live NEPSE prices, its price history and dividend record.",
+          "Every stock in your demat account valued at live NEPSE prices, its price history and dividend record.",
       },
       { property: "og:title", content: "Portfolio | MeroShare Investor Console" },
       {
         property: "og:description",
         content:
-          "Every scrip in your demat account valued at live NEPSE prices, its price history and dividend record.",
+          "Every stock in your demat account valued at live NEPSE prices, its price history and dividend record.",
       },
       ogImage(),
     ],
@@ -106,7 +106,7 @@ function portfolioCsv(
   return [
     csvRow([
       "SN",
-      "Scrip",
+      "Stock",
       "Description",
       "Units",
       "LTP",
@@ -516,10 +516,10 @@ function PortfolioPage() {
           <h1 className="font-display text-2xl font-semibold sm:text-3xl">Portfolio</h1>
           <p className="mt-1 hidden text-sm text-muted-foreground sm:block">
             {view === "yobroker" && yoEnriched
-              ? `${yoEnriched.holdings.length} scrip${yoEnriched.holdings.length === 1 ? "" : "s"} · virtual Yo Broker portfolio. Click any scrip for detail.`
+              ? `${yoEnriched.holdings.length} stock${yoEnriched.holdings.length === 1 ? "" : "s"} · virtual Yo Broker portfolio. Click any stock for detail.`
               : view === "broker" && brokerEnriched
-                ? `${brokerEnriched.holdings.length} scrip${brokerEnriched.holdings.length === 1 ? "" : "s"} · live ${realBrokerId === "naasa-x" ? "Naasa X" : realBrokerId} broker holdings. Click any scrip for detail.`
-                : `${holdings.length} scrip${holdings.length === 1 ? "" : "s"} · ${liveCount} valued at live NEPSE prices. Click any scrip for its full detail.`}
+                ? `${brokerEnriched.holdings.length} stock${brokerEnriched.holdings.length === 1 ? "" : "s"} · live ${realBrokerId === "naasa-x" ? "Naasa X" : realBrokerId} broker holdings. Click any stock for detail.`
+                : `${holdings.length} stock${holdings.length === 1 ? "" : "s"} · ${liveCount} valued at live NEPSE prices. Click any stock for its full detail.`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -550,7 +550,7 @@ function PortfolioPage() {
                   title: expIsBroker ? "Broker holdings at live prices" : "Portfolio holdings at live prices",
                   head: [
                     "SN",
-                    "Scrip",
+                    "Stock",
                     "Description",
                     "Units",
                     "LTP",
@@ -578,7 +578,7 @@ function PortfolioPage() {
                     ? [
                         "",
                         "Total",
-                        `${brokerEnriched?.holdings.length ?? 0} scrips · live broker prices`,
+                        `${brokerEnriched?.holdings.length ?? 0} stocks · live broker prices`,
                         formatQty(brokerEnriched?.totalUnits ?? 0),
                         "",
                         (brokerEnriched?.totalValue ?? 0).toFixed(2),
@@ -589,7 +589,7 @@ function PortfolioPage() {
                     : [
                         "",
                         "Total",
-                        `${holdings.length} scrips · ${liveCount} at live prices`,
+                        `${holdings.length} stocks · ${liveCount} at live prices`,
                         formatQty(totals.units),
                         "",
                         totals.value.toFixed(2),
@@ -674,7 +674,7 @@ function PortfolioPage() {
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by scrip or company name…"
+          placeholder="Search by stock or company name…"
           className="h-10 rounded-xl pl-9"
         />
       </div>
@@ -683,7 +683,7 @@ function PortfolioPage() {
         <ChipRow>
           <StatChip
             icon={<Coins className="size-4" />}
-            label="Yo scrips"
+            label="Yo stocks"
             value={String(yoEnriched.holdings.length)}
           />
           <StatChip
@@ -762,7 +762,7 @@ function PortfolioPage() {
           <ChipRow>
             <StatChip
               icon={<Coins className="size-4" />}
-              label="Broker scrips"
+              label="Broker stocks"
               value={String(brokerEnriched.holdings.length)}
             />
             <StatChip
@@ -821,7 +821,7 @@ function PortfolioPage() {
         <ChipRow>
           <StatChip
             icon={<Coins className="size-4" />}
-            label="Scrips held"
+            label="Stocks held"
             value={String(holdings.length)}
           />
           <StatChip
@@ -899,7 +899,7 @@ function PortfolioPage() {
         yoEnriched.holdings.length === 0 ? (
           <EmptyBlock
             title="No Yo holdings"
-            description="Buy virtual scrips with Yo Broker to see them here. Use the Terminal or Market to place paper orders."
+            description="Buy virtual stocks with Yo Broker to see them here. Use the Terminal or Market to place paper orders."
           />
         ) : yoItems.length === 0 ? (
           <EmptyBlock title="No matches" description="Nothing matches your search." />
@@ -910,7 +910,7 @@ function PortfolioPage() {
                 <TableRow className="bg-muted/40 hover:bg-muted/40">
                   <TableHead className="w-10 pl-4">SN</TableHead>
                   <SortableTh
-                    label="Scrip"
+                    label="Stock"
                     active={sort.key === "scrip"}
                     dir={sort.dir}
                     onClick={() => toggle("scrip")}
@@ -1058,7 +1058,7 @@ function PortfolioPage() {
         ) : brokerEnriched.holdings.length === 0 ? (
           <EmptyBlock
             title="No broker holdings"
-            description="Your connected broker account currently holds no scrips."
+            description="Your connected broker account currently holds no stocks."
           />
         ) : brokerItems.length === 0 ? (
           <EmptyBlock title="No matches" description="Nothing matches your search." />
@@ -1069,7 +1069,7 @@ function PortfolioPage() {
                 <TableRow className="bg-muted/40 hover:bg-muted/40">
                   <TableHead className="w-10 pl-4">SN</TableHead>
                   <SortableTh
-                    label="Scrip"
+                    label="Stock"
                     active={sort.key === "scrip"}
                     dir={sort.dir}
                     onClick={() => toggle("scrip")}
@@ -1169,7 +1169,7 @@ function PortfolioPage() {
                       </TableCell>
                       <TableCell
                         className="num text-right text-muted-foreground"
-                        title={hasBasis ? "WACC avg buy" : "No WACC cost data for this scrip"}
+                        title={hasBasis ? "WACC avg buy" : "No WACC cost data for this stock"}
                       >
                         {hasBasis ? formatNpr(h.avgBuy) : "-"}
                       </TableCell>
@@ -1210,7 +1210,7 @@ function PortfolioPage() {
             </Table>
             {brokerItems.length !== brokerEnriched.holdings.length ? (
               <p className="border-t border-border/60 px-4 py-2.5 text-xs text-muted-foreground">
-                Showing {brokerItems.length} of {brokerEnriched.holdings.length} scrips · filtered
+                Showing {brokerItems.length} of {brokerEnriched.holdings.length} stocks · filtered
                 value {formatNpr(brokerItems.reduce((s, h) => s + h.value, 0))}
               </p>
             ) : null}
@@ -1223,12 +1223,12 @@ function PortfolioPage() {
       ) : holdings.length === 0 ? (
         <EmptyBlock
           title="No holdings"
-          description="Your demat account currently holds no scrips."
+          description="Your demat account currently holds no stocks."
         />
       ) : items.length === 0 ? (
         <EmptyBlock
           title="No matches"
-          description="Nothing matches your search. Try a different scrip or company."
+          description="Nothing matches your search. Try a different stock or company."
         />
       ) : (
         <Panel padding="none" className="overflow-clip">
@@ -1237,7 +1237,7 @@ function PortfolioPage() {
               <TableRow className="bg-muted/40 hover:bg-muted/40">
                 <TableHead className="w-10 pl-4">SN</TableHead>
                 <SortableTh
-                  label="Scrip"
+                  label="Stock"
                   active={sort.key === "scrip"}
                   dir={sort.dir}
                   onClick={() => toggle("scrip")}
@@ -1453,7 +1453,7 @@ function PortfolioPage() {
           </Table>
           {items.length !== holdings.length ? (
             <p className="border-t border-border/60 px-4 py-2.5 text-xs text-muted-foreground">
-              Showing {items.length} of {holdings.length} scrips · filtered value{" "}
+              Showing {items.length} of {holdings.length} stocks · filtered value{" "}
               {formatNpr(items.reduce((s, h) => s + h.value, 0))}
             </p>
           ) : null}

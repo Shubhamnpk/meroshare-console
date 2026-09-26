@@ -44,6 +44,7 @@ import {
   formatNumber,
   formatPercent,
   formatQty,
+  sessionAgeLabel,
 } from "@/lib/format";
 import { parseFeedDate } from "@/lib/nepali-dates";
 import { upcomingMerged } from "@/lib/ipo/status";
@@ -301,7 +302,7 @@ function DashboardPage() {
     />,
     <StatCard
       key="scrips"
-      label="Scrips held"
+      label="Stocks held"
       value={holdings.length}
       sub={
         <>
@@ -407,23 +408,9 @@ function DashboardPage() {
                     }
                   >
                     ·{" "}
-                    {(() => {
-                      if (!market.data) return "—";
-                      if (market.data.status.isOpen) return "today";
-                      const raw = nepse?.generatedTime;
-                      if (!raw) return "closed";
-                      const d = new Date(String(raw).replace(" ", "T"));
-                      const dateStr = formatDate(raw);
-                      if (Number.isNaN(d.getTime())) return `${dateStr} · closed`;
-                      const today0 = new Date();
-                      today0.setHours(0, 0, 0, 0);
-                      const gen0 = new Date(d);
-                      gen0.setHours(0, 0, 0, 0);
-                      const diff = Math.round((today0.getTime() - gen0.getTime()) / 86_400_000);
-                      if (diff <= 0) return `${dateStr} · closed`;
-                      if (diff === 1) return `1 day ago · ${dateStr}`;
-                      return `${diff} days ago · ${dateStr}`;
-                    })()}
+                    {!market.data
+                      ? "—"
+                      : sessionAgeLabel(nepse?.generatedTime, market.data.status.isOpen)}
                   </span>
                 </p>
                 {nepse ? (
@@ -531,7 +518,7 @@ function DashboardPage() {
             {holdings.length === 0 ? (
               <EmptyBlock
                 title="No holdings yet"
-                description="Scrips in your demat account will appear here."
+                description="Stocks in your demat account will appear here."
               />
             ) : (
               <div className="grid gap-2 sm:grid-cols-2">

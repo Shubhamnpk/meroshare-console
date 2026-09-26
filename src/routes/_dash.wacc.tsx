@@ -90,7 +90,7 @@ function waccCsv(scrip: string, rows: PurchaseSourceItem[]) {
     ]),
   );
   return [
-    csvRow(["SN", "Scrip", "Post date", "Quantity", "Price", "User cost", "Remarks"]),
+    csvRow(["SN", "Stock", "Post date", "Quantity", "Price", "User cost", "Remarks"]),
     ...lines,
   ].join("\n");
 }
@@ -508,7 +508,7 @@ function reportCsv(holdings: WaccReportItem[]) {
       String(h.lastModifiedDate ?? ""),
     ]),
   );
-  return [csvRow(["Scrip", "Quantity", "WACC rate", "Total cost", "Last modified"]), ...lines].join(
+  return [csvRow(["Stock", "Quantity", "WACC rate", "Total cost", "Last modified"]), ...lines].join(
     "\n",
   );
 }
@@ -561,15 +561,15 @@ function WaccReportPanel({
     <section className="space-y-3 pt-4">
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="font-display text-base font-semibold">Calculated WACC</h2>
-        <span className="text-xs text-muted-foreground">all scrips</span>
+        <span className="text-xs text-muted-foreground">all stocks</span>
         <span className="num ml-auto rounded-full border border-border/70 bg-card px-3 py-1.5 text-xs text-muted-foreground">
-          {holdings.length} scrips · {formatQty(totalUnits)} units · {formatNpr(totalCost)} invested
+          {holdings.length} stocks · {formatQty(totalUnits)} units · {formatNpr(totalCost)} invested
         </span>
         <ExportButton
           formats={[
             {
               title: "CSV",
-              description: "Calculated WACC for every scrip",
+              description: "Calculated WACC for every stock",
               filename: "wacc-report",
               extension: "csv",
               build: () => reportCsv(holdings),
@@ -589,7 +589,7 @@ function WaccReportPanel({
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">
               <SortableTh
-                label="Scrip"
+                label="Stock"
                 active={sort.key === "scrip"}
                 dir={sort.dir}
                 onClick={() => toggle("scrip")}
@@ -654,12 +654,12 @@ function WaccReportPanel({
           <TableFooter>
             <TableRow className="border-t border-border/70 bg-muted/40 font-semibold">
               <TableCell className="px-4 py-2.5">
-                Total · {holdings.length} scrip{holdings.length > 1 ? "s" : ""}
+                Total · {holdings.length} stock{holdings.length > 1 ? "s" : ""}
               </TableCell>
               <TableCell className="num px-4 py-2.5 text-right">{formatQty(totalUnits)}</TableCell>
               <TableCell
                 className="num px-4 py-2.5 text-right"
-                title="Average WACC across all scrips (total cost / total units)"
+                title="Average WACC across all stocks (total cost / total units)"
               >
                 {formatNpr(Math.round(avgWacc * 100) / 100)}
               </TableCell>
@@ -812,7 +812,7 @@ function WaccPage() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <Select value={scrip} onValueChange={setScrip}>
             <SelectTrigger className="sm:w-72">
-              <SelectValue placeholder="Select a scrip" />
+              <SelectValue placeholder="Select a stock" />
             </SelectTrigger>
             <SelectContent>
               {pendingList.length ? (
@@ -843,7 +843,7 @@ function WaccPage() {
           </Select>
           {pendingScrips.isLoading || symbols.isLoading ? (
             <span className="animate-pulse text-xs text-muted-foreground">
-              Checking pending scrips…
+              Checking pending stocks…
             </span>
           ) : null}
           {scrip ? (
@@ -918,7 +918,7 @@ function WaccPage() {
                     <TableHeader>
                       <TableRow className="bg-muted/40 hover:bg-muted/40">
                         <TableHead className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider">
-                          Scrip
+                          Stock
                         </TableHead>
                         <TableHead className="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wider">
                           Quantity
@@ -949,12 +949,12 @@ function WaccPage() {
                     <TableFooter>
                       <TableRow className="border-t border-border/70 bg-muted/40 font-semibold">
                         <TableCell className="px-4 py-2.5">
-                          Total · {doneScrips.length} scrip{doneScrips.length > 1 ? "s" : ""}
+                          Total · {doneScrips.length} stock{doneScrips.length > 1 ? "s" : ""}
                         </TableCell>
                         <TableCell className="num px-4 py-2.5 text-right">{formatQty(doneTotals.units)}</TableCell>
                         <TableCell
                           className="num px-4 py-2.5 text-right"
-                          title="Average WACC across calculated scrips (total cost / total units)"
+                          title="Average WACC across calculated stocks (total cost / total units)"
                         >
                           {formatNpr(
                             Math.round((doneTotals.cost / Math.max(1, doneTotals.units)) * 100) /
@@ -999,8 +999,8 @@ function WaccPage() {
           </div>
         ) : (
           <EmptyBlock
-            title="Select a scrip"
-            description="Pick a scrip above to load its purchase source entries."
+            title="Select a stock"
+            description="Pick a stock above to load its purchase source entries."
           />
         )
       ) : search.isPending ? (

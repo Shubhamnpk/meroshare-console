@@ -90,7 +90,7 @@ export const Route = createFileRoute("/_dash/terminal")({
       {
         property: "og:description",
         content:
-          "Candlestick charts, technical indicators and portfolio net-worth tracking for every NEPSE-listed scrip.",
+          "Candlestick charts, technical indicators and portfolio net-worth tracking for every NEPSE-listed stock.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -462,10 +462,30 @@ function TerminalPage() {
     ...indexGraphQuery(state.symbol),
     enabled: mode === "scrip" && isIndexEarly,
   });
-  // Daily index candles from the YONEPSE archive for 1M+ ranges (the session
+  const scrip1DProbe = useQuery({
+    ...chartSeriesQuery(state.symbol, "1D"),
+    enabled:
+      mode === "scrip" &&
+      Boolean(state.symbol) &&
+      !isIndexEarly &&
+      state.range !== "1D",
+  });
+  const udf1DProbe = useQuery({
+    ...udfHistoryQuery(state.symbol, "1D", intradayRes),
+    refetchInterval: false,
+    refetchIntervalInBackground: false,
+    enabled:
+      mode === "scrip" &&
+      Boolean(state.symbol) &&
+      !isIndexEarly &&
+      state.range !== "1D",
+  });
+  // Daily index candles from the YONEPSE archive for 1W+ ranges (the session
   // feed above only covers today). MAX (0) means the whole archive, uncapped.
   const indexRangeDays =
-    state.range === "1M"
+    state.range === "1W"
+      ? 10
+      : state.range === "1M"
       ? 31
       : state.range === "3M"
         ? 93
@@ -473,14 +493,12 @@ function TerminalPage() {
           ? 186
           : state.range === "1Y"
             ? 366
-            : state.range === "3Y"
-              ? 1098
               : state.range === "5Y"
                 ? 1826
                 : 0;
   const indexDaily = useQuery({
     ...indexDailyQuery(state.symbol, indexRangeDays),
-    enabled: mode === "scrip" && isIndexEarly && state.range !== "1D" && state.range !== "1W",
+    enabled: mode === "scrip" && isIndexEarly && state.range !== "1D",
   });
   // Live tick for crazy 1m: when broker linked, poll broker quote every 5s and patch last candle
   const liveTick = useQuery({
@@ -505,8 +523,6 @@ function TerminalPage() {
       ? 120
       : state.range === "5Y"
         ? 60
-        : state.range === "3Y"
-          ? 36
           : state.range === "1Y"
             ? 13
             : state.range === "6M"
@@ -768,10 +784,12 @@ function TerminalPage() {
   const costMissing = showProfit && !investment.isPending && costByScrip.size === 0;
   const effectiveProfit = showProfit && !costMissing;
   const indexBars: ChartBar[] = useMemo(() => {
-    const pts = (indexHistory.data ?? []) as import("@/lib/nepse/types").PricePoint[];
-    if (!isIndexEarly || pts.length === 0) return NO_BARS;
-  
-    if (state.range === "1D" || state.range === "1W") return NO_BARS;
+    if (!isIndexEarly) return NO_BARS;
+    if (state.range === "1D") return NO_BARS;
+
+    // YONEPSE daily candles first: long ranges must render even when the
+    // session feed is down (previously an empty session feed blanked every
+    // range because of the early return below).
     const daily = (indexDaily.data ?? []) as unknown as Record<string, unknown>[];
     const mapped = daily.map((b) => ({
       date: String(b["date"] ?? ""),
@@ -782,7 +800,16 @@ function TerminalPage() {
       volume: Number(b["volume"] ?? 0),
       synthetic: Boolean(b["synthetic"]),
     })) as ChartBar[];
-    if (mapped.length > 0) return [...mapped].sort((a, b) => a.date.localeCompare(b.date));
+    if (mapped.length > 0) {
+      // 1W keeps the live session line while it exists; otherwise the daily
+      // candles below stand in. All longer ranges always use daily candles.
+      if (state.range !== "1W") return [...mapped].sort((a, b) => a.date.localeCompare(b.date));
+      const pts = (indexHistory.data ?? []) as import("@/lib/nepse/types").PricePoint[];
+      if (pts.length > 0) return NO_BARS;
+      return [...mapped].sort((a, b) => a.date.localeCompare(b.date));
+    }
+    const pts = (indexHistory.data ?? []) as import("@/lib/nepse/types").PricePoint[];
+    if (pts.length === 0) return NO_BARS;
     const windowDays =
       state.range === "1M"
         ? 31
@@ -812,14 +839,20 @@ function TerminalPage() {
         synthetic: true,
       }));
   }, [indexDaily.data, indexHistory.data, isIndexEarly, state.range]);
-  const indexIntraday = useMemo(() => {
-    if (!isIndexEarly || (state.range !== "1D" && state.range !== "1W")) return NO_POINTS;
+  // Session-feed points independent of the selected range: drives the 1D
+  // availability (button disabled + redirect below) as well as the 1D/1W line.
+  const indexSessionPoints: PricePoint[] = useMemo(() => {
+    if (!isIndexEarly) return NO_POINTS;
     const pts = ((indexHistory.data ?? []) as PricePoint[]).filter(
       (p) => Number.isFinite(p.value) && p.value > 0 && Number.isFinite(Number(p.time)),
     );
     if (pts.length === 0) return NO_POINTS;
     return [...pts].sort((a, b) => Number(a.time) - Number(b.time));
-  }, [indexHistory.data, isIndexEarly, state.range]);
+  }, [indexHistory.data, isIndexEarly]);
+  const indexIntraday = useMemo(() => {
+    if (!isIndexEarly || (state.range !== "1D" && state.range !== "1W")) return NO_POINTS;
+    return indexSessionPoints;
+  }, [indexSessionPoints, isIndexEarly, state.range]);
   const portfolioIntraday = useMemo(() => {
     if (mode !== "portfolio" || state.range !== "1D") return NO_POINTS;
     const pts = ((worthIntraday.data?.points ?? []) as PricePoint[]).filter(
@@ -872,15 +905,55 @@ function TerminalPage() {
     [showAgg, activeBars, barAgg],
   );
   const isIntraday = drawnBars.length === 0 && intraday.length > 0;
+  // Session feed resolved with nothing chartable (e.g. mirror 502): 1W must
+  // keep waiting for the YONEPSE daily fallback instead of flashing empty,
+  // and the 1D button below is disabled.
+  const indexSessionEmpty =
+    !indexHistory.isPending && indexSessionPoints.length < 2;
+  // 1D availability for a normal symbol: mirror 1D series (intraday ticks or
+  // trailing daily bars) or the UDF fallback. Reads the live 1D view queries
+  // while parked on 1D, the probes otherwise.
+  const oneDProbeBars =
+    state.range === "1D" ? mirrorBars : (scrip1DProbe.data?.bars ?? NO_BARS);
+  const oneDProbeIntraday =
+    state.range === "1D" ? mirrorIntraday : (scrip1DProbe.data?.intraday ?? NO_POINTS);
+  const oneDProbeUdf = state.range === "1D" ? udf.data : udf1DProbe.data;
+  const oneDProbeSettled =
+    state.range === "1D"
+      ? !series.isPending && !udf.isPending
+      : !scrip1DProbe.isPending && !udf1DProbe.isPending;
+  const scrip1DEmpty =
+    mode === "scrip" &&
+    !isIndexEarly &&
+    oneDProbeSettled &&
+    oneDProbeBars.length === 0 &&
+    oneDProbeIntraday.length === 0 &&
+    (oneDProbeUdf?.bars ?? []).length === 0 &&
+    (oneDProbeUdf?.points ?? []).length === 0;
+  // Either flavor of "no 1D": dry index session feed, or every 1D source dry
+  // for a normal symbol.
+  const oneDUnavailable =
+    mode === "scrip" && (isIndexEarly ? indexSessionEmpty : scrip1DEmpty);
   const loading =
     mode === "portfolio"
       ? netWorth.isPending || worthIntraday.isPending
       : isIndexEarly
-        ? state.range === "1D" || state.range === "1W"
+        ? state.range === "1D"
           ? indexHistory.isPending
-          : indexDaily.isPending
+          : state.range === "1W"
+            ? indexHistory.isPending || (indexSessionEmpty && indexDaily.isPending)
+            : indexDaily.isPending
         : series.isPending ||
           (useUdf ? false : udf.isPending && state.range === "1D" && !hasMirrorIntraday);
+  // 1D needs an intraday source: when it settles dry (index session feed, or
+  // every 1D source for a normal symbol), park the chart on 1W instead of
+  // the empty state. Never switches back on its own — the 1D button
+  // re-enables when a source recovers and the user can switch back manually.
+  useEffect(() => {
+    if (mode === "scrip" && state.range === "1D" && oneDUnavailable) {
+      setState((prev) => (prev.range === "1D" ? { ...prev, range: "1W" } : prev));
+    }
+  }, [mode, state.range, oneDUnavailable]);
   const udfBadge = useUdf ? " · UDF" : "";
   const isMobile = useIsMobile();
   const chartHeight = expanded ? 640 : isMobile ? 320 : 400;
@@ -972,7 +1045,7 @@ function TerminalPage() {
                 mode === m ? "bg-primary/15 text-primary" : "text-muted-foreground",
               )}
             >
-              {m === "scrip" ? "Scrip" : "My net worth"}
+              {m === "scrip" ? "Stock" : "My net worth"}
             </button>
           ))}
         </div>
@@ -991,7 +1064,7 @@ function TerminalPage() {
                   setQuery("");
                 }
               }}
-              placeholder="Search any listed scrip, e.g. NABIL, SHIVM, NRIC…"
+              placeholder="Search any listed stock, e.g. NABIL, SHIVM, NRIC…"
               className="h-10 rounded-xl pl-9"
             />
             {results.length > 0 && (
@@ -1054,7 +1127,7 @@ function TerminalPage() {
                 ? effectiveProfit
                   ? "Value minus invested cost at each close · today's WACC rate"
                   : `${holdings.length} holdings valued at each historical close`
-                : (quote?.name ?? series.data?.name ?? "NEPSE listed scrip")}
+                : (quote?.name ?? series.data?.name ?? "NEPSE listed stock")}
             </p>
           </div>
           <div className="text-right">
@@ -1077,21 +1150,30 @@ function TerminalPage() {
 
         <div className="flex flex-wrap items-center gap-2 border-b border-border/60 px-3 py-2">
           <div className="flex flex-wrap gap-1">
-            {RANGES.map((r) => (
-              <button
-                key={r}
-                type="button"
-                onClick={() => setState((prev) => ({ ...prev, range: r }))}
-                className={cn(
-                  "rounded-lg px-2 py-1 text-xs font-medium transition-colors",
-                  state.range === r
-                    ? "bg-primary/15 text-primary"
-                    : "text-muted-foreground hover:bg-muted/60",
-                )}
-              >
-                {r}
-              </button>
-            ))}
+            {RANGES.map((r) => {
+              // 1D needs an intraday source (index session feed, or mirror /
+              // UDF for a normal symbol). When it settles dry the button is
+              // disabled — the effect below parks the chart on 1W instead.
+              const unavailable = r === "1D" && oneDUnavailable;
+              return (
+                <button
+                  key={r}
+                  type="button"
+                  disabled={unavailable}
+                  title={unavailable ? "1D unavailable — showing 1W" : undefined}
+                  onClick={() => setState((prev) => ({ ...prev, range: r }))}
+                  className={cn(
+                    "rounded-lg px-2 py-1 text-xs font-medium transition-colors",
+                    state.range === r
+                      ? "bg-primary/15 text-primary"
+                      : "text-muted-foreground hover:bg-muted/60",
+                    unavailable && "cursor-not-allowed opacity-40 hover:bg-transparent",
+                  )}
+                >
+                  {r}
+                </button>
+              );
+            })}
           </div>
           {showAgg ? (
             <>
@@ -1277,7 +1359,7 @@ function TerminalPage() {
             ) : null}
             {profitInfo.excluded.length > 0 ? (
               <>
-                Excludes {profitInfo.excluded.length} scrip
+                Excludes {profitInfo.excluded.length} stock
                 {profitInfo.excluded.length === 1 ? "" : "s"} with no cost data (
                 {profitInfo.excluded.slice(0, 4).join(", ")}
                 {profitInfo.excluded.length > 4 ? ` +${profitInfo.excluded.length - 4} more` : ""}).
@@ -1333,10 +1415,10 @@ function TerminalPage() {
                 {mode === "portfolio"
                   ? "No historical price coverage for your holdings yet."
                   : isIndex
-                    ? state.range === "1D" || state.range === "1W"
+                    ? state.range === "1D"
                       ? "No session data for this index right now."
                       : "Index history is unavailable right now."
-                    : "No chart data available for this scrip."}
+                    : "No chart data available for this stock."}
               </p>
               {(() => {
                 const err = mode === "portfolio" ? netWorth.error : series.error;
@@ -1928,7 +2010,7 @@ function TerminalPage() {
 
       <p className="text-xs text-muted-foreground">
         {mode === "portfolio"
-          ? "Net worth is your current unit counts valued at each historical close; it does not reflect past buys and sells. Click any point to pin its per-scrip prices below."
+          ? "Net worth is your current unit counts valued at each historical close; it does not reflect past buys and sells. Click any point to pin its per-stock prices below."
           : series.data?.hasSynthetic
             ? "Long ranges use archived daily closes where high/low were never published, so those candle bodies are derived from the previous close."
             : "Daily OHLC from public NEPSE mirrors."}{" "}

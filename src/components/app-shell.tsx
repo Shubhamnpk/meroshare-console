@@ -146,10 +146,10 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
             type="button"
             onClick={() => setPaletteOpen(true)}
             className="hidden items-center gap-2 rounded-xl border border-border/70 bg-secondary px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent md:flex"
-            aria-label="Search scrips (Ctrl+K)"
+            aria-label="Search stocks (Ctrl+K)"
           >
             <Search className="size-3.5" aria-hidden />
-            <span>Search scrips…</span>
+            <span>Search stocks…</span>
             <kbd className="num rounded-md bg-muted px-1.5 py-0.5 font-sans text-[0.65rem]">
               Ctrl K
             </kbd>
@@ -159,7 +159,7 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
             size="icon"
             className="md:hidden"
             onClick={() => setPaletteOpen(true)}
-            aria-label="Search scrips"
+            aria-label="Search stocks"
           >
             <Search className="size-4" />
           </Button>

@@ -80,6 +80,27 @@ export function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+/**
+ * Relative session age like the home NEPSE header: "today" while the market
+ * is open, otherwise "1 day ago · 12 Sep 2026", "3 days ago · …", or
+ * "closed" when there is no session timestamp at all.
+ */
+export function sessionAgeLabel(raw: unknown, isOpen: boolean): string {
+  if (isOpen) return "today";
+  if (raw == null || raw === "") return "closed";
+  const d = new Date(String(raw).replace(" ", "T"));
+  const dateStr = formatDate(raw);
+  if (Number.isNaN(d.getTime())) return `${dateStr} · closed`;
+  const today0 = new Date();
+  today0.setHours(0, 0, 0, 0);
+  const gen0 = new Date(d);
+  gen0.setHours(0, 0, 0, 0);
+  const diff = Math.round((today0.getTime() - gen0.getTime()) / 86_400_000);
+  if (diff <= 0) return `${dateStr} · closed`;
+  if (diff === 1) return `1 day ago · ${dateStr}`;
+  return `${diff} days ago · ${dateStr}`;
+}
+
 export function daysUntil(value: unknown): number | null {
   if (!value) return null;
   const raw = String(value);

@@ -1269,7 +1269,7 @@ export function MarketOverview({
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search sector or scrip…"
+                placeholder="Search sector or stock…"
                 className="h-8 w-full rounded-xl border border-border/60 bg-surface pl-8 pr-3 text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-primary/50 focus:outline-hidden"
               />
             </div>
@@ -1324,8 +1324,8 @@ export function MarketOverview({
           <div className="rounded-2xl border border-border/70 bg-card/60 p-3.5 shadow-xs">
             <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
               {matchingScrips.length > 0
-                ? `Scrips matching “${searchQuery.trim()}” (${matchingScrips.length})`
-                : `No scrips match “${searchQuery.trim()}”`}
+                ? `Stocks matching “${searchQuery.trim()}” (${matchingScrips.length})`
+                : `No stocks match “${searchQuery.trim()}”`}
             </p>
             {matchingScrips.length > 0 && (
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
@@ -1369,7 +1369,7 @@ export function MarketOverview({
                     <SortableTh label="Mkt Share" active={depthSort.key === "share"} dir={depthSort.dir} onClick={() => toggleDepthSort("share")} align="right" className="py-2.5 px-3 font-semibold" />
                     <SortableTh label="Breadth" active={depthSort.key === "breadth"} dir={depthSort.dir} onClick={() => toggleDepthSort("breadth")} className="py-2.5 px-3 text-center min-w-[120px] font-semibold" />
                     <SortableTh label="Top Performer" active={depthSort.key === "performer"} dir={depthSort.dir} onClick={() => toggleDepthSort("performer")} className="py-2.5 px-3 font-semibold" />
-                    <SortableTh label="Heaviest Scrip" active={depthSort.key === "traded"} dir={depthSort.dir} onClick={() => toggleDepthSort("traded")} className="py-2.5 px-3 font-semibold" />
+                    <SortableTh label="Heaviest Stock" active={depthSort.key === "traded"} dir={depthSort.dir} onClick={() => toggleDepthSort("traded")} className="py-2.5 px-3 font-semibold" />
                     <TableHead className="py-2.5 pr-4 pl-2 text-right">Chart</TableHead>
                   </TableRow>
                 </TableHeader>

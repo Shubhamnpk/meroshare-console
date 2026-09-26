@@ -41,7 +41,7 @@ import {
   marketSnapshotQuery,
   indexGraphQuery,
 } from "@/lib/queries";
-import { formatDateTime, formatNpr, formatNumber, formatPercent, formatQty } from "@/lib/format";
+import { formatDateTime, formatNpr, formatNumber, formatPercent, formatQty, sessionAgeLabel } from "@/lib/format";
 import { sectorOf } from "@/lib/nepse/sectors";
 import { useWatchlist } from "@/lib/watchlist";
 import { useSettings } from "@/lib/settings";
@@ -57,12 +57,12 @@ export const Route = createFileRoute("/_dash/market")({
       {
         name: "description",
         content:
-          "Live NEPSE indices, market summary, top gainers and losers, and every listed scrip.",
+          "Live NEPSE indices, market summary, top gainers and losers, and every listed stock.",
       },
       { property: "og:title", content: "Market | MeroShare Investor Console" },
       {
         property: "og:description",
-        content: "Live NEPSE indices, top movers and every listed scrip in one place.",
+        content: "Live NEPSE indices, top movers and every listed stock in one place.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -325,6 +325,11 @@ function MarketPage() {
   const nepse =
     snapshot.data?.indices.find((i) => /nepse/i.test(i.name)) ?? snapshot.data?.indices[0];
 
+  const closedAge =
+    snapshot.data && !snapshot.data.status.isOpen
+      ? sessionAgeLabel(nepse?.generatedTime, false)
+      : null;
+
   // Whole-NEPSE mood for the heatmap header: advancer breadth + index move.
   const marketScore = useMemo(() => {
     const total = prices.length;
@@ -355,7 +360,9 @@ function MarketPage() {
             {snapshot.data
               ? snapshot.data.status.isOpen
                 ? "Market is open."
-                : "Market is closed."
+                : closedAge && closedAge !== "closed"
+                  ? `Market is closed · ${closedAge}.`
+                  : "Market is closed."
               : null}
           </p>
         </div>
@@ -382,9 +389,6 @@ function MarketPage() {
               aria-label="Market depth"
             >
               <Layers /> <span className="hidden sm:inline">Depth</span>
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => void navigate({ to: "/terminal" })} aria-label="Terminal">
-              <ChartCandlestick /> <span className="hidden sm:inline">Terminal</span>
             </Button>
             <Button variant="outline" size="sm" onClick={() => void navigate({ to: "/calendar" })} aria-label="Calendar">
               <CalendarDays /> <span className="hidden sm:inline">Calendar</span>
@@ -501,15 +505,18 @@ function MarketPage() {
                   value={heatGrouped ? "grouped" : "mixed"}
                   onChange={(v) => setHeatGrouped(v === "grouped")}
                 />
-                <div
-                  className="hidden shrink-0 items-center gap-2 rounded-xl border border-border/60 bg-surface px-2.5 py-1 md:flex"
-                  title="Whole-NEPSE sentiment: advancer breadth blended with the NEPSE move"
+                <button
+                  type="button"
+                  onClick={() => void navigate({ to: "/market-depth" })}
+                  className="hidden shrink-0 cursor-pointer items-center gap-2 rounded-xl border border-border/60 bg-surface px-2.5 py-1 transition-colors hover:border-primary/40 hover:text-foreground md:flex"
+                  title="Whole-NEPSE sentiment: advancer breadth blended with the NEPSE move. Click to open market depth."
+                  aria-label="Open market depth"
                 >
                   <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                     Mood
                   </span>
                   <MiniMood score={marketScore} />
-                </div>
+                </button>
               </div>
             </div>
             <CategoryDropdown
@@ -581,20 +588,20 @@ function MarketPage() {
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search all listed scrips…"
+                placeholder="Search all listed stocks…"
                 className="h-10 rounded-xl pl-9"
               />
             </div>
 
             {filtered.length === 0 ? (
-              <EmptyBlock title="No matches" description="No listed scrip matches that search." />
+              <EmptyBlock title="No matches" description="No listed stock matches that search." />
             ) : (
               <Panel padding="none" className="overflow-clip">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/40 hover:bg-muted/40">
                       <SortableTh
-                        label="Scrip"
+                        label="Stock"
                         active={sort.key === "symbol"}
                         dir={sort.dir}
                         onClick={() => toggle("symbol")}

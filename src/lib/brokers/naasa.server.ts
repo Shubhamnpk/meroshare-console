@@ -768,7 +768,7 @@ export async function placeNaasaAmo(
   input: NaasaAmoInput,
 ): Promise<NaasaPlaceResult> {
   const sym = input.symbol.trim().toUpperCase();
-  if (!/^[A-Z0-9]{3,24}$/.test(sym)) throw new Error("Invalid scrip symbol.");
+  if (!/^[A-Z0-9]{3,24}$/.test(sym)) throw new Error("Invalid stock symbol.");
   if (!Number.isInteger(input.quantity) || input.quantity < 1 || input.quantity > 100000) {
     throw new Error("Quantity must be 1-100000.");
   }
@@ -910,7 +910,7 @@ export async function cancelNaasaAmo(
   input: NaasaAmoCancelInput,
 ): Promise<{ ok: boolean; message: string }> {
   const sym = input.scrip.trim().toUpperCase().replace(/^25\.1!/, "").replace(/^NEPSE\./, "");
-  if (!sym) throw new Error("Scrip missing — refresh the AMO list.");
+  if (!sym) throw new Error("Stock missing — refresh the AMO list.");
   if (!Number.isInteger(input.quantity) || input.quantity < 1) {
     throw new Error("Quantity missing — refresh the AMO list.");
   }
@@ -965,7 +965,7 @@ function buildNaasaOrderBody(input: NaasaPlaceInput): {
   body: Record<string, unknown>;
 } {
   const sym = input.symbol.trim().toUpperCase();
-  if (!/^[A-Z0-9]{3,24}$/.test(sym)) throw new Error("Invalid scrip symbol.");
+  if (!/^[A-Z0-9]{3,24}$/.test(sym)) throw new Error("Invalid stock symbol.");
   if (!Number.isInteger(input.quantity) || input.quantity < 1 || input.quantity > 100000) {
     throw new Error("Quantity must be 1–100000.");
   }

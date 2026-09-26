@@ -337,7 +337,7 @@ export const getPortfolioHistorySeries = createServerFn({ method: "POST" })
       }));
       const failed = [...wanted].filter((s) => !snapshotsBySymbol.has(s)).map((symbol) => ({
         symbol,
-        message: "No transactions found for this scrip in demo portfolio.",
+        message: "No transactions found for this stock in demo portfolio.",
       }));
       const points = await getPortfolioHistory(timelines, data.granularity, data.months);
       return {
@@ -397,8 +397,8 @@ export const getPortfolioHistorySeries = createServerFn({ method: "POST" })
       .map((symbol) => ({
         symbol,
         message: truncated
-          ? "Not enough transaction history fetched to reach this scrip."
-          : "No transactions found for this scrip in your demat history.",
+          ? "Not enough transaction history fetched to reach this stock."
+          : "No transactions found for this stock in your demat history.",
       }));
 
     const points = await getPortfolioHistory(timelines, data.granularity, data.months);

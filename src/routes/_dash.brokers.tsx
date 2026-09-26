@@ -43,7 +43,7 @@ export const Route = createFileRoute("/_dash/brokers")({
       {
         name: "description",
         content:
-          "Every NEPSE member broker with branch coverage, plus the daily floor sheet: broker leaderboard, scrip leaderboard, hourly activity and per-transaction trade trails.",
+          "Every NEPSE member broker with branch coverage, plus the daily floor sheet: broker leaderboard, stock leaderboard, hourly activity and per-transaction trade trails.",
       },
       { property: "og:title", content: "Brokers & Floor Sheet | MeroShare Investor Console" },
       {
@@ -392,7 +392,7 @@ function FloorSheetTab({
         <StatCard label="Trades" value={formatNumber(day.totalTrades)} />
         <StatCard label="Traded shares" value={formatQty(day.totalVolume)} />
         <StatCard
-          label="Scrips / brokers"
+          label="Stocks / brokers"
           value={`${day.scripsTraded} / ${day.brokersActive}`}
           hint={
             day.biggestTrade
@@ -456,7 +456,7 @@ function FloorSheetTab({
 
         <section className="rounded-2xl border border-border/60 bg-surface">
           <header className="border-b border-border/60 px-4 py-3">
-            <h2 className="text-sm font-semibold">Scrip leaderboard</h2>
+            <h2 className="text-sm font-semibold">Stock leaderboard</h2>
             <p className="text-xs text-muted-foreground">By turnover for the day.</p>
           </header>
           <SymbolLeaderboard
@@ -479,7 +479,7 @@ function FloorSheetTab({
                 : `Trade trail - ${trail.symbol}`
           }
           subtitle={[
-            trail.symbol ? `Scrip ${trail.symbol}` : null,
+            trail.symbol ? `Stock ${trail.symbol}` : null,
             trail.brokerCode ? `Broker ${trail.brokerCode}` : null,
             multiDay && date && toDate ? `${date} → ${toDate}` : null,
           ]
@@ -676,7 +676,7 @@ function SymbolLeaderboard({
         <TableHeader className="bg-surface">
           <TableRow>
             <SortableTh
-              label="Scrip"
+              label="Stock"
               active={sort.key === "symbol"}
               dir={sort.dir}
               onClick={() => toggle("symbol")}
@@ -767,7 +767,7 @@ function PartyBoard({
             <button
               type="button"
               onClick={() => onPick(p.code)}
-              title={`Follow broker ${p.code} in this scrip`}
+              title={`Follow broker ${p.code} in this stock`}
               className="flex w-full items-center gap-2 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-accent/60"
             >
               <span className="num w-4 shrink-0 text-[11px] font-bold text-muted-foreground">
@@ -962,7 +962,7 @@ function TradeTrail({
                     kind="text"
                   />
                   <SortableTh
-                    label="Scrip"
+                    label="Stock"
                     active={sort.key === "symbol"}
                     dir={sort.dir}
                     onClick={() => toggle("symbol")}

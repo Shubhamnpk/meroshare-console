@@ -289,7 +289,7 @@ type SortCycle = "default" | "asc" | "desc";
 const SORT_LABELS: Record<SortKey, string> = {
   appliedDate: "Date",
   companyName: "Company",
-  scrip: "Scrip",
+  scrip: "Stock",
   appliedKitta: "Kitta",
   status: "Status",
   amount: "Amount",
@@ -400,7 +400,7 @@ function reportCsv(items: ApplicationReportItem[], details: (JsonRecord | null)[
     csvRow([
       "SN",
       "Company",
-      "Scrip",
+      "Stock",
       "Applied",
       "Allotted",
       "Amount",
@@ -640,7 +640,7 @@ export function ApplicationReports({
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search company, scrip, status or remark"
+            placeholder="Search company, stock, status or remark"
             className="h-9 rounded-xl pl-9"
           />
         </div>
@@ -679,7 +679,7 @@ export function ApplicationReports({
                 build: () => "",
                 pdf: () => ({
                   title: "IPO application history",
-                  head: ["SN", "Company", "Scrip", "Applied", "Allotted", "Amount", "Status"],
+                  head: ["SN", "Company", "Stock", "Applied", "Allotted", "Amount", "Status"],
                   body: currentItems.map((item, idx) => {
                     const d = currentDetails.data?.[idx] ?? null;
                     return [

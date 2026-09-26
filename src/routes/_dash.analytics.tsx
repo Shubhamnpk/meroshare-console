@@ -265,7 +265,7 @@ function AnalyticsPage() {
       ) : rows.length === 0 ? (
         <EmptyBlock
           title="Nothing to analyse"
-          description="Analytics appear once you hold at least one scrip."
+          description="Analytics appear once you hold at least one stock."
         />
       ) : (
         <>
@@ -277,7 +277,7 @@ function AnalyticsPage() {
               <StatCard
                 label="Top 5 concentration"
                 value={`${top5.toFixed(1)}%`}
-                sub="Share of portfolio in largest 5 scrips"
+                sub="Share of portfolio in largest 5 stocks"
                 className="h-full"
               />
             </SwipeItem>
@@ -331,7 +331,7 @@ function AnalyticsPage() {
               <AllocationPie title="Allocation by sector" slices={sectorSlices} total={total} />
             ) : null}
             <AllocationPie
-              title="Allocation by scrip"
+              title="Allocation by stock"
               slices={scripSlices}
               total={total}
               onPick={setPicked}
@@ -368,7 +368,7 @@ function AnalyticsPage() {
           ) : null}
 
           <Panel as="section">
-            <h2 className="mb-4 font-display text-base font-semibold">Allocation by scrip</h2>
+            <h2 className="mb-4 font-display text-base font-semibold">Allocation by stock</h2>
             <ul className="space-y-3">
               {rows.map((r) => (
                 <li key={r.scrip}>

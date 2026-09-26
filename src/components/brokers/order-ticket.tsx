@@ -487,7 +487,7 @@ export function OrderTicket({
             <div className="grid grid-cols-2 gap-2 rounded-xl bg-muted/40 p-3 text-sm">
               <span className="text-muted-foreground">Side</span>
               <span className="text-right font-bold">{side}</span>
-              <span className="text-muted-foreground">Scrip</span>
+              <span className="text-muted-foreground">Stock</span>
               <span className="num text-right font-semibold">{symbol}</span>
               <span className="text-muted-foreground">Quantity</span>
               <span className="num text-right font-semibold">

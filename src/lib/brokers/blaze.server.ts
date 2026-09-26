@@ -195,7 +195,7 @@ function blazeBaseBody(
   input: BlazeOrderInput,
 ): { sym: string; body: Record<string, unknown> } {
   const sym = input.symbol.trim().toUpperCase();
-  if (!/^[A-Z0-9]{3,24}$/.test(sym)) throw new Error("Invalid scrip symbol.");
+  if (!/^[A-Z0-9]{3,24}$/.test(sym)) throw new Error("Invalid stock symbol.");
   if (!Number.isInteger(input.quantity) || input.quantity < 1 || input.quantity > 100000) {
     throw new Error("Quantity must be 1–100000.");
   }
@@ -373,7 +373,7 @@ export async function placeBlazeTrigger(
 ): Promise<{ ok: boolean; message: string; tranId: string | null }> {
   const id = await blazeIdentity(session);
   const sym = input.symbol.trim().toUpperCase();
-  if (!/^[A-Z0-9]{3,24}$/.test(sym)) throw new Error("Invalid scrip symbol.");
+  if (!/^[A-Z0-9]{3,24}$/.test(sym)) throw new Error("Invalid stock symbol.");
   const json = await blazePost<Record<string, unknown>>(id, "/api/TriggerOrder/Order", {
     ClientCode: id.clientCode,
     SessionNo: id.sessionNo,

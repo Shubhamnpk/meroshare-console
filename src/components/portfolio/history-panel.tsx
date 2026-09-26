@@ -175,7 +175,7 @@ function PriceHistoryTab({
         title="No price history"
         description={
           failedSymbols.length > 0
-            ? "We couldn't load demat history for some of your scrips, so there is nothing to chart yet. Retry, or pick a shorter range."
+            ? "We couldn't load demat history for some of your stocks, so there is nothing to chart yet. Retry, or pick a shorter range."
             : "The YONEPSE LTP archive has no points for your holdings in this range yet."
         }
       >
@@ -239,7 +239,7 @@ function PriceHistoryTab({
 
       {failedSymbols.length > 0 ? (
         <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
-          Couldn&apos;t load demat history for {failedSymbols.length} scrip
+          Couldn&apos;t load demat history for {failedSymbols.length} stock
           {failedSymbols.length === 1 ? "" : "s"}:{" "}
           <span className="font-medium">{failedSymbols.map((f) => f.symbol).join(", ")}</span>.
           They&apos;re missing from this chart:{" "}
@@ -302,7 +302,7 @@ function PriceHistoryTab({
           const count = point.breakdown.length;
           return (
             <p className="text-[0.65rem] text-muted-foreground">
-              {count} {count === 1 ? "scrip" : "scrips"}
+              {count} {count === 1 ? "stock" : "stocks"}
             </p>
           );
         }}
@@ -314,10 +314,10 @@ function PriceHistoryTab({
 
       <p className="text-[0.68rem] text-muted-foreground">
         {granularity === "day"
-          ? "Daily closing values from the YONEPSE LTP archive. Hover for the per-scrip breakdown. Click a point to pin it below."
+          ? "Daily closing values from the YONEPSE LTP archive. Hover for the per-stock breakdown. Click a point to pin it below."
           : granularity === "year"
-            ? "Year-end closing values from the YONEPSE LTP archive. Hover for the per-scrip breakdown. Click a point to pin it below."
-            : "Month-end closing values from the YONEPSE LTP archive. Hover for the per-scrip breakdown. Click a point to pin it below."}
+            ? "Year-end closing values from the YONEPSE LTP archive. Hover for the per-stock breakdown. Click a point to pin it below."
+            : "Month-end closing values from the YONEPSE LTP archive. Hover for the per-stock breakdown. Click a point to pin it below."}
       </p>
     </div>
   );
@@ -392,7 +392,7 @@ export function PointBreakdown({
               profit ·{" "}
             </>
           ) : null}
-          {formatNpr(point.value)} across {rows.length} scrip{rows.length === 1 ? "" : "s"}
+          {formatNpr(point.value)} across {rows.length} stock{rows.length === 1 ? "" : "s"}
         </span>
       </header>
       <Table>
@@ -1066,7 +1066,7 @@ export function HistoryPanel({
       <div className="px-4 pb-4">
         {tab === null ? (
           <p className="rounded-xl border border-dashed border-border/70 px-4 py-8 text-center text-sm text-muted-foreground">
-            Choose an insight above to load it on demand: past prices and your dividend record.
+            Choose an insight above to load it on demand the past prices and your dividend record.
           </p>
         ) : tab === "price" ? (
           <PriceHistoryTab holdings={holdings} onPickScrip={onPickScrip} />

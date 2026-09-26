@@ -270,7 +270,7 @@ export function Heatmap({
                   key={g.key}
                   className="num pointer-events-none absolute z-10 rounded-md bg-background/85 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest text-muted-foreground backdrop-blur-sm"
                   style={{ left: `${g.x + 0.6}%`, top: `${g.y + 0.8}%` }}
-                  title={`${g.count} scrips · ${Math.round(g.share * 100)}% of map area`}
+                  title={`${g.count} stocks · ${Math.round(g.share * 100)}% of map area`}
                 >
                   {g.label} ({g.count} · {Math.round(g.share * 100)}%)
                 </div>

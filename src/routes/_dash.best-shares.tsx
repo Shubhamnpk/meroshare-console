@@ -547,7 +547,7 @@ function BestSharesPage() {
               <TableHeader className="bg-muted">
                 <TableRow className="bg-muted/40 hover:bg-muted/40">
                   <TableHead className="px-3 py-3 pl-4 sm:pl-4">#</TableHead>
-                  <SortableTh label="Scrip" active={sort.key === "symbol"} dir={sort.dir} kind="text" align="left" onClick={() => toggle("symbol")} className="px-3 py-3" />
+                  <SortableTh label="Stock" active={sort.key === "symbol"} dir={sort.dir} kind="text" align="left" onClick={() => toggle("symbol")} className="px-3 py-3" />
                   <SortableTh label="LTP" active={sort.key === "ltp"} dir={sort.dir} kind="number" align="right" onClick={() => toggle("ltp")} className="num px-3 py-3 text-right" />
                   <SortableTh label="Chg%" active={sort.key === "change"} dir={sort.dir} kind="number" align="right" onClick={() => toggle("change")} className="num px-3 py-3 text-right" />
                   {tab === "dividends" ? (

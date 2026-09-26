@@ -102,7 +102,7 @@ function TransferDetailDialog({
 
   const details: [string, string][] = [
     ["Transfer ID", String(item["id"] ?? "-")],
-    ["Scrip", String(item["scriptCode"] ?? obligation?.["scriptCode"] ?? "-")],
+    ["Stock", String(item["scriptCode"] ?? obligation?.["scriptCode"] ?? "-")],
     ["Quantity", String(item["quantity"] ?? obligation?.["quantity"] ?? "-")],
     ["Settlement Date", String(item["settleDate"] ?? obligation?.["settlementDate"] ?? "-")],
     ["Status", String(reqStatus?.["name"] ?? item["statusName"] ?? "-")],
@@ -209,7 +209,7 @@ export function EdisTransferList() {
                 kind="text"
               />
               <SortableTh
-                label="Scrip"
+                label="Stock"
                 active={sort.key === "scriptCode"}
                 dir={sort.dir}
                 onClick={() => toggle("scriptCode")}
@@ -370,7 +370,7 @@ export function EdisNodelTrades() {
                 kind="text"
               />
               <SortableTh
-                label="Scrip"
+                label="Stock"
                 active={sort.key === "scriptCode"}
                 dir={sort.dir}
                 onClick={() => toggle("scriptCode")}

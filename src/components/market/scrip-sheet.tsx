@@ -1408,7 +1408,7 @@ export function ScripSheet({
               </span>
               <div className="min-w-0 pb-1">
                 <span className="flex items-center gap-2">
-                  <SheetTitle className="font-display text-xl">{upper || "Scrip"}</SheetTitle>
+                  <SheetTitle className="font-display text-xl">{upper || "Stock"}</SheetTitle>
                   {price ? (
                     <>
                       <button
@@ -1500,7 +1500,7 @@ export function ScripSheet({
         <div className="space-y-5 px-4 pb-8">
           {!price && !isOpenEnd && !holding && !yoHolding ? (
             <p className="mt-2 text-sm text-muted-foreground">
-              No live market data for this scrip right now.
+              No live market data for this stock right now.
             </p>
           ) : null}
 
@@ -1626,7 +1626,7 @@ export function ScripSheet({
                   </>
                 ) : (
                   <p className="mt-3 rounded-xl border border-border/60 bg-surface px-3 py-2.5 text-sm text-muted-foreground">
-                    No price history in the feed for this scrip yet.
+                    No price history in the feed for this stock yet.
                   </p>
                 )}
               </Panel>
@@ -1737,7 +1737,7 @@ export function ScripSheet({
                   />
                 ) : (
                   <p className="mt-3 rounded-xl border border-border/60 bg-surface px-3 py-2.5 text-sm text-muted-foreground">
-                    No financial data in the feed for this scrip yet.
+                    No financial data in the feed for this stock yet.
                   </p>
                 )}
               </Panel>
@@ -1927,7 +1927,7 @@ export function ScripSheet({
                 )
               ) : (
                 <p className="rounded-xl border border-border/60 bg-surface px-3 py-2.5 text-sm text-muted-foreground">
-                  No dividend announcements in the feed for this scrip.
+                  No dividend announcements in the feed for this stock.
                 </p>
               )}
             </TabsContent>

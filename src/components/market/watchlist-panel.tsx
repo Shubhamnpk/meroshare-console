@@ -114,7 +114,7 @@ export function WatchlistPanel({
       }
     }
     if (added > 0)
-      toast.success(`Synced ${added} scrip${added === 1 ? "" : "s"} from broker watchlist.`);
+      toast.success(`Synced ${added} stock${added === 1 ? "" : "s"} from broker watchlist.`);
     if (onlyLocal.length > 0 && !pushLocalToBroker.isPending) pushLocalToBroker.mutate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, brokerId, brokerWatchlists.isPending, brokerKey, localKey]);
@@ -172,7 +172,7 @@ export function WatchlistPanel({
             <Input
               value={term}
               onChange={(e) => setTerm(e.target.value)}
-              placeholder="Add a scrip by symbol or name…"
+              placeholder="Add a stock by symbol or name…"
               className="h-9 rounded-xl pl-9"
             />
           </div>
@@ -206,7 +206,7 @@ export function WatchlistPanel({
           {rows.length === 0 ? (
             <EmptyBlock
               title="Nothing on your watchlist yet"
-              description="Search above, or tap the star next to any scrip."
+              description="Search above, or tap the star next to any stock."
               icon={<Star className="size-6" />}
             />
           ) : (

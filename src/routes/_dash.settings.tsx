@@ -787,7 +787,7 @@ function BrokerConnectionsCard() {
                       <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
                         Holdings
                       </p>
-                      <p className="font-medium">{yoHoldings} scrips</p>
+                      <p className="font-medium">{yoHoldings} stocks</p>
                     </div>
                     <div>
                       <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">Mode</p>

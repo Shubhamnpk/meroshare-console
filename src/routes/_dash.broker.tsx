@@ -915,7 +915,7 @@ function OrderHistoryBox({
   const detailRows: [string, string][] = order
     ? (
         [
-          ["Scrip", order.symbol],
+          ["Stock", order.symbol],
           ["Side", order.side],
           ["Quantity", String(order.quantity)],
           ["Price", order.price !== null ? String(order.price) : "MKT"],
@@ -1569,7 +1569,7 @@ function BrokerPage() {
             {[
               {
                 label: "Holdings",
-                value: `${(holdings.data ?? []).length} scrips`,
+                value: `${(holdings.data ?? []).length} stocks`,
                 sub: "broker demat",
               },
               {
@@ -1608,7 +1608,7 @@ function BrokerPage() {
             <Input
               value={holdingSearch}
               onChange={(e) => setHoldingSearch(e.target.value)}
-              placeholder="Filter scrips…"
+              placeholder="Filter stocks…"
               className="h-8 w-44 text-xs"
             />
           </div>
@@ -1621,7 +1621,7 @@ function BrokerPage() {
                 <TableHeader className="bg-surface">
                   <TableRow className="bg-muted/40 hover:bg-muted/40">
                     <SortableTh
-                      label="Scrip"
+                      label="Stock"
                       active={holdingSort.key === "symbol"}
                       dir={holdingSort.dir}
                       onClick={() => toggleHoldingSort("symbol")}
@@ -1986,7 +1986,7 @@ function BrokerPage() {
                           kind="text"
                         />
                         <SortableTh
-                          label="Scrip"
+                          label="Stock"
                           active={tradeSort.key === "symbol"}
                           dir={tradeSort.dir}
                           onClick={() => toggleTradeSort("symbol")}
@@ -2320,7 +2320,7 @@ function BrokerPage() {
 
       <p className="text-[0.7rem] leading-relaxed text-muted-foreground">
         Live from your linked broker terminal. Cancelling is two taps and immediate. Placing happens
-        from the Terminal or any scrip&apos;s Trade tab, always behind a confirmation.
+        from the Terminal or any stock&apos;s Trade tab, always behind a confirmation.
       </p>
 
       <TmsReauthModal open={reauthOpen} onOpenChange={setReauthOpen} />

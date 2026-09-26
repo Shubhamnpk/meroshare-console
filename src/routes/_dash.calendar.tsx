@@ -499,7 +499,7 @@ function CalendarPage() {
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
-              {v === "mine" ? "My holdings" : "All scrips"}
+              {v === "mine" ? "My holdings" : "All stocks"}
             </button>
           ))}
         </div>
@@ -520,7 +520,7 @@ function CalendarPage() {
         <button
           type="button"
           onClick={() => void navigate({ search: {} })}
-          title="Show all scrips"
+          title="Show all stocks"
           className="num inline-flex w-fit items-center gap-1.5 rounded-full bg-primary/15 px-3 py-1 text-xs font-semibold text-primary hover:bg-primary/20"
         >
           Showing {focusSymbol} only · clear <X className="size-3" />

@@ -32,12 +32,12 @@ export const Route = createFileRoute("/_dash/transactions")({
       { title: "Transactions | MeroShare Investor Console" },
       {
         name: "description",
-        content: "Credit and debit history for every scrip in your demat account.",
+        content: "Credit and debit history for every stock in your demat account.",
       },
       { property: "og:title", content: "Transactions | MeroShare Investor Console" },
       {
         property: "og:description",
-        content: "Credit and debit history for every scrip in your demat account.",
+        content: "Credit and debit history for every stock in your demat account.",
       },
       ogImage(),
     ],
@@ -143,16 +143,16 @@ function TransactionsPage() {
         <div>
           <h1 className="font-display text-2xl font-semibold sm:text-3xl">Transactions</h1>
           <p className="mt-1 hidden text-sm text-muted-foreground sm:block">
-            Credit and debit history for every scrip in your demat account.
+            Credit and debit history for every stock in your demat account.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <Select value={symbol} onValueChange={setSymbol}>
             <SelectTrigger className="w-44">
-              <SelectValue placeholder="All scrips" />
+              <SelectValue placeholder="All stocks" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All scrips</SelectItem>
+              <SelectItem value="all">All stocks</SelectItem>
               {(symbols.data ?? []).map((s) => (
                 <SelectItem key={s} value={s}>
                   {s}
@@ -207,7 +207,7 @@ function TransactionsPage() {
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by scrip or description…"
+          placeholder="Search by stock or description…"
           className="h-10 rounded-xl pl-9"
         />
       </div>
@@ -244,7 +244,7 @@ function TransactionsPage() {
       ) : filtered.length === 0 ? (
         <EmptyBlock
           title="No matches"
-          description="Nothing matches your search. Try a different scrip or description."
+          description="Nothing matches your search. Try a different stock or description."
         />
       ) : (
         <div className="overflow-clip rounded-2xl border border-border/70 bg-card">

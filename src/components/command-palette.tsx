@@ -83,14 +83,14 @@ export function CommandPalette({
 
   const list = (
     <Command shouldFilter={false}>
-      <CommandInput placeholder="Search any listed scrip…" value={query} onValueChange={setQuery} />
+      <CommandInput placeholder="Search any listed stock…" value={query} onValueChange={setQuery} />
       <CommandList>
         <CommandEmpty>
           {snapshot.isLoading
-            ? "Loading scrips…"
+            ? "Loading stocks…"
             : query
-              ? "No scrip matches that search."
-              : "No scrips in the live feed right now."}
+              ? "No stock matches that search."
+              : "No stocks in the live feed right now."}
         </CommandEmpty>
         <CommandGroup heading={query ? "Matches" : "Top traded"}>
           {results.map((item) => (
@@ -128,7 +128,7 @@ export function CommandPalette({
         <SheetContent side="bottom" className="h-[70dvh] px-0 pt-2" onClose={() => setOpen(false)}>
           <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-muted-foreground/30" />
           <SheetHeader className="px-4 text-left">
-            <SheetTitle>Search scrips</SheetTitle>
+            <SheetTitle>Search stocks</SheetTitle>
           </SheetHeader>
           <div className="mt-2 overflow-y-auto px-2">{list}</div>
         </SheetContent>

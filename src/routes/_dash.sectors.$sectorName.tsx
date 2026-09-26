@@ -525,7 +525,7 @@ function SectorDetailPage() {
         <BackButton onBack={() => void navigate({ to: "/market-depth" })} />
         <EmptyBlock
           title="Sector not found"
-          description={`No scrips grouped under "${sectorName}". Pick a sector from the market depth heatmap.`}
+          description={`No stocks grouped under "${sectorName}". Pick a sector from the market depth heatmap.`}
         />
       </div>
     );
@@ -549,7 +549,7 @@ function SectorDetailPage() {
         <div className="min-w-0 flex-1">
           <h1 className="font-display text-xl font-semibold sm:text-3xl">{resolved.name}</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            {stats.items.length} listed scrips · {stats.share.toFixed(1)}% of market turnover
+            {stats.items.length} listed stocks · {stats.share.toFixed(1)}% of market turnover
           </p>
         </div>
         <div className="text-right">
@@ -752,7 +752,7 @@ function SectorDetailPage() {
           <MoverRows
             title="Neutral"
             rows={stats.flats}
-            emptyLabel="No flat scrips this session"
+            emptyLabel="No flat stocks this session"
             tone="flat"
             onPick={setPicked}
             stat={<CompactNpr value={stats.flatsTurnover} />}
