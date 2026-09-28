@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { ErrorBoundary } from "react-error-boundary";
 import {
   ArrowUpRight,
   Briefcase,
@@ -123,6 +124,39 @@ function MoverCard({
         <p className="mt-1 text-sm text-muted-foreground">-</p>
       )}
     </div>
+  );
+}
+
+/** Crash isolation per widget: one widget throwing must not blank the page. */
+function WidgetFallback({
+  label,
+  resetErrorBoundary,
+}: {
+  label: string;
+  resetErrorBoundary: () => void;
+}) {
+  return (
+    <div
+      role="alert"
+      className="flex flex-col items-start gap-2 rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm"
+    >
+      <p className="font-medium text-foreground">Couldn't load {label}.</p>
+      <Button type="button" size="sm" variant="outline" onClick={() => resetErrorBoundary()}>
+        Try again
+      </Button>
+    </div>
+  );
+}
+
+function Widget({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <ErrorBoundary
+      fallbackRender={({ resetErrorBoundary }) => (
+        <WidgetFallback label={label} resetErrorBoundary={resetErrorBoundary} />
+      )}
+    >
+      {children}
+    </ErrorBoundary>
   );
 }
 
@@ -345,14 +379,14 @@ function DashboardPage() {
           <h1 className="font-display text-2xl font-semibold sm:text-3xl">Dashboard</h1>
           <p className="mt-1 hidden text-sm text-muted-foreground sm:block">
             {data && data.marketStale
-              ? ", showing MeroShare prices (feed temporarily unreachable)"
+              ? "Showing MeroShare prices (feed temporarily unreachable)"
               : ""}
           </p>
         </div>
         <button
           type="button"
           onClick={refreshAll}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+          className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
         >
           <RefreshCw className={isRefreshing ? "size-4 animate-spin" : "size-4"} />
           Refresh
@@ -376,6 +410,7 @@ function DashboardPage() {
             </div>
           </div>
 
+          <Widget label="NEPSE index">
           <Panel
             as="button"
             type="button"
@@ -420,6 +455,23 @@ function DashboardPage() {
                       {formatPercent(nepse.percentChange)}
                     </DeltaPill>
                   </p>
+                ) : market.isError || nepseGraph.isError ? (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                    <span className="text-muted-foreground">Index data unavailable.</span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={(e) => {
+                        // Don't open the chart modal underneath.
+                        e.stopPropagation();
+                        void market.refetch();
+                        void nepseGraph.refetch();
+                      }}
+                    >
+                      Try again
+                    </Button>
+                  </div>
                 ) : (
                   <p className="mt-2 text-sm text-muted-foreground">Loading…</p>
                 )}
@@ -432,7 +484,7 @@ function DashboardPage() {
                       <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-muted-foreground">
                         52-week range
                       </p>
-                      <p className="flex items-center gap-1 text-[0.68rem] font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100">
+                      <p className="flex items-center gap-1 text-[0.68rem] font-medium text-primary opacity-100 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-focus-within:opacity-100 [@media(hover:hover)]:group-hover:opacity-100">
                         Click for the full chart <ArrowUpRight className="size-3" />
                       </p>
                     </div>
@@ -458,56 +510,9 @@ function DashboardPage() {
               ) : null}
             </div>
           </Panel>
+          </Widget>
 
-          <Panel as="section">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <h2 className="flex items-center gap-2 font-display text-base font-semibold">
-                <Star className="size-4 fill-warning text-warning" /> Watchlist
-              </h2>
-              {watchlist.symbols.length > 0 ? (
-                <button
-                  type="button"
-                  onClick={() => setWatchlistOpen(true)}
-                  className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-                >
-                  View all ({watchlist.symbols.length}) <ArrowUpRight className="size-3" />
-                </button>
-              ) : null}
-            </div>
-            {watchlist.symbols.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Star any company stock on the Market page and it will wait for you here.
-              </p>
-            ) : (
-              <div className="flex snap-x gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                {watchlist.symbols.map((symbol) => {
-                  const price = market.data?.prices.find((p) => p.symbol === symbol);
-                  return (
-                    <button
-                      key={symbol}
-                      type="button"
-                      onClick={() => {
-                        setPicked(symbol);
-                        setPickedTab(null);
-                      }}
-                      className="w-36 shrink-0 snap-start rounded-xl border border-border/60 bg-surface px-3 py-2.5 text-left transition-colors hover:border-primary/40"
-                    >
-                      <p className="truncate text-[13px] font-semibold">{symbol}</p>
-                      <p className="num mt-0.5 text-sm font-semibold">
-                        {price ? formatNpr(price.ltp) : "-"}
-                      </p>
-                      {price ? (
-                        <DeltaPill value={price.percentChange}>
-                          {formatPercent(price.percentChange)}
-                        </DeltaPill>
-                      ) : null}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </Panel>
-
+          <Widget label="Today's movers">
           <Panel as="section">
             <div className="mb-3 flex items-center justify-between gap-3">
               <h2 className="font-display text-base font-semibold">Today's movers</h2>
@@ -519,7 +524,11 @@ function DashboardPage() {
               <EmptyBlock
                 title="No holdings yet"
                 description="Stocks in your demat account will appear here."
-              />
+              >
+                <Link to="/market" className="text-xs font-medium text-primary hover:underline">
+                  Browse market
+                </Link>
+              </EmptyBlock>
             ) : (
               <div className="grid gap-2 sm:grid-cols-2">
                 <MoverCard
@@ -543,8 +552,10 @@ function DashboardPage() {
               </div>
             )}
           </Panel>
+          </Widget>
 
           {data && data.sectors.length > 0 ? (
+            <Widget label="Sector allocation">
             <Panel as="section">
               <h2 className="mb-3 font-display text-base font-semibold">Sector allocation</h2>
               <ul className="space-y-2">
@@ -564,10 +575,67 @@ function DashboardPage() {
                 ))}
               </ul>
             </Panel>
+            </Widget>
           ) : null}
         </>
       )}
 
+      <Widget label="Watchlist">
+        <Panel as="section">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h2 className="flex items-center gap-2 font-display text-base font-semibold">
+              <Star className="size-4 fill-warning text-warning" /> Watchlist
+            </h2>
+            {watchlist.symbols.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => setWatchlistOpen(true)}
+                className="inline-flex min-h-11 items-center gap-1 px-1 text-xs font-medium text-primary hover:underline"
+              >
+                View all ({watchlist.symbols.length}) <ArrowUpRight className="size-3" />
+              </button>
+            ) : null}
+          </div>
+          {watchlist.symbols.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Star any company stock on the{" "}
+              <Link to="/market" className="font-medium text-primary hover:underline">
+                Market page
+              </Link>{" "}
+              and it will wait for you here.
+            </p>
+          ) : (
+            <div className="flex snap-x gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {watchlist.symbols.map((symbol) => {
+                const price = market.data?.prices.find((p) => p.symbol === symbol);
+                return (
+                  <button
+                    key={symbol}
+                    type="button"
+                    onClick={() => {
+                      setPicked(symbol);
+                      setPickedTab(null);
+                    }}
+                    className="w-36 shrink-0 snap-start rounded-xl border border-border/60 bg-surface px-3 py-2.5 text-left transition-colors hover:border-primary/40"
+                  >
+                    <p className="truncate text-[13px] font-semibold">{symbol}</p>
+                    <p className="num mt-0.5 text-sm font-semibold">
+                      {price ? formatNpr(price.ltp) : "-"}
+                    </p>
+                    {price ? (
+                      <DeltaPill value={price.percentChange}>
+                        {formatPercent(price.percentChange)}
+                      </DeltaPill>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </Panel>
+      </Widget>
+
+      <Widget label="Dividend calendar">
       <Panel as="section">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="flex items-center gap-2 font-display text-base font-semibold">
@@ -582,6 +650,8 @@ function DashboardPage() {
         </div>
         {dividends.isLoading ? (
           <SkeletonCards count={1} />
+        ) : dividends.isError ? (
+          <ErrorBlock error={dividends.error} retry={() => void dividends.refetch()} />
         ) : upcomingClosures.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No upcoming book closures for your holdings.
@@ -656,7 +726,9 @@ function DashboardPage() {
           </ul>
         )}
       </Panel>
+      </Widget>
 
+      <Widget label="Issues">
       <Panel as="section" className="min-w-0 overflow-hidden">
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="font-display text-base font-semibold">Issues</h2>
@@ -711,17 +783,13 @@ function DashboardPage() {
                   return (
                     <li
                       key={issue.companyShareId}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => navigate({ to: "/ipo", search: { tab: "apply" } })}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          navigate({ to: "/ipo", search: { tab: "apply" } });
-                        }
-                      }}
-                      className="flex min-w-0 w-full cursor-pointer flex-col gap-3 overflow-hidden rounded-xl border border-border/60 bg-surface p-3 transition-colors hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:flex-row sm:items-center sm:gap-3 sm:px-3 sm:py-3"
+                      className="flex min-w-0 w-full flex-col gap-3 overflow-hidden rounded-xl border border-border/60 bg-surface p-3 transition-colors hover:border-primary/30 sm:flex-row sm:items-center sm:gap-3 sm:px-3 sm:py-3"
                     >
+                      <Link
+                        to="/ipo"
+                        search={{ tab: "apply" }}
+                        className="block min-w-0 flex-1 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
                       <div className="flex min-w-0 w-full flex-1 items-center gap-3 overflow-hidden">
                         <span className="num flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
                           {String(issue.companyName ?? issue.scrip ?? "?")
@@ -768,12 +836,12 @@ function DashboardPage() {
                           </span>
                         </span>
                       </div>
+                      </Link>
                       <Button
                         size="sm"
                         variant={applied ? "outline" : "default"}
                         className="h-7 w-full shrink-0 px-3 text-xs sm:ml-2 sm:w-auto"
-                        onClick={(e) => {
-                          e.stopPropagation();
+                        onClick={() => {
                           navigate({ to: "/ipo", search: { tab: "apply" } });
                         }}
                       >
@@ -793,18 +861,14 @@ function DashboardPage() {
                   {upcomingIssues.map((item) => (
                     <li
                       key={item.key}
-                      role="button"
-                      tabIndex={0}
-                      title={`${item.title} - view in IPO calendar`}
-                      onClick={() => navigate({ to: "/ipo", search: { tab: "calendar" } })}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          navigate({ to: "/ipo", search: { tab: "calendar" } });
-                        }
-                      }}
-                      className="block cursor-pointer rounded-xl border border-dashed border-border/60 bg-surface/60 p-3 transition-colors hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="block rounded-xl border border-dashed border-border/60 bg-surface/60 transition-colors hover:border-primary/40"
                     >
+                      <Link
+                        to="/ipo"
+                        search={{ tab: "calendar" }}
+                        title={`${item.title} - view in IPO calendar`}
+                        className="block rounded-xl p-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="truncate text-sm font-semibold" title={item.title}>
@@ -821,6 +885,7 @@ function DashboardPage() {
                           Upcoming
                         </span>
                       </div>
+                      </Link>
                     </li>
                   ))}
                 </ul>
@@ -829,6 +894,7 @@ function DashboardPage() {
           </div>
         )}
       </Panel>
+      </Widget>
 
       <ScripSheet
         symbol={picked}

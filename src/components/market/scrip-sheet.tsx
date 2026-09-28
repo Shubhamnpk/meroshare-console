@@ -60,7 +60,8 @@ import { PriceAlertDialog } from "@/components/brokers/price-alert-dialog";
 import { usePriceAlerts } from "@/lib/price-alerts";
 import { loadYoWallet } from "@/lib/yobroker/store";
 import { Panel } from "@/components/ui/panel";
-import { breakEvenPrice, buyCost, cgtRate, daysBetween, DP_CHARGE, sellProceeds } from "@/lib/calc/fees";
+import { netPosition } from "@/lib/calc/position";
+import { useHoldingAge, useIsOpenEnd, type TxnRow } from "./use-holding-age";
 import {
   dividendsQuery,
   brokerConnectionsQuery,
@@ -76,7 +77,6 @@ import {
   transactionsQuery,
   udfHistoryQuery,
   waccReportQuery,
-  waccSearchQuery,
 } from "@/lib/queries";
 import { formatDate, formatHoldingTime, formatNpr, formatPercent, formatQty, toNumber } from "@/lib/format";
 import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
@@ -124,126 +124,25 @@ function PositionCard({
   const rawPct = hasCost && costBasis > 0 ? (rawPl / costBasis) * 100 : 0;
   const rawUp = rawPl >= 0;
 
-  const purchaseQ = useQuery(waccSearchQuery(scrip));
-  const schemesQ = useQuery(mfSchemesQuery());
-  const isOpenEnd = useMemo(
-    () => schemesQ.data?.some((s) => s.symbol.toUpperCase() === scrip.toUpperCase() && s.fundType === "open_end") ?? false,
-    [schemesQ.data, scrip],
-  );
+  // Shared FIFO holding-age logic (same as the terminal position card).
+  const txnQ = useQuery(transactionsQuery(scrip));
+  const txnItems = (txnQ.data as unknown as { items?: TxnRow[] } | undefined)?.items;
+  const { holdingDays, avgHoldingDays, lots } = useHoldingAge(scrip, txnItems);
+  const isOpenEnd = useIsOpenEnd(scrip);
   const fundDetailQ = useQuery(mfSchemeQuery(isOpenEnd ? scrip : null));
   const [holdingOpen, setHoldingOpen] = useState(false);
-  const txnQ = useQuery(transactionsQuery(scrip));
-  const holdingDays = useMemo(() => {
-    const items = (txnQ.data as unknown as { items?: { transactionDate?: string; creditQuantity?: number; debitQuantity?: number; balanceAfterTransaction?: number }[] } | undefined)?.items ?? []
-    if (items.length > 0) {
-      const sorted = [...items].sort((a, b) => String(a.transactionDate ?? "").localeCompare(String(b.transactionDate ?? "")))
-      const lots: { qty: number; date: string }[] = []
-      for (const t of sorted) {
-        const credit = Number((t as Record<string, unknown>)["creditQuantity"] ?? (t as Record<string, unknown>)["creditQty"] ?? 0)
-        const debit = Number((t as Record<string, unknown>)["debitQuantity"] ?? (t as Record<string, unknown>)["debitQty"] ?? 0)
-        const date = String(t.transactionDate ?? "")
-        if (credit > 0 && date) lots.push({ qty: credit, date })
-        if (debit > 0) {
-          let remaining = debit
-          while (remaining > 0 && lots.length > 0) {
-            const first = lots[0]!
-            if (first.qty > remaining) {
-              first.qty -= remaining
-              remaining = 0
-            } else {
-              remaining -= first.qty
-              lots.shift()
-            }
-          }
-        }
-      }
-      if (lots.length > 0) {
-        const earliest = lots.map((l) => l.date).sort()[0] as string
-        const d = daysBetween(earliest, new Date())
-        if (d > 0) return d
-      }
-    }
-    const raw = purchaseQ.data as unknown as { waccUpdateResponse?: { transactionDate?: string; postDate?: string }[]; waccSummaryResponse?: { transactionDate?: string; postDate?: string }[] } | undefined;
-    const all = [...(raw?.waccUpdateResponse ?? []), ...(raw?.waccSummaryResponse ?? [])];
-    const dates = all
-      .map((r) => r.transactionDate || r.postDate)
-      .filter(Boolean) as string[];
-    if (dates.length === 0) return 400;
-    const earliest = dates.sort()[0] as string;
-    const d = daysBetween(earliest, new Date());
-    return d > 0 ? d : 400;
-  }, [txnQ.data, purchaseQ.data]);
-  const { avgHoldingDays, lots } = useMemo(() => {
-    const items = (txnQ.data as unknown as { items?: { transactionDate?: string; creditQuantity?: number; debitQuantity?: number }[] } | undefined)?.items ?? []
-    if (items.length > 0) {
-      const sorted = [...items].sort((a, b) => String(a.transactionDate ?? "").localeCompare(String(b.transactionDate ?? "")))
-      const lotsArr: { qty: number; date: string }[] = []
-      for (const t of sorted) {
-        const credit = Number((t as Record<string, unknown>)["creditQuantity"] ?? (t as Record<string, unknown>)["creditQty"] ?? 0)
-        const debit = Number((t as Record<string, unknown>)["debitQuantity"] ?? (t as Record<string, unknown>)["debitQty"] ?? 0)
-        const date = String(t.transactionDate ?? "")
-        if (credit > 0 && date) lotsArr.push({ qty: credit, date })
-        if (debit > 0) {
-          let remaining = debit
-          while (remaining > 0 && lotsArr.length > 0) {
-            const first = lotsArr[0]!
-            if (first.qty > remaining) {
-              first.qty -= remaining
-              remaining = 0
-            } else {
-              remaining -= first.qty
-              lotsArr.shift()
-            }
-          }
-        }
-      }
-      if (lotsArr.length > 0) {
-        let totalUnits = 0
-        let weighted = 0
-        const withDays: { date: string; qty: number; days: number }[] = []
-        for (const lot of lotsArr) {
-          const d = daysBetween(lot.date, new Date())
-          if (!(d > 0)) continue
-          withDays.push({ date: lot.date, qty: lot.qty, days: d })
-          weighted += d * lot.qty
-          totalUnits += lot.qty
-        }
-        withDays.sort((a, b) => b.days - a.days)
-        const avg = totalUnits > 0 ? Math.round(weighted / totalUnits) : holdingDays
-        return { avgHoldingDays: avg, lots: withDays }
-      }
-    }
-    const raw = purchaseQ.data as unknown as {
-      waccUpdateResponse?: { transactionDate?: string; postDate?: string; quantity?: number; transactionQuantity?: number }[];
-      waccSummaryResponse?: { transactionDate?: string; postDate?: string; quantity?: number; transactionQuantity?: number }[];
-    } | undefined;
-    const all = [...(raw?.waccUpdateResponse ?? []), ...(raw?.waccSummaryResponse ?? [])];
-    if (all.length === 0) return { avgHoldingDays: holdingDays, lots: [] as { date: string; qty: number; days: number }[] };
-    let totalUnits = 0;
-    let weighted = 0;
-    const arr: { date: string; qty: number; days: number }[] = [];
-    for (const r of all) {
-      const dateStr = (r.transactionDate || r.postDate) as string | undefined;
-      if (!dateStr) continue;
-      const qty = Number((r as Record<string, unknown>)["quantity"] ?? (r as Record<string, unknown>)["transactionQuantity"] ?? 0);
-      if (!(qty > 0)) continue;
-      const d = daysBetween(dateStr, new Date());
-      if (!(d > 0)) continue;
-      arr.push({ date: dateStr, qty, days: d });
-      weighted += d * qty;
-      totalUnits += qty;
-    }
-    arr.sort((a, b) => b.days - a.days);
-    const avg = totalUnits > 0 ? Math.round(weighted / totalUnits) : holdingDays;
-    return { avgHoldingDays: avg, lots: arr };
-  }, [txnQ.data, purchaseQ.data, holdingDays]);
-  const buy = useMemo(() => buyCost(units, avgCost, { isOpenEnd }), [units, avgCost, isOpenEnd]);
+  const pos = useMemo(
+    () =>
+      netPosition(units, avgCost, Number.isFinite(ltp) ? (ltp as number) : 0, {
+        isOpenEnd,
+        holdingDays,
+      }),
+    [units, avgCost, ltp, holdingDays, isOpenEnd],
+  );
+  const buy = pos.buy;
   const commissionWacc = hasCost ? buy.perUnit : 0;
-  const proceeds = useMemo(() => {
-    const safeLtp = Number.isFinite(ltp) ? (ltp as number) : 0;
-    return sellProceeds({ units: Math.max(0, units), price: safeLtp, avgCost: commissionWacc, holdingDays, isOpenEnd });
-  }, [units, commissionWacc, ltp, holdingDays, isOpenEnd]);
-  const be = useMemo(() => (units > 0 && commissionWacc > 0 ? breakEvenPrice(units, commissionWacc, holdingDays, { isOpenEnd }) : 0), [units, commissionWacc, holdingDays, isOpenEnd]);
+  const proceeds = pos.net;
+  const be = pos.breakeven;
 
   const netUp = (proceeds?.profit ?? rawPl) >= 0;
   const dayChange = previousClose != null && previousClose > 0 ? (ltp - previousClose) * units : 0;

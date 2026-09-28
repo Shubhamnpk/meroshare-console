@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { PiggyBank } from "lucide-react";
 import { ErrorBlock, EmptyBlock, LoadingBlock } from "@/components/states";
+import { StatChip, ChipRow } from "@/components/stat-chip";
 import { BackButton as HistoryBackButton } from "@/components/back-button";
 import { ScripSheet } from "@/components/market/scrip-sheet";
 import { FundBrowse } from "@/components/tools/fund-browse";
@@ -58,15 +59,6 @@ export const Route = createFileRoute("/_dash/mutual-funds")({
 });
 
 type Tab = "schemes" | "managers" | "market" | "heatmap";
-
-function StatChip({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-border/70 bg-card px-3.5 py-2 leading-tight">
-      <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="num font-semibold">{value}</p>
-    </div>
-  );
-}
 
 function MutualFundsPage() {
   const managersQ = useQuery(mfManagersQuery());
@@ -297,14 +289,14 @@ function MutualFundsPage() {
       ) : tab === "schemes" ? (
         <>
           {stats ? (
-            <div className="flex flex-wrap gap-2">
+            <ChipRow wrap>
               <StatChip label="Schemes" value={formatNumber(schemes.length)} />
               <StatChip label="Trading below NAV" value={formatNumber(stats.bargains)} />
               <StatChip
                 label="Avg. discount"
                 value={stats.avg !== null ? formatPercent(stats.avg) : "-"}
               />
-            </div>
+            </ChipRow>
           ) : null}
           <FundBrowse
             schemes={schemes}
@@ -318,13 +310,13 @@ function MutualFundsPage() {
         <FundHeatmap rows={heatRows} onPick={pickFund} />
       ) : tab === "managers" ? (
         <>
-          <div className="flex flex-wrap gap-2">
+          <ChipRow wrap>
             <StatChip label="Fund houses" value={formatNumber(managers.length)} />
             <StatChip
               label="With schemes live"
               value={formatNumber(aggs.filter((a) => a.schemes.length > 0).length)}
             />
-          </div>
+          </ChipRow>
           <ManagerGrid aggs={aggs} onPick={setPickedManager} />
         </>
       ) : (

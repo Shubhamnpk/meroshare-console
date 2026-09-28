@@ -56,6 +56,7 @@ import {
   saveBrokerWatchlist,
 } from "@/lib/brokers/brokers.functions";
 import { useWatchlist } from "@/lib/prefs";
+import { buildCsv, downloadText } from "@/components/export-dialog";
 import type { BrokerId } from "@/lib/brokers/types";
 import { errorMessage, formatNpr, formatQty } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -1064,23 +1065,16 @@ function BrokerPage() {
     setExportingStatement(true);
     try {
       const rows = await getBrokerStatement({ data: { brokerId, ...txnRange } });
-      const cell = (v: string | number | null): string => {
-        if (v === null) return "";
-        const s = String(v).replace(/"/g, '""');
-        return /[",\n]/.test(s) ? `"${s}"` : s;
-      };
-      const csv = [
-        "date,narration,debit,credit,balance",
-        ...rows.map((r) => [r.date, r.narration, r.debit, r.credit, r.balance].map(cell).join(",")),
-      ].join("\n");
-      const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `broker-statement-${txnRange.fromDate ?? "all"}_${txnRange.toDate ?? "all"}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      const csv = buildCsv(
+        ["date", "narration", "debit", "credit", "balance"],
+        rows.map((r) => [r.date, r.narration, r.debit, r.credit, r.balance]),
+      );
+      // BOM first so Nepali text opens correctly in Excel.
+      downloadText(
+        `broker-statement-${txnRange.fromDate ?? "all"}_${txnRange.toDate ?? "all"}.csv`,
+        `\uFEFF${csv}`,
+        "text/csv;charset=utf-8",
+      );
       toast.success(`Exported ${rows.length} statement rows.`);
     } catch (err) {
       toast.error(errorMessage(err, "Statement export failed."));

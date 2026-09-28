@@ -21,6 +21,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ErrorBlock, EmptyBlock, LoadingBlock } from "@/components/states";
+import { StatChip, ChipRow } from "@/components/stat-chip";
 import { BackButton } from "@/components/back-button";
 import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
 import { mfApprovalsQuery, mfPipelineByTypeQuery, mfPipelineOverviewQuery } from "@/lib/queries";
@@ -69,15 +70,6 @@ function statusPill(status: string | null) {
     >
       {status}
     </span>
-  );
-}
-
-function StatChip({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-border/70 bg-card px-3.5 py-2 leading-tight">
-      <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="num font-semibold">{value}</p>
-    </div>
   );
 }
 
@@ -158,7 +150,7 @@ function IpoPipelinePage() {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <ChipRow wrap>
         <StatChip
           label={`${label} pending`}
           value={pipelineQ.data ? formatNumber(pipelineQ.data.count) : "-"}
@@ -175,7 +167,7 @@ function IpoPipelinePage() {
           label="All pipelines"
           value={overviewQ.data ? formatNumber(overviewQ.data.total) : "-"}
         />
-      </div>
+      </ChipRow>
 
       <div className="flex flex-col gap-2 sm:flex-row">
         <div className="relative flex-1">

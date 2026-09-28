@@ -532,9 +532,6 @@ function IpoPage() {
     <div className="space-y-5">
       <div>
         <h1 className="font-display text-2xl font-semibold sm:text-3xl">IPO</h1>
-        <p className="mt-1 hidden text-sm text-muted-foreground sm:block">
-          Apply for open issues and track your applications.
-        </p>
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>

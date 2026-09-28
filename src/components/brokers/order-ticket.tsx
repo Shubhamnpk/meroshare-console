@@ -24,8 +24,8 @@ import {
   brokerOrderBookQuery,
   brokerQuoteQuery,
   marketSnapshotQuery,
-  mfSchemesQuery,
 } from "@/lib/queries";
+import { useIsOpenEnd } from "@/components/market/use-holding-age";
 import { placeBrokerAmo, placeBrokerOrder } from "@/lib/brokers/brokers.functions";
 import type { BrokerId } from "@/lib/brokers/types";
 import { errorMessage, formatNpr } from "@/lib/format";
@@ -67,8 +67,6 @@ export function OrderTicket({
   const book = useQuery(brokerOrderBookQuery(brokerId));
   const amoList = useQuery(brokerAmoListQuery(brokerId));
   const market = useQuery(marketSnapshotQuery());
-  const schemesQ = useQuery(mfSchemesQuery());
-
   // After-market orders: when NEPSE is closed, only limit orders with
   // standing validity queue for the next session (no market/IOC/FOK).
   const marketOpen = market.data?.status.isOpen ?? true;
@@ -76,10 +74,7 @@ export function OrderTicket({
 
   // Open-end mutual funds are bought/redeemed with the fund manager at NAV —
   // they are never traded on the exchange, so no broker order may be placed.
-  const isOpenEnd =
-    schemesQ.data?.some(
-      (s) => s.symbol.toUpperCase() === symbol.toUpperCase() && s.fundType === "open_end",
-    ) ?? false;
+  const isOpenEnd = useIsOpenEnd(symbol);
 
   const [side, setSide] = useState<"BUY" | "SELL">("BUY");
   const [quantity, setQuantity] = useState("");

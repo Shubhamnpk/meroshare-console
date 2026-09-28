@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ErrorBlock, EmptyBlock, LoadingBlock } from "@/components/states";
+import { StatChip, ChipRow } from "@/components/stat-chip";
 import { BackButton } from "@/components/back-button";
 import {
   Dialog,
@@ -65,15 +66,6 @@ const SORT_KINDS: Record<SortKey, SortKind> = {
   recent: "number",
   issuer: "text",
 };
-
-function StatChip({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-border/70 bg-card px-3.5 py-2 leading-tight">
-      <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="num font-semibold">{value}</p>
-    </div>
-  );
-}
 
 function CouponBadge({ value }: { value: number | null }) {
   if (value == null) return <span className="text-xs text-muted-foreground">-</span>;
@@ -287,7 +279,7 @@ function DebenturesPage() {
         />
       ) : (
         <>
-          <div className="flex flex-wrap gap-2">
+          <ChipRow wrap>
             <StatChip label="Issues" value={String(summary?.count ?? all.length)} />
             <StatChip label="Issuers" value={String(summary?.issuers ?? "-")} />
             <StatChip
@@ -301,7 +293,7 @@ function DebenturesPage() {
             {compared.length > 0 ? (
               <StatChip label="Comparing" value={`${compared.length} / 3`} />
             ) : null}
-          </div>
+          </ChipRow>
 
           {compareRows.length >= 2 ? (
             <section className="space-y-3 rounded-2xl border border-primary/25 bg-card p-4">

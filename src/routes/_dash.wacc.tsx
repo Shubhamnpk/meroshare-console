@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ErrorBlock, EmptyBlock, SkeletonCards } from "@/components/states";
-import { ExportButton, csvRow } from "@/components/export-dialog";
+import { ExportButton, buildCsv } from "@/components/export-dialog";
 import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
 import {
   Table,
@@ -78,21 +78,19 @@ function rowPrice(r: PurchaseSourceItem): number {
 }
 
 function waccCsv(scrip: string, rows: PurchaseSourceItem[]) {
-  const lines = rows.map((r, idx) =>
-    csvRow([
-      idx + 1,
-      String(r.scrip ?? scrip),
-      String(r.postDate ?? r.transactionDate ?? ""),
-      String(r.quantity ?? r.transactionQuantity ?? ""),
-      String(rowPrice(r)),
-      String(toNumber(r.userCost)),
-      String(r.remarks ?? ""),
-    ]),
+  const lines = rows.map((r, idx) => [
+    idx + 1,
+    String(r.scrip ?? scrip),
+    String(r.postDate ?? r.transactionDate ?? ""),
+    String(r.quantity ?? r.transactionQuantity ?? ""),
+    String(rowPrice(r)),
+    String(toNumber(r.userCost)),
+    String(r.remarks ?? ""),
+  ]);
+  return buildCsv(
+    ["SN", "Stock", "Post date", "Quantity", "Price", "User cost", "Remarks"],
+    lines,
   );
-  return [
-    csvRow(["SN", "Stock", "Post date", "Quantity", "Price", "User cost", "Remarks"]),
-    ...lines,
-  ].join("\n");
 }
 
 type RowSortKey = "date" | "qty" | "price" | "cost";
@@ -499,18 +497,14 @@ function PendingTable({ scrip, rows }: { scrip: string; rows: PurchaseSourceItem
 }
 
 function reportCsv(holdings: WaccReportItem[]) {
-  const lines = holdings.map((h) =>
-    csvRow([
-      String(h.scrip ?? ""),
-      String(toNumber(h.totalQuantity)),
-      String(toNumber(h.averageBuyRate)),
-      String(toNumber(h.totalCost)),
-      String(h.lastModifiedDate ?? ""),
-    ]),
-  );
-  return [csvRow(["Stock", "Quantity", "WACC rate", "Total cost", "Last modified"]), ...lines].join(
-    "\n",
-  );
+  const lines = holdings.map((h) => [
+    String(h.scrip ?? ""),
+    String(toNumber(h.totalQuantity)),
+    String(toNumber(h.averageBuyRate)),
+    String(toNumber(h.totalCost)),
+    String(h.lastModifiedDate ?? ""),
+  ]);
+  return buildCsv(["Stock", "Quantity", "WACC rate", "Total cost", "Last modified"], lines);
 }
 
 function WaccReportPanel({

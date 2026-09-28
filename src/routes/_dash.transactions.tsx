@@ -19,7 +19,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ExportButton, csvRow } from "@/components/export-dialog";
+import { ExportButton, buildCsv } from "@/components/export-dialog";
+import { StatChip, ChipRow } from "@/components/stat-chip";
 import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
 import { holdingSymbolsQuery, transactionsQuery } from "@/lib/queries";
 import { formatDate, formatQty, toNumber } from "@/lib/format";
@@ -47,43 +48,16 @@ export const Route = createFileRoute("/_dash/transactions")({
 });
 
 function transactionsCsv(items: TransactionItem[]) {
-  const rows = items.map((t, i) =>
-    csvRow([
-      i + 1,
-      formatDate(t.transactionDate),
-      t.script ?? "",
-      t.historyDescription ?? "",
-      toNumber(t.creditQuantity) > 0 ? String(toNumber(t.creditQuantity)) : "",
-      toNumber(t.debitQuantity) > 0 ? String(toNumber(t.debitQuantity)) : "",
-      String(toNumber(t.balanceAfterTransaction)),
-    ]),
-  );
-  return [
-    csvRow(["SN", "Date", "Script", "Description", "Credit", "Debit", "Balance"]),
-    ...rows,
-  ].join("\n");
-}
-
-function StatChip({
-  icon,
-  label,
-  value,
-  valueClass,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  valueClass?: string;
-}) {
-  return (
-    <div className="flex items-center gap-2 rounded-xl border border-border/70 bg-card px-3.5 py-2">
-      <span className="text-muted-foreground">{icon}</span>
-      <div className="leading-tight">
-        <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">{label}</p>
-        <p className={`num font-semibold ${valueClass ?? ""}`}>{value}</p>
-      </div>
-    </div>
-  );
+  const rows = items.map((t, i) => [
+    i + 1,
+    formatDate(t.transactionDate),
+    t.script ?? "",
+    t.historyDescription ?? "",
+    toNumber(t.creditQuantity) > 0 ? String(toNumber(t.creditQuantity)) : "",
+    toNumber(t.debitQuantity) > 0 ? String(toNumber(t.debitQuantity)) : "",
+    String(toNumber(t.balanceAfterTransaction)),
+  ]);
+  return buildCsv(["SN", "Date", "Script", "Description", "Credit", "Debit", "Balance"], rows);
 }
 
 function TransactionsPage() {
@@ -142,9 +116,6 @@ function TransactionsPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl font-semibold sm:text-3xl">Transactions</h1>
-          <p className="mt-1 hidden text-sm text-muted-foreground sm:block">
-            Credit and debit history for every stock in your demat account.
-          </p>
         </div>
         <div className="flex items-center gap-2">
           <Select value={symbol} onValueChange={setSymbol}>
@@ -212,7 +183,7 @@ function TransactionsPage() {
         />
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <ChipRow wrap>
         <StatChip
           icon={<ArrowDownRight className="size-4 text-gain" />}
           label="Records"
@@ -230,7 +201,7 @@ function TransactionsPage() {
           value={formatQty(totalDebit)}
           valueClass="text-loss"
         />
-      </div>
+      </ChipRow>
 
       {q.isLoading ? (
         <LoadingBlock label="Loading transactions" />

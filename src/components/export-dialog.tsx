@@ -39,8 +39,28 @@ const DEFAULT_ICONS: Record<string, typeof FileJson> = {
 };
 
 /** Escape and join one CSV row. */
-export function csvRow(cells: (string | number | undefined)[]): string {
+export function csvRow(cells: (string | number | undefined | null)[]): string {
   return cells.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(",");
+}
+
+/** Build a whole CSV document: quoted header row plus quoted data rows. */
+export function buildCsv(
+  head: (string | number)[] | null,
+  rows: (string | number | undefined | null)[][],
+): string {
+  return [...(head ? [csvRow(head)] : []), ...rows.map((r) => csvRow(r))].join("\n");
+}
+
+/** Trigger a client-side file download. Callers add `\uFEFF` for Excel-friendly CSV. */
+export function downloadText(filename: string, content: string, mime: string): void {
+  const url = URL.createObjectURL(new Blob([content], { type: mime }));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }
 
 const DISCLAIMER =

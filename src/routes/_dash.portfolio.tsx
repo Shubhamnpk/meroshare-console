@@ -8,11 +8,10 @@ import { marketSnapshotQuery } from "@/lib/queries";
 import { Panel } from "@/components/ui/panel";
 import { ErrorBlock, LoadingBlock, EmptyBlock } from "@/components/states";
 import { DeltaPill } from "@/components/stat-card";
+import { StatChip, ChipRow } from "@/components/stat-chip";
 import { CompactNpr, CompactQty } from "@/components/market/compact-value";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  ArrowDownRight,
-  ArrowUpRight,
   Coins,
   PiggyBank,
   Search,
@@ -21,24 +20,25 @@ import {
   Wallet,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
-import { ExportButton, csvRow } from "@/components/export-dialog";
+import { sortBy, useSort } from "@/components/sortable-table";
+import { ExportButton, buildCsv } from "@/components/export-dialog";
 import {
-  Table,
-  TableBody,
   TableCell,
   TableFooter,
-  TableHead,
-  TableHeader,
   TableRow,
 } from "@/components/ui/table";
 import { ScripSheet } from "@/components/market/scrip-sheet";
 import { HistoryPanel } from "@/components/portfolio/history-panel";
+import {
+  HoldingsTable,
+  toPaperRows,
+  type HoldingsSortKey as SortKey,
+} from "@/components/portfolio/holdings-table";
 import { brokerConnectionsQuery, brokerHoldingsQuery, enrichedPortfolioQuery, investmentSummaryQuery, mfSchemesQuery, waccSearchQuery } from "@/lib/queries";
 import type { BrokerId } from "@/lib/brokers/types";
 import { useSettings } from "@/lib/settings";
 import { formatNpr, formatPercent, formatQty } from "@/lib/format";
-import { buyCost, sellProceeds, breakEvenPrice, daysBetween } from "@/lib/calc/fees";
+import { netPosition } from "@/lib/calc/position";
 import { cn } from "@/lib/utils";
 import { ogImage, canonicalLink } from "@/lib/seo";
 import type { EnrichedHolding } from "@/lib/nepse/types";
@@ -69,6 +69,7 @@ function portfolioCsv(
   holdings: EnrichedHolding[],
   totals: { value: number; valuePrev: number },
   costOf: (scrip: string) => { cost: number; waccRate: number } | undefined,
+  isOpenEnd: (scrip: string) => boolean,
 ) {
   const rows = holdings.map((h, i) => {
     const c = costOf(h.scrip);
@@ -77,15 +78,14 @@ function portfolioCsv(
     let pl = 0;
     let plPct = "";
     if (cost > 0 && wacc > 0) {
-      const buy = buyCost(h.units, wacc);
-      const net = sellProceeds({ units: h.units, price: h.ltp, avgCost: buy.perUnit, holdingDays: 400 });
-      pl = net.profit;
-      plPct = `${net.profitPercent.toFixed(2)}%`;
+      const pos = netPosition(h.units, wacc, h.ltp, { isOpenEnd: isOpenEnd(h.scrip) });
+      pl = pos.profit;
+      plPct = `${pos.profitPct.toFixed(2)}%`;
     } else if (cost > 0) {
       pl = h.value - cost;
       plPct = `${((pl / cost) * 100).toFixed(2)}%`;
     }
-    return csvRow([
+    return [
       i + 1,
       h.scrip,
       h.description,
@@ -101,10 +101,10 @@ function portfolioCsv(
       `${h.percentChange.toFixed(2)}%`,
       totals.value > 0 ? `${((h.value / totals.value) * 100).toFixed(2)}%` : "0.00%",
       h.sector ?? "",
-    ]);
+    ];
   });
-  return [
-    csvRow([
+  return buildCsv(
+    [
       "SN",
       "Stock",
       "Description",
@@ -120,54 +120,10 @@ function portfolioCsv(
       "Day change",
       "Weight",
       "Sector",
-    ]),
-    ...rows,
-  ].join("\n");
-}
-
-function StatChip({
-  icon,
-  label,
-  value,
-  valueClass,
-}: {
-  icon: ReactNode;
-  label: string;
-  value: ReactNode;
-  valueClass?: string;
-}) {
-  return (
-    <div className="flex shrink-0 items-center gap-2 rounded-xl border border-border/70 bg-card px-3.5 py-2">
-      <span className="text-muted-foreground">{icon}</span>
-      <div className="leading-tight">
-        <p className="whitespace-nowrap text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-          {label}
-        </p>
-        <p className={`num whitespace-nowrap font-semibold ${valueClass ?? ""}`}>{value}</p>
-      </div>
-    </div>
+    ],
+    rows,
   );
 }
-
-/** Single-row chip rail: never wraps, scrolls horizontally when squeezed. */
-function ChipRow({ children }: { children: ReactNode }) {
-  return (
-    <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      {children}
-    </div>
-  );
-}
-
-type SortKey =
-  | "scrip"
-  | "units"
-  | "ltp"
-  | "previousClose"
-  | "value"
-  | "avgBuy"
-  | "unrealized"
-  | "percentChange"
-  | "weight";
 
 function PortfolioPage() {
   const { compactNumbers, autoRefresh, refreshMinutes } = useSettings();
@@ -255,15 +211,12 @@ function PortfolioPage() {
   const plOf = (h: EnrichedHolding) => {
     const c = costMap.get(h.scrip);
     if (!c || c.cost <= 0 || c.waccRate <= 0) return 0;
-    const open = isOpenEnd(h.scrip);
-    const buy = buyCost(h.units, c.waccRate, { isOpenEnd: open });
-    const net = sellProceeds({ units: h.units, price: h.ltp, avgCost: buy.perUnit, holdingDays: 400, isOpenEnd: open });
-    return net.profit;
+    return netPosition(h.units, c.waccRate, h.ltp, { isOpenEnd: isOpenEnd(h.scrip) }).profit;
   };
   const buyOf = (h: EnrichedHolding) => {
     const c = costMap.get(h.scrip);
     if (!c || c.waccRate <= 0) return null;
-    return buyCost(h.units, c.waccRate, { isOpenEnd: isOpenEnd(c.scrip) });
+    return netPosition(h.units, c.waccRate, h.ltp, { isOpenEnd: isOpenEnd(h.scrip) }).buy;
   };
 
   // Totals for footer: all-in cost and net receivable
@@ -288,9 +241,7 @@ function PortfolioPage() {
         continue;
       }
       const open = isOpenEnd(h.scrip);
-      const buy = buyCost(h.units, c.waccRate, { isOpenEnd: open });
-      const net = sellProceeds({ units: h.units, price: h.ltp, avgCost: buy.perUnit, holdingDays: 400, isOpenEnd: open });
-      sum += net.netReceivable;
+      sum += netPosition(h.units, c.waccRate, h.ltp, { isOpenEnd: open }).net.netReceivable;
     }
     return sum;
   }, [holdings, costMap, schemesQ.data]);
@@ -355,8 +306,8 @@ function PortfolioPage() {
         value,
         previousValue: prevValue,
         dayChange: value - prevValue,
-        avgCost: h.avgCost,
-      } as EnrichedHolding & { avgCost: number };
+        avgBuy: h.avgCost,
+      } as EnrichedHolding & { avgBuy: number };
     });
     const totalValue = holdingsYo.reduce((s, h) => s + h.value, 0);
     const totalPrev = holdingsYo.reduce((s, h) => s + h.previousValue, 0);
@@ -393,9 +344,9 @@ function PortfolioPage() {
         case "value":
           return h.value;
         case "avgBuy":
-          return (h as unknown as { avgCost: number }).avgCost ?? 0;
+          return h.avgBuy;
         case "unrealized":
-          return h.value - h.units * ((h as unknown as { avgCost: number }).avgCost ?? 0);
+          return h.value - h.units * h.avgBuy;
         case "percentChange":
           return h.dayChange;
         case "weight":
@@ -531,7 +482,7 @@ function PortfolioPage() {
                 description: "Spreadsheet-friendly rows of every holding",
                 filename: expFilename,
                 extension: "csv",
-                build: () => portfolioCsv(expItems, expTotals, expCostOf),
+                build: () => portfolioCsv(expItems, expTotals, expCostOf, isOpenEnd),
               },
               {
                 title: "JSON",
@@ -904,146 +855,25 @@ function PortfolioPage() {
         ) : yoItems.length === 0 ? (
           <EmptyBlock title="No matches" description="Nothing matches your search." />
         ) : (
-          <Panel padding="none" className="overflow-clip">
-            <Table className="min-w-[760px]">
-              <TableHeader>
-                <TableRow className="bg-muted/40 hover:bg-muted/40">
-                  <TableHead className="w-10 pl-4">SN</TableHead>
-                  <SortableTh
-                    label="Stock"
-                    active={sort.key === "scrip"}
-                    dir={sort.dir}
-                    onClick={() => toggle("scrip")}
-                    align="left"
-                    kind="text"
-                  />
-                  <SortableTh
-                    label="Units"
-                    active={sort.key === "units"}
-                    dir={sort.dir}
-                    onClick={() => toggle("units")}
-                    align="right"
-                  />
-                  <SortableTh
-                    label="LTP"
-                    active={sort.key === "ltp"}
-                    dir={sort.dir}
-                    onClick={() => toggle("ltp")}
-                    align="right"
-                  />
-                  <SortableTh
-                    label="Prev close"
-                    active={sort.key === "previousClose"}
-                    dir={sort.dir}
-                    onClick={() => toggle("previousClose")}
-                    align="right"
-                  />
-                  <SortableTh
-                    label="Value"
-                    active={sort.key === "value"}
-                    dir={sort.dir}
-                    onClick={() => toggle("value")}
-                    align="right"
-                  />
-                  <SortableTh
-                    label="Avg cost"
-                    active={sort.key === "avgBuy"}
-                    dir={sort.dir}
-                    onClick={() => toggle("avgBuy")}
-                    align="right"
-                  />
-                  <SortableTh
-                    label="Net P/L"
-                    active={sort.key === "unrealized"}
-                    dir={sort.dir}
-                    onClick={() => toggle("unrealized")}
-                    align="right"
-                  />
-                  <SortableTh
-                    label="Day"
-                    active={sort.key === "percentChange"}
-                    dir={sort.dir}
-                    onClick={() => toggle("percentChange")}
-                    align="right"
-                  />
-                  <SortableTh
-                    label="Weight"
-                    active={sort.key === "weight"}
-                    dir={sort.dir}
-                    onClick={() => toggle("weight")}
-                    align="right"
-                    className="pr-4"
-                  />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {yoItems.map((h, idx) => {
-                  const weight =
-                    yoEnriched.totalValue > 0 ? (h.value / yoEnriched.totalValue) * 100 : 0;
-                  const avg = (h as unknown as { avgCost: number }).avgCost ?? 0;
-                  const pl = h.value - h.units * avg;
-                  const plPct = avg > 0 ? (pl / (h.units * avg)) * 100 : 0;
-                  return (
-                    <TableRow
-                      key={`${h.scrip}-${idx}`}
-                      className="cursor-pointer"
-                      onClick={() => setPicked(h.scrip)}
-                    >
-                      <TableCell className="pl-4 text-xs text-muted-foreground">
-                        {idx + 1}
-                      </TableCell>
-                      <TableCell>
-                        <p className="font-semibold hover:text-primary">{h.scrip}</p>
-                        <p className="max-w-52 truncate text-xs text-muted-foreground">
-                          {h.description}
-                        </p>
-                      </TableCell>
-                      <TableCell className="num text-right">{formatQty(h.units)}</TableCell>
-                      <TableCell className="text-right">
-                        <span className="num font-medium">{formatNpr(h.ltp)}</span>
-                      </TableCell>
-                      <TableCell className="num text-right text-muted-foreground">
-                        {h.previousClose > 0 ? formatNpr(h.previousClose) : "-"}
-                      </TableCell>
-                      <TableCell className="num text-right font-medium">
-                        {formatNpr(h.value)}
-                      </TableCell>
-                      <TableCell className="num text-right text-muted-foreground">
-                        {formatNpr(avg)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <DeltaPill
-                          value={pl}
-                          title={`${pl >= 0 ? "+" : "-"}${formatNpr(Math.abs(pl))} net P/L`}
-                        >{`${pl >= 0 ? "+" : ""}${plPct.toFixed(2)}%`}</DeltaPill>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <DeltaPill
-                          value={h.percentChange}
-                        >{`${h.dayChange >= 0 ? "+" : "-"}${formatNpr(Math.abs(h.dayChange))} (${h.percentChange.toFixed(2)}%)`}</DeltaPill>
-                      </TableCell>
-                      <TableCell className="pr-4 text-right">
-                        <div className="flex flex-col items-end gap-1">
-                          <span className="num text-xs text-muted-foreground">
-                            {weight.toFixed(1)}%
-                          </span>
-                          <div
-                            className="h-1 w-14 overflow-hidden rounded-full bg-muted"
-                            aria-hidden
-                          >
-                            <div
-                              className="h-full rounded-full bg-violet-500/60"
-                              style={{ width: `${Math.min(100, weight)}%` }}
-                            />
-                          </div>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </Panel>
+          <HoldingsTable
+            rows={toPaperRows(yoItems, yoEnriched.totalValue, {
+              avgTitle: "Avg cost",
+              noBasisTitle: "No cost data for this stock",
+            })}
+            sort={sort}
+            onToggle={toggle}
+            onPick={(scrip) => setPicked(scrip)}
+            avgLabel="Avg buy"
+            weightBarClass="bg-emerald-500/60"
+            footnote={
+              yoItems.length !== yoEnriched.holdings.length ? (
+                <p className="border-t border-border/60 px-4 py-2.5 text-xs text-muted-foreground">
+                  Showing {yoItems.length} of {yoEnriched.holdings.length} stocks ·
+                  filtered value {formatNpr(yoItems.reduce((s, h) => s + h.value, 0))}
+                </p>
+              ) : null
+            }
+          />
         )
       ) : view === "broker" ? (
         !realBrokerId ? (
@@ -1063,158 +893,25 @@ function PortfolioPage() {
         ) : brokerItems.length === 0 ? (
           <EmptyBlock title="No matches" description="Nothing matches your search." />
         ) : (
-          <Panel padding="none" className="overflow-clip">
-            <Table className="min-w-[760px]">
-              <TableHeader>
-                <TableRow className="bg-muted/40 hover:bg-muted/40">
-                  <TableHead className="w-10 pl-4">SN</TableHead>
-                  <SortableTh
-                    label="Stock"
-                    active={sort.key === "scrip"}
-                    dir={sort.dir}
-                    onClick={() => toggle("scrip")}
-                    align="left"
-                    kind="text"
-                  />
-                  <SortableTh
-                    label="Units"
-                    active={sort.key === "units"}
-                    dir={sort.dir}
-                    onClick={() => toggle("units")}
-                    align="right"
-                  />
-                  <SortableTh
-                    label="LTP"
-                    active={sort.key === "ltp"}
-                    dir={sort.dir}
-                    onClick={() => toggle("ltp")}
-                    align="right"
-                  />
-                  <SortableTh
-                    label="Prev close"
-                    active={sort.key === "previousClose"}
-                    dir={sort.dir}
-                    onClick={() => toggle("previousClose")}
-                    align="right"
-                  />
-                  <SortableTh
-                    label="Value"
-                    active={sort.key === "value"}
-                    dir={sort.dir}
-                    onClick={() => toggle("value")}
-                    align="right"
-                  />
-                  <SortableTh
-                    label="Avg buy"
-                    active={sort.key === "avgBuy"}
-                    dir={sort.dir}
-                    onClick={() => toggle("avgBuy")}
-                    align="right"
-                  />
-                  <SortableTh
-                    label="Net P/L"
-                    active={sort.key === "unrealized"}
-                    dir={sort.dir}
-                    onClick={() => toggle("unrealized")}
-                    align="right"
-                  />
-                  <SortableTh
-                    label="Day"
-                    active={sort.key === "percentChange"}
-                    dir={sort.dir}
-                    onClick={() => toggle("percentChange")}
-                    align="right"
-                  />
-                  <SortableTh
-                    label="Weight"
-                    active={sort.key === "weight"}
-                    dir={sort.dir}
-                    onClick={() => toggle("weight")}
-                    align="right"
-                    className="pr-4"
-                  />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {brokerItems.map((h, idx) => {
-                  const weight =
-                    brokerEnriched.totalValue > 0 ? (h.value / brokerEnriched.totalValue) * 100 : 0;
-                  const hasBasis = h.avgBuy > 0;
-                  const pl = hasBasis ? h.value - h.units * h.avgBuy : 0;
-                  const plPct = hasBasis && h.units * h.avgBuy > 0 ? (pl / (h.units * h.avgBuy)) * 100 : 0;
-                  return (
-                    <TableRow
-                      key={`${h.scrip}-${idx}`}
-                      className="cursor-pointer"
-                      onClick={() => setPicked(h.scrip)}
-                    >
-                      <TableCell className="pl-4 text-xs text-muted-foreground">
-                        {idx + 1}
-                      </TableCell>
-                      <TableCell>
-                        <p className="font-semibold hover:text-primary">{h.scrip}</p>
-                        <p className="max-w-52 truncate text-xs text-muted-foreground">
-                          {h.description}
-                        </p>
-                      </TableCell>
-                      <TableCell className="num text-right">{formatQty(h.units)}</TableCell>
-                      <TableCell className="text-right">
-                        <span className="num font-medium">{formatNpr(h.ltp)}</span>
-                      </TableCell>
-                      <TableCell className="num text-right text-muted-foreground">
-                        {h.previousClose > 0 ? formatNpr(h.previousClose) : "-"}
-                      </TableCell>
-                      <TableCell className="num text-right font-medium">
-                        {formatNpr(h.value)}
-                      </TableCell>
-                      <TableCell
-                        className="num text-right text-muted-foreground"
-                        title={hasBasis ? "WACC avg buy" : "No WACC cost data for this stock"}
-                      >
-                        {hasBasis ? formatNpr(h.avgBuy) : "-"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {hasBasis ? (
-                          <DeltaPill
-                            value={pl}
-                          >{`${pl >= 0 ? "+" : "-"}${formatNpr(Math.abs(pl))} (${plPct.toFixed(1)}%)`}</DeltaPill>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <DeltaPill
-                          value={h.percentChange}
-                        >{`${h.dayChange >= 0 ? "+" : "-"}${formatNpr(Math.abs(h.dayChange))} (${h.percentChange.toFixed(2)}%)`}</DeltaPill>
-                      </TableCell>
-                      <TableCell className="pr-4 text-right">
-                        <div className="flex flex-col items-end gap-1">
-                          <span className="num text-xs text-muted-foreground">
-                            {weight.toFixed(1)}%
-                          </span>
-                          <div
-                            className="h-1 w-14 overflow-hidden rounded-full bg-muted"
-                            aria-hidden
-                          >
-                            <div
-                              className="h-full rounded-full bg-emerald-500/60"
-                              style={{ width: `${Math.min(100, weight)}%` }}
-                            />
-                          </div>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-            {brokerItems.length !== brokerEnriched.holdings.length ? (
-              <p className="border-t border-border/60 px-4 py-2.5 text-xs text-muted-foreground">
-                Showing {brokerItems.length} of {brokerEnriched.holdings.length} stocks · filtered
-                value {formatNpr(brokerItems.reduce((s, h) => s + h.value, 0))}
-              </p>
-            ) : null}
-          </Panel>
+          <HoldingsTable
+            rows={toPaperRows(brokerItems, brokerEnriched.totalValue, {
+              avgTitle: "WACC avg buy",
+              noBasisTitle: "No WACC cost data for this stock",
+            })}
+            sort={sort}
+            onToggle={toggle}
+            onPick={(scrip) => setPicked(scrip)}
+            avgLabel="Avg buy"
+            weightBarClass="bg-emerald-500/60"
+            footnote={
+              brokerItems.length !== brokerEnriched.holdings.length ? (
+                <p className="border-t border-border/60 px-4 py-2.5 text-xs text-muted-foreground">
+                  Showing {brokerItems.length} of {brokerEnriched.holdings.length} stocks ·
+                  filtered value {formatNpr(brokerItems.reduce((s, h) => s + h.value, 0))}
+                </p>
+              ) : null
+            }
+          />
         )
       ) : q.isLoading ? (
         <LoadingBlock label="Loading portfolio" />
@@ -1231,233 +928,113 @@ function PortfolioPage() {
           description="Nothing matches your search. Try a different stock or company."
         />
       ) : (
-        <Panel padding="none" className="overflow-clip">
-          <Table className="min-w-[760px]">
-            <TableHeader>
-              <TableRow className="bg-muted/40 hover:bg-muted/40">
-                <TableHead className="w-10 pl-4">SN</TableHead>
-                <SortableTh
-                  label="Stock"
-                  active={sort.key === "scrip"}
-                  dir={sort.dir}
-                  onClick={() => toggle("scrip")}
-                  align="left"
-                  kind="text"
-                />
-                <SortableTh
-                  label="Units"
-                  active={sort.key === "units"}
-                  dir={sort.dir}
-                  onClick={() => toggle("units")}
-                  align="right"
-                />
-                <SortableTh
-                  label="LTP"
-                  active={sort.key === "ltp"}
-                  dir={sort.dir}
-                  onClick={() => toggle("ltp")}
-                  align="right"
-                />
-                <SortableTh
-                  label="Prev close"
-                  active={sort.key === "previousClose"}
-                  dir={sort.dir}
-                  onClick={() => toggle("previousClose")}
-                  align="right"
-                />
-                <SortableTh
-                  label="Value"
-                  active={sort.key === "value"}
-                  dir={sort.dir}
-                  onClick={() => toggle("value")}
-                  align="right"
-                />
-                <SortableTh
-                  label="Avg buy"
-                  active={sort.key === "avgBuy"}
-                  dir={sort.dir}
-                  onClick={() => toggle("avgBuy")}
-                  align="right"
-                />
-                <SortableTh
-                  label="Net P/L"
-                  active={sort.key === "unrealized"}
-                  dir={sort.dir}
-                  onClick={() => toggle("unrealized")}
-                  align="right"
-                />
-                <SortableTh
-                  label="Day"
-                  active={sort.key === "percentChange"}
-                  dir={sort.dir}
-                  onClick={() => toggle("percentChange")}
-                  align="right"
-                />
-                <SortableTh
-                  label="Weight"
-                  active={sort.key === "weight"}
-                  dir={sort.dir}
-                  onClick={() => toggle("weight")}
-                  align="right"
-                  className="pr-4"
-                />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {items.map((h, idx) => {
-                const weight = totals.value > 0 ? (h.value / totals.value) * 100 : 0;
-                const basis = costOf(h.scrip);
-                const hasBasis = Boolean(basis && basis.cost > 0 && basis.waccRate > 0);
-                const open = isOpenEnd(h.scrip);
-                const buy = hasBasis ? buyCost(h.units, basis!.waccRate, { isOpenEnd: open }) : null;
-                const net = hasBasis && buy ? sellProceeds({ units: h.units, price: h.ltp, avgCost: buy.perUnit, holdingDays: 400, isOpenEnd: open }) : null;
-                const pl = net ? net.profit : hasBasis ? h.value - (basis?.cost ?? 0) : 0;
-                const plPct = net ? net.profitPercent : hasBasis && (basis?.cost ?? 0) > 0 ? (pl / (basis?.cost ?? 1)) * 100 : 0;
-                return (
-                  <TableRow
-                    key={`${h.scrip}-${idx}`}
-                    className="cursor-pointer"
-                    onClick={() => setPicked(h.scrip)}
-                  >
-                    <TableCell className="pl-4 text-xs text-muted-foreground">{idx + 1}</TableCell>
-                    <TableCell>
-                      <p className="font-semibold transition-colors hover:text-primary">
-                        {h.scrip}
-                      </p>
-                      <p className="max-w-52 truncate text-xs text-muted-foreground">
-                        {h.description}
-                      </p>
-                    </TableCell>
-                    <TableCell className="num text-right">{formatQty(h.units)}</TableCell>
-                    <TableCell className="text-right">
-                      <span className="inline-flex items-center justify-end gap-1">
-                        <span className="num font-medium">{formatNpr(h.ltp)}</span>
-                        {h.previousClose > 0 &&
-                          h.ltp > 0 &&
-                          h.ltp !== h.previousClose &&
-                          (h.percentChange > 0 ? (
-                            <ArrowUpRight className="size-3.5 text-gain" aria-hidden />
-                          ) : (
-                            <ArrowDownRight className="size-3.5 text-loss" aria-hidden />
-                          ))}
-                      </span>
-                    </TableCell>
-                    <TableCell className="num text-right text-muted-foreground">
-                      {h.previousClose > 0 ? formatNpr(h.previousClose) : "-"}
-                    </TableCell>
-                    <TableCell className="num text-right font-medium">
-                      {formatNpr(h.value)}
-                    </TableCell>
-                    <TableCell
-                      className="num text-right text-muted-foreground"
-                      title={
-                        hasBasis
-                          ? basis?.status === "pending"
+          <HoldingsTable
+            rows={items.map((h, idx) => {
+              const basis = costOf(h.scrip);
+              const hasBasis = Boolean(basis && basis.cost > 0 && basis.waccRate > 0);
+              const open = isOpenEnd(h.scrip);
+              const pos = hasBasis
+                ? netPosition(h.units, basis!.waccRate, h.ltp, { isOpenEnd: open })
+                : null;
+              const pl = pos ? pos.profit : hasBasis ? h.value - (basis?.cost ?? 0) : 0;
+              const plPct = pos
+                ? pos.profitPct
+                : hasBasis && (basis?.cost ?? 0) > 0
+                  ? (pl / (basis?.cost ?? 1)) * 100
+                  : 0;
+              const waccRate = basis?.waccRate ?? 0;
+              return {
+                key: `${h.scrip}-${idx}`,
+                scrip: h.scrip,
+                description: h.description,
+                units: h.units,
+                ltp: h.ltp,
+                previousClose: h.previousClose,
+                value: h.value,
+                dayChange: h.dayChange,
+                dayPct: h.percentChange,
+                weight: totals.value > 0 ? (h.value / totals.value) * 100 : 0,
+                avg:
+                  hasBasis && waccRate > 0
+                    ? {
+                        value: waccRate,
+                        prefix: basis?.status === "pending" ? "~" : "",
+                        title: `All-in ${formatNpr(pos!.buy.perUnit)} incl. broker+SEBON+DP`,
+                        cellTitle:
+                          basis?.status === "pending"
                             ? "Estimated from purchase price (WACC not confirmed yet)"
-                            : "CDSC-calculated WACC — hover for all-in"
-                          : "No cost data (blocked or not available)"
+                            : "CDSC-calculated WACC — hover for all-in",
                       }
-                    >
-                      {hasBasis && (basis?.waccRate ?? 0) > 0 ? (
-                        (() => {
-                          const buy = buyCost(h.units, basis!.waccRate);
-                          return (
-                            <span title={`All-in ${formatNpr(buy.perUnit)} incl. broker+SEBON+DP`}>
-                              {basis?.status === "pending" ? "~" : ""}
-                              {formatNpr(basis?.waccRate ?? 0)}
-                            </span>
-                          );
-                        })()
-                      ) : (
-                        "-"
-                      )}
+                    : {
+                        value: null,
+                        cellTitle: "No cost data (blocked or not available)",
+                      },
+                pl: hasBasis
+                  ? {
+                      value: pl,
+                      pct: plPct,
+                      title: `${pl >= 0 ? "+" : "-"}${formatNpr(Math.abs(pl))} net · Breakeven ${formatNpr(pos!.breakeven)}`,
+                    }
+                  : null,
+              };
+            })}
+            sort={sort}
+            onToggle={toggle}
+            onPick={(scrip) => setPicked(scrip)}
+            avgLabel="Avg buy"
+            trendArrows
+            weightBarClass="bg-primary/60"
+            footer={
+              items.length === holdings.length ? (
+                <TableFooter>
+                  <TableRow>
+                    <TableCell className="pl-4 font-semibold" colSpan={2}>
+                      Total
+                    </TableCell>
+                    <TableCell className="num text-right font-semibold">
+                      {formatQty(totals.units)}
+                    </TableCell>
+                    <TableCell colSpan={2} />
+                    <TableCell className="num text-right font-semibold">
+                      {formatNpr(totals.value, { compact: compactNumbers })}
                     </TableCell>
                     <TableCell
-                      className="text-right"
-                      title={
-                        hasBasis
-                          ? `Net after all charges & CGT · Breakeven ${formatNpr(breakEvenPrice(h.units, buyCost(h.units, basis!.waccRate).perUnit, 400))}`
-                          : undefined
-                      }
+                      className="num text-right font-semibold text-muted-foreground"
+                      title={`All-in avg ${formatNpr(allInAvgWacc)}`}
                     >
-                      {hasBasis ? (
+                      {allInAvgWacc > 0 ? formatNpr(allInAvgWacc) : "-"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {totalBuyCost > 0 ? (
                         <DeltaPill
-                          value={pl}
-                          title={`${pl >= 0 ? "+" : "-"}${formatNpr(Math.abs(pl))} net · Breakeven ${formatNpr(breakEvenPrice(h.units, buyCost(h.units, basis!.waccRate).perUnit, 400))}`}
+                          value={unrealizedPL}
+                          title={`${unrealizedPL >= 0 ? "+" : "-"}${formatNpr(Math.abs(unrealizedPL))} net total`}
                         >
-                          {`${pl >= 0 ? "+" : ""}${plPct.toFixed(2)}%`}
+                          {`${unrealizedPL >= 0 ? "+" : ""}${((unrealizedPL / totalBuyCost) * 100).toFixed(2)}%`}
                         </DeltaPill>
                       ) : (
                         <span className="text-xs text-muted-foreground">-</span>
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      <DeltaPill value={h.percentChange}>
-                        {`${h.dayChange >= 0 ? "+" : "-"}${formatNpr(Math.abs(h.dayChange))} (${h.percentChange.toFixed(2)}%)`}
+                      <DeltaPill value={totals.dayChange}>
+                        {`${totals.dayChange >= 0 ? "+" : "-"}${formatNpr(Math.abs(totals.dayChange))} (${totals.dayPct.toFixed(2)}%)`}
                       </DeltaPill>
                     </TableCell>
-                    <TableCell className="pr-4 text-right">
-                      <div className="flex flex-col items-end gap-1">
-                        <span className="num text-xs text-muted-foreground">
-                          {weight.toFixed(1)}%
-                        </span>
-                        <div className="h-1 w-14 overflow-hidden rounded-full bg-muted" aria-hidden>
-                          <div
-                            className="h-full rounded-full bg-primary/60"
-                            style={{ width: `${Math.min(100, weight)}%` }}
-                          />
-                        </div>
-                      </div>
-                    </TableCell>
+                    <TableCell className="num pr-4 text-right font-semibold">100%</TableCell>
                   </TableRow>
-                );
-              })}
-            </TableBody>
-            {items.length === holdings.length ? (
-              <TableFooter>
-                <TableRow>
-                  <TableCell className="pl-4 font-semibold" colSpan={2}>
-                    Total
-                  </TableCell>
-                  <TableCell className="num text-right font-semibold">
-                    {formatQty(totals.units)}
-                  </TableCell>
-                  <TableCell colSpan={2} />
-                  <TableCell className="num text-right font-semibold">
-                    {formatNpr(totals.value, { compact: compactNumbers })}
-                  </TableCell>
-                  <TableCell className="num text-right font-semibold text-muted-foreground" title={`All-in avg ${formatNpr(allInAvgWacc)}`}>
-                    {allInAvgWacc > 0 ? formatNpr(allInAvgWacc) : "-"}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {totalBuyCost > 0 ? (
-                      <DeltaPill
-                        value={unrealizedPL}
-                        title={`${unrealizedPL >= 0 ? "+" : "-"}${formatNpr(Math.abs(unrealizedPL))} net total`}
-                      >
-                        {`${unrealizedPL >= 0 ? "+" : ""}${((unrealizedPL / totalBuyCost) * 100).toFixed(2)}%`}
-                      </DeltaPill>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DeltaPill value={totals.dayChange}>
-                      {`${totals.dayChange >= 0 ? "+" : "-"}${formatNpr(Math.abs(totals.dayChange))} (${totals.dayPct.toFixed(2)}%)`}
-                    </DeltaPill>
-                  </TableCell>
-                  <TableCell className="num pr-4 text-right font-semibold">100%</TableCell>
-                </TableRow>
-              </TableFooter>
-            ) : null}
-          </Table>
-          {items.length !== holdings.length ? (
-            <p className="border-t border-border/60 px-4 py-2.5 text-xs text-muted-foreground">
-              Showing {items.length} of {holdings.length} stocks · filtered value{" "}
-              {formatNpr(items.reduce((s, h) => s + h.value, 0))}
-            </p>
-          ) : null}
-        </Panel>
+                </TableFooter>
+              ) : null
+            }
+            footnote={
+              items.length !== holdings.length ? (
+                <p className="border-t border-border/60 px-4 py-2.5 text-xs text-muted-foreground">
+                  Showing {items.length} of {holdings.length} stocks · filtered value{" "}
+                  {formatNpr(items.reduce((s, h) => s + h.value, 0))}
+                </p>
+              ) : null
+            }
+          />
       )}
 
       {view === "actual" && q.data && q.data.sectors.length > 0 ? (

@@ -1,13 +1,19 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, TrendingDown, TrendingUp } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { formatHoldingTime, formatNpr, formatPercent, formatQty } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { breakEvenPrice, buyCost, cgtRate, daysBetween, sellProceeds, DP_CHARGE } from "@/lib/calc/fees";
-import { mfSchemesQuery, waccSearchQuery } from "@/lib/queries";
+import { breakEvenPrice, buyCost, cgtRate, sellProceeds, DP_CHARGE } from "@/lib/calc/fees";
+import { netPosition } from "@/lib/calc/position";
+import { useHoldingAge, useIsOpenEnd } from "./use-holding-age";
 
 
 export function PositionPnlCard({
@@ -26,74 +32,24 @@ export function PositionPnlCard({
   const [open, setOpen] = useState(false);
   const [avgOpen, setAvgOpen] = useState(false);
 
-  // Wallet-style holding period: earliest purchase date for this scrip
-  const purchaseQ = useQuery(waccSearchQuery(symbol));
-  const schemesQ = useQuery(mfSchemesQuery());
-  const isOpenEnd = useMemo(
-    () => schemesQ.data?.some((s) => s.symbol.toUpperCase() === symbol.toUpperCase() && s.fundType === "open_end") ?? false,
-    [schemesQ.data, symbol],
-  );
-  const holdingDays = useMemo(() => {
-    const raw = purchaseQ.data as unknown as { waccUpdateResponse?: { transactionDate?: string; postDate?: string }[]; waccSummaryResponse?: { transactionDate?: string; postDate?: string }[] } | undefined;
-    const all = [...(raw?.waccUpdateResponse ?? []), ...(raw?.waccSummaryResponse ?? [])];
-    const dates = all
-      .map((r) => r.transactionDate || r.postDate)
-      .filter(Boolean) as string[];
-    if (dates.length === 0) return 400;
-    const earliest = dates.sort()[0] as string;
-    const d = daysBetween(earliest, new Date());
-    return d > 0 ? d : 400;
-  }, [purchaseQ.data]);
-
-  const { avgHoldingDays, lots } = useMemo(() => {
-    const raw = purchaseQ.data as unknown as {
-      waccUpdateResponse?: { transactionDate?: string; postDate?: string; quantity?: number; transactionQuantity?: number }[];
-      waccSummaryResponse?: { transactionDate?: string; postDate?: string; quantity?: number; transactionQuantity?: number }[];
-    } | undefined;
-    const all = [...(raw?.waccUpdateResponse ?? []), ...(raw?.waccSummaryResponse ?? [])];
-    if (all.length === 0) return { avgHoldingDays: holdingDays, lots: [] as { date: string; qty: number; days: number }[] };
-    let totalUnits = 0;
-    let weighted = 0;
-    const arr: { date: string; qty: number; days: number }[] = [];
-    for (const r of all) {
-      const dateStr = (r.transactionDate || r.postDate) as string | undefined;
-      if (!dateStr) continue;
-      const qty = Number((r as Record<string, unknown>)["quantity"] ?? (r as Record<string, unknown>)["transactionQuantity"] ?? 0);
-      if (!(qty > 0)) continue;
-      const d = daysBetween(dateStr, new Date());
-      if (!(d > 0)) continue;
-      arr.push({ date: dateStr, qty, days: d });
-      weighted += d * qty;
-      totalUnits += qty;
-    }
-    arr.sort((a, b) => b.days - a.days);
-    const avg = totalUnits > 0 ? Math.round(weighted / totalUnits) : holdingDays;
-    return { avgHoldingDays: avg, lots: arr };
-  }, [purchaseQ.data, holdingDays]);
+  // Shared FIFO holding-age logic (same as the stock-details sheet).
+  const { holdingDays, avgHoldingDays, lots } = useHoldingAge(symbol);
+  const isOpenEnd = useIsOpenEnd(symbol);
 
   const data = useMemo(() => {
     const safeLtp = Number.isFinite(ltp) ? ltp : 0;
     // Commission WACC = buy-side all-in per unit (price + broker + SEBON + DP amortized) — open-end MF has no charges
-    const buy = buyCost(units, avgCost, { isOpenEnd });
+    const pos = netPosition(units, avgCost, ltp, { isOpenEnd, holdingDays });
+    const buy = pos.buy;
     const commissionWacc = buy.perUnit;
-    const proceeds = sellProceeds({ units, price: ltp, avgCost: commissionWacc, holdingDays, isOpenEnd });
-    const be = breakEvenPrice(units, commissionWacc, holdingDays, { isOpenEnd });
+    const proceeds = pos.net;
+    const be = pos.breakeven;
     const costBasis = buy.total; // real cash out
     const marketValue = units * ltp;
     const rawProfit = marketValue - units * avgCost;
     return { proceeds, be, costBasis, marketValue, rawProfit, commissionWacc, buy };
   }, [units, avgCost, ltp, holdingDays, isOpenEnd]);
 
-  if (!data) {
-    return (
-      <div className="rounded-xl border border-dashed border-border/60 bg-muted/20 px-3 py-3 text-xs">
-        <p className="font-semibold">Position hidden — debug</p>
-        <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-          symbol={symbol} ltp={String(ltp)} units={units} avgCost={avgCost} holdingDays={holdingDays} isOpenEnd={String(isOpenEnd)}
-        </p>
-      </div>
-    );
-  }
   const { proceeds, be, costBasis, marketValue, rawProfit, commissionWacc, buy } = data;
   const netProfit = proceeds.profit;
   const netPct = proceeds.profitPercent;
@@ -168,53 +124,70 @@ export function PositionPnlCard({
                 <p className="text-[0.68rem] text-muted-foreground">{units} × {formatNpr(ltp)}</p>
               </div>
               <div className="rounded-xl bg-muted/10 border border-border/40 px-4 py-3">
-                <p className="text-xs font-medium text-muted-foreground">Total cost</p>
-                <p className="num mt-1 text-base font-bold">{formatNpr(proceeds.costBasis)}</p>
+                <p className="text-xs font-medium text-muted-foreground">Net receivable</p>
+                <p className="num mt-1 text-base font-bold">{formatNpr(proceeds.netReceivable)}</p>
+                <p className="text-[0.68rem] text-muted-foreground">after charges & tax</p>
               </div>
             </div>
 
-            <div className="rounded-xl border border-border/60 overflow-hidden">
-              <p className="bg-muted/20 px-4 py-2 text-xs font-semibold text-muted-foreground">Sell charges</p>
-              <div className="divide-y divide-border/30">
-                <div className="flex items-center justify-between px-4 py-3">
-                  <span className="text-sm text-muted-foreground">Broker commission</span>
-                  <span className="num text-sm font-medium">− {formatNpr(proceeds.commission)}</span>
-                </div>
-                <div className="flex items-center justify-between px-4 py-3">
-                  <span className="text-sm text-muted-foreground">SEBON 0.015%</span>
-                  <span className="num text-sm font-medium">− {formatNpr(proceeds.sebon)}</span>
-                </div>
-                <div className="flex items-center justify-between px-4 py-3">
-                  <span className="text-sm text-muted-foreground">DP charge</span>
-                  <span className="num text-sm font-medium">− {formatNpr(proceeds.dp)}</span>
-                </div>
-                <div className="flex items-center justify-between bg-muted/10 px-4 py-3">
-                  <span className="text-sm font-semibold">Total charges</span>
-                  <span className="num text-sm font-bold">− {formatNpr(proceeds.charges)}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-border/60 overflow-hidden">
-              <p className="bg-muted/20 px-4 py-2 text-xs font-semibold text-muted-foreground">After charges & tax</p>
-              <div className="divide-y divide-border/30">
-                <div className="flex items-center justify-between px-4 py-3">
-                  <span className="text-sm text-muted-foreground">Net before tax</span>
-                  <span className="num text-sm font-semibold">{formatNpr(proceeds.netBeforeTax)}</span>
-                </div>
-                <div className="flex items-center justify-between px-4 py-3">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Capital gains tax</p>
-                    <p className="text-xs text-muted-foreground">{(proceeds.cgtRate * 100).toFixed(1)}% · {formatHoldingTime(holdingDays)} {holdingDays >= 365 ? "long term" : "short term"}</p>
+            <Accordion type="multiple" className="rounded-xl border border-border/60 px-4">
+              <AccordionItem value="charges" className="border-b border-border/30">
+                <AccordionTrigger className="py-3 text-left no-underline hover:no-underline">
+                  <span className="flex flex-1 items-center justify-between gap-2 pr-2">
+                    <span className="text-sm font-semibold">Sell charges</span>
+                    <span className="num text-sm font-bold">− {formatNpr(proceeds.charges)}</span>
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent>
+                  <div className="divide-y divide-border/30">
+                    <div className="flex items-center justify-between py-2.5">
+                      <span className="text-sm text-muted-foreground">Broker commission</span>
+                      <span className="num text-sm font-medium">− {formatNpr(proceeds.commission)}</span>
+                    </div>
+                    <div className="flex items-center justify-between py-2.5">
+                      <span className="text-sm text-muted-foreground">SEBON 0.015%</span>
+                      <span className="num text-sm font-medium">− {formatNpr(proceeds.sebon)}</span>
+                    </div>
+                    <div className="flex items-center justify-between py-2.5">
+                      <span className="text-sm text-muted-foreground">DP charge</span>
+                      <span className="num text-sm font-medium">− {formatNpr(proceeds.dp)}</span>
+                    </div>
                   </div>
-                  <span className="num text-sm font-medium">− {formatNpr(proceeds.cgt)}</span>
-                </div>
-                <div className="flex items-center justify-between bg-primary/5 px-4 py-3">
-                  <span className="text-sm font-bold">Net receivable</span>
-                  <span className="num text-base font-bold">{formatNpr(proceeds.netReceivable)}</span>
-                </div>
-              </div>
-            </div>
+                </AccordionContent>
+              </AccordionItem>
+              <AccordionItem value="tax" className="border-b-0">
+                <AccordionTrigger className="py-3 text-left no-underline hover:no-underline">
+                  <span className="flex flex-1 items-center justify-between gap-2 pr-2">
+                    <span className="text-sm font-semibold">
+                      Tax{" "}
+                      <span className="font-normal text-muted-foreground">
+                        ({(proceeds.cgtRate * 100).toFixed(1)}% CGT)
+                      </span>
+                    </span>
+                    <span className="num text-sm font-bold">− {formatNpr(proceeds.cgt)}</span>
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent>
+                  <div className="divide-y divide-border/30">
+                    <div className="flex items-center justify-between py-2.5">
+                      <span className="text-sm text-muted-foreground">Cost basis</span>
+                      <span className="num text-sm font-medium">{formatNpr(proceeds.costBasis)}</span>
+                    </div>
+                    <div className="flex items-center justify-between py-2.5">
+                      <span className="text-sm text-muted-foreground">Net before tax</span>
+                      <span className="num text-sm font-semibold">{formatNpr(proceeds.netBeforeTax)}</span>
+                    </div>
+                    <div className="flex items-center justify-between py-2.5">
+                      <div>
+                        <p className="text-sm text-muted-foreground">Capital gains tax</p>
+                        <p className="text-xs text-muted-foreground">{formatHoldingTime(holdingDays)} {holdingDays >= 365 ? "long term" : "short term"}</p>
+                      </div>
+                      <span className="num text-sm font-medium">− {formatNpr(proceeds.cgt)}</span>
+                    </div>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
 
             <div className="rounded-xl bg-card border border-gain/20 px-4 py-3 space-y-2">
               <div className="flex items-center justify-between">

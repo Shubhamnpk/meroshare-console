@@ -15,11 +15,56 @@ const Table = React.forwardRef<
      */
     viewportSticky?: boolean;
   }
->(({ className, viewportSticky = true, ...props }, ref) => (
-  <div className={cn("relative w-full overflow-x-auto", viewportSticky && "xl:overflow-x-clip")}>
-    <table ref={ref} className={cn("w-full caption-bottom text-sm", className)} {...props} />
-  </div>
-));
+>(({ className, viewportSticky = true, ...props }, ref) => {
+  const tableRef = React.useRef<HTMLTableElement | null>(null);
+  React.useEffect(() => {
+    const table = tableRef.current;
+    if (!table) return;
+    const thead = table.querySelector("thead");
+    if (!(thead instanceof HTMLElement)) return;
+    if (table.closest('[role="dialog"]')) return;
+    const mq = window.matchMedia("(max-width: 1279.98px)");
+    const STUCK_TOP = 63;
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      if (!mq.matches) {
+        thead.style.transform = "";
+        return;
+      }
+      const r = table.getBoundingClientRect();
+      const y = Math.max(0, Math.min(STUCK_TOP - r.top, r.bottom - thead.offsetHeight - r.top));
+      thead.style.transform = y > 0 ? `translateY(${y}px)` : "";
+    };
+    const schedule = () => {
+      if (!raf) raf = requestAnimationFrame(update);
+    };
+    update();
+    window.addEventListener("scroll", schedule, { passive: true, capture: true });
+    window.addEventListener("resize", schedule);
+    mq.addEventListener("change", schedule);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("scroll", schedule, { capture: true });
+      window.removeEventListener("resize", schedule);
+      mq.removeEventListener("change", schedule);
+      thead.style.transform = "";
+    };
+  }, []);
+  return (
+    <div className={cn("relative w-full overflow-x-auto", viewportSticky && "xl:overflow-x-clip")}>
+      <table
+        ref={(node) => {
+          tableRef.current = node;
+          if (typeof ref === "function") ref(node);
+          else if (ref) ref.current = node;
+        }}
+        className={cn("w-full caption-bottom text-sm", className)}
+        {...props}
+      />
+    </div>
+  );
+});
 Table.displayName = "Table";
 
 const TableHeader = React.forwardRef<
@@ -29,11 +74,18 @@ const TableHeader = React.forwardRef<
   <thead
     ref={ref}
     className={cn(
-      // Sticky by default: parks under the navbar (4rem) and releases at the
-      // table end. Inner scroll contexts override the offset with
-      // `[--sticky-top:0]` (see Dialog/Drawer/Sheet content). `bg-card`
-      // keeps rows from showing through while stuck.
-      "sticky top-[var(--sticky-top,4rem)] z-10 bg-card [&_tr]:border-b",
+      // Pure-CSS viewport sticky works only at xl (the wrapper clips there,
+      // so no scroll trap). Below xl the overflow-x-auto wrapper is a scroll
+      // container, so a CSS top offset would park the header 4rem inside
+      // the card (gap above, overlapping row 1) — hence `auto` here, while
+      // the Table effect nudges the thead under the navbar with translateY
+      // (verified: pins at 63px, zero column drift on horizontal swipe).
+      // Dialog/Drawer/Sheet set `[--sticky-top:0]` and scroll themselves,
+      // so the header sticks there at every breakpoint.
+      // The -1px pull hides the 1px collapse slit (tr borders don't paint
+      // in sticky context); the shadow is the bottom edge because shadows
+      // stick while collapse borders don't — same 1px look at rest.
+      "sticky top-[var(--sticky-top,auto)] xl:top-[calc(var(--sticky-top,4rem)-1px)] z-10 bg-card shadow-[0_1px_0_0_var(--color-border)]",
       className,
     )}
     {...props}

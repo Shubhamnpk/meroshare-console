@@ -1828,7 +1828,7 @@ Backtested with MeroShare Console 🇳🇵`;
 
               <div className="overflow-x-auto rounded-xl border border-border/60 xl:overflow-x-clip">
                 <Table className="text-xs">
-                  <TableHeader className="bg-muted/20 text-muted-foreground border-b border-border/60">
+                  <TableHeader className="bg-muted/20 text-muted-foreground">
                     <TableRow className="bg-muted/40 hover:bg-muted/40">
                       <TableHead className="py-2.5 px-3 text-left font-semibold">Rank</TableHead>
                       <TableHead className="py-2.5 px-3 text-left font-semibold">Asset</TableHead>
@@ -2582,7 +2582,7 @@ Backtested with MeroShare Console 🇳🇵`;
                 {/* Desktop Table View */}
                 <div className="hidden sm:block overflow-x-auto xl:overflow-x-clip">
                   <Table className="text-xs">
-                    <TableHeader className="text-muted-foreground border-b border-border/60">
+                    <TableHeader className="text-muted-foreground">
                       <TableRow className="bg-muted/40 hover:bg-muted/40">
                         <TableHead className="py-2.5 px-3 text-left font-semibold">Year</TableHead>
                         <TableHead className="py-2.5 px-3 text-right font-semibold">Buys</TableHead>
@@ -2883,7 +2883,7 @@ Backtested with MeroShare Console 🇳🇵`;
 
                 <div className="max-h-96 overflow-y-auto overflow-x-auto rounded-xl border border-border/50">
                   <Table className="text-xs">
-                    <TableHeader className="sticky top-0 bg-surface text-muted-foreground border-b border-border/60">
+                    <TableHeader className="sticky top-0 bg-surface text-muted-foreground">
                       <TableRow className="bg-muted/40 hover:bg-muted/40">
                         <TableHead className="py-2.5 px-3 text-left font-semibold">#</TableHead>
                         <TableHead className="py-2.5 px-3 text-left font-semibold">Date</TableHead>

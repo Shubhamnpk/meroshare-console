@@ -21,7 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ExportButton, csvRow } from "@/components/export-dialog";
+import { ExportButton, buildCsv } from "@/components/export-dialog";
 import {
   Select,
   SelectContent,
@@ -384,7 +384,7 @@ function SortBar({
 function reportCsv(items: ApplicationReportItem[], details: (JsonRecord | null)[]) {
   const rows = items.map((item, idx) => {
     const d = details[idx] ?? null;
-    return csvRow([
+    return [
       idx + 1,
       String(item.companyName ?? ""),
       String(item.scrip ?? ""),
@@ -394,10 +394,10 @@ function reportCsv(items: ApplicationReportItem[], details: (JsonRecord | null)[
       d ? String(d["statusName"] ?? "") : String(item.statusName ?? ""),
       d ? String(d["stageName"] ?? "") : "",
       d ? String(d["meroshareRemark"] ?? "") : "",
-    ]);
+    ];
   });
-  return [
-    csvRow([
+  return buildCsv(
+    [
       "SN",
       "Company",
       "Stock",
@@ -407,9 +407,9 @@ function reportCsv(items: ApplicationReportItem[], details: (JsonRecord | null)[
       "Status",
       "Stage",
       "Remark",
-    ]),
-    ...rows,
-  ].join("\n");
+    ],
+    rows,
+  );
 }
 
 function ReportList({

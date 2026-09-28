@@ -28,6 +28,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ErrorBlock, EmptyBlock, LoadingBlock } from "@/components/states";
+import { StatChip, ChipRow } from "@/components/stat-chip";
 import {
   Table,
   TableBody,
@@ -36,7 +37,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ExportButton, csvRow } from "@/components/export-dialog";
+import { ExportButton, buildCsv } from "@/components/export-dialog";
 import { activityLogQuery, defaultActivityRange } from "@/lib/queries";
 import { formatDate, formatDateTime, formatNumber } from "@/lib/format";
 import { useIpLocations, type IpLocation } from "@/lib/ip-location";
@@ -144,7 +145,7 @@ function activityCsv(items: ActivityLogItem[], locations: Record<string, IpLocat
   const rows = items.map((item, i) => {
     const ip = clean(item.ipAddress);
     const loc = ip ? locations[ip] : undefined;
-    return csvRow([
+    return [
       i + 1,
       String(item.description ?? item.activityType ?? ""),
       String(item.browserName ?? ""),
@@ -156,10 +157,10 @@ function activityCsv(items: ActivityLogItem[], locations: Record<string, IpLocat
       loc?.country ?? "",
       loc?.org ?? "",
       String(item.recordedDate ?? ""),
-    ]);
+    ];
   });
-  return [
-    csvRow([
+  return buildCsv(
+    [
       "SN",
       "Activity",
       "Browser",
@@ -171,20 +172,8 @@ function activityCsv(items: ActivityLogItem[], locations: Record<string, IpLocat
       "Country",
       "Network",
       "Recorded on",
-    ]),
-    ...rows,
-  ].join("\n");
-}
-
-function StatChip({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
-  return (
-    <div className="flex items-center gap-2 rounded-xl border border-border/70 bg-card px-3.5 py-2">
-      <span className="text-muted-foreground">{icon}</span>
-      <div className="leading-tight">
-        <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">{label}</p>
-        <p className="num font-semibold">{value}</p>
-      </div>
-    </div>
+    ],
+    rows,
   );
 }
 
@@ -459,7 +448,7 @@ function ActivityPage() {
         />
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <ChipRow wrap>
         <StatChip
           icon={<History className="size-4" />}
           label="Records"
@@ -480,7 +469,7 @@ function ActivityPage() {
           label="Browsers"
           value={formatNumber(uniqueBrowsers)}
         />
-      </div>
+      </ChipRow>
 
       {q.isLoading ? (
         <LoadingBlock label="Loading activity" />
