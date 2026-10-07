@@ -1,6 +1,6 @@
 // Server-only login orchestration.
 import { CDSC_URLS, CdscError, cdscRequestWithHeaders } from "./cdsc.server";
-import { fetchCapitals, fetchOwnDetail } from "./api.server";
+import { fetchCapitalsSafe, fetchOwnDetail } from "./api.server";
 import { getMeroShareSession } from "./session.server";
 import type { OwnDetail, SessionUser } from "./types";
 
@@ -44,7 +44,9 @@ export async function performLogin(input: {
   username: string;
   password: string;
 }): Promise<SessionUser> {
-  const capitals = await fetchCapitals();
+  // Bounded fetch: falls back to the vendored list instead of hanging sign-in
+  // on the same slow list call the picker already gave up on after 3s.
+  const capitals = await fetchCapitalsSafe();
   if (!capitals.some((c) => c.id === input.capitalId)) {
     throw new CdscError("Please pick your depository participant from the list.", 400);
   }

@@ -570,6 +570,33 @@ export function TerminalChart({
         emit(bar ? bar.date : null);
       };
       chart.subscribeClick(onClick);
+      // Tap-to-pin must ignore pan releases: the library fires click on
+      // mouse-up even after a drag, which pinned a bar the user never tapped.
+      // Capture on the wrapper (an ancestor of the canvases, so this runs
+      // before the chart's own listeners) and swallow clicks whose pointer
+      // travelled — real taps barely move.
+      // NOTE: capture must live on the ancestor, not the chart container:
+      // at-target listeners fire in registration order, so the chart (wired
+      // first, inside createChart) would win there.
+      let downX = 0;
+      let downY = 0;
+      let downActive = false;
+      const onPointerDownCapture = (e: PointerEvent) => {
+        downActive = true;
+        downX = e.clientX;
+        downY = e.clientY;
+      };
+      const onClickCapture = (e: MouseEvent) => {
+        if (!downActive) return;
+        // Keyboard-synthesised clicks carry no coordinates; let them through.
+        if (e.clientX === 0 && e.clientY === 0) return;
+        const dx = e.clientX - downX;
+        const dy = e.clientY - downY;
+        if (dx * dx + dy * dy > 36) e.stopPropagation();
+      };
+      const captureHost = container.parentElement;
+      captureHost?.addEventListener("pointerdown", onPointerDownCapture, true);
+      captureHost?.addEventListener("click", onClickCapture, true);
       const handler = (param: MouseEventParams) => {
         if (anchorRef.current && pointerDownRef.current && param.time) {
           draggingRef.current = true;
@@ -649,6 +676,8 @@ export function TerminalChart({
         chart.unsubscribeCrosshairMove(handler);
         chart.unsubscribeDblClick(onDblClick);
         chart.unsubscribeClick(onClick);
+        captureHost?.removeEventListener("pointerdown", onPointerDownCapture, true);
+        captureHost?.removeEventListener("click", onClickCapture, true);
         chart.remove();
         apiRef.current = null;
       };
@@ -760,6 +789,10 @@ export function TerminalChart({
       onMouseLeave={() => {
         setOrderAt(null);
         setOrderMenu(false);
+        // Cursor left the chart: clear the hover readout everywhere
+        // (lightweight-charts doesn't reliably emit a null crosshair move on
+        // leave, so without this the last hovered value sticks forever).
+        hoverRef.current?.(null);
       }}
       onPointerDown={() => {
         pointerDownRef.current = true;

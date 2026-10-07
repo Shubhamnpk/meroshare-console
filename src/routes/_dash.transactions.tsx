@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { ErrorBlock, LoadingBlock, EmptyBlock } from "@/components/states";
 import { useMemo, useState } from "react";
-import { ArrowDownRight, ArrowUpRight, Search } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, FileUp, Pencil, Search, Trash2 } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -11,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -20,6 +22,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ExportButton, buildCsv } from "@/components/export-dialog";
+import { Button } from "@/components/ui/button";
+import { GlobalImportDialog } from "@/components/world/global-import-dialog";
+import { GlobalPositionSheet } from "@/components/world/global-position-sheet";
+import { GlobalTxnEditDialog } from "@/components/world/global-txn-edit-dialog";
+import { deleteGlobalTxn, deriveHoldings, useGlobalTxns } from "@/lib/world/store";
+import type { GlobalTxn } from "@/lib/world/import";
 import { StatChip, ChipRow } from "@/components/stat-chip";
 import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
 import { holdingSymbolsQuery, transactionsQuery } from "@/lib/queries";
@@ -44,11 +52,13 @@ export const Route = createFileRoute("/_dash/transactions")({
     ],
     links: [canonicalLink("/transactions")],
   }),
+  validateSearch: (search: Record<string, unknown>) => ({
+    tab: search["tab"] === "global" ? ("global" as const) : ("meroshare" as const),
+  }),
   component: TransactionsPage,
 });
 
-function transactionsCsv(items: TransactionItem[]) {
-  const rows = items.map((t, i) => [
+function transactionsCsv(items: TransactionItem[]) {  const rows = items.map((t, i) => [
     i + 1,
     formatDate(t.transactionDate),
     t.script ?? "",
@@ -60,9 +70,53 @@ function transactionsCsv(items: TransactionItem[]) {
   return buildCsv(["SN", "Date", "Script", "Description", "Credit", "Debit", "Balance"], rows);
 }
 
+function formatGbp(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v)) return "-";
+  return new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(v);
+}
+
+function formatShares(qty: number): string {
+  return String(Number(qty.toFixed(8)));
+}
+
+const GLOBAL_SIDE_TONE: Record<GlobalTxn["side"], string> = {
+  BUY: "bg-gain/15 text-gain",
+  SELL: "bg-loss/15 text-loss",
+  DIV: "bg-primary/15 text-primary",
+  CASH: "bg-muted text-muted-foreground",
+};
+
+function globalTxnsCsv(items: GlobalTxn[]) {
+  const rows = items.map((t) => [
+    formatDate(t.date),
+    t.side,
+    t.symbol || "-",
+    t.name,
+    t.qty > 0 ? formatShares(t.qty) : "",
+    t.price > 0 ? `${t.price} ${t.currency}` : "",
+    t.currency,
+    t.costGbp != null ? t.costGbp.toFixed(2) : "",
+    t.notes,
+  ]);
+  return buildCsv(
+    ["Date", "Type", "Symbol", "Name", "Qty", "Price", "Currency", "Total GBP", "Notes"],
+    rows,
+  );
+}
+
 function TransactionsPage() {
+  const { tab: tabParam } = Route.useSearch();
+  const [txTab, setTxTab] = useState<"meroshare" | "global">(tabParam);
   const [symbol, setSymbol] = useState<string>("all");
   const [search, setSearch] = useState("");
+  const [gSearch, setGSearch] = useState("");
+  const [importOpen, setImportOpen] = useState(false);
+  const [editingTxn, setEditingTxn] = useState<GlobalTxn | null>(null);
+  const [positionSymbol, setPositionSymbol] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [confirmBulk, setConfirmBulk] = useState(false);
+  const globalTxns = useGlobalTxns();
   const { sort, toggle } = useSort<
     "date" | "script" | "description" | "credit" | "debit" | "balance"
   >(
@@ -111,6 +165,31 @@ function TransactionsPage() {
   const totalCredit = filtered.reduce((sum, t) => sum + Math.max(0, toNumber(t.creditQuantity)), 0);
   const totalDebit = filtered.reduce((sum, t) => sum + Math.max(0, toNumber(t.debitQuantity)), 0);
 
+  const globalHoldings = useMemo(() => deriveHoldings(globalTxns), [globalTxns]);
+  const gFiltered = useMemo(() => {
+    const term = gSearch.trim().toLowerCase();
+    const rows = term
+      ? globalTxns.filter((t) =>
+          [t.symbol, t.name, t.notes, t.side].some((s) => s.toLowerCase().includes(term)),
+        )
+      : globalTxns;
+    return [...rows].sort((a, b) => b.date.localeCompare(a.date));
+  }, [globalTxns, gSearch]);
+
+  const visibleIds = useMemo(() => gFiltered.map((t) => t.id), [gFiltered]);
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selected.includes(id));
+  const someVisibleSelected = visibleIds.some((id) => selected.includes(id));
+  const toggleOne = (id: string) =>
+    setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  const toggleAllVisible = () =>
+    setSelected((prev) =>
+      allVisibleSelected ? prev.filter((id) => !visibleIds.includes(id)) : [...new Set([...prev, ...visibleIds])],
+    );
+  const selectedRows = useMemo(
+    () => gFiltered.filter((t) => selected.includes(t.id)),
+    [gFiltered, selected],
+  );
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -118,6 +197,8 @@ function TransactionsPage() {
           <h1 className="font-display text-2xl font-semibold sm:text-3xl">Transactions</h1>
         </div>
         <div className="flex items-center gap-2">
+          {txTab === "meroshare" ? (
+            <>
           <Select value={symbol} onValueChange={setSymbol}>
             <SelectTrigger className="w-44">
               <SelectValue placeholder="All stocks" />
@@ -163,16 +244,63 @@ function TransactionsPage() {
                     t.script ?? "",
                     t.historyDescription ?? "",
                     toNumber(t.creditQuantity) > 0 ? `+${formatQty(t.creditQuantity)}` : "",
-                    toNumber(t.debitQuantity) > 0 ? `\u2212${formatQty(t.debitQuantity)}` : "",
+                    toNumber(t.debitQuantity) > 0 ? `−${formatQty(t.debitQuantity)}` : "",
                     formatQty(toNumber(t.balanceAfterTransaction)),
                   ]),
                 }),
               },
             ]}
           />
+            </>
+          ) : (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setImportOpen(true)}
+                className="gap-1.5"
+              >
+                <FileUp className="size-3.5" /> Import
+              </Button>
+              <ExportButton
+                disabled={gFiltered.length === 0}
+                formats={[
+                  {
+                    title: "CSV",
+                    description: "Global transactions only (never demat)",
+                    filename: "global-transactions",
+                    extension: "csv",
+                    build: () => globalTxnsCsv(gFiltered),
+                  },
+                  {
+                    title: "JSON",
+                    description: "Raw global records",
+                    filename: "global-transactions",
+                    extension: "json",
+                    build: () => JSON.stringify(gFiltered, null, 2),
+                  },
+                ]}
+              />
+            </>
+          )}
         </div>
       </div>
 
+      <Tabs
+        value={txTab}
+        onValueChange={(v) => setTxTab(v as "meroshare" | "global")}
+        className="self-start"
+      >
+        <TabsList>
+          <TabsTrigger value="meroshare">MeroShare</TabsTrigger>
+          <TabsTrigger value="global">
+            Global{globalHoldings.length > 0 ? ` (${globalHoldings.length})` : ""}
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      {txTab === "meroshare" ? (
+        <>
       <div className="relative">
         <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
@@ -299,6 +427,237 @@ function TransactionsPage() {
             </TableBody>
           </Table>
         </div>
+      )}
+        </>
+      ) : (
+        <>
+          <div className="relative">
+            <Search
+              aria-hidden
+              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+            />
+            <Input
+              value={gSearch}
+              onChange={(e) => setGSearch(e.target.value)}
+              placeholder="Search global transactions…"
+              aria-label="Search global transactions"
+              className="h-10 rounded-xl pl-9"
+            />
+          </div>
+
+          <ChipRow wrap>
+            <StatChip label="Records" value={String(globalTxns.length)} />
+            <StatChip label="Symbols held" value={String(globalHoldings.length)} />
+          </ChipRow>
+
+          {selected.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-card px-3 py-2">
+              <span className="text-xs font-semibold">
+                {selected.length} selected
+              </span>
+              {confirmBulk ? (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => {
+                    for (const id of selected) deleteGlobalTxn(id);
+                    toast.success(`Deleted ${selected.length} transactions.`);
+                    setSelected([]);
+                    setConfirmBulk(false);
+                  }}
+                >
+                  Tap again to delete {selected.length}
+                </Button>
+              ) : (
+                <Button size="sm" variant="outline" onClick={() => setConfirmBulk(true)}>
+                  Delete ({selected.length})
+                </Button>
+              )}
+              <ExportButton
+                disabled={selectedRows.length === 0}
+                formats={[
+                  {
+                    title: "CSV",
+                    description: "Selected global rows only",
+                    filename: "global-transactions-selected",
+                    extension: "csv",
+                    build: () => globalTxnsCsv(selectedRows),
+                  },
+                  {
+                    title: "JSON",
+                    description: "Selected raw records",
+                    filename: "global-transactions-selected",
+                    extension: "json",
+                    build: () => JSON.stringify(selectedRows, null, 2),
+                  },
+                ]}
+              />
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setSelected([]);
+                  setConfirmBulk(false);
+                }}
+              >
+                Clear
+              </Button>
+            </div>
+          ) : null}
+
+          {globalTxns.length === 0 ? (
+            <EmptyBlock
+              title="No global transactions"
+              description="Foreign holdings live here, never mixed with NEPSE demat. Import a Trading 212 statement or standard CSV — or try the demo data."
+            >
+              <Button size="sm" onClick={() => setImportOpen(true)}>
+                Import CSV
+              </Button>
+            </EmptyBlock>
+          ) : gFiltered.length === 0 ? (
+            <EmptyBlock title="No matches" description="Nothing matches your search.">
+              <button
+                type="button"
+                onClick={() => setGSearch("")}
+                className="text-xs font-medium text-primary hover:underline"
+              >
+                Clear search
+              </button>
+            </EmptyBlock>
+          ) : (
+            <div className="overflow-clip rounded-2xl border border-border/70 bg-card">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/40 hover:bg-muted/40">
+                    <TableHead className="w-10 pl-4">
+                      <input
+                        type="checkbox"
+                        aria-label={allVisibleSelected ? "Deselect all rows" : "Select all rows"}
+                        checked={allVisibleSelected}
+                        ref={(el) => {
+                          if (el) el.indeterminate = someVisibleSelected && !allVisibleSelected;
+                        }}
+                        onChange={() => toggleAllVisible()}
+                        onClick={(e) => e.stopPropagation()}
+                        className="size-4 accent-primary"
+                      />
+                    </TableHead>
+                    <TableHead className="w-10">SN</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Symbol</TableHead>
+                    <TableHead className="text-right">Qty</TableHead>
+                    <TableHead className="text-right">Price</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
+                    <TableHead className="w-20 pr-4">
+                      <span className="sr-only">Row actions</span>
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {gFiltered.map((t, idx) => (
+                    <TableRow
+                      key={t.id}
+                      className={t.symbol ? "cursor-pointer" : undefined}
+                      onClick={() => {
+                        if (t.symbol) setPositionSymbol(t.symbol);
+                      }}
+                    >
+                      <TableCell className="pl-4" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${t.symbol || "cash"} transaction`}
+                          checked={selected.includes(t.id)}
+                          onChange={() => toggleOne(t.id)}
+                          className="size-4 accent-primary"
+                        />
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{idx + 1}</TableCell>
+                      <TableCell className="whitespace-nowrap text-xs">
+                        {formatDate(t.date)}
+                      </TableCell>
+                      <TableCell>
+                        <span
+                          className={`num inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${GLOBAL_SIDE_TONE[t.side]}`}
+                        >
+                          {t.side}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <p className="font-semibold">{t.symbol || "—"}</p>
+                        {t.name ? (
+                          <p className="max-w-52 truncate text-xs text-muted-foreground">
+                            {t.name}
+                          </p>
+                        ) : null}
+                      </TableCell>
+                      <TableCell className="num text-right">
+                        {t.qty > 0 ? formatShares(t.qty) : "-"}
+                      </TableCell>
+                      <TableCell className="num text-right text-muted-foreground">
+                        {t.price > 0 ? `${t.price} ${t.currency}` : "-"}
+                      </TableCell>
+                      <TableCell className="num text-right font-medium">
+                        {formatGbp(t.costGbp)}
+                      </TableCell>
+                      <TableCell className="pr-4">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            aria-label={`Edit ${t.symbol || "cash"} transaction`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirmDelete(null);
+                              setEditingTxn(t);
+                            }}
+                            className="flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                          >
+                            <Pencil className="size-4" />
+                          </button>
+                          {confirmDelete === t.id ? (
+                            <button
+                              type="button"
+                              aria-label="Tap again to confirm delete"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (deleteGlobalTxn(t.id)) toast.success("Transaction deleted.");
+                                setSelected((prev) => prev.filter((id) => id !== t.id));
+                                setConfirmDelete(null);
+                              }}
+                              className="flex h-9 items-center rounded-lg bg-destructive/15 px-2 text-xs font-semibold text-destructive"
+                            >
+                              Sure?
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              aria-label={`Delete ${t.symbol || "cash"} transaction`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setConfirmDelete(t.id);
+                              }}
+                              className="flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                            >
+                              <Trash2 className="size-4" />
+                            </button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+          <GlobalImportDialog open={importOpen} onOpenChange={setImportOpen} />
+          <GlobalTxnEditDialog txn={editingTxn} onOpenChange={() => setEditingTxn(null)} />
+          <GlobalPositionSheet
+            symbol={positionSymbol}
+            onOpenChange={(open) => {
+              if (!open) setPositionSymbol(null);
+            }}
+          />
+        </>
       )}
     </div>
   );

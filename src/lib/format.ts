@@ -110,7 +110,8 @@ export function daysUntil(value: unknown): number | null {
 }
 
 export function formatHoldingTime(days: number): string {
-  if (!Number.isFinite(days) || days <= 0) return "-";
+  if (!Number.isFinite(days) || days < 0) return "-";
+  if (days === 0) return "today";
   if (days < 7) return `${days} day${days === 1 ? "" : "s"}`;
   if (days < 30) {
     const w = Math.round(days / 7);

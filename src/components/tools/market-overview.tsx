@@ -24,7 +24,7 @@ import {
   Layers,
   TrendingUp,
   TrendingDown,
-  LayoutGrid,
+  List,
   TableProperties,
   PieChart,
   Search,
@@ -37,6 +37,8 @@ import {
   LineChart,
 } from "lucide-react";
 import { formatNpr, formatNumber, formatPercent, formatQty } from "@/lib/format";
+import { DeltaPill } from "@/components/stat-card";
+import { EmptyBlock } from "@/components/states";
 import type { LivePrice, MarketIndex, PricePoint, SectorIndex } from "@/lib/nepse/types";
 import { normalizeSectorKey, subindexKeyFor } from "@/lib/nepse/sectors";
 import { ScripSheet } from "@/components/market/scrip-sheet";
@@ -51,24 +53,6 @@ import { cn } from "@/lib/utils";
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function tileColor(pct: number): string {
-  if (pct > 3) return "bg-emerald-500 text-white";
-  if (pct > 1) return "bg-emerald-500/75 text-white";
-  if (pct > 0.2) return "bg-emerald-500/40 text-emerald-100";
-  if (pct >= -0.2) return "bg-muted/70 text-muted-foreground";
-  if (pct > -1) return "bg-red-500/40 text-red-100";
-  if (pct > -3) return "bg-red-500/75 text-white";
-  return "bg-red-500 text-white";
-}
-
-function sectorBorderColor(pct: number): string {
-  if (pct > 1) return "border-emerald-500/50";
-  if (pct > 0) return "border-emerald-500/25";
-  if (pct === 0) return "border-border/50";
-  if (pct > -1) return "border-red-500/25";
-  return "border-red-500/50";
-}
 
 function sectorSortKey(s: string): number {
   const order = [
@@ -845,7 +829,7 @@ export function MoverRows({
 // Main component: Market Overview & Market Depth
 // ---------------------------------------------------------------------------
 
-export type MarketDepthViewMode = "matrix" | "grid" | "treemap";
+export type MarketDepthViewMode = "matrix" | "stocks" | "treemap";
 
 type DepthSortKey =
   | "sector"
@@ -1127,6 +1111,50 @@ export function MarketOverview({
     return sortBy(filteredSectors, getter, depthSort.dir);
   }, [filteredSectors, depthSort]);
 
+  // Individual stocks view: same search box filters by symbol, name or
+  // sector; sortable like the Market page table (top 200 by the sort).
+  const { sort: stockSort, toggle: toggleStockSort } = useSort<
+    "symbol" | "sector" | "ltp" | "percentChange" | "volume" | "turnover"
+  >(
+    { key: "turnover", dir: "desc" },
+    {
+      symbol: "text",
+      sector: "text",
+      ltp: "number",
+      percentChange: "number",
+      volume: "number",
+      turnover: "number",
+    },
+  );
+  const stockRows = useMemo(() => {
+    const term = searchQuery.trim().toLowerCase();
+    const rows = term
+      ? prices.filter(
+          (p) =>
+            p.symbol.toLowerCase().includes(term) ||
+            p.name.toLowerCase().includes(term) ||
+            (p.sector ?? "Others").toLowerCase().includes(term),
+        )
+      : prices;
+    const getter = (p: (typeof rows)[number]): string | number => {
+      switch (stockSort.key) {
+        case "symbol":
+          return p.symbol;
+        case "sector":
+          return p.sector ?? "Others";
+        case "ltp":
+          return p.ltp;
+        case "percentChange":
+          return p.percentChange;
+        case "volume":
+          return p.volume;
+        default:
+          return p.turnover;
+      }
+    };
+    return sortBy(rows, getter, stockSort.dir).slice(0, 200);
+  }, [prices, searchQuery, stockSort]);
+
   const sentiment =
     breadth.avgChange >= 1
       ? "Strong Bullish"
@@ -1291,16 +1319,16 @@ export function MarketOverview({
               </button>
               <button
                 type="button"
-                onClick={() => setViewMode("grid")}
+                onClick={() => setViewMode("stocks")}
                 className={cn(
                   "flex items-center gap-1.5 rounded-lg px-2.5 py-1 transition-colors cursor-pointer",
-                  viewMode === "grid"
+                  viewMode === "stocks"
                     ? "bg-primary text-primary-foreground font-semibold shadow-xs"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
-                <LayoutGrid className="size-3.5" />
-                <span className="hidden sm:inline">Sector Grid</span>
+                <List className="size-3.5" />
+                <span className="hidden sm:inline">Stocks</span>
               </button>
               <button
                 type="button"
@@ -1556,98 +1584,68 @@ export function MarketOverview({
           </div>
         )}
 
-        {/* View Mode 2: Sector Grid (Interactive Heatmap Cards) */}
-        {viewMode === "grid" && (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {filteredSectors.map((s) => {
-              const isUp = (s.sectorPercentChange ?? s.avgChange) >= 0;
-
-              return (
-                <div
-                  key={s.sector}
-                  className={cn(
-                    "rounded-2xl border bg-card/60 p-3.5 transition-all shadow-xs",
-                    sectorBorderColor(s.avgChange),
-                  )}
-                >
-                  {/* Sector header — opens the dedicated sector detail page */}
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void navigate({
-                        to: "/sectors/$sectorName",
-                        params: { sectorName: s.sector },
-                      })
-                    }
-                    title={`Open ${s.sector} sector page`}
-                    className="mb-2.5 flex w-full items-center justify-between gap-2 border-b border-border/40 pb-2 text-left group cursor-pointer hover:border-primary/40 transition-colors"
-                  >
-                    <div className="flex min-w-0 flex-1 items-center gap-2">
-                      <SectorBadge sector={s.sector} />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1">
-                          <p className="truncate text-xs font-bold text-foreground group-hover:text-primary transition-colors">
-                            {s.sector}
-                          </p>
-                          <ArrowUpRight className="size-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </div>
-                      <p className="truncate text-[10px] text-muted-foreground">
-                        {s.items.length} stocks · <CompactNpr value={s.totalTurnover} /> vol
-                      </p>
-                      </div>
-                    </div>
-
-                    <div className="ml-2 text-right">
-                      <p
-                        className={cn(
-                          "num text-xs font-bold",
-                          isUp ? "text-emerald-400" : "text-red-400",
-                        )}
+        {/* View Mode 2: All Stocks (filterable, sortable table) */}
+        {viewMode === "stocks" && (
+          stockRows.length === 0 ? (
+            <EmptyBlock
+              title="No matches"
+              description={
+                searchQuery.trim()
+                  ? `No stocks match “${searchQuery.trim()}”.`
+                  : "No listed stocks in the feed right now."
+              }
+            />
+          ) : (
+            <div className="overflow-clip rounded-2xl border border-border/70 bg-card/80 shadow-xs">
+              <div className="overflow-x-auto xl:overflow-x-clip">
+                <Table className="text-left text-xs">
+                  <TableHeader>
+                    <TableRow className="bg-muted/40 hover:bg-muted/40">
+                      <SortableTh label="Stock" active={stockSort.key === "symbol"} dir={stockSort.dir} onClick={() => toggleStockSort("symbol")} kind="text" className="py-2.5 pl-4 pr-2 font-semibold" />
+                      <SortableTh label="Sector" active={stockSort.key === "sector"} dir={stockSort.dir} onClick={() => toggleStockSort("sector")} kind="text" className="hidden py-2.5 px-3 font-semibold lg:table-cell" />
+                      <SortableTh label="LTP" active={stockSort.key === "ltp"} dir={stockSort.dir} onClick={() => toggleStockSort("ltp")} align="right" className="py-2.5 px-3 font-semibold" />
+                      <SortableTh label="Change" active={stockSort.key === "percentChange"} dir={stockSort.dir} onClick={() => toggleStockSort("percentChange")} align="right" className="py-2.5 px-3 font-semibold" />
+                      <SortableTh label="Volume" active={stockSort.key === "volume"} dir={stockSort.dir} onClick={() => toggleStockSort("volume")} align="right" className="hidden py-2.5 px-3 font-semibold sm:table-cell" />
+                      <SortableTh label="Turnover" active={stockSort.key === "turnover"} dir={stockSort.dir} onClick={() => toggleStockSort("turnover")} align="right" className="hidden py-2.5 px-3 font-semibold md:table-cell" />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {stockRows.map((p) => (
+                      <TableRow
+                        key={p.symbol}
+                        className="cursor-pointer"
+                        onClick={() => setPickedScrip(p.symbol)}
                       >
-                        {s.sectorPercentChange != null
-                          ? formatPercent(s.sectorPercentChange)
-                          : formatPercent(s.avgChange)}
-                      </p>
-                      {s.sectorPoints != null && (
-                        <p className="num text-[10px] text-muted-foreground">
-                          {formatNumber(s.sectorPoints)}
-                        </p>
-                      )}
-                    </div>
-                  </button>
-
-                  {/* Stock tiles */}
-                  <div className="grid grid-cols-3 gap-1 sm:grid-cols-4">
-                    {s.items.map((p) => {
-                      const maxTurnover = s.items[0]?.turnover ?? 1;
-                      const scale = Math.max(0.4, Math.min(1, p.turnover / maxTurnover));
-
-                      return (
-                        <button
-                          key={p.symbol}
-                          type="button"
-                          onClick={() => setPickedScrip(p.symbol)}
-                          className={cn(
-                            "flex flex-col items-center justify-center rounded-md px-1 py-1 text-center transition-all hover:ring-1 hover:ring-white/40 cursor-pointer",
-                            tileColor(p.percentChange),
-                          )}
-                          style={{ opacity: Math.max(0.45, scale) }}
-                          title={`${p.symbol} ${formatNpr(p.ltp)} (${formatPercent(p.percentChange)})`}
-                        >
-                          <span className="text-[10px] font-bold leading-tight">
-                            {p.symbol}
-                          </span>
-                          <span className="num text-[9px] leading-tight opacity-85 font-medium">
+                        <TableCell className="py-2.5 pl-4 pr-2">
+                          <p className="font-semibold">{p.symbol}</p>
+                          <p className="max-w-52 truncate text-[11px] text-muted-foreground">
+                            {p.name}
+                          </p>
+                        </TableCell>
+                        <TableCell className="hidden py-2.5 px-3 text-muted-foreground lg:table-cell">
+                          {p.sector ?? "Others"}
+                        </TableCell>
+                        <TableCell className="num py-2.5 px-3 text-right font-medium">
+                          {formatNpr(p.ltp)}
+                        </TableCell>
+                        <TableCell className="py-2.5 px-3 text-right">
+                          <DeltaPill value={p.percentChange}>
                             {formatPercent(p.percentChange)}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                          </DeltaPill>
+                        </TableCell>
+                        <TableCell className="num hidden py-2.5 px-3 text-right text-muted-foreground sm:table-cell">
+                          {formatQty(p.volume)}
+                        </TableCell>
+                        <TableCell className="num hidden py-2.5 px-3 text-right text-muted-foreground md:table-cell">
+                          {formatNpr(p.turnover, { compact: true })}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          )
         )}
 
         {/* View Mode 3: Treemap View */}

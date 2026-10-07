@@ -46,7 +46,7 @@ import { SectorBadge } from "@/components/market/sector-icon";
 import { CompactNpr, CompactQty } from "@/components/market/compact-value";
 import { normalizeSectorKey, subindexKeyFor } from "@/lib/nepse/sectors";
 import { ScripSheet } from "@/components/market/scrip-sheet";
-import type { LivePrice, SectorIndex } from "@/lib/nepse/types";
+import type { ChartBar, LivePrice, PricePoint, SectorIndex } from "@/lib/nepse/types";
 
 export const Route = createFileRoute("/_dash/sectors/$sectorName")({
   head: () => ({
@@ -65,13 +65,17 @@ export const Route = createFileRoute("/_dash/sectors/$sectorName")({
   component: SectorDetailPage,
 });
 
+// Stable empty series: inline [] gets a fresh identity every render, which
+// rebuilds the whole chart on every hover (the spinning-chart bug).
+const NO_BARS: ChartBar[] = [];
+const NO_POINTS: PricePoint[] = [];
+
 const RANGES = [
   { key: "1D", label: "1D", days: 2 },
   { key: "1W", label: "1W", days: 7 },
   { key: "1M", label: "1M", days: 30 },
   { key: "3M", label: "3M", days: 90 },
-  { key: "6M", label: "6M", days: 180 },
-  { key: "1Y", label: "1Y", days: 365 },
+  { key: "6M", label: "6M", days: 180 },  { key: "1Y", label: "1Y", days: 365 },
   { key: "3Y", label: "3Y", days: 1095 },
   { key: "5Y", label: "5Y", days: 1825 },
   { key: "ALL", label: "All", days: 0 },
@@ -683,7 +687,7 @@ function SectorDetailPage() {
             </div>
           ) : usingIntraday ? (
             <TerminalChart
-              bars={[]}
+              bars={NO_BARS}
               intraday={intradayPoints}
               style={chartStyle}
               indicators={indicators}
@@ -699,7 +703,7 @@ function SectorDetailPage() {
           ) : bars.length >= 2 ? (
             <TerminalChart
               bars={bars}
-              intraday={[]}
+              intraday={NO_POINTS}
               style={chartStyle}
               indicators={indicators}
               logScale={false}

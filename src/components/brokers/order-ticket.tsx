@@ -47,14 +47,13 @@ export function OrderTicket({
   limitPrice,
 }: {
   symbol: string;
-  /** External limit price request (e.g. from the chart); applied on change. */
   limitPrice?: { price: number; side?: "BUY" | "SELL"; nonce: number } | null | undefined;
 }) {
   const queryClient = useQueryClient();
   const connections = useQuery(brokerConnectionsQuery());
   const brokerId = (connections.data?.[0]?.brokerId ?? null) as BrokerId | null;
 
-  const { wsReady } = useBrokerMarketWs(brokerId, symbol);
+  const { wsReady, wsStatus } = useBrokerMarketWs(brokerId, symbol);
   const quote = useQuery({
     ...brokerQuoteQuery(brokerId, symbol),
     refetchInterval: wsReady ? false : 20_000,
@@ -67,13 +66,9 @@ export function OrderTicket({
   const book = useQuery(brokerOrderBookQuery(brokerId));
   const amoList = useQuery(brokerAmoListQuery(brokerId));
   const market = useQuery(marketSnapshotQuery());
-  // After-market orders: when NEPSE is closed, only limit orders with
-  // standing validity queue for the next session (no market/IOC/FOK).
   const marketOpen = market.data?.status.isOpen ?? true;
   const amo = !marketOpen;
 
-  // Open-end mutual funds are bought/redeemed with the fund manager at NAV —
-  // they are never traded on the exchange, so no broker order may be placed.
   const isOpenEnd = useIsOpenEnd(symbol);
 
   const [side, setSide] = useState<"BUY" | "SELL">("BUY");
@@ -88,7 +83,6 @@ export function OrderTicket({
   const ltp = quote.data?.ltp ?? null;
   useEffect(() => {
     if (ltp !== null && price === "") setPrice(String(ltp));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ltp, symbol]);
 
   // Chart-driven limit price: switch to Limit and fill it in.
@@ -98,7 +92,6 @@ export function OrderTicket({
       setOrderType("LMT");
       setPrice(String(limitPrice.price));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [limitPrice?.nonce]);
 
   // AMO guardrails: market orders and instant validities need a live market.
@@ -253,6 +246,18 @@ export function OrderTicket({
                     ? `${quote.data.changePercent.toFixed(2)}%`
                     : "-"}
                 </DeltaPill>
+                {!wsReady ? (
+                  <p
+                    className="mt-1 text-[0.68rem] font-medium text-warning"
+                    title={
+                      wsStatus === "error"
+                        ? "The live broker feed failed — this is the last fetched quote, refreshing periodically."
+                        : "The live broker feed is reconnecting — this is the last fetched quote, refreshing periodically."
+                    }
+                  >
+                    {wsStatus === "error" ? "Feed unavailable · last quote" : "Feed reconnecting… · last quote"}
+                  </p>
+                ) : null}
               </div>
             ) : (
               <p

@@ -114,14 +114,17 @@ export function HistoryTabButton({
 function PriceHistoryTab({
   holdings,
   onPickScrip,
+  waccOf,
 }: {
   holdings: EnrichedHolding[];
   onPickScrip: (scrip: string) => void;
+  waccOf?: ((scrip: string) => { rate: number; pending: boolean } | undefined) | undefined;
 }) {
   const { compactNumbers } = useSettings();
   const [granularity, setGranularity] = useState<PortfolioGranularity>("day");
   const [rangeMonths, setRangeMonths] = useState<number>(12);
   const [selected, setSelected] = useState<number | null>(null);
+  const [mode, setMode] = useState<"profit" | "total">("profit");
 
   const history = useQuery(
     portfolioHistoryQuery(
@@ -132,6 +135,23 @@ function PriceHistoryTab({
   );
   const timelinePoints = useMemo(() => history.data?.points ?? [], [history.data?.points]);
   const failedSymbols = history.data?.failed ?? [];
+  // Profit mode subtracts average-cost basis (current WACC × units actually
+  // held at each point). Only offered when a WACC source is wired in.
+  const showToggle = waccOf !== undefined;
+  const activeMode = showToggle ? mode : "total";
+  const displayPoints = useMemo(() => {
+    if (activeMode !== "profit")
+      return timelinePoints.map((p) => ({ time: p.time, value: p.value }));
+    return timelinePoints.map((p) => ({
+      time: p.time,
+      value:
+        p.value -
+        p.breakdown.reduce(
+          (sum, b) => sum + b.units * (waccOf?.(b.symbol.toUpperCase())?.rate ?? 0),
+          0,
+        ),
+    }));
+  }, [timelinePoints, activeMode, waccOf]);
 
   const formatLabel = (time: number) => {
     if (granularity === "day")
@@ -150,18 +170,18 @@ function PriceHistoryTab({
   };
 
   const historyStats = useMemo(() => {
-    if (timelinePoints.length < 2) return null;
-    const start = timelinePoints[0]!.value;
-    const end = timelinePoints[timelinePoints.length - 1]!.value;
+    if (displayPoints.length < 2) return null;
+    const start = displayPoints[0]!.value;
+    const end = displayPoints[displayPoints.length - 1]!.value;
     return {
       start,
       end,
       change: end - start,
       pct: start > 0 ? ((end - start) / start) * 100 : 0,
-      high: Math.max(...timelinePoints.map((p) => p.value)),
-      low: Math.min(...timelinePoints.map((p) => p.value)),
+      high: Math.max(...displayPoints.map((p) => p.value)),
+      low: Math.min(...displayPoints.map((p) => p.value)),
     };
-  }, [timelinePoints]);
+  }, [displayPoints]);
 
   const selectedPoint =
     selected != null ? timelinePoints.find((p) => p.time === selected) : undefined;
@@ -198,6 +218,29 @@ function PriceHistoryTab({
           Portfolio value over time
         </h3>
         <div className="flex flex-wrap items-center gap-1.5">
+          {showToggle ? (
+            <div
+              role="group"
+              aria-label="History measure"
+              className="flex overflow-hidden rounded-full border border-border/60"
+            >
+              {(["profit", "total"] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  aria-pressed={activeMode === m}
+                  onClick={() => setMode(m)}
+                  className={`h-8 px-2.5 text-xs font-medium capitalize transition-colors ${
+                    activeMode === m
+                      ? "bg-primary/15 text-primary"
+                      : "bg-surface text-muted-foreground"
+                  }`}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+          ) : null}
           <Select
             value={granularity}
             onValueChange={(v) => {
@@ -290,7 +333,7 @@ function PriceHistoryTab({
       ) : null}
 
       <AreaChart
-        points={timelinePoints.map((p) => ({ time: p.time, value: p.value }))}
+        points={displayPoints}
         height={240}
         formatValue={(v) => formatNpr(v, { compact: true })}
         formatLabel={formatLabel}
@@ -309,10 +352,18 @@ function PriceHistoryTab({
       />
 
       {selectedPoint ? (
-        <PointBreakdown point={selectedPoint} formatLabel={formatLabel} onPickScrip={onPickScrip} />
+        <PointBreakdown
+          point={selectedPoint}
+          formatLabel={formatLabel}
+          onPickScrip={onPickScrip}
+          costOf={waccOf}
+        />
       ) : null}
 
       <p className="text-[0.68rem] text-muted-foreground">
+        {activeMode === "profit"
+          ? "Profit = value minus what you paid (current average buy price × units held at each point). Total = value plus cost. "
+          : null}
         {granularity === "day"
           ? "Daily closing values from the YONEPSE LTP archive. Hover for the per-stock breakdown. Click a point to pin it below."
           : granularity === "year"
@@ -1035,10 +1086,13 @@ export function HistoryPanel({
   holdings,
   onPickScrip,
   defaultTab = null,
+  waccOf,
 }: {
   holdings: EnrichedHolding[];
   onPickScrip: (scrip: string) => void;
   defaultTab?: HistoryTab | null;
+  /** Average buy price per scrip; when given, the price tab gains a Profit/Total toggle. */
+  waccOf?: ((scrip: string) => { rate: number; pending: boolean } | undefined) | undefined;
 }) {
   const [tab, setTab] = useState<HistoryTab | null>(defaultTab);
 
@@ -1069,7 +1123,7 @@ export function HistoryPanel({
             Choose an insight above to load it on demand the past prices and your dividend record.
           </p>
         ) : tab === "price" ? (
-          <PriceHistoryTab holdings={holdings} onPickScrip={onPickScrip} />
+          <PriceHistoryTab holdings={holdings} onPickScrip={onPickScrip} waccOf={waccOf} />
         ) : (
           <DividendHistoryTab onPickScrip={onPickScrip} />
         )}

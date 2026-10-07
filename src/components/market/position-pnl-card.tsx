@@ -33,12 +33,11 @@ export function PositionPnlCard({
   const [avgOpen, setAvgOpen] = useState(false);
 
   // Shared FIFO holding-age logic (same as the stock-details sheet).
-  const { holdingDays, avgHoldingDays, lots } = useHoldingAge(symbol);
+  const { holdingDays, avgHoldingDays, lots, known: ageKnown } = useHoldingAge(symbol);
   const isOpenEnd = useIsOpenEnd(symbol);
 
   const data = useMemo(() => {
     const safeLtp = Number.isFinite(ltp) ? ltp : 0;
-    // Commission WACC = buy-side all-in per unit (price + broker + SEBON + DP amortized) — open-end MF has no charges
     const pos = netPosition(units, avgCost, ltp, { isOpenEnd, holdingDays });
     const buy = pos.buy;
     const commissionWacc = buy.perUnit;
@@ -180,7 +179,7 @@ export function PositionPnlCard({
                     <div className="flex items-center justify-between py-2.5">
                       <div>
                         <p className="text-sm text-muted-foreground">Capital gains tax</p>
-                        <p className="text-xs text-muted-foreground">{formatHoldingTime(holdingDays)} {holdingDays >= 365 ? "long term" : "short term"}</p>
+                        <p className="text-xs text-muted-foreground">{ageKnown ? `${formatHoldingTime(holdingDays)} ${holdingDays >= 365 ? "long term" : "short term"}` : "purchase date unknown · assumed long-term"}</p>
                       </div>
                       <span className="num text-sm font-medium">− {formatNpr(proceeds.cgt)}</span>
                     </div>
@@ -217,20 +216,24 @@ export function PositionPnlCard({
           <DialogHeader className="px-5 pt-5 pb-3">
             <DialogTitle className="text-base font-bold leading-none">{symbol} · Holding age</DialogTitle>
             <p className="mt-1.5 text-xs text-muted-foreground">
-              Avg {formatHoldingTime(avgHoldingDays)} (weighted) · Oldest {formatHoldingTime(holdingDays)} for tax · {lots.length} lot{lots.length === 1 ? "" : "s"} still held
+              {ageKnown ? (
+                <>Avg {formatHoldingTime(avgHoldingDays)} (weighted) · Oldest {formatHoldingTime(holdingDays)} for tax · {lots.length} lot{lots.length === 1 ? "" : "s"} still held</>
+              ) : (
+                <>No purchase dates found — tax shown at the assumed long-term rate</>
+              )}
             </p>
           </DialogHeader>
           <div className="px-5 pb-5 space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-xl bg-muted/10 border border-border/40 px-4 py-3">
                 <p className="text-xs font-medium text-muted-foreground">Average holding</p>
-                <p className="num mt-1 text-base font-bold">{formatHoldingTime(avgHoldingDays)}</p>
+                <p className="num mt-1 text-base font-bold">{ageKnown ? formatHoldingTime(avgHoldingDays) : "—"}</p>
                 <p className="text-[0.68rem] text-muted-foreground">display only — tax uses oldest</p>
               </div>
               <div className="rounded-xl bg-muted/10 border border-border/40 px-4 py-3">
                 <p className="text-xs font-medium text-muted-foreground">Oldest lot (tax)</p>
-                <p className="num mt-1 text-base font-bold">{formatHoldingTime(holdingDays)}</p>
-                <p className="text-[0.68rem] text-muted-foreground">{holdingDays >= 365 ? "long term" : "short term"}</p>
+                <p className="num mt-1 text-base font-bold">{ageKnown ? formatHoldingTime(holdingDays) : "—"}</p>
+                <p className="text-[0.68rem] text-muted-foreground">{ageKnown ? (holdingDays >= 365 ? "long term" : "short term") : "no dates found · assumed long-term"}</p>
               </div>
             </div>
             {lots.length > 0 ? (

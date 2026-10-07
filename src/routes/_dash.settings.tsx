@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -51,6 +51,8 @@ import { useSettings, COLOR_OPTIONS, type ThemePref } from "@/lib/settings";
 import { getNumberFormat, setNumberFormat } from "@/components/ui/amount-input";
 import { clearRemembered, loadRemembered } from "@/lib/remember-me";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { GlobalImportDialog } from "@/components/world/global-import-dialog";
+import { clearGlobalTxns, deriveHoldings, useGlobalTxns } from "@/lib/world/store";
 import { APP_VERSION, GITHUB_REPO_URL } from "@/lib/version";
 import {
   hasNativeInstallPrompt,
@@ -608,8 +610,55 @@ function EdisBetaCard() {
   );
 }
 
-function BrokerConnectionsCard() {
-  const queryClient = useQueryClient();
+function GlobalDataCard() {
+  const [importOpen, setImportOpen] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const txns = useGlobalTxns();
+  const holdings = useMemo(() => deriveHoldings(txns), [txns]);
+  return (
+    <Panel padding="lg" shadow className="space-y-4">
+      <SectionHeader
+        icon={Database}
+        title="Global holdings data"
+        subtitle="Foreign stocks live here — imported from CSV, never mixed with NEPSE demat."
+        badge={txns.length > 0 ? `${txns.length} rows` : undefined}
+      />
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" onClick={() => setImportOpen(true)}>
+          Import CSV
+        </Button>
+        <Button size="sm" variant="outline" asChild>
+          <Link to="/transactions" search={{ tab: "global" }}>
+            View transactions
+          </Link>
+        </Button>
+        {txns.length > 0 ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              if (confirmClear) {
+                clearGlobalTxns();
+                setConfirmClear(false);
+              } else {
+                setConfirmClear(true);
+              }
+            }}
+          >
+            {confirmClear ? "Tap again to clear all" : "Clear"}
+          </Button>
+        ) : null}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {holdings.length} symbol{holdings.length === 1 ? "" : "s"} held · Trading 212 or standard
+        CSV · demo data available in the importer.
+      </p>
+      <GlobalImportDialog open={importOpen} onOpenChange={setImportOpen} />
+    </Panel>
+  );
+}
+
+function BrokerConnectionsCard() {  const queryClient = useQueryClient();
   const connections = useQuery(brokerConnectionsQuery());
   const vaultStatus = useQuery(brokerVaultStatusQuery());
   const vaultReady = vaultStatus.data?.configured ?? null;
@@ -1605,6 +1654,8 @@ function SettingsPage() {
             <div className={current === "advanced" ? "space-y-6" : "hidden"}>
               {/* Broker plug-ins (opt-in) */}
               <BrokerConnectionsCard />
+              {/* Global (non-NEPSE) data import */}
+              <GlobalDataCard />
               {/* EDIS beta (opt-in) */}
               <EdisBetaCard />
               {/* Manual cache clear */}

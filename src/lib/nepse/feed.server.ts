@@ -946,12 +946,18 @@ export async function getIndexHistory(indexName: string): Promise<PricePoint[]> 
     `/indices/graph/${encodeURIComponent(clean)}`,
     TTL.medium,
   );
-  return (data ?? []).flatMap((point): PricePoint[] => {
+  // The mirror pads the session: every tick arrives ~2× and the final close
+  // tick is repeated ~120× at the same timestamp. Index-based sparklines plot
+  // point index, so those copies render as a long flat tail after close —
+  // dedupe by time (last write wins), matching TerminalChart's sanitize step.
+  const byTime = new Map<number, PricePoint>();
+  for (const point of data ?? []) {
     const time = num(point?.[0]);
     const value = num(point?.[1]);
-    if (!time || !value) return [];
-    return [{ time, value }];
-  });
+    if (!time || !value) continue;
+    byTime.set(time, { time, value });
+  }
+  return [...byTime.values()].sort((a, b) => a.time - b.time);
 }
 
 /**

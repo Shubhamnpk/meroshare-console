@@ -1,5 +1,6 @@
 // Server-only MeroShare operations. Every function here talks to CDSC with the
 // caller's own bearer token, taken from the encrypted session cookie.
+import capitalsFallback from "./capitals.json";
 import { CDSC_URLS, cdscRequest } from "./cdsc.server";
 import { readSession, requireAuth, type AuthContext } from "./session.server";
 import type {
@@ -24,8 +25,58 @@ import type {
   WaccReport,
   WaccSearchResponse,
 } from "./types";
-export async function fetchCapitals(): Promise<Capital[]> {
+function fetchCapitals(): Promise<Capital[]> {
   return cdscRequest<Capital[]>(CDSC_URLS.capitals);
+}
+
+/** How long the DP list may take before callers get the vendored fallback. */
+const CAPITALS_TIMEOUT_MS = 3_000;
+/** How long a successful live DP list is reused before re-fetching. */
+const CAPITALS_TTL_MS = 10 * 60_000;
+
+let capitalsCache: { at: number; value: Capital[] } | null = null;
+let capitalsInflight: Promise<Capital[] | null> | null = null;
+
+/**
+ * Live DP list bounded to CAPITALS_TIMEOUT_MS. The first caller starts the
+ * fetch, later callers join it; on timeout (or CDSC failure) this resolves
+ * null so callers serve capitals.json instead. A timed-out fetch keeps
+ * running and populates the cache for the next call; a failed one clears the
+ * memo so the next call retries.
+ */
+async function fetchCapitalsBounded(): Promise<Capital[] | null> {
+  if (capitalsCache && Date.now() - capitalsCache.at < CAPITALS_TTL_MS) {
+    return capitalsCache.value;
+  }
+  capitalsInflight ??= fetchCapitals()
+    .then((value) => {
+      capitalsCache = { at: Date.now(), value };
+      return value;
+    })
+    .catch(() => {
+      capitalsInflight = null;
+      return null;
+    });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      capitalsInflight,
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), CAPITALS_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * The DP list the login picker and performLogin validate against: live from
+ * CDSC, or the vendored capitals.json when CDSC is slower than the timeout or
+ * down — so signing in never waits on a hanging list fetch.
+ */
+export async function fetchCapitalsSafe(): Promise<Capital[]> {
+  return (await fetchCapitalsBounded()) ?? capitalsFallback;
 }
 
 export async function fetchOwnDetail(auth: AuthContext): Promise<OwnDetail> {

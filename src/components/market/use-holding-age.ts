@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { daysBetween } from "@/lib/calc/fees";
 import { mfSchemesQuery, transactionsQuery, waccSearchQuery } from "@/lib/queries";
 
-/** One demat movement row (loose: brokers rename keys per env). */
 export type TxnRow = {
   transactionDate?: string;
   postDate?: string;
@@ -17,11 +16,10 @@ export interface HoldingLot {
 }
 
 export interface HoldingAge {
-  /** Oldest still-held lot in days (drives CGT long/short term). */
   holdingDays: number;
-  /** Unit-weighted average age across still-held lots. */
   avgHoldingDays: number;
   lots: HoldingLot[];
+  known: boolean;
 }
 
 /** True when the scrip is an open-end mutual fund (never exchange-traded). */
@@ -85,7 +83,9 @@ export function useHoldingAge(symbol: string, txnItems?: TxnRow[]): HoldingAge {
       const withDays: HoldingLot[] = [];
       for (const lot of lots) {
         const d = daysBetween(lot.date, new Date());
-        if (!(d > 0)) continue;
+        // Keep same-day lots (d === 0): bought today is held 0 days, not
+        // "no data". Invalid dates yield NaN, which `>= 0` still rejects.
+        if (!(d >= 0)) continue;
         withDays.push({ date: lot.date, qty: lot.qty, days: d });
       }
       withDays.sort((a, b) => b.days - a.days);
@@ -95,7 +95,7 @@ export function useHoldingAge(symbol: string, txnItems?: TxnRow[]): HoldingAge {
     if (held.length > 0) {
       const earliest = held.map((l) => l.date).sort()[0] as string;
       const oldest = daysBetween(earliest, new Date());
-      if (oldest > 0) {
+      if (oldest >= 0) {
         const withDays = ageLots(held);
         const totalUnits = withDays.reduce((s, l) => s + l.qty, 0);
         const weighted = withDays.reduce((s, l) => s + l.days * l.qty, 0);
@@ -103,6 +103,7 @@ export function useHoldingAge(symbol: string, txnItems?: TxnRow[]): HoldingAge {
           holdingDays: oldest,
           avgHoldingDays: totalUnits > 0 ? Math.round(weighted / totalUnits) : oldest,
           lots: withDays,
+          known: true,
         };
       }
     }
@@ -114,10 +115,11 @@ export function useHoldingAge(symbol: string, txnItems?: TxnRow[]): HoldingAge {
     const dates = all
       .map((r) => r.transactionDate || r.postDate)
       .filter(Boolean) as string[];
-    if (dates.length === 0) return { holdingDays: 400, avgHoldingDays: 400, lots: [] };
+    if (dates.length === 0)
+      return { holdingDays: 400, avgHoldingDays: 400, lots: [], known: false };
     const earliest = dates.sort()[0] as string;
     const d = daysBetween(earliest, new Date());
-    const holdingDays = d > 0 ? d : 400;
+    const holdingDays = d >= 0 ? d : 400;
     const rawLots = purchaseQ.data as unknown as {
       waccUpdateResponse?: {
         transactionDate?: string;
@@ -152,6 +154,7 @@ export function useHoldingAge(symbol: string, txnItems?: TxnRow[]): HoldingAge {
       holdingDays,
       avgHoldingDays: totalUnits > 0 ? Math.round(weighted / totalUnits) : holdingDays,
       lots: withDays,
+      known: true,
     };
   }, [supplied, txnQ.data, purchaseQ.data]);
 }

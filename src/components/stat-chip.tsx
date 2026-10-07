@@ -1,10 +1,6 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
-/**
- * Single stat chip: icon + uppercase label + value. Icon-less usage renders
- * the same card without the icon slot.
- */
 export function StatChip({
   icon,
   label,

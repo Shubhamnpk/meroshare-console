@@ -56,6 +56,9 @@ import {
   checkEdisPoolAccountFn,
   checkEdisWaccLeftFn,
 } from "./meroshare/edis.functions";
+import { getWorldHistory, getWorldQuote, getGlobalValuation, getWorldSearch, getWorldCompany, getGlobalHistory } from "./world/market.functions";
+import type { GlobalValuationRow } from "./world/market.functions";
+import type { WorldRange } from "./world/feed.server";
 import type { ChartRange, PortfolioGranularity } from "./nepse/types";
 import { brokerVaultStatus, listBrokerConnections } from "./brokers/brokers.functions";
 import {
@@ -1026,6 +1029,90 @@ export const edisWaccLeftQuery = () =>
   queryOptions({
     queryKey: ["edis-wacc-left"],
     queryFn: () => checkEdisWaccLeftFn(),
+    staleTime: 10 * 60_000,
+    retry: false,
+  });
+
+// ---------------------------------------------------------------------------
+// World (non-NEPSE) market data — isolated from NEPSE feeds by design.
+// ---------------------------------------------------------------------------
+
+export const worldQuoteQuery = (symbol: string | null, currency?: string) =>
+  queryOptions({
+    queryKey: ["world-quote", symbol, currency ?? ""],
+    queryFn: () => getWorldQuote({ data: { symbol: symbol ?? "", currency } }),
+    enabled: Boolean(symbol),
+    staleTime: 60_000,
+    retry: false,
+  });
+
+export const worldHistoryQuery = (symbol: string | null, range: WorldRange, currency?: string) =>
+  queryOptions({
+    queryKey: ["world-history", symbol, range, currency ?? ""],
+    queryFn: () => getWorldHistory({ data: { symbol: symbol ?? "", range, currency } }),
+    enabled: Boolean(symbol),
+    staleTime: 10 * 60_000,
+    retry: false,
+  });
+
+export interface GlobalLotInput {
+  symbol: string;
+  qty: number;
+  avgPrice: number;
+  currency: string;
+}
+
+export const globalValuationQuery = (holdings: GlobalLotInput[], enabled = true) =>
+  queryOptions({
+    queryKey: ["global-valuation", JSON.stringify(holdings.map((h) => [h.symbol, h.qty]))],
+    queryFn: async (): Promise<{ rows: GlobalValuationRow[] }> =>
+      getGlobalValuation({ data: { holdings } }),
+    enabled: enabled && holdings.length > 0,
+    staleTime: 60_000,
+    retry: false,
+  });
+
+export const worldSearchQuery = (query: string) =>
+  queryOptions({
+    queryKey: ["world-search", query.trim().toLowerCase()],
+    queryFn: async () => getWorldSearch({ data: { query: query.trim() } }),
+    enabled: query.trim().length >= 2,
+    staleTime: 60 * 60_000,
+    retry: false,
+  });
+
+export const worldCompanyQuery = (symbol: string | null) =>
+  queryOptions({
+    queryKey: ["world-company", symbol],
+    queryFn: async () => getWorldCompany({ data: { symbol: symbol ?? "" } }),
+    enabled: Boolean(symbol),
+    staleTime: 24 * 60 * 60_000,
+    retry: false,
+  });
+
+export interface GlobalHistoryLot {
+  symbol: string;
+  currency: string;
+  lots: { date: string; side: string; qty: number; price: number }[];
+}
+
+export const globalHistoryQuery = (
+  holdings: GlobalHistoryLot[],
+  range: "1M" | "3M" | "6M" | "1Y" | "MAX",
+) =>
+  queryOptions({
+    queryKey: [
+      "global-history",
+      JSON.stringify(
+        holdings.map((h) => [
+          h.symbol,
+          h.lots.map((l) => [l.date.slice(0, 10), l.side, l.qty, l.price]),
+        ]),
+      ),
+      range,
+    ],
+    queryFn: async () => getGlobalHistory({ data: { holdings, range } }),
+    enabled: holdings.length > 0,
     staleTime: 10 * 60_000,
     retry: false,
   });

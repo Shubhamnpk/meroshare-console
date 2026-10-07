@@ -1,10 +1,9 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getBrokerWsCredentials } from "@/lib/brokers/brokers.functions";
 import type { BrokerDepth, BrokerDepthRow, BrokerId, BrokerQuote } from "@/lib/brokers/types";
 
 function parseDepthSegments(raw: string): BrokerDepthRow[][] {
-  // WebSocket depth: BBR^BBQ^BO^BSR^BSQ^SO | ...
   if (!raw || typeof raw !== "string") return [[], []];
   const levels = raw
     .split("|")
@@ -27,11 +26,14 @@ function parseDepthSegments(raw: string): BrokerDepthRow[][] {
   return [bids.slice(0, 5), asks.slice(0, 5)];
 }
 
+export type BrokerWsStatus = "idle" | "connecting" | "live" | "retrying" | "error";
+
 export function useBrokerMarketWs(brokerId: BrokerId | null, symbol: string | null) {
   const queryClient = useQueryClient();
   const cleanSymbol = symbol?.trim().toUpperCase() ?? "";
   const wsRef = useRef<WebSocket | null>(null);
   const retryRef = useRef<number | null>(null);
+  const [status, setStatus] = useState<BrokerWsStatus>("idle");
 
   const creds = useQuery({
     queryKey: ["broker-ws-creds", brokerId],
@@ -49,9 +51,21 @@ export function useBrokerMarketWs(brokerId: BrokerId | null, symbol: string | nu
 
     let closed = false;
     let structures: Record<string, number> | null = null;
+    let seenMessage = false;
+    setStatus("connecting");
+
+    const markLive = () => {
+      if (!seenMessage) {
+        seenMessage = true;
+        setStatus("live");
+      }
+    };
 
     const connect = () => {
       if (closed) return;
+      // Fresh connection, fresh liveness: otherwise the first post-reconnect
+      // message is ignored and status sticks at "retrying" forever.
+      seenMessage = false;
       try {
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
@@ -67,6 +81,7 @@ export function useBrokerMarketWs(brokerId: BrokerId | null, symbol: string | nu
         ws.onmessage = (ev) => {
           const msg = typeof ev.data === "string" ? ev.data : "";
           if (!msg) return;
+          markLive();
 
           // 1. Structures map: EXCH^COL^idx or JSON
           if (msg.includes("Structures") || msg.includes("EXCH")) {
@@ -90,7 +105,7 @@ export function useBrokerMarketWs(brokerId: BrokerId | null, symbol: string | nu
               if (!scripKey.toUpperCase().includes(cleanSymbol)) return;
               const row = (parsed["row"] ?? parsed["Row"] ?? parsed["data"] ?? "") as unknown;
               if (typeof row === "string" && (row.includes("^") || row.includes("|"))) {
-                const [bids, asks] = parseDepthSegments(row);
+                const [bids = [], asks = []] = parseDepthSegments(row);
                 if (bids.length || asks.length) {
                   const depth: BrokerDepth = { errorCode: 0, message: "live", bids, asks };
                   queryClient.setQueryData(["broker-depth", brokerId, cleanSymbol], depth);
@@ -115,7 +130,7 @@ export function useBrokerMarketWs(brokerId: BrokerId | null, symbol: string | nu
             // Heuristic: if it looks like depth (6 fields per segment)
             const segs = msg.split("|");
             if (segs[0]?.split("^").length === 6) {
-              const [bids, asks] = parseDepthSegments(msg);
+              const [bids = [], asks = []] = parseDepthSegments(msg);
               if (bids.length || asks.length) {
                 const depth: BrokerDepth = { errorCode: 0, message: "live", bids, asks };
                 queryClient.setQueryData(["broker-depth", brokerId, cleanSymbol], depth);
@@ -126,6 +141,7 @@ export function useBrokerMarketWs(brokerId: BrokerId | null, symbol: string | nu
 
         ws.onclose = () => {
           if (closed) return;
+          setStatus("retrying");
           retryRef.current = window.setTimeout(connect, 1000) as unknown as number;
         };
 
@@ -141,6 +157,7 @@ export function useBrokerMarketWs(brokerId: BrokerId | null, symbol: string | nu
 
     return () => {
       closed = true;
+      setStatus("idle");
       if (retryRef.current) clearTimeout(retryRef.current);
       const ws = wsRef.current;
       if (ws) {
@@ -154,5 +171,6 @@ export function useBrokerMarketWs(brokerId: BrokerId | null, symbol: string | nu
     };
   }, [brokerId, cleanSymbol, wsUrl, queryClient]);
 
-  return { wsReady: Boolean(wsUrl) && !creds.isError, wsUrl };
+  const wsStatus: BrokerWsStatus = creds.isError ? "error" : status;
+  return { wsReady: wsStatus === "live", wsStatus, wsUrl };
 }

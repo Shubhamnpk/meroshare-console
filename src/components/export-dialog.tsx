@@ -60,7 +60,8 @@ export function downloadText(filename: string, content: string, mime: string): v
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
-  URL.revokeObjectURL(url);
+
+  window.setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
 const DISCLAIMER =
@@ -120,7 +121,7 @@ function savePdf(
   },
   logo: HTMLImageElement | null,
 ): boolean {
-  if (!table) return false;
+  if (!table || table.body.length === 0) return false;
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const width = doc.internal.pageSize.getWidth();
   const height = doc.internal.pageSize.getHeight();
@@ -242,17 +243,12 @@ export function ExportButton({
       }
     } else {
       const content = format.extension === "csv" ? `\uFEFF${format.build()}` : format.build();
-      const blob = new Blob([content], {
-        type:
-          format.mime ??
+      downloadText(
+        `${name}.${format.extension}`,
+        content,
+        format.mime ??
           (format.extension === "json" ? "application/json" : "text/csv;charset=utf-8"),
-      });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `${name}.${format.extension}`;
-      anchor.click();
-      URL.revokeObjectURL(url);
+      );
     }
     toast.success(`Exported as ${format.title.toUpperCase()}`);
     setOpen(false);

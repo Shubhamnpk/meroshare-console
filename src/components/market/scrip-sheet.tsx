@@ -106,6 +106,7 @@ function PositionCard({
   ltp,
   previousClose,
   basisLabel = "vs CDSC WACC",
+  priceEstimate = false,
 }: {
   scrip: string;
   units: number;
@@ -114,8 +115,10 @@ function PositionCard({
   ltp: number;
   previousClose?: number | null;
   basisLabel?: string;
+  priceEstimate?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const live = !priceEstimate;
   const avgCost = waccRate > 0 ? waccRate : totalCost > 0 && units > 0 ? totalCost / units : 0;
   const hasCost = avgCost > 0;
   const costBasis = totalCost > 0 ? totalCost : units * avgCost;
@@ -127,7 +130,7 @@ function PositionCard({
   // Shared FIFO holding-age logic (same as the terminal position card).
   const txnQ = useQuery(transactionsQuery(scrip));
   const txnItems = (txnQ.data as unknown as { items?: TxnRow[] } | undefined)?.items;
-  const { holdingDays, avgHoldingDays, lots } = useHoldingAge(scrip, txnItems);
+  const { holdingDays, avgHoldingDays, lots, known: ageKnown } = useHoldingAge(scrip, txnItems);
   const isOpenEnd = useIsOpenEnd(scrip);
   const fundDetailQ = useQuery(mfSchemeQuery(isOpenEnd ? scrip : null));
   const [holdingOpen, setHoldingOpen] = useState(false);
@@ -181,20 +184,31 @@ function PositionCard({
             </div>
             <div>
               <p className="text-[0.65rem] uppercase tracking-wide text-muted-foreground">Value</p>
-              <p className="num text-sm font-medium">{formatNpr(currentValue)}</p>
+              <p className="num text-sm font-medium">{live ? formatNpr(currentValue) : "—"}</p>
             </div>
           </div>
+          {!live ? (
+            <p className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[0.7rem] leading-relaxed text-amber-700 dark:text-amber-300">
+              No live market price right now — value and returns are paused, not zero.
+            </p>
+          ) : null}
           <div className="mt-3 rounded-xl border border-border/40 overflow-hidden">
             <div className="flex items-center justify-between gap-2 px-3 py-2.5">
               <span className="text-xs font-medium text-foreground">Day change</span>
-              <span className={cn("num text-xs font-semibold", dayUp ? "text-gain" : "text-loss")}>
-                {dayUp ? "+" : ""}{formatNpr(dayChange)} ({formatPercent(dayPercent)})
-              </span>
+              {live ? (
+                <span className={cn("num text-xs font-semibold", dayUp ? "text-gain" : "text-loss")}>
+                  {dayUp ? "+" : ""}{formatNpr(dayChange)} ({formatPercent(dayPercent)})
+                </span>
+              ) : (
+                <span className="num text-xs font-semibold text-muted-foreground">—</span>
+              )}
             </div>
             {proceeds ? (
               <div className="flex items-center justify-between gap-2 border-t border-border/30 px-3 py-2.5">
                 <span className="text-xs font-medium text-foreground">Return</span>
-                {hasCost ? (
+                {!live ? (
+                  <span className="num text-sm font-bold text-muted-foreground">—</span>
+                ) : hasCost ? (
                   <button
                     type="button"
                     onClick={() => setOpen(true)}
@@ -298,7 +312,7 @@ function PositionCard({
                     <div className="flex items-center justify-between px-4 py-3">
                       <div>
                         <p className="text-sm text-muted-foreground">Capital gains tax</p>
-                        <p className="text-xs text-muted-foreground">{(proceeds.cgtRate * 100).toFixed(1)}% · {formatHoldingTime(holdingDays)} {holdingDays >= 365 ? "long term" : "short term"}</p>
+                        <p className="text-xs text-muted-foreground">{(proceeds.cgtRate * 100).toFixed(1)}% · {ageKnown ? `${formatHoldingTime(holdingDays)} ${holdingDays >= 365 ? "long term" : "short term"}` : "purchase date unknown · assumed long-term"}</p>
                       </div>
                       <span className="num text-sm font-medium">− {formatNpr(proceeds.cgt)}</span>
                     </div>
@@ -353,13 +367,13 @@ function PositionCard({
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-xl bg-muted/10 border border-border/40 px-4 py-3">
                 <p className="text-xs font-medium text-muted-foreground">Average holding</p>
-                <p className="num mt-1 text-base font-bold">{formatHoldingTime(avgHoldingDays)}</p>
+                <p className="num mt-1 text-base font-bold">{ageKnown ? formatHoldingTime(avgHoldingDays) : "—"}</p>
                 <p className="text-[0.68rem] text-muted-foreground">display only</p>
               </div>
               <div className="rounded-xl bg-muted/10 border border-border/40 px-4 py-3">
                 <p className="text-xs font-medium text-muted-foreground">Oldest lot (tax)</p>
-                <p className="num mt-1 text-base font-bold">{formatHoldingTime(holdingDays)}</p>
-                <p className="text-[0.68rem] text-muted-foreground">{holdingDays >= 365 ? "long term" : "short term"}</p>
+                <p className="num mt-1 text-base font-bold">{ageKnown ? formatHoldingTime(holdingDays) : "—"}</p>
+                <p className="text-[0.68rem] text-muted-foreground">{ageKnown ? (holdingDays >= 365 ? "long term" : "short term") : "no dates found · assumed long-term"}</p>
               </div>
             </div>
             {lots.length > 0 ? (
@@ -1061,6 +1075,20 @@ export function ScripSheet({
     return faceVal > 0 ? faceVal : 100;
   }, [price, holding, navFromScheme, detail.data, faceVal]);
 
+  // True only when every real price source missed and effectiveLtp is just
+  // the face-value fallback — value and returns must pause, not fabricate.
+  const ltpIsEstimate = useMemo(() => {
+    if (price && price.ltp > 0) return false;
+    if (holding && holding.ltp > 0) return false;
+    if (navFromScheme != null && navFromScheme > 0) return false;
+    const lastTraded = (detail.data?.overview as { lastTradedPrice?: unknown } | undefined)
+      ?.lastTradedPrice;
+    if (typeof lastTraded === "number" && lastTraded > 0) return false;
+    const hist = detail.data?.history;
+    if (hist && hist.length > 0 && hist[hist.length - 1]!.close > 0) return false;
+    return true;
+  }, [price, holding, navFromScheme, detail.data]);
+
   const effectivePreviousClose = useMemo(() => {
     if (price && price.previousClose != null && price.previousClose > 0) return price.previousClose;
     if (holding && holding.previousClose != null && holding.previousClose > 0) return holding.previousClose;
@@ -1371,11 +1399,20 @@ export function ScripSheet({
             ) : effectiveLtp > 0 ? (
               <div className="shrink-0 text-right">
                 <p className="num font-display text-2xl font-semibold leading-none">
-                  {formatNpr(effectiveLtp)}
+                  {ltpIsEstimate ? `~${formatNpr(effectiveLtp)}` : formatNpr(effectiveLtp)}
                 </p>
-                <DeltaPill value={effectivePercentChange}>
-                  {formatPercent(effectivePercentChange)}
-                </DeltaPill>
+                {ltpIsEstimate ? (
+                  <span
+                    className="mt-1 inline-block rounded-full bg-warning/15 px-2 py-0.5 text-[0.65rem] font-semibold text-warning"
+                    title="Face-value estimate — no market price available right now"
+                  >
+                    est. · no live price
+                  </span>
+                ) : (
+                  <DeltaPill value={effectivePercentChange}>
+                    {formatPercent(effectivePercentChange)}
+                  </DeltaPill>
+                )}
               </div>
             ) : null}
           </div>
@@ -1436,6 +1473,7 @@ export function ScripSheet({
                   ltp={effectiveLtp}
                   previousClose={effectivePreviousClose}
                   basisLabel={positionBasisLabel}
+                  priceEstimate={ltpIsEstimate}
                 />
               ) : null}
               <Panel padding="sm">
