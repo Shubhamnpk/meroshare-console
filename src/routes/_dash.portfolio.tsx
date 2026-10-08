@@ -1020,7 +1020,7 @@ function PortfolioPage() {
         <ChipRow>
           <StatChip
             icon={<Coins className="size-4" />}
-            label="Stocks held"
+            label="Stocks"
             value={String(holdings.length)}
           />
           <StatChip

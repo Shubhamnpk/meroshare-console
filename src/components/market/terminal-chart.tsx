@@ -12,6 +12,7 @@ import {
   LineStyle,
   TickMarkType,
   createChart,
+  createSeriesMarkers,
   type IChartApi,
   type ISeriesApi,
   type MouseEventParams,
@@ -96,6 +97,8 @@ export function TerminalChart({
   onSelectPoint,
   onCreateOrder,
   onCreateAlert,
+  tradeMarkers,
+  orderLines,
 }: {
   bars: ChartBar[];
   intraday: PricePoint[];
@@ -117,6 +120,10 @@ export function TerminalChart({
   onCreateOrder?: ((order: { price: number; side: "BUY" | "SELL" }) => void) | undefined;
   /** Fired from the hover "+" menu ("Remind" row) to set a price alert. */
   onCreateAlert?: ((price: number) => void) | undefined;
+  /** Executed buy/sell points drawn as arrows on the candles, like the cost line. */
+  tradeMarkers?: { time: string; side: "BUY" | "SELL"; qty: number }[] | undefined;
+  /** Open-order bid/sale marks pinned at their limit prices (day orders + AMO). */
+  orderLines?: { price: number; side: "BUY" | "SELL"; qty: number; amo: boolean }[] | undefined;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const hoverRef = useRef(onHover);
@@ -323,6 +330,38 @@ export function TerminalChart({
         close: b.close,
         volume: b.volume,
       }));
+
+      // Open orders as dashed bid/sale lines at their limit prices. Price
+      // lines need no candle date, so unlike trade arrows they also work
+      // on intraday. Capped so a crowded book can't stripe the chart.
+      if (mainSeries && orderLines && orderLines.length > 0) {
+        for (const o of orderLines.slice(0, 25)) {
+          if (!(o.price > 0)) continue;
+          mainSeries.createPriceLine({
+            price: o.price,
+            color: o.side === "BUY" ? UP : DOWN,
+            lineWidth: 1,
+            lineStyle: LineStyle.Dashed,
+            axisLabelVisible: true,
+            title: `${o.side === "BUY" ? "B" : "S"}${o.qty > 0 ? ` ${o.qty}` : ""}${o.amo ? " · AMO" : ""}`,
+          });
+        }
+      }
+
+      // Executed orders as buy/sell arrows under/over their candles. Daily
+      // axis only — intraday runs on timestamps, where date strings misplace.
+      if (!isIntraday && tradeMarkers && tradeMarkers.length > 0 && mainSeries) {
+        createSeriesMarkers(
+          mainSeries,
+          tradeMarkers.map((m) => ({
+            time: m.time as Time,
+            position: m.side === "BUY" ? "belowBar" : "aboveBar",
+            color: m.side === "BUY" ? UP : DOWN,
+            shape: m.side === "BUY" ? "arrowUp" : "arrowDown",
+            text: `${m.side === "BUY" ? "B" : "S"}${m.qty > 0 ? ` ${m.qty}` : ""}`,
+          })),
+        );
+      }
 
       if (!isIntraday) {
         if (indicators.sma20) {
@@ -699,6 +738,8 @@ export function TerminalChart({
     isIntraday,
     wacc,
     includeWaccDomain,
+    tradeMarkers,
+    orderLines,
   ]);
 
   // "+" quick-order follows the mouse anywhere over the chart body (the

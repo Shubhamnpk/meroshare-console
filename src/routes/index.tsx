@@ -314,8 +314,17 @@ function LoginPage() {
       disabled={capitals.isLoading}
       onClick={() => setCapitalOpen(true)}
     >
-      <span className={cn("truncate", !selected && "text-muted-foreground")}>
-        {capitals.isLoading ? "Loading DP list…" : selected ? selected.name : "Select your DP"}
+      <span className={cn("flex min-w-0 items-center gap-1.5", !selected && "text-muted-foreground")}>
+        {capitals.isLoading ? (
+          <span className="truncate">Loading DP list…</span>
+        ) : selected ? (
+          <>
+            <span className="num shrink-0 text-xs text-muted-foreground">{selected.code}</span>
+            <span className="truncate">{selected.name}</span>
+          </>
+        ) : (
+          <span className="truncate">Select your DP</span>
+        )}
       </span>
       <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
     </Button>

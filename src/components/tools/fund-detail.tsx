@@ -475,7 +475,7 @@ export function FundDetail({
                 className="bg-card px-3 py-2.5 text-left transition-colors hover:bg-muted/50"
               >
                 <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                  Stocks held
+                  Stocks
                 </p>
                 <p className="num text-sm font-bold text-primary underline-offset-2 hover:underline">
                   {holdings.length}
@@ -483,7 +483,7 @@ export function FundDetail({
               </button>
             ) : (
               <HeroStat
-                label="Stocks held"
+                label="Stocks"
                 value={perf?.holdingsCount != null ? formatQty(perf.holdingsCount) : "-"}
               />
             )}

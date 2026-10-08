@@ -366,38 +366,6 @@ function AnalyticsPage() {
               </ul>
             </Panel>
           ) : null}
-
-          <Panel as="section">
-            <h2 className="mb-4 font-display text-base font-semibold">Allocation by stock</h2>
-            <ul className="space-y-3">
-              {rows.map((r) => (
-                <li key={r.scrip}>
-                  <div className="flex items-baseline justify-between gap-3 text-sm">
-                    <button
-                      type="button"
-                      onClick={() => setPicked(r.scrip)}
-                      className="font-medium transition-colors hover:text-primary"
-                    >
-                      {r.scrip}
-                    </button>
-                    <span className="num text-muted-foreground">
-                      {formatNpr(r.value)} · {r.weight.toFixed(1)}%
-                    </span>
-                  </div>
-                  <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-secondary">
-                    <div
-                      className="h-full rounded-full"
-                      style={{
-                        width: `${Math.max(r.weight, 1)}%`,
-                        background: "var(--gradient-brand)",
-                      }}
-                    />
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </Panel>
-
           <HistoryPanel holdings={holdings} onPickScrip={setPicked} />
         </>
       )}

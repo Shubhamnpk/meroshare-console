@@ -336,7 +336,7 @@ function DashboardPage() {
     />,
     <StatCard
       key="scrips"
-      label="Stocks held"
+      label="Stocks"
       value={holdings.length}
       sub={
         <>

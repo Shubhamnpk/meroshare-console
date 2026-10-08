@@ -88,7 +88,7 @@ export function HoldingsDetailSheet({
               <SheetTitle className="font-display text-lg leading-tight">
                 {symbol?.toUpperCase()}
               </SheetTitle>
-              <SheetDescription className="text-xs">{holdings.length} stocks held</SheetDescription>
+              <SheetDescription className="text-xs">{holdings.length} stocks</SheetDescription>
             </div>
           </div>
         </SheetHeader>

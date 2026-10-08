@@ -96,7 +96,7 @@ const LEGACY_KEYS = {
 
 const DEFAULT_TERMINAL: TerminalState = {
   symbol: "NABIL",
-  range: "1Y",
+  range: "1D",
   style: "candles",
   indicators: { sma: true, ema: false, bb: false, vwap: false, rsi: false, macd: false },
   logScale: false,

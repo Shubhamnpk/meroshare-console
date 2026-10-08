@@ -80,6 +80,38 @@ export function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+/** "2:30 PM" from an ISO timestamp, or null when the value carries no time part. */
+export function formatTimeOfDay(value: unknown): string | null {
+  if (!value) return null;
+  const raw = String(value);
+  if (!/[T ]\d/.test(raw)) return null;
+  const date = new Date(raw.includes("T") ? raw : raw.replace(" ", "T"));
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
+
+/**
+ * Exact holding age for per-lot rows: precise days under a month, then a
+ * month+day breakdown — so two lots inside the same month still read apart.
+ */
+export function formatPreciseAge(days: number): string {
+  if (!Number.isFinite(days) || days < 0) return "-";
+  if (days === 0) return "today";
+  if (days === 1) return "1 day";
+  if (days < 30) return `${days} days`;
+  if (days < 365) {
+    const m = Math.floor(days / 30);
+    const r = days % 30;
+    return r === 0 ? `${m} mo` : `${m} mo ${r} d`;
+  }
+  const y = Math.floor(days / 365);
+  const rem = days % 365;
+  const m = Math.floor(rem / 30);
+  const r = rem % 30;
+  const tail = m > 0 ? (r > 0 ? ` ${m} mo ${r} d` : ` ${m} mo`) : r > 0 ? ` ${r} d` : "";
+  return `${y} yr${tail}`;
+}
+
 /**
  * Relative session age like the home NEPSE header: "today" while the market
  * is open, otherwise "1 day ago · 12 Sep 2026", "3 days ago · …", or

@@ -1599,6 +1599,8 @@ export function ScripSheet({
                               ? "loss"
                               : "gain"
                           }
+                          colorByPosition
+                          valueToneByPosition
                         />
                       </div>
                     ) : null}
@@ -1617,6 +1619,8 @@ export function ScripSheet({
                               ? "loss"
                               : "gain"
                           }
+                          colorByPosition
+                          valueToneByPosition
                         />
                       </div>
                     ) : null}

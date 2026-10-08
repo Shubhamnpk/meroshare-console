@@ -1,6 +1,6 @@
 // Broker order ticket: live quote + depth + buy/sell on a SAVED broker connection.
 // Shown only when a broker is linked; otherwise points at Settings → Advanced.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ArrowDownRight, ArrowUpRight, RefreshCw } from "lucide-react";
@@ -21,7 +21,6 @@ import {
   brokerConnectionsQuery,
   brokerDepthQuery,
   brokerHoldingsQuery,
-  brokerOrderBookQuery,
   brokerQuoteQuery,
   marketSnapshotQuery,
 } from "@/lib/queries";
@@ -47,7 +46,13 @@ export function OrderTicket({
   limitPrice,
 }: {
   symbol: string;
-  limitPrice?: { price: number; side?: "BUY" | "SELL"; nonce: number } | null | undefined;
+  limitPrice?: {
+    price: number;
+    side?: "BUY" | "SELL";
+    nonce: number;
+    /** Prefill quantity (order reuse). Omitted by chart-hover drafts. */
+    qty?: number;
+  } | null | undefined;
 }) {
   const queryClient = useQueryClient();
   const connections = useQuery(brokerConnectionsQuery());
@@ -63,7 +68,6 @@ export function OrderTicket({
     refetchInterval: wsReady ? false : 20_000,
   });
   const holdings = useQuery(brokerHoldingsQuery(brokerId));
-  const book = useQuery(brokerOrderBookQuery(brokerId));
   const amoList = useQuery(brokerAmoListQuery(brokerId));
   const market = useQuery(marketSnapshotQuery());
   const marketOpen = market.data?.status.isOpen ?? true;
@@ -83,15 +87,44 @@ export function OrderTicket({
   const ltp = quote.data?.ltp ?? null;
   useEffect(() => {
     if (ltp !== null && price === "") setPrice(String(ltp));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ltp, symbol]);
 
-  // Chart-driven limit price: switch to Limit and fill it in.
+  // Consumed reuse/chart drafts, by nonce — so a stale draft never refills
+  // the form after a plain symbol switch.
+  const draftNonce = useRef(0);
+
+  // Symbol change resets the form; a reuse draft arriving with the change
+  // fills it back in. Runs before the draft effect below on remount.
   useEffect(() => {
-    if (limitPrice && limitPrice.price > 0) {
-      if (limitPrice.side) setSide(limitPrice.side);
+    const draft = limitPrice && limitPrice.nonce !== draftNonce.current ? limitPrice : null;
+    if (draft) draftNonce.current = draft.nonce;
+    if (draft?.side) setSide(draft.side);
+    if (draft && draft.price > 0) {
+      setOrderType("LMT");
+      setPrice(String(draft.price));
+    } else {
+      setPrice("");
+    }
+    setQuantity(draft && draft.qty != null && draft.qty > 0 ? String(Math.floor(draft.qty)) : "");
+    setConfirmOpen(false);
+    setPlaceError(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbol]);
+
+  // Chart hover / same-symbol reuse draft (skips drafts the reset consumed).
+  useEffect(() => {
+    if (!limitPrice || limitPrice.nonce === draftNonce.current) return;
+    draftNonce.current = limitPrice.nonce;
+    if (limitPrice.side) setSide(limitPrice.side);
+    if (limitPrice.price > 0) {
       setOrderType("LMT");
       setPrice(String(limitPrice.price));
     }
+    if (limitPrice.qty != null && limitPrice.qty > 0) {
+      setQuantity(String(Math.floor(limitPrice.qty)));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [limitPrice?.nonce]);
 
   // AMO guardrails: market orders and instant validities need a live market.
@@ -101,25 +134,9 @@ export function OrderTicket({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [amo]);
 
-  useEffect(() => {
-    setQuantity("");
-    setPrice("");
-    setConfirmOpen(false);
-    setPlaceError(null);
-  }, [symbol]);
-
   const holding = useMemo(
     () => holdings.data?.find((h) => h.symbol === symbol) ?? null,
     [holdings.data, symbol],
-  );
-  const openOrders = useMemo(
-    () =>
-      (book.data ?? []).filter(
-        (o) =>
-          o.symbol === symbol &&
-          /OPEN|PARTIALLY|ACCEPTED|QUEUED|PENDING/.test(o.status.toUpperCase()),
-      ),
-    [book.data, symbol],
   );
   const symbolAmoOrders = useMemo(
     () => (amoList.data ?? []).filter((o) => o.scrip === symbol),
@@ -255,7 +272,7 @@ export function OrderTicket({
                         : "The live broker feed is reconnecting — this is the last fetched quote, refreshing periodically."
                     }
                   >
-                    {wsStatus === "error" ? "Feed unavailable · last quote" : "Feed reconnecting… · last quote"}
+                    {wsStatus === "error" ? "Feed unavailable · last quote" : "Feed connected · last quote"}
                   </p>
                 ) : null}
               </div>
@@ -443,29 +460,6 @@ export function OrderTicket({
               ? `Review ${side} order (AMO)`
               : `Review ${side} order`}
         </Button>
-        {openOrders.length > 0 ? (
-          <div className="mt-3 rounded-xl border border-border/60 p-2.5">
-            <p className="px-1 pb-1.5 text-xs font-semibold text-muted-foreground">
-              Your open orders · {symbol}
-            </p>
-            {openOrders.map((o) => (
-              <div
-                key={o.id || `${o.side}-${o.price}-${o.quantity}`}
-                className="flex items-center justify-between px-1 py-1 text-xs"
-              >
-                <span
-                  className={cn("font-bold", o.side === "BUY" ? "text-gain" : "text-destructive")}
-                >
-                  {o.side} {o.quantity.toLocaleString("en-NP")}
-                </span>
-                <span className="num text-muted-foreground">
-                  @ {o.price !== null ? o.price.toLocaleString("en-NP") : "MKT"} · {o.status}
-                </span>
-              </div>
-            ))}
-          </div>
-        ) : null}
-
         <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
