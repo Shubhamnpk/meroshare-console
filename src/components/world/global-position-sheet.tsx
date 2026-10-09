@@ -673,9 +673,6 @@ export function GlobalPositionSheet({
               <DialogTitle className="text-base font-bold leading-none">
                 {symbol} · Lots
               </DialogTitle>
-              <p className="mt-1.5 text-xs text-muted-foreground">
-                Every buy still held — its age and its own gain since that day.
-              </p>
             </DialogHeader>
             <div className="px-5 pb-5 space-y-3">
               <div className="grid grid-cols-2 gap-3">

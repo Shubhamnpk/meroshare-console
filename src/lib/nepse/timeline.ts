@@ -35,6 +35,49 @@ export function unitsHeldAt(snapshots: UnitSnapshot[], cutoffEpoch: number): num
   return units;
 }
 
+/** Minimal dividend shape for 5-year averaging (structural — DividendRow fits). */
+export interface DatedDividend {
+  announcementDate: string | null;
+  cashDividend: number;
+  totalDividend: number;
+}
+
+function inLast5Years(date: string | null, cutoffMs: number): boolean {
+  if (date == null) return false;
+  const t = Date.parse(date.replace(" ", "T"));
+  return !Number.isNaN(t) && t >= cutoffMs;
+}
+
+function cutoff5yMs(): number {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - 5);
+  return d.getTime();
+}
+
+/**
+ * Calendar 5-year average cash dividend (percent units): only announcements
+ * inside the actual last 5 years count, spread over 5 — stale payouts and
+ * gap years can't fake a fresh yield. Null when nothing paid is in-window.
+ */
+export function avgCashLast5Y(rows: DatedDividend[]): number | null {
+  const cutoffMs = cutoff5yMs();
+  const paid = rows.filter(
+    (d) => d.cashDividend > 0 && inLast5Years(d.announcementDate, cutoffMs),
+  );
+  if (paid.length === 0) return null;
+  return paid.reduce((s, d) => s + d.cashDividend, 0) / 5;
+}
+
+/** Same calendar window for total (cash + bonus) dividends. */
+export function avgTotalLast5Y(rows: DatedDividend[]): number | null {
+  const cutoffMs = cutoff5yMs();
+  const paid = rows.filter(
+    (d) => d.totalDividend > 0 && inLast5Years(d.announcementDate, cutoffMs),
+  );
+  if (paid.length === 0) return null;
+  return paid.reduce((s, d) => s + d.totalDividend, 0) / 5;
+}
+
 /** Unix-epoch seconds at the start of a "YYYY-MM" month in NPT. */
 export function monthStartEpoch(month: string): number {
   return Math.floor(Date.parse(`${month}-01T00:00:00+05:45`) / 1000);

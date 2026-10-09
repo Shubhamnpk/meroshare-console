@@ -775,8 +775,8 @@ export function yonepseIndexKey(indexName: string): string {
  * first. Monthly files carry every trading day as
  * `[dateIndex, close, open, high, low, turnover, volume, trades]`, so any
  * range (1M → MAX) gets real candles. `days` bounds the trailing window;
- * 0 means everything (capped to 144 months / 12 years for fast load).
- * Bounded ranges are capped to 64 monthly files (~5 years).
+ * 0 means everything back to 1997. Bounded ranges are capped to 64 monthly
+ * files (~5 years).
  */
 export async function getIndexDailyBars(indexName: string, days = 0): Promise<ChartBar[]> {
   const key = yonepseIndexKey(indexName);
@@ -789,7 +789,6 @@ export async function getIndexDailyBars(indexName: string, days = 0): Promise<Ch
   const tailMonth = days > 0 ? monthKeyFromEpoch(now - days * 86400) : "0000-00";
   let months = availableMonths.filter((m) => m >= tailMonth);
   if (days > 0 && months.length > 64) months = months.slice(-64);
-  else if (days === 0 && months.length > 144) months = months.slice(-144);
   if (months.length === 0) return [];
 
   const files = await Promise.all(

@@ -44,6 +44,7 @@ import {
 import { DeltaPill } from "@/components/stat-card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { AreaChart } from "@/components/market/area-chart";
 import { RangeBar } from "@/components/market/range-bar";
 import { DividendSimulator, actualMatchedTotals } from "@/components/market/dividend-simulator";
@@ -82,6 +83,7 @@ import { formatDate, formatHoldingTime, formatNpr, formatPercent, formatQty, toN
 import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
 import { useWatchlist } from "@/lib/watchlist";
 import { sectorOf } from "@/lib/nepse/sectors";
+import { avgCashLast5Y, avgTotalLast5Y } from "@/lib/nepse/timeline";
 import { cn } from "@/lib/utils";
 import type { FinancialReport, PricePoint } from "@/lib/nepse/types";
 import type { TransactionItem } from "@/lib/meroshare/types";
@@ -96,6 +98,10 @@ function resolveFaceValue(
   if (isMF) return 10;
   if (apiFaceValue != null && apiFaceValue > 0) return apiFaceValue;
   return 100;
+}
+/** Dividend yield in percent units: pct (0-100+) × face ÷ LTP. */
+function yieldPct(pct: number, face: number, ltp: number): string {
+  return formatPercent((((pct / 100) * face) / ltp) * 100);
 }
 /** Unrealized P/L against a cost basis — now with actual net after broker/SEBON/DP/CGT. */
 function PositionCard({
@@ -1158,6 +1164,14 @@ export function ScripSheet({
   // Factual overview: work back from the current holding through real demat
   // movements, so each announcement pays on the units truly held then.
   const faceForSim = resolveFaceValue(overview?.faceValue, overview?.sector, upper);
+  // Calendar 5-year average dividends (percent units) — shared rule, see
+  // lib/nepse/timeline. Cash + bonus reconcile to the total.
+  const yield5 = useMemo(() => {
+    const cash = avgCashLast5Y(yearlyDividends);
+    const total = avgTotalLast5Y(yearlyDividends);
+    if (cash === null || total === null) return null;
+    return { cash, total };
+  }, [yearlyDividends]);
   const actualTotals = useMemo(() => {
     if (!holding || holding.units <= 0) return null;
     const tx = myHistory.data?.items ?? [];
@@ -1798,16 +1812,64 @@ export function ScripSheet({
                         <dt className="text-xs text-muted-foreground">Latest FY</dt>
                         <dd className="num font-medium">{dividend?.fiscalYear ?? "-"}</dd>
                       </div>
-                      {price?.ltp && dividend?.cashDividend ? (
+                      {price?.ltp && dividend?.totalDividend ? (
                         <div>
-                          <dt className="text-xs text-muted-foreground">Yield (cash)</dt>
-                          <dd className="num font-medium">
-                            {formatPercent(
-                              ((dividend.cashDividend / 100) *
-                                resolveFaceValue(overview?.faceValue, overview?.sector, upper)) /
-                                price.ltp,
-                            )}
-                          </dd>
+                          <dt className="text-xs text-muted-foreground">Yield</dt>
+                          <HoverCard>
+                            <HoverCardTrigger asChild>
+                              <dd className="num cursor-help font-medium underline decoration-dotted underline-offset-2">
+                                {yieldPct(dividend.totalDividend, faceForSim, price.ltp)}
+                              </dd>
+                            </HoverCardTrigger>
+                            <HoverCardContent className="w-56 p-3 text-xs">
+                              <p className="mb-1.5 font-semibold">Latest · {dividend.fiscalYear}</p>
+                              <div className="flex justify-between py-0.5">
+                                <span className="text-muted-foreground">Cash yield</span>
+                                <span className="num font-medium">
+                                  {yieldPct(dividend.cashDividend, faceForSim, price.ltp)}
+                                </span>
+                              </div>
+                              <div className="flex justify-between py-0.5">
+                                <span className="text-muted-foreground">Bonus yield</span>
+                                <span className="num font-medium">
+                                  {yieldPct(dividend.bonusShare, faceForSim, price.ltp)}
+                                </span>
+                              </div>
+                              <p className="mt-1.5 border-t border-border/60 pt-1.5 text-[0.65rem] leading-relaxed text-muted-foreground">
+                                Bonus valued at Rs {faceForSim} face.
+                              </p>
+                            </HoverCardContent>
+                          </HoverCard>
+                        </div>
+                      ) : null}
+                      {price?.ltp && yield5 !== null ? (
+                        <div>
+                          <dt className="text-xs text-muted-foreground">Yield avg (5-yr)</dt>
+                          <HoverCard>
+                            <HoverCardTrigger asChild>
+                              <dd className="num cursor-help font-medium underline decoration-dotted underline-offset-2">
+                                {yieldPct(yield5.total, faceForSim, price.ltp)}
+                              </dd>
+                            </HoverCardTrigger>
+                            <HoverCardContent className="w-56 p-3 text-xs">
+                              <p className="mb-1.5 font-semibold">Calendar 5-yr average</p>
+                              <div className="flex justify-between py-0.5">
+                                <span className="text-muted-foreground">Cash yield</span>
+                                <span className="num font-medium">
+                                  {yieldPct(yield5.cash, faceForSim, price.ltp)}
+                                </span>
+                              </div>
+                              <div className="flex justify-between py-0.5">
+                                <span className="text-muted-foreground">Bonus yield</span>
+                                <span className="num font-medium">
+                                  {yieldPct(yield5.total - yield5.cash, faceForSim, price.ltp)}
+                                </span>
+                              </div>
+                              <p className="mt-1.5 border-t border-border/60 pt-1.5 text-[0.65rem] leading-relaxed text-muted-foreground">
+                                Bonus valued at Rs {faceForSim} face .
+                              </p>
+                            </HoverCardContent>
+                          </HoverCard>
                         </div>
                       ) : null}
                     </dl>

@@ -22,6 +22,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DeltaPill } from "@/components/stat-card";
+import { ChipRow, StatChip } from "@/components/stat-chip";
 import { PositionPnlCard } from "@/components/market/position-pnl-card";
 import {
   DEFAULT_INDICATORS,
@@ -51,6 +52,8 @@ import {
   mfSchemesQuery,
   portfolioHistoryQuery,
   portfolioIntradayQuery,
+  scripDetailQuery,
+  scripFinancialsQuery,
   udfHistoryQuery,
 } from "@/lib/queries";
 import {
@@ -64,7 +67,7 @@ import { TmsReauthModal } from "@/components/brokers/tms-reauth-modal";
 import { useTmsReauth } from "@/hooks/use-tms-reauth";
 import { useBrokerMarketWs } from "@/hooks/use-broker-ws";
 import type { ChartBar, ChartRange, PortfolioHistoryPoint, PricePoint } from "@/lib/nepse/types";
-import { errorMessage, formatNpr, formatPercent } from "@/lib/format";
+import { errorMessage, formatNpr, formatNumber, formatPercent } from "@/lib/format";
 import {
   ORDER_PAGE_SIZE,
   amoIsActiveRow,
@@ -802,6 +805,33 @@ function TerminalPage() {
     return [...new Set(["NEPSE", ...owned, ...watchSymbols])].slice(0, 12);
   }, [holdings, watchSymbols]);
   const isIndex = isIndexEarly;
+  // Fundamentals strip (same labels as the stock sheet): company facts +
+  // latest financial report. Auxiliary only — the section hides when empty
+  // so it can never break the terminal.
+  const fundDetailQ = useQuery({
+    ...scripDetailQuery(mode === "scrip" && !isIndexEarly ? state.symbol : null),
+  });
+  const fundFinQ = useQuery({
+    ...scripFinancialsQuery(mode === "scrip" && !isIndexEarly ? state.symbol : null),
+  });
+  const fundOv = fundDetailQ.data?.overview ?? null;
+  const fundRep = fundFinQ.data?.reports?.[0] ?? null;
+  const fundMcap = fundOv?.marketCapitalization ?? 0;
+  const fundPe = fundRep?.pe ?? null;
+  const fundEps = fundRep?.eps ?? null;
+  const fundNwps = fundRep?.netWorthPerShare ?? null;
+  const fundFace = fundOv?.faceValue ?? 0;
+  const fundSector = fundOv?.sector ?? null;
+  const fundPeriod = [
+    fundRep?.quarter ?? null,
+    fundRep?.fy
+      ? `${fundRep.fy}${fundRep.fyNepali ? ` (${fundRep.fyNepali})` : ""}`
+      : null,
+  ]
+    .filter((x): x is string => !!x)
+    .join(" · ");
+  const showFundamentals = mode === "scrip" && !isIndex && Boolean(fundOv || fundRep);
+  const watched = mode === "scrip" && !isIndex && watchlist.has(state.symbol);
 
   // Cost basis for profit mode, mirroring the portfolio investment summary:
   // CDSC-calculated WACC where present, pending rows estimated from qty x
@@ -1395,21 +1425,49 @@ function TerminalPage() {
 
           {quickSymbols.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
-              {quickSymbols.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setState((prev) => ({ ...prev, symbol: s }))}
-                  className={cn(
-                    "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-                    state.symbol === s
-                      ? "border-primary/50 bg-primary/15 text-primary"
-                      : "border-border/60 bg-surface text-muted-foreground hover:border-primary/30",
-                  )}
-                >
-                  {s}
-                </button>
-              ))}
+              {quickSymbols.map((s) => {
+                const inList = s !== "NEPSE" && watchlist.has(s);
+                return (
+                  <span key={s} className="group relative inline-flex">
+                    <button
+                      type="button"
+                      onClick={() => setState((prev) => ({ ...prev, symbol: s }))}
+                      className={cn(
+                        "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                        state.symbol === s
+                          ? "border-primary/50 bg-primary/15 text-primary"
+                          : "border-border/60 bg-surface text-muted-foreground hover:border-primary/30",
+                      )}
+                    >
+                      {s}
+                    </button>
+                    {s !== "NEPSE" ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          watchlist.toggle(s);
+                          toast.success(
+                            inList ? "Removed from watchlist" : "Added to watchlist",
+                          );
+                        }}
+                        aria-label={
+                          inList ? `Remove ${s} from watchlist` : `Add ${s} to watchlist`
+                        }
+                        title={inList ? `Remove ${s} from watchlist` : `Add ${s} to watchlist`}
+                        className={cn(
+                          "absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full border bg-card shadow-sm transition-all",
+                          "sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100",
+                          inList
+                            ? "border-amber-500/50 text-amber-600 dark:text-amber-400"
+                            : "border-border/70 text-muted-foreground hover:border-primary/40 hover:text-primary",
+                        )}
+                      >
+                        <Star className={cn("size-3", inList && "fill-warning text-warning")} />
+                      </button>
+                    ) : null}
+                  </span>
+                );
+              })}
             </div>
           )}
         </div>
@@ -1419,11 +1477,40 @@ function TerminalPage() {
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-3 py-3">
           <div>
             <p className="font-display text-lg font-semibold">
-              {mode === "portfolio"
-                ? effectiveProfit
-                  ? "Portfolio profit (est.)"
-                  : "Portfolio net worth"
-                : state.symbol}
+              {mode === "portfolio" ? (
+                effectiveProfit ? (
+                  "Portfolio profit (est.)"
+                ) : (
+                  "Portfolio net worth"
+                )
+              ) : (
+                <span className="inline-flex items-center gap-2">
+                  {state.symbol}
+                  {!isIndex ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        watchlist.toggle(state.symbol);
+                        toast.success(watched ? "Removed from watchlist" : "Added to watchlist");
+                      }}
+                      aria-label={watched ? "Remove from watchlist" : "Add to watchlist"}
+                      title={watched ? "Remove from watchlist" : "Add to watchlist"}
+                      className={cn(
+                        "inline-flex size-7 shrink-0 items-center justify-center rounded-lg border transition-colors",
+                        watched
+                          ? "border-amber-500/50 bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                          : "border-border/70 text-muted-foreground hover:border-primary/40 hover:text-primary",
+                      )}
+                    >
+                      {watched ? (
+                        <Star className="size-3.5 fill-warning text-warning" />
+                      ) : (
+                        <Star className="size-3.5" />
+                      )}
+                    </button>
+                  ) : null}
+                </span>
+              )}
             </p>
             <p className="text-xs text-muted-foreground">
               {mode === "portfolio"
@@ -1844,10 +1931,33 @@ function TerminalPage() {
               </span>
             ) : null}
           </div>
-        )}
-      </div>
+          )}
+        </div>
 
-      {mode === "portfolio" && (selectedPoint ?? pinnedIntradayPoint) && (
+      {showFundamentals ? (
+        <section aria-label="Fundamentals">
+          <div className="mb-2 flex items-baseline justify-between gap-2 px-1">
+            <h2 className="font-display text-sm font-semibold">Fundamentals</h2>
+            {fundPeriod ? (
+              <p className="text-[0.68rem] text-muted-foreground">{fundPeriod}</p>
+            ) : null}
+          </div>
+          <ChipRow>
+            {fundSector ? <StatChip label="Sector" value={fundSector} /> : null}
+            {fundMcap > 0 ? (
+              <StatChip label="Market cap" value={formatNpr(fundMcap, { compact: true })} />
+            ) : null}
+            {fundPe != null ? <StatChip label="P/E" value={formatNumber(fundPe)} /> : null}
+            {fundEps != null ? <StatChip label="EPS" value={formatNpr(fundEps)} /> : null}
+            {fundNwps != null ? (
+              <StatChip label="Net worth / share" value={formatNpr(fundNwps)} />
+            ) : null}
+            {fundFace > 0 ? <StatChip label="Face value" value={formatNpr(fundFace)} /> : null}
+          </ChipRow>
+        </section>
+      ) : null}
+
+        {mode === "portfolio" && (selectedPoint ?? pinnedIntradayPoint) && (
         <PointBreakdown
           point={(selectedPoint ?? pinnedIntradayPoint)!}
           formatLabel={(t) =>

@@ -620,7 +620,7 @@ function GlobalDataCard() {
       <SectionHeader
         icon={Database}
         title="Global holdings data"
-        subtitle="Foreign stocks live here — imported from CSV, never mixed with NEPSE demat."
+        subtitle="Foreign stocks (NOT mixed with NEPSE)"
         badge={txns.length > 0 ? `${txns.length} rows` : undefined}
       />
       <div className="flex flex-wrap items-center gap-2">
@@ -650,8 +650,7 @@ function GlobalDataCard() {
         ) : null}
       </div>
       <p className="text-xs text-muted-foreground">
-        {holdings.length} symbol{holdings.length === 1 ? "" : "s"} held · Trading 212 or standard
-        CSV · demo data available in the importer.
+       Trading 212 or standard CSV
       </p>
       <GlobalImportDialog open={importOpen} onOpenChange={setImportOpen} />
     </Panel>

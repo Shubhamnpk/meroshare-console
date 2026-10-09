@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
   AreaChart,
@@ -9,7 +9,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { indexDailyQuery, indexGraphQuery } from "@/lib/queries";
+import { dividendsQuery, faceValuesQuery, indexDailyQuery, indexGraphQuery } from "@/lib/queries";
 import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
 import {
   Table,
@@ -39,8 +39,9 @@ import {
 import { formatNpr, formatNumber, formatPercent, formatQty } from "@/lib/format";
 import { DeltaPill } from "@/components/stat-card";
 import { EmptyBlock } from "@/components/states";
-import type { LivePrice, MarketIndex, PricePoint, SectorIndex } from "@/lib/nepse/types";
+import type { DividendRow, LivePrice, MarketIndex, PricePoint, SectorIndex } from "@/lib/nepse/types";
 import { normalizeSectorKey, subindexKeyFor } from "@/lib/nepse/sectors";
+import { avgTotalLast5Y } from "@/lib/nepse/timeline";
 import { ScripSheet } from "@/components/market/scrip-sheet";
 import { IndexChartModal } from "@/components/tools/index-chart-modal";
 import { MarketMarquee } from "@/components/market/market-marquee";
@@ -836,6 +837,7 @@ type DepthSortKey =
   | "points"
   | "turnover"
   | "share"
+  | "yield"
   | "breadth"
   | "performer"
   | "traded";
@@ -898,6 +900,42 @@ export function MarketOverview({
     );
   };
 
+  // Sector 5-yr yields: same calendar rule as sector details — the mean of
+  // members' 5-yr avg total yields. Faces chunk at 200 (API limit); members
+  // without data sit out instead of faking a zero.
+  const divSymbols = useMemo(() => prices.map((p) => p.symbol), [prices]);
+  const faceChunks = useMemo(() => {
+    const out: string[][] = [];
+    for (let i = 0; i < divSymbols.length; i += 200) out.push(divSymbols.slice(i, i + 200));
+    return out;
+  }, [divSymbols]);
+  const dividendsQ = useQuery(dividendsQuery());
+  const facesQs = useQueries({ queries: faceChunks.map((chunk) => faceValuesQuery(chunk)) });
+  const divBySymbol = useMemo(() => {
+    const map = new Map<string, DividendRow[]>();
+    for (const d of dividendsQ.data ?? []) {
+      const arr = map.get(d.symbol) ?? [];
+      arr.push(d);
+      map.set(d.symbol, arr);
+    }
+    return map;
+  }, [dividendsQ.data]);
+  const faces = useMemo(() => {
+    const merged: Record<string, number> = {};
+    for (const q of facesQs) Object.assign(merged, q.data ?? {});
+    return merged;
+  }, [facesQs]);
+  // Per-stock 5-yr avg total yields (same calendar rule as sector details).
+  const stockYield = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const p of prices) {
+      const avg = avgTotalLast5Y(divBySymbol.get(p.symbol) ?? []);
+      const fv = faces[p.symbol] ?? 100;
+      if (avg !== null && avg > 0 && fv > 0 && p.ltp > 0) map.set(p.symbol, (avg * fv) / p.ltp);
+    }
+    return map;
+  }, [prices, divBySymbol, faces]);
+
   // Aggregated sector statistics and market breadth
   const { sectors, breadth, totalMarketTurnover, totalMarketVolume } = useMemo(() => {
     const grouped = new Map<string, LivePrice[]>();
@@ -932,11 +970,26 @@ export function MarketOverview({
         const topLoser = sortedByChange[sortedByChange.length - 1];
         const topTraded = sortedByTurnover[0];
         const si = findSectorIndex(sector);
+        // Mean of members' 5-yr avg total yields; members without in-window
+        // dividends sit out (never a faked zero).
+        const memberYields: number[] = [];
+        for (const p of items) {
+          const avg = avgTotalLast5Y(divBySymbol.get(p.symbol) ?? []);
+          const fv = faces[p.symbol] ?? 100;
+          if (avg !== null && avg > 0 && fv > 0 && p.ltp > 0) {
+            memberYields.push((avg * fv) / p.ltp);
+          }
+        }
 
         return {
           sector,
           sectorIndex: si,
           items: sortedByTurnover,
+          avgYield5:
+            memberYields.length > 0
+              ? memberYields.reduce((s, y) => s + y, 0) / memberYields.length
+              : null,
+          yieldMembers: memberYields.length,
           avgChange:
             items.length > 0
               ? items.reduce((s, p) => s + p.percentChange, 0) / items.length
@@ -971,7 +1024,7 @@ export function MarketOverview({
       totalMarketTurnover: grandTurnover,
       totalMarketVolume: grandVolume,
     };
-  }, [prices, sectorIndexMap]);
+  }, [prices, sectorIndexMap, divBySymbol, faces]);
 
   // ── Sentiment Score (0 = extreme bear, 100 = extreme bull) ──
   const sentimentScore = useMemo(() => {
@@ -1083,6 +1136,7 @@ export function MarketOverview({
       points: "number",
       turnover: "number",
       share: "number",
+      yield: "number",
       breadth: "number",
       performer: "number",
       traded: "number",
@@ -1100,6 +1154,8 @@ export function MarketOverview({
           return s.totalTurnover;
         case "share":
           return s.marketSharePct;
+        case "yield":
+          return s.avgYield5 ?? Number.NEGATIVE_INFINITY;
         case "breadth":
           return s.advancers - s.decliners;
         case "performer":
@@ -1114,7 +1170,7 @@ export function MarketOverview({
   // Individual stocks view: same search box filters by symbol, name or
   // sector; sortable like the Market page table (top 200 by the sort).
   const { sort: stockSort, toggle: toggleStockSort } = useSort<
-    "symbol" | "sector" | "ltp" | "percentChange" | "volume" | "turnover"
+    "symbol" | "sector" | "ltp" | "percentChange" | "volume" | "turnover" | "yield"
   >(
     { key: "turnover", dir: "desc" },
     {
@@ -1124,6 +1180,7 @@ export function MarketOverview({
       percentChange: "number",
       volume: "number",
       turnover: "number",
+      yield: "number",
     },
   );
   const stockRows = useMemo(() => {
@@ -1148,12 +1205,14 @@ export function MarketOverview({
           return p.percentChange;
         case "volume":
           return p.volume;
+        case "yield":
+          return stockYield.get(p.symbol) ?? Number.NEGATIVE_INFINITY;
         default:
           return p.turnover;
       }
     };
     return sortBy(rows, getter, stockSort.dir).slice(0, 200);
-  }, [prices, searchQuery, stockSort]);
+  }, [prices, searchQuery, stockSort, stockYield]);
 
   const sentiment =
     breadth.avgChange >= 1
@@ -1395,6 +1454,7 @@ export function MarketOverview({
                     <SortableTh label="Index Points" active={depthSort.key === "points"} dir={depthSort.dir} onClick={() => toggleDepthSort("points")} align="right" className="py-2.5 px-3 font-semibold" />
                     <SortableTh label="Turnover" active={depthSort.key === "turnover"} dir={depthSort.dir} onClick={() => toggleDepthSort("turnover")} align="right" className="py-2.5 px-3 font-semibold" />
                     <SortableTh label="Mkt Share" active={depthSort.key === "share"} dir={depthSort.dir} onClick={() => toggleDepthSort("share")} align="right" className="py-2.5 px-3 font-semibold" />
+                    <SortableTh label="Yield 5Y" active={depthSort.key === "yield"} dir={depthSort.dir} onClick={() => toggleDepthSort("yield")} align="right" className="py-2.5 px-3 font-semibold" />
                     <SortableTh label="Breadth" active={depthSort.key === "breadth"} dir={depthSort.dir} onClick={() => toggleDepthSort("breadth")} className="py-2.5 px-3 text-center min-w-[120px] font-semibold" />
                     <SortableTh label="Top Performer" active={depthSort.key === "performer"} dir={depthSort.dir} onClick={() => toggleDepthSort("performer")} className="py-2.5 px-3 font-semibold" />
                     <SortableTh label="Heaviest Stock" active={depthSort.key === "traded"} dir={depthSort.dir} onClick={() => toggleDepthSort("traded")} className="py-2.5 px-3 font-semibold" />
@@ -1482,6 +1542,17 @@ export function MarketOverview({
                               />
                             </div>
                           </div>
+                        </TableCell>
+
+                        <TableCell
+                          className="num py-3 px-3 text-right font-semibold text-primary"
+                          title={
+                            s.avgYield5 != null
+                              ? `Mean of ${s.yieldMembers} members' 5-yr avg total yields on LTP`
+                              : "No in-window dividends in this sector"
+                          }
+                        >
+                          {s.avgYield5 != null ? `${s.avgYield5.toFixed(2)}%` : "—"}
                         </TableCell>
 
                         <TableCell className="py-3 px-3 text-center">
@@ -1607,6 +1678,7 @@ export function MarketOverview({
                       <SortableTh label="Change" active={stockSort.key === "percentChange"} dir={stockSort.dir} onClick={() => toggleStockSort("percentChange")} align="right" className="py-2.5 px-3 font-semibold" />
                       <SortableTh label="Volume" active={stockSort.key === "volume"} dir={stockSort.dir} onClick={() => toggleStockSort("volume")} align="right" className="hidden py-2.5 px-3 font-semibold sm:table-cell" />
                       <SortableTh label="Turnover" active={stockSort.key === "turnover"} dir={stockSort.dir} onClick={() => toggleStockSort("turnover")} align="right" className="hidden py-2.5 px-3 font-semibold md:table-cell" />
+                      <SortableTh label="Yield 5Y" active={stockSort.key === "yield"} dir={stockSort.dir} onClick={() => toggleStockSort("yield")} align="right" className="py-2.5 px-3 font-semibold" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1638,6 +1710,18 @@ export function MarketOverview({
                         </TableCell>
                         <TableCell className="num hidden py-2.5 px-3 text-right text-muted-foreground md:table-cell">
                           {formatNpr(p.turnover, { compact: true })}
+                        </TableCell>
+                        <TableCell
+                          className="num py-2.5 px-3 text-right font-semibold text-primary"
+                          title={
+                            stockYield.get(p.symbol) != null
+                              ? "5-year average total yield on LTP"
+                              : "No in-window dividends"
+                          }
+                        >
+                          {stockYield.get(p.symbol) != null
+                            ? `${stockYield.get(p.symbol)!.toFixed(2)}%`
+                            : "—"}
                         </TableCell>
                       </TableRow>
                     ))}

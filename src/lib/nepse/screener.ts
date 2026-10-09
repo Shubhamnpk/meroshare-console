@@ -247,7 +247,7 @@ export function computeLongTermScore(
       : 0;
   const dividendYield =
     avgDividendTotal > 0 && faceValue > 0 && price.ltp > 0
-      ? (avgDividendTotal * faceValue) / (price.ltp * 100)
+      ? (avgDividendTotal * faceValue) / price.ltp
       : null;
 
   // Dividend streak: count consecutive fiscal years with dividends

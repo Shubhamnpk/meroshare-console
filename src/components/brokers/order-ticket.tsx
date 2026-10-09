@@ -16,6 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { DeltaPill } from "@/components/stat-card";
+import { RangeBar } from "@/components/market/range-bar";
 import {
   brokerAmoListQuery,
   brokerConnectionsQuery,
@@ -39,6 +40,15 @@ function num(v: number | null | undefined): string {
   return typeof v === "number" && Number.isFinite(v)
     ? v.toLocaleString("en-NP", { maximumFractionDigits: 2 })
     : "-";
+}
+
+/** Plain-language read of top-of-book imbalance (share of visible size on the bid side). */
+function depthMood(bidPct: number): string {
+  if (bidPct >= 65) return "Strong buying pressure";
+  if (bidPct >= 55) return "Buying pressure";
+  if (bidPct > 45) return "Balanced book";
+  if (bidPct > 35) return "Selling pressure";
+  return "Strong selling pressure";
 }
 
 export function OrderTicket({
@@ -146,6 +156,20 @@ export function OrderTicket({
     () => (amoList.data ?? []).filter((o) => o.scrip !== symbol),
     [amoList.data, symbol],
   );
+  // Top-of-book size per side for the depth totals + mood gauge below.
+  const depthTotals = useMemo(() => {
+    const bidQty = (depth.data?.bids ?? []).reduce((s, r) => s + (r.quantity ?? 0), 0);
+    const askQty = (depth.data?.asks ?? []).reduce((s, r) => s + (r.quantity ?? 0), 0);
+    const total = bidQty + askQty;
+    return { bidQty, askQty, total, bidPct: total > 0 ? (bidQty / total) * 100 : 0 };
+  }, [depth.data]);
+  // Day + 52-week range ends for the bars below (0 when unusable).
+  const dayLow = quote.data?.low ?? 0;
+  const dayHigh = quote.data?.high ?? 0;
+  const wLow = quote.data?.weekLow52 ?? 0;
+  const wHigh = quote.data?.weekHigh52 ?? 0;
+  const spot = ltp ?? 0;
+  const dayUp = (quote.data?.changePercent ?? 0) >= 0;
 
   const qty = Math.floor(Number(quantity));
   const px = Number(price);
@@ -561,6 +585,12 @@ export function OrderTicket({
                 </div>
               ))
             )}
+            {(depth.data?.bids ?? []).length > 0 ? (
+              <div className="num mt-1 flex justify-between border-t border-border/60 pt-1 text-xs font-semibold">
+                <span className="text-muted-foreground">Total</span>
+                <span className="text-gain">{depthTotals.bidQty.toLocaleString("en-NP")}</span>
+              </div>
+            ) : null}
           </div>
           <div>
             <p className="mb-1 font-semibold text-destructive">Asks</p>
@@ -576,21 +606,86 @@ export function OrderTicket({
                 </div>
               ))
             )}
+            {(depth.data?.asks ?? []).length > 0 ? (
+              <div className="num mt-1 flex justify-between border-t border-border/60 pt-1 text-xs font-semibold">
+                <span className="text-muted-foreground">Total</span>
+                <span className="text-destructive">
+                  {depthTotals.askQty.toLocaleString("en-NP")}
+                </span>
+              </div>
+            ) : null}
           </div>
         </div>
-        <div className="mt-3 space-y-1 border-t border-border/60 pt-2 text-xs text-muted-foreground">
-          <div className="flex justify-between">
-            <span>High / Low</span>
-            <span className="num">
-              {num(quote.data?.high)} / {num(quote.data?.low)}
-            </span>
+        {depthTotals.total > 0 ? (
+          <div className="mt-3 rounded-xl border border-border/60 bg-muted/10 px-3 py-2.5">
+            <div className="flex items-center justify-between gap-2 text-xs">
+              <span className="font-semibold text-foreground">
+                {depthMood(depthTotals.bidPct)}
+              </span>
+              <span className="num text-muted-foreground">
+                {depthTotals.bidPct.toFixed(0)}% bid · {(100 - depthTotals.bidPct).toFixed(0)}% ask
+              </span>
+            </div>
+            <div
+              className="mt-2 flex h-2 overflow-hidden rounded-full bg-muted"
+              role="img"
+              aria-label={`${depthMood(depthTotals.bidPct)}: ${depthTotals.bidPct.toFixed(0)} percent of top-of-book size on bids`}
+            >
+              <div className="h-full bg-gain" style={{ width: `${depthTotals.bidPct}%` }} />
+              <div className="h-full flex-1 bg-loss/70" />
+            </div>
+            <p className="mt-1.5 text-[0.68rem] text-muted-foreground">
+              Share of the top 5 levels waiting to buy vs waiting to sell.
+            </p>
           </div>
-          <div className="flex justify-between">
-            <span>52w H / L</span>
-            <span className="num">
-              {num(quote.data?.weekHigh52)} / {num(quote.data?.weekLow52)}
-            </span>
-          </div>
+        ) : null}
+        <div className="mt-3 space-y-3 border-t border-border/60 pt-3 text-xs text-muted-foreground">
+          {dayLow > 0 && dayHigh > dayLow && spot > 0 ? (
+            <div>
+              <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-muted-foreground">
+                Day range
+              </p>
+              <RangeBar
+                low={dayLow}
+                high={dayHigh}
+                value={Math.min(Math.max(spot, dayLow), dayHigh)}
+                format={(v) => num(v)}
+                tone={dayUp ? "gain" : "loss"}
+                colorByPosition
+                valueToneByPosition
+              />
+            </div>
+          ) : (
+            <div className="flex justify-between">
+              <span>High / Low</span>
+              <span className="num">
+                {num(quote.data?.high)} / {num(quote.data?.low)}
+              </span>
+            </div>
+          )}
+          {wLow > 0 && wHigh > wLow && spot > 0 ? (
+            <div>
+              <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-muted-foreground">
+                52-week range
+              </p>
+              <RangeBar
+                low={wLow}
+                high={wHigh}
+                value={Math.min(Math.max(spot, wLow), wHigh)}
+                format={(v) => num(v)}
+                tone={dayUp ? "gain" : "loss"}
+                colorByPosition
+                valueToneByPosition
+              />
+            </div>
+          ) : (
+            <div className="flex justify-between">
+              <span>52w H / L</span>
+              <span className="num">
+                {num(quote.data?.weekHigh52)} / {num(quote.data?.weekLow52)}
+              </span>
+            </div>
+          )}
           <div className="flex justify-between">
             <span>Volume</span>
             <span className="num">

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueries } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   Activity,
@@ -40,7 +40,12 @@ import {
   marketSectorsQuery,
   marketSnapshotQuery,
   indexGraphQuery,
+  dividendsQuery,
+  faceValuesQuery,
 } from "@/lib/queries";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
+import { avgCashLast5Y, avgTotalLast5Y } from "@/lib/nepse/timeline";
+import type { DividendRow } from "@/lib/nepse/types";
 import { formatDateTime, formatNpr, formatNumber, formatPercent, formatQty, sessionAgeLabel } from "@/lib/format";
 import { sectorOf } from "@/lib/nepse/sectors";
 import { useWatchlist } from "@/lib/watchlist";
@@ -199,7 +204,45 @@ function MarketPage() {
   const [watchlistOpen, setWatchlistOpen] = useState(false);
 
   const prices = snapshot.data?.prices ?? [];
-  const { sort, toggle } = useSort<"symbol" | "ltp" | "percentChange" | "volume" | "turnover">(
+  // Per-stock 5-yr yields (same calendar rule as sector details); cash kept
+  // alongside total so the hover can split them without another lookup.
+  const divSymbols = useMemo(() => prices.map((p) => p.symbol), [prices]);
+  const faceChunks = useMemo(() => {
+    const out: string[][] = [];
+    for (let i = 0; i < divSymbols.length; i += 200) out.push(divSymbols.slice(i, i + 200));
+    return out;
+  }, [divSymbols]);
+  const dividendsQ = useQuery(dividendsQuery());
+  const facesQs = useQueries({ queries: faceChunks.map((chunk) => faceValuesQuery(chunk)) });
+  const divBySymbol = useMemo(() => {
+    const map = new Map<string, DividendRow[]>();
+    for (const d of dividendsQ.data ?? []) {
+      const arr = map.get(d.symbol) ?? [];
+      arr.push(d);
+      map.set(d.symbol, arr);
+    }
+    return map;
+  }, [dividendsQ.data]);
+  const faces = useMemo(() => {
+    const merged: Record<string, number> = {};
+    for (const q of facesQs) Object.assign(merged, q.data ?? {});
+    return merged;
+  }, [facesQs]);
+  const stockYield = useMemo(() => {
+    const map = new Map<string, { cash: number; total: number }>();
+    for (const p of prices) {
+      const rows = divBySymbol.get(p.symbol) ?? [];
+      const avgCash = avgCashLast5Y(rows);
+      const avgTotal = avgTotalLast5Y(rows);
+      const fv = faces[p.symbol] ?? 100;
+      if (avgCash === null || avgTotal === null || fv <= 0 || p.ltp <= 0) continue;
+      map.set(p.symbol, { cash: (avgCash * fv) / p.ltp, total: (avgTotal * fv) / p.ltp });
+    }
+    return map;
+  }, [prices, divBySymbol, faces]);
+  const { sort, toggle } = useSort<
+    "symbol" | "ltp" | "percentChange" | "volume" | "turnover" | "yield"
+  >(
     {
       key: "turnover",
       dir: "desc",
@@ -210,6 +253,7 @@ function MarketPage() {
       percentChange: "number",
       volume: "number",
       turnover: "number",
+      yield: "number",
     },
   );
   const filtered = useMemo(() => {
@@ -229,12 +273,14 @@ function MarketPage() {
           return p.percentChange;
         case "volume":
           return p.volume;
+        case "yield":
+          return stockYield.get(p.symbol)?.total ?? Number.NEGATIVE_INFINITY;
         default:
           return p.turnover;
       }
     };
     return sortBy(rows, getter, sort.dir).slice(0, 200);
-  }, [prices, search, sort]);
+  }, [prices, search, sort, stockYield]);
 
   // Whole-market heatmap: top 60 scrips by turnover. Grouped splits sectors
   // into labeled regions on one scale; mixed throws all into a single pool
@@ -639,6 +685,13 @@ function MarketPage() {
                         align="right"
                         className="hidden md:table-cell"
                       />
+                      <SortableTh
+                        label="Yield 5Y"
+                        active={sort.key === "yield"}
+                        dir={sort.dir}
+                        onClick={() => toggle("yield")}
+                        align="right"
+                      />
                       <TableHead className="w-12 pr-4" />
                     </TableRow>
                   </TableHeader>
@@ -668,6 +721,39 @@ function MarketPage() {
                         </TableCell>
                         <TableCell className="num hidden text-right text-muted-foreground md:table-cell">
                           {formatNpr(price.turnover, { compact: true })}
+                        </TableCell>
+                        <TableCell className="num text-right font-semibold text-primary">
+                          {(() => {
+                            const y = stockYield.get(price.symbol);
+                            if (y == null) return "—";
+                            return (
+                              <HoverCard>
+                                <HoverCardTrigger asChild>
+                                  <span className="cursor-help underline decoration-dotted underline-offset-2">
+                                    {y.total.toFixed(2)}%
+                                  </span>
+                                </HoverCardTrigger>
+                                <HoverCardContent className="w-56 p-3 text-left text-xs">
+                                  <p className="mb-1.5 font-semibold">
+                                    5-yr average · {price.symbol}
+                                  </p>
+                                  <div className="flex justify-between py-0.5">
+                                    <span className="text-muted-foreground">Cash yield</span>
+                                    <span className="num font-medium">+{y.cash.toFixed(2)}%</span>
+                                  </div>
+                                  <div className="flex justify-between py-0.5">
+                                    <span className="text-muted-foreground">Bonus yield</span>
+                                    <span className="num font-medium">
+                                      +{(y.total - y.cash).toFixed(2)}%
+                                    </span>
+                                  </div>
+                                  <p className="mt-1.5 border-t border-border/60 pt-1.5 text-[0.65rem] leading-relaxed text-muted-foreground">
+                                    Bonus valued at face value (convention, not cash).
+                                  </p>
+                                </HoverCardContent>
+                              </HoverCard>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell className="pr-4 text-right">
                           <button

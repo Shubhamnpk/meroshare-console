@@ -82,7 +82,7 @@ export function StockCompare() {
         const latestDiv = symDividends[0] ?? null;
         const dividendYield =
           latestDiv && fv > 0 && price.ltp > 0
-            ? (latestDiv.totalDividend * fv) / (price.ltp * 100)
+            ? (latestDiv.totalDividend * fv) / price.ltp
             : null;
         const fiscalYears = [
           ...new Set(symDividends.map((d) => d.fiscalYear).filter(Boolean)),

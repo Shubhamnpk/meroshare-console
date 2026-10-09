@@ -14,6 +14,7 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import {
   screenerDataQuery,
   marketSectorsQuery,
@@ -45,6 +46,7 @@ import { MoverRows, SentimentGauge } from "@/components/tools/market-overview";
 import { SectorBadge } from "@/components/market/sector-icon";
 import { CompactNpr, CompactQty } from "@/components/market/compact-value";
 import { normalizeSectorKey, subindexKeyFor } from "@/lib/nepse/sectors";
+import { avgCashLast5Y, avgTotalLast5Y } from "@/lib/nepse/timeline";
 import { ScripSheet } from "@/components/market/scrip-sheet";
 import type { ChartBar, LivePrice, PricePoint, SectorIndex } from "@/lib/nepse/types";
 
@@ -157,9 +159,8 @@ type ConstituentKey =
   | "turnover"
   | "trades";
 
-// Latest-dividend yield % + latest reported EPS per symbol, same convention
-// as Best Shares / stock compare: yield = latest totalDividend × faceValue
-// ÷ (ltp × 100), EPS = newest financial report's EPS.
+// 5-year average dividend yield % + latest reported EPS per symbol (shared
+// calendar rule, see lib/nepse/timeline). yield = avg total × face ÷ ltp.
 function useFundamentals(
   prices: LivePrice[],
   dividends: Record<string, import("@/lib/nepse/types").DividendRow[]>,
@@ -167,14 +168,19 @@ function useFundamentals(
   faceValues: Record<string, number>,
 ) {
   return useMemo(() => {
-    const map = new Map<string, { yieldPct: number | null; eps: number | null }>();
+    const map = new Map<string, { yieldPct: number | null; yieldCashPct: number | null; eps: number | null }>();
     for (const p of prices) {
-      const latest = (dividends[p.symbol] ?? [])[0] ?? null;
+      const rows = dividends[p.symbol] ?? [];
+      const avgTotal = avgTotalLast5Y(rows);
+      const avgCash = avgCashLast5Y(rows);
       const fv = faceValues[p.symbol] ?? 100;
       const raw =
-        latest && fv > 0 && p.ltp > 0 ? (latest.totalDividend * fv) / (p.ltp * 100) : null;
+        avgTotal !== null && avgTotal > 0 && fv > 0 && p.ltp > 0 ? (avgTotal * fv) / p.ltp : null;
+      const rawCash =
+        avgCash !== null && avgCash > 0 && fv > 0 && p.ltp > 0 ? (avgCash * fv) / p.ltp : null;
       map.set(p.symbol, {
         yieldPct: raw != null ? Math.round(raw * 100) / 100 : null,
+        yieldCashPct: rawCash != null ? Math.round(rawCash * 100) / 100 : null,
         eps: financials[p.symbol]?.[0]?.eps ?? null,
       });
     }
@@ -881,11 +887,38 @@ function SectorDetailPage() {
                     <TableCell className={cn("num py-2.5 px-3 text-right font-semibold", upRow ? "text-gain" : "text-loss")}>
                       {formatPercent(p.percentChange)}
                     </TableCell>
-                    <TableCell
-                      className="num py-2.5 px-3 text-right font-semibold text-primary"
-                      title={fund?.yieldPct != null ? "Latest dividend yield on LTP" : "No dividend on record"}
-                    >
-                      {fund?.yieldPct != null ? `${fund.yieldPct.toFixed(2)}%` : "—"}
+                    <TableCell className="num py-2.5 px-3 text-right font-semibold text-primary">
+                      {fund?.yieldPct != null ? (
+                        <HoverCard>
+                          <HoverCardTrigger asChild>
+                            <span className="cursor-help underline decoration-dotted underline-offset-2">
+                              {fund.yieldPct.toFixed(2)}%
+                            </span>
+                          </HoverCardTrigger>
+                          <HoverCardContent className="w-56 p-3 text-left text-xs">
+                            <p className="mb-1.5 font-semibold">5-yr average · {p.symbol}</p>
+                            <div className="flex justify-between py-0.5">
+                              <span className="text-muted-foreground">Cash yield</span>
+                              <span className="num font-medium">
+                                {fund.yieldCashPct != null ? `+${fund.yieldCashPct.toFixed(2)}%` : "—"}
+                              </span>
+                            </div>
+                            <div className="flex justify-between py-0.5">
+                              <span className="text-muted-foreground">Bonus yield</span>
+                              <span className="num font-medium">
+                                {fund.yieldCashPct != null
+                                  ? `+${(fund.yieldPct - fund.yieldCashPct).toFixed(2)}%`
+                                  : "—"}
+                              </span>
+                            </div>
+                            <p className="mt-1.5 border-t border-border/60 pt-1.5 text-[0.65rem] leading-relaxed text-muted-foreground">
+                              Bonus valued at face value (convention, not cash).
+                            </p>
+                          </HoverCardContent>
+                        </HoverCard>
+                      ) : (
+                        "—"
+                      )}
                     </TableCell>
                     <TableCell
                       className="num py-2.5 px-3 text-right text-muted-foreground"

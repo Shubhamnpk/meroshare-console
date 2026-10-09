@@ -87,8 +87,11 @@ export function WatchlistPanel({
       if (!res.ok) throw new Error(res.message);
       return res.message;
     },
-    onSuccess: (msg) => {
-      toast.success(msg);
+    // Silent on success: this push runs automatically on every open, so
+    // toasting the broker's raw reply ("Market Watch Default saved
+    // successfully") surprises users who asked for nothing. Failures still
+    // surface — a dead sync needs attention.
+    onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["broker-watchlists"] });
     },
     onError: (err) => toast.error(errorMessage(err, "Push failed.")),
