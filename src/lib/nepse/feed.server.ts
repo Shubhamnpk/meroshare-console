@@ -37,8 +37,7 @@ import { canonicalSymbol, matchSymbols } from "./aliases";
 const NEPSE_API = process.env["NEPSE_API_URL"];
 const YONEPSE_BASE = process.env["YONEPSE_BASE_URL"];
 
-export const FEED_ATTRIBUTION =
-  "Live NEPSE mirror + community YONEPSE feed (indicative, unofficial data).";
+export const FEED_ATTRIBUTION = "Live NEPSE mirror + community YONEPSE feed (indicative, unofficial data).";
 
 interface CacheEntry {
   value: unknown;
@@ -66,10 +65,7 @@ function str(value: unknown): string | null {
  * On failure the last good value is served (marked stale); if nothing was ever
  * cached the caller receives `null` and renders a degraded state.
  */
-export async function feedJson<T>(
-  url: string,
-  ttlMs: number,
-): Promise<{ data: T | null; stale: boolean }> {
+export async function feedJson<T>(url: string, ttlMs: number): Promise<{ data: T | null; stale: boolean }> {
   const key = url;
   const hit = cache.get(key);
   const now = Date.now();
@@ -99,14 +95,8 @@ export async function feedJson<T>(
 }
 
 /** bitnepal wraps every response in { success, data, error }. */
-async function bitnepalJson<T>(
-  path: string,
-  ttlMs: number,
-): Promise<{ data: T | null; stale: boolean }> {
-  const { data, stale } = await feedJson<{ success: boolean; data: T | null }>(
-    `${NEPSE_API}${path}`,
-    ttlMs,
-  );
+async function bitnepalJson<T>(path: string, ttlMs: number): Promise<{ data: T | null; stale: boolean }> {
+  const { data, stale } = await feedJson<{ success: boolean; data: T | null }>(`${NEPSE_API}${path}`, ttlMs);
   return { data: data?.data ?? null, stale };
 }
 
@@ -133,10 +123,7 @@ async function withFallback<T>(
 
 /** One movers list out of the YONEPSE combined top-stocks file (cached per URL). */
 async function yonepseTopStocks(key: string): Promise<{ data: Rec[] | null; stale: boolean }> {
-  const { data, stale } = await feedJson<Rec>(
-    `${YONEPSE_BASE}/data/market/top_stocks.json`,
-    TTL.fast,
-  );
+  const { data, stale } = await feedJson<Rec>(`${YONEPSE_BASE}/data/market/top_stocks.json`, TTL.fast);
   const rows = Array.isArray(data?.[key]) ? (data![key] as unknown as Rec[]) : null;
   return { data: rows ?? null, stale };
 }
@@ -200,10 +187,7 @@ export async function getLivePrices(): Promise<{ prices: LivePrice[]; stale: boo
           turnover: num(row["totalTradedValue"]) || num(row["turnover"]),
           trades: num(row["totalTrades"]) || num(row["trades"]),
           lastUpdated: str(row["lastUpdatedTime"]) ?? str(row["last_updated"]),
-          sector:
-            sectors.get(symbol.toUpperCase()) ??
-            sectors.get(canonicalSymbol(symbol.toUpperCase())) ??
-            null,
+          sector: sectors.get(symbol.toUpperCase()) ?? sectors.get(canonicalSymbol(symbol.toUpperCase())) ?? null,
           fiftyTwoWeekHigh: row["fiftyTwoWeekHigh"] == null ? null : num(row["fiftyTwoWeekHigh"]),
           fiftyTwoWeekLow: row["fiftyTwoWeekLow"] == null ? null : num(row["fiftyTwoWeekLow"]),
           assetType: str(row["asset_type"]),
@@ -217,9 +201,7 @@ export async function getLivePrices(): Promise<{ prices: LivePrice[]; stale: boo
   // the primary mirror is serving.
   if (yonepseFile.data) {
     const bySymbol = new Map(prices.map((p) => [p.symbol, p]));
-    for (const row of parse(
-      yonepseFile.data.filter((r) => str(r["asset_type"]) === "open_ended_mutual_fund"),
-    )) {
+    for (const row of parse(yonepseFile.data.filter((r) => str(r["asset_type"]) === "open_ended_mutual_fund"))) {
       bySymbol.set(row.symbol, row);
     }
     return { prices: [...bySymbol.values()], stale };
@@ -312,21 +294,11 @@ function movers(rows: Rec[] | undefined, valueKey: string, label: string): Mover
 
 export async function getTopStocks(): Promise<TopStocks> {
   const [gainers, losers, turnover, volume, transactions] = await Promise.all([
-    withFallback(bitnepalJson<Rec[]>("/prices/top/gainers", TTL.fast), () =>
-      yonepseTopStocks("top_gainer"),
-    ),
-    withFallback(bitnepalJson<Rec[]>("/prices/top/losers", TTL.fast), () =>
-      yonepseTopStocks("top_loser"),
-    ),
-    withFallback(bitnepalJson<Rec[]>("/prices/top/turnover", TTL.fast), () =>
-      yonepseTopStocks("top_turnover"),
-    ),
-    withFallback(bitnepalJson<Rec[]>("/prices/top/trade", TTL.fast), () =>
-      yonepseTopStocks("top_trade"),
-    ),
-    withFallback(bitnepalJson<Rec[]>("/prices/top/transaction", TTL.fast), () =>
-      yonepseTopStocks("top_transaction"),
-    ),
+    withFallback(bitnepalJson<Rec[]>("/prices/top/gainers", TTL.fast), () => yonepseTopStocks("top_gainer")),
+    withFallback(bitnepalJson<Rec[]>("/prices/top/losers", TTL.fast), () => yonepseTopStocks("top_loser")),
+    withFallback(bitnepalJson<Rec[]>("/prices/top/turnover", TTL.fast), () => yonepseTopStocks("top_turnover")),
+    withFallback(bitnepalJson<Rec[]>("/prices/top/trade", TTL.fast), () => yonepseTopStocks("top_trade")),
+    withFallback(bitnepalJson<Rec[]>("/prices/top/transaction", TTL.fast), () => yonepseTopStocks("top_transaction")),
   ]);
   return {
     gainers: movers(gainers.data ?? [], "percentageChange", "%").slice(0, 15),
@@ -345,10 +317,7 @@ interface DividendResponse {
 }
 
 export async function getDividends(): Promise<DividendRow[]> {
-  const { data } = await feedJson<DividendResponse>(
-    `${YONEPSE_BASE}/data/dividend/history.json`,
-    TTL.slow,
-  );
+  const { data } = await feedJson<DividendResponse>(`${YONEPSE_BASE}/data/dividend/history.json`, TTL.slow);
   if (!data?.records?.length || !data.symbols?.length) return [];
   const { symbols, records } = data;
   return records.flatMap((row): DividendRow[] => {
@@ -424,10 +393,7 @@ export async function getPortfolioHistory(
   }
   if (timelines.length === 0 || !Number.isFinite(firstTime)) return [];
 
-  const { data: manifest } = await feedJson<Rec>(
-    `${YONEPSE_BASE}/data/ltp/manifest.json`,
-    TTL.daily,
-  );
+  const { data: manifest } = await feedJson<Rec>(`${YONEPSE_BASE}/data/ltp/manifest.json`, TTL.daily);
   const availableMonths: string[] = (manifest?.["availableMonths"] ?? []) as string[];
   const availableDays: string[] = (manifest?.["availableDays"] ?? []) as string[];
   const startKey = monthKeyFromEpoch(firstTime);
@@ -450,14 +416,10 @@ export async function getPortfolioHistory(
     const coverageStart = monthKeyFromEpoch(
       dayWindow[0] ? Date.parse(dayWindow[0] + "T00:00:00+05:45") / 1000 : tailStart,
     );
-    const monthWindow = availableMonths.filter(
-      (m) => m >= startKey && m >= tailMonthKey && m < coverageStart,
-    );
+    const monthWindow = availableMonths.filter((m) => m >= startKey && m >= tailMonthKey && m < coverageStart);
     // Monthly files carry every trading day of the month, so the pre-daily-
     // feed window still gets one point per trading day, not just month ends.
-    return [...(await scoreMonthDays(unitsBySymbol, monthWindow)), ...daily].sort(
-      (a, b) => a.time - b.time,
-    );
+    return [...(await scoreMonthDays(unitsBySymbol, monthWindow)), ...daily].sort((a, b) => a.time - b.time);
   }
 
   const monthWindow = availableMonths.filter((m) => m >= startKey && m >= tailMonthKey);
@@ -492,10 +454,7 @@ async function scoreMonthDays(
   const capped = months.length > 120 ? months.slice(-120) : months;
   const files = await Promise.all(
     capped.map(async (month) => {
-      const { data } = await feedJson<Rec>(
-        `${YONEPSE_BASE}/data/ltp/monthly/${month}.json`,
-        TTL.daily,
-      );
+      const { data } = await feedJson<Rec>(`${YONEPSE_BASE}/data/ltp/monthly/${month}.json`, TTL.daily);
       return {
         month,
         dates: (data?.["dates"] ?? []) as string[],
@@ -562,10 +521,7 @@ async function scoreMonths(
   const capped = months.length > 120 ? months.slice(-120) : months;
   const files = await Promise.all(
     capped.map(async (month) => {
-      const { data } = await feedJson<Rec>(
-        `${YONEPSE_BASE}/data/ltp/monthly/${month}.json`,
-        TTL.daily,
-      );
+      const { data } = await feedJson<Rec>(`${YONEPSE_BASE}/data/ltp/monthly/${month}.json`, TTL.daily);
       const series = (data?.["series"] ?? {}) as Record<string, unknown[]>;
       const dates = (data?.["dates"] ?? []) as string[];
       return { month, series, lastDate: dates[dates.length - 1] ?? "" };
@@ -573,18 +529,14 @@ async function scoreMonths(
   );
   const lastClose = new Map<string, number>();
   return files.flatMap(({ month, series, lastDate }): PortfolioHistoryPoint[] => {
-    const cutoff =
-      (Date.parse(`${lastDate}T23:59:59+05:45`) || Date.parse(`${month}-28T23:59:59+05:45`)) / 1000;
+    const cutoff = (Date.parse(`${lastDate}T23:59:59+05:45`) || Date.parse(`${month}-28T23:59:59+05:45`)) / 1000;
     const p = evaluateSnapshot(unitsBySymbol, series, cutoff, monthStartEpoch(month), lastClose);
     return p ? [p] : [];
   });
 }
 
 /** Score one point per trading day from the daily LTP files (oldest first, capped to 300). */
-async function scoreDays(
-  unitsBySymbol: Map<string, UnitSnapshot[]>,
-  days: string[],
-): Promise<PortfolioHistoryPoint[]> {
+async function scoreDays(unitsBySymbol: Map<string, UnitSnapshot[]>, days: string[]): Promise<PortfolioHistoryPoint[]> {
   if (days.length === 0) return [];
   const capped = days.length > 300 ? days.slice(-300) : days;
   const files = await Promise.all(
@@ -780,10 +732,7 @@ export function yonepseIndexKey(indexName: string): string {
  */
 export async function getIndexDailyBars(indexName: string, days = 0): Promise<ChartBar[]> {
   const key = yonepseIndexKey(indexName);
-  const { data: manifest } = await feedJson<Rec>(
-    `${YONEPSE_BASE}/data/indices/manifest.json`,
-    TTL.daily,
-  );
+  const { data: manifest } = await feedJson<Rec>(`${YONEPSE_BASE}/data/indices/manifest.json`, TTL.daily);
   const availableMonths = [...((manifest?.["availableMonths"] ?? []) as string[])].sort();
   const now = Math.floor(Date.now() / 1000);
   const tailMonth = days > 0 ? monthKeyFromEpoch(now - days * 86400) : "0000-00";
@@ -793,10 +742,7 @@ export async function getIndexDailyBars(indexName: string, days = 0): Promise<Ch
 
   const files = await Promise.all(
     months.map(async (month) => {
-      const { data } = await feedJson<Rec>(
-        `${YONEPSE_BASE}/data/indices/monthly/${month}.json`,
-        TTL.daily,
-      );
+      const { data } = await feedJson<Rec>(`${YONEPSE_BASE}/data/indices/monthly/${month}.json`, TTL.daily);
       const series = (data?.["series"] ?? {}) as Record<string, unknown>;
       const rows = Array.isArray(series[key]) ? (series[key] as unknown[][]) : [];
       return { dates: (data?.["dates"] ?? []) as string[], rows };
@@ -941,10 +887,7 @@ export async function getIndexHistory(indexName: string): Promise<PricePoint[]> 
   // Callers pass display names ("NEPSE Index", "Banking SubIndex", sector
   // group names); the mirror only answers its own short keys.
   const clean = indexGraphKey(indexName) || indexName.trim();
-  const { data } = await bitnepalJson<unknown[][]>(
-    `/indices/graph/${encodeURIComponent(clean)}`,
-    TTL.medium,
-  );
+  const { data } = await bitnepalJson<unknown[][]>(`/indices/graph/${encodeURIComponent(clean)}`, TTL.medium);
   // The mirror pads the session: every tick arrives ~2× and the final close
   // tick is repeated ~120× at the same timestamp. Index-based sparklines plot
   // point index, so those copies render as a long flat tail after close —
@@ -967,15 +910,12 @@ export async function getIndexHistory(indexName: string): Promise<PricePoint[]> 
  */
 export async function getYonepseHistory(symbol: string, limitDays = 264): Promise<DailyBar[]> {
   const upper = symbol.toUpperCase();
-  const { data: manifest } = await feedJson<Rec>(
-    `${YONEPSE_BASE}/data/ltp/manifest.json`,
-    TTL.daily,
+  const { data: manifest } = await feedJson<Rec>(`${YONEPSE_BASE}/data/ltp/manifest.json`, TTL.daily);
+  const availableDays: string[] = [...((manifest?.["availableDays"] ?? []) as string[])].sort((a, b) =>
+    b.localeCompare(a),
   );
-  const availableDays: string[] = [...((manifest?.["availableDays"] ?? []) as string[])].sort(
-    (a, b) => b.localeCompare(a),
-  );
-  const availableMonths: string[] = [...((manifest?.["availableMonths"] ?? []) as string[])].sort(
-    (a, b) => b.localeCompare(a),
+  const availableMonths: string[] = [...((manifest?.["availableMonths"] ?? []) as string[])].sort((a, b) =>
+    b.localeCompare(a),
   );
 
   const days = availableDays.slice(0, Math.min(availableDays.length, limitDays));
@@ -998,15 +938,10 @@ export async function getYonepseHistory(symbol: string, limitDays = 264): Promis
   const tailMonth = monthKeyFromEpoch(now - limitDays * 86400);
   const firstDay = days[days.length - 1];
   const dailyStartMonth = firstDay ? firstDay.slice(0, 7) : "9999-99";
-  const monthList = availableMonths
-    .filter((m) => m >= tailMonth && m < dailyStartMonth)
-    .slice(0, 18);
+  const monthList = availableMonths.filter((m) => m >= tailMonth && m < dailyStartMonth).slice(0, 18);
   const monthFiles = await Promise.all(
     monthList.map(async (month) => {
-      const { data } = await feedJson<Rec>(
-        `${YONEPSE_BASE}/data/ltp/monthly/${month}.json`,
-        TTL.daily,
-      );
+      const { data } = await feedJson<Rec>(`${YONEPSE_BASE}/data/ltp/monthly/${month}.json`, TTL.daily);
       return {
         month,
         series: (data?.["series"] ?? {}) as Record<string, unknown[]>,
@@ -1056,26 +991,14 @@ export async function getScripDetail(symbol: string): Promise<ScripDetail> {
           isin: str(security["isin"]),
           faceValue: security["faceValue"] == null ? null : num(security["faceValue"]),
           listingDate: str(security["listingDate"]),
-          paidUpCapital:
-            detail?.data?.["paidUpCapital"] == null ? null : num(detail.data["paidUpCapital"]),
+          paidUpCapital: detail?.data?.["paidUpCapital"] == null ? null : num(detail.data["paidUpCapital"]),
           marketCapitalization:
-            detail?.data?.["marketCapitalization"] == null
-              ? null
-              : num(detail.data["marketCapitalization"]),
-          publicShares:
-            detail?.data?.["publicShares"] == null ? null : num(detail.data["publicShares"]),
-          publicPercentage:
-            detail?.data?.["publicPercentage"] == null
-              ? null
-              : num(detail.data["publicPercentage"]),
+            detail?.data?.["marketCapitalization"] == null ? null : num(detail.data["marketCapitalization"]),
+          publicShares: detail?.data?.["publicShares"] == null ? null : num(detail.data["publicShares"]),
+          publicPercentage: detail?.data?.["publicPercentage"] == null ? null : num(detail.data["publicPercentage"]),
           promoterPercentage:
-            detail?.data?.["promoterPercentage"] == null
-              ? null
-              : num(detail.data["promoterPercentage"]),
-          totalShares:
-            detail?.data?.["stockListedShares"] == null
-              ? null
-              : num(detail.data["stockListedShares"]),
+            detail?.data?.["promoterPercentage"] == null ? null : num(detail.data["promoterPercentage"]),
+          totalShares: detail?.data?.["stockListedShares"] == null ? null : num(detail.data["stockListedShares"]),
           website: str(company["companyWebsite"]),
           email: str(company["email"]),
           contactPerson: str(company["companyContactPerson"]),
@@ -1105,8 +1028,7 @@ export async function getScripDetail(symbol: string): Promise<ScripDetail> {
     const time = num(row["time"]);
     const value = num(row["contractRate"]);
     if (!time || !value) return [];
-    const volume =
-      num(row["totalTradedQuantity"]) || num(row["volume"]) || num(row["shareTraded"]) || undefined;
+    const volume = num(row["totalTradedQuantity"]) || num(row["volume"]) || num(row["shareTraded"]) || undefined;
     return [{ time, value, volume }];
   });
 
@@ -1138,9 +1060,7 @@ export async function getScripFinancials(symbol: string): Promise<ScripFinancial
   const reports: FinancialReport[] = rawReports
     .flatMap((raw): FinancialReport[] => {
       const rec = raw as Rec;
-      const doc = Array.isArray(rec["documents"])
-        ? ((rec["documents"] as unknown[])[0] as Rec)
-        : null;
+      const doc = Array.isArray(rec["documents"]) ? ((rec["documents"] as unknown[])[0] as Rec) : null;
       const path = str(doc?.["path"]);
       return [
         {
@@ -1196,9 +1116,7 @@ export async function getAllFinancials(): Promise<Map<string, FinancialReport[]>
     const reports: FinancialReport[] = rawReports
       .flatMap((raw): FinancialReport[] => {
         const rec = raw as Rec;
-        const doc = Array.isArray(rec["documents"])
-          ? ((rec["documents"] as unknown[])[0] as Rec)
-          : null;
+        const doc = Array.isArray(rec["documents"]) ? ((rec["documents"] as unknown[])[0] as Rec) : null;
         const path = str(doc?.["path"]);
         return [
           {
@@ -1325,10 +1243,7 @@ async function mapLimit<T, R>(items: T[], limit: number, worker: (item: T) => Pr
 
 /** Deep daily-close history from the archive, oldest → newest. */
 async function getArchiveBars(symbol: string, months: number): Promise<DailyBar[]> {
-  const { data: manifest } = await feedJson<Rec>(
-    `${YONEPSE_BASE}/data/ltp/manifest.json`,
-    TTL.daily,
-  );
+  const { data: manifest } = await feedJson<Rec>(`${YONEPSE_BASE}/data/ltp/manifest.json`, TTL.daily);
   const available = [...((manifest?.["availableMonths"] ?? []) as string[])].sort();
   const wanted = available.slice(Math.max(0, available.length - months));
   const chunks = await mapLimit(wanted, 8, (month) => archiveMonthBars(symbol, month));
@@ -1410,8 +1325,7 @@ export async function getChartSeries(symbol: string, range: ChartRange): Promise
     const time = num(row["time"]);
     const value = num(row["contractRate"]);
     if (!time || !value) return [];
-    const volume =
-      num(row["totalTradedQuantity"]) || num(row["volume"]) || num(row["shareTraded"]) || undefined;
+    const volume = num(row["totalTradedQuantity"]) || num(row["volume"]) || num(row["shareTraded"]) || undefined;
     return [{ time, value, volume }];
   });
 

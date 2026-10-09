@@ -1,11 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AreaChart } from "@/components/market/area-chart";
 import {
   DEFAULT_INDICATORS,
@@ -99,10 +93,7 @@ function useResolvedLight(): boolean {
   const [light, setLight] = useState(false);
   useEffect(() => {
     const resolve = () =>
-      setLight(
-        theme === "light" ||
-          (theme === "system" && window.matchMedia("(prefers-color-scheme: light)").matches),
-      );
+      setLight(theme === "light" || (theme === "system" && window.matchMedia("(prefers-color-scheme: light)").matches));
     resolve();
     const mq = window.matchMedia("(prefers-color-scheme: light)");
     mq.addEventListener("change", resolve);
@@ -124,15 +115,11 @@ function HoverLegend({ info, origin }: { info: HoverInfo | null; origin: number 
   ];
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-      <span className={cn("num font-semibold", up ? "text-gain" : "text-loss")}>
-        {info.date.slice(0, 10)}
-      </span>
+      <span className={cn("num font-semibold", up ? "text-gain" : "text-loss")}>{info.date.slice(0, 10)}</span>
       {cells.map((c) => (
         <span key={c.label} className="num flex items-center gap-1 text-muted-foreground">
           <span className="text-[0.65rem] uppercase">{c.label}</span>
-          <span className={cn("font-medium", c.label === "Δ" && (up ? "text-gain" : "text-loss"))}>
-            {c.value}
-          </span>
+          <span className={cn("font-medium", c.label === "Δ" && (up ? "text-gain" : "text-loss"))}>{c.value}</span>
         </span>
       ))}
       <span
@@ -257,9 +244,7 @@ export function ChartModal({
           {stats ? (
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               <div className="rounded-xl border border-border/60 bg-surface px-3 py-2">
-                <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                  Start
-                </p>
+                <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">Start</p>
                 <p className="num text-sm font-medium">{formatValue(stats.start)}</p>
               </div>
               <div className="rounded-xl border border-border/60 bg-surface px-3 py-2">
@@ -267,17 +252,13 @@ export function ChartModal({
                 <p className="num text-sm font-medium">{formatValue(stats.end)}</p>
               </div>
               <div className="rounded-xl border border-border/60 bg-surface px-3 py-2">
-                <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                  Change
-                </p>
+                <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">Change</p>
                 <p className="text-sm font-medium">
                   <DeltaPill value={stats.change}>{formatPercent(stats.pct)}</DeltaPill>
                 </p>
               </div>
               <div className="rounded-xl border border-border/60 bg-surface px-3 py-2">
-                <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                  High / Low
-                </p>
+                <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">High / Low</p>
                 <p className="num text-sm font-medium">
                   {formatValue(stats.high)} / {formatValue(stats.low)}
                 </p>
@@ -304,18 +285,12 @@ export function ChartModal({
               points={active.points}
               height={300}
               formatValue={formatValue}
-              formatLabel={(t) =>
-                active.key === "1D" ? formatIntradayLabel(t) : formatDailyLabel(t)
-              }
+              formatLabel={(t) => (active.key === "1D" ? formatIntradayLabel(t) : formatDailyLabel(t))}
               tooltipExtra={(p) => {
-                const pct =
-                  stats && stats.start ? ((p.value - stats.start) / stats.start) * 100 : 0;
+                const pct = stats && stats.start ? ((p.value - stats.start) / stats.start) * 100 : 0;
                 return (
                   <p
-                    className={cn(
-                      "num text-right text-[0.65rem] font-semibold",
-                      pct >= 0 ? "text-gain" : "text-loss",
-                    )}
+                    className={cn("num text-right text-[0.65rem] font-semibold", pct >= 0 ? "text-gain" : "text-loss")}
                   >
                     {pct >= 0 ? "+" : ""}
                     {pct.toFixed(2)}% from start
@@ -330,8 +305,8 @@ export function ChartModal({
           )}
 
           <p className="text-[0.68rem] leading-relaxed text-muted-foreground">
-            Values are indicative figures from the public NEPSE mirror. Hover anywhere on the chart
-            to inspect individual points; the crosshair shows the exact price on the vertical axis.
+            Values are indicative figures from the public NEPSE mirror. Hover anywhere on the chart to inspect
+            individual points; the crosshair shows the exact price on the vertical axis.
           </p>
         </div>
       </DialogContent>

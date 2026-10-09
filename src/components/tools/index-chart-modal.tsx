@@ -1,9 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  ChartCandlestick,
-  SlidersHorizontal,
-} from "lucide-react";
+import { ChartCandlestick, SlidersHorizontal } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getIndexDailyHistory } from "@/lib/nepse/market.functions";
 import { indexGraphQuery } from "@/lib/queries";
@@ -52,10 +49,7 @@ function useResolvedLight(): boolean {
   const [light, setLight] = useState(false);
   useEffect(() => {
     const resolve = () =>
-      setLight(
-        theme === "light" ||
-          (theme === "system" && window.matchMedia("(prefers-color-scheme: light)").matches),
-      );
+      setLight(theme === "light" || (theme === "system" && window.matchMedia("(prefers-color-scheme: light)").matches));
     resolve();
     const mq = window.matchMedia("(prefers-color-scheme: light)");
     mq.addEventListener("change", resolve);
@@ -204,9 +198,7 @@ export function IndexChartModal({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
-                <DialogTitle className="font-display text-lg font-bold sm:text-xl">
-                  {title}
-                </DialogTitle>
+                <DialogTitle className="font-display text-lg font-bold sm:text-xl">{title}</DialogTitle>
               </div>
               <p className="mt-0.5 text-xs text-muted-foreground">
                 Historical trading data &amp; technical performance across all ranges.
@@ -217,9 +209,7 @@ export function IndexChartModal({
               <div className="flex flex-col items-end text-right">
                 <span className="num text-2xl font-bold">{formatNumber(shownValue)}</span>
                 {shownPct != null && (
-                  <span
-                    className={`num text-sm font-semibold ${shownPct >= 0 ? "text-gain" : "text-loss"}`}
-                  >
+                  <span className={`num text-sm font-semibold ${shownPct >= 0 ? "text-gain" : "text-loss"}`}>
                     {shownPct >= 0 ? "+" : ""}
                     {shownPct.toFixed(2)}%
                   </span>
@@ -313,23 +303,21 @@ export function IndexChartModal({
                       className="fixed inset-0 z-20 cursor-default"
                     />
                     <div className="absolute right-0 top-full z-30 mt-1 flex flex-wrap gap-1 rounded-xl border border-border bg-card p-2 shadow-xl">
-                    {INDICATOR_TOGGLES.map((t) => (
-                      <button
-                        key={t.key}
-                        type="button"
-                        onClick={() =>
-                          setIndicators((prev) => ({ ...prev, [t.key]: !prev[t.key] }))
-                        }
-                        className={cn(
-                          "rounded-md border px-2 py-0.5 text-[0.68rem] font-medium transition-colors cursor-pointer",
-                          indicators[t.key]
-                            ? "border-primary/50 bg-primary/15 text-primary"
-                            : "border-border/60 bg-surface text-muted-foreground hover:border-primary/30",
-                        )}
-                      >
-                        {t.label}
-                      </button>
-                    ))}
+                      {INDICATOR_TOGGLES.map((t) => (
+                        <button
+                          key={t.key}
+                          type="button"
+                          onClick={() => setIndicators((prev) => ({ ...prev, [t.key]: !prev[t.key] }))}
+                          className={cn(
+                            "rounded-md border px-2 py-0.5 text-[0.68rem] font-medium transition-colors cursor-pointer",
+                            indicators[t.key]
+                              ? "border-primary/50 bg-primary/15 text-primary"
+                              : "border-border/60 bg-surface text-muted-foreground hover:border-primary/30",
+                          )}
+                        >
+                          {t.label}
+                        </button>
+                      ))}
                     </div>
                   </>
                 )}
@@ -356,12 +344,8 @@ export function IndexChartModal({
                 light={light}
                 height={360}
                 onHover={setHover}
-                onSelectPoint={(p) =>
-                  setPinnedPoint((cur) => (cur && p && cur.time === p.time ? null : p))
-                }
-                onSelectBar={(d) =>
-                  setPinnedBar(d ? (bars.find((b) => b.date === d) ?? null) : null)
-                }
+                onSelectPoint={(p) => setPinnedPoint((cur) => (cur && p && cur.time === p.time ? null : p))}
+                onSelectBar={(d) => setPinnedBar(d ? (bars.find((b) => b.date === d) ?? null) : null)}
               />
             ) : bars.length >= 2 ? (
               <TerminalChart
@@ -374,30 +358,22 @@ export function IndexChartModal({
                 height={360}
                 onHover={setHover}
                 onSelectBar={(d) =>
-                  setPinnedBar((cur) =>
-                    cur && d === cur.date ? null : (bars.find((b) => b.date === d) ?? null),
-                  )
+                  setPinnedBar((cur) => (cur && d === cur.date ? null : (bars.find((b) => b.date === d) ?? null)))
                 }
-                onSelectPoint={(p) =>
-                  setPinnedPoint((cur) => (cur && p && cur.time === p.time ? null : p))
-                }
+                onSelectPoint={(p) => setPinnedPoint((cur) => (cur && p && cur.time === p.time ? null : p))}
               />
             ) : range === "1D" ? (
               <div className="flex h-[360px] flex-col items-center justify-center gap-1.5 p-6 text-center text-muted-foreground">
-                <p className="text-sm font-semibold text-foreground">
-                  Intraday session graph not published
-                </p>
+                <p className="text-sm font-semibold text-foreground">Intraday session graph not published</p>
                 <p className="text-xs">
-                  Real-time ticks stream during active NEPSE trading hours (11:00 AM – 3:00 PM NPT).
-                  Switch to 1W, 1M, or 1Y to view historical daily candles.
+                  Real-time ticks stream during active NEPSE trading hours (11:00 AM – 3:00 PM NPT). Switch to 1W, 1M,
+                  or 1Y to view historical daily candles.
                 </p>
               </div>
             ) : dailyQuery.isError ? (
               <div className="flex h-[360px] flex-col items-center justify-center gap-2 p-6 text-center">
                 <p className="text-sm font-semibold text-foreground">Couldn't load chart data</p>
-                <p className="text-xs text-muted-foreground">
-                  Check your connection and try again.
-                </p>
+                <p className="text-xs text-muted-foreground">Check your connection and try again.</p>
                 <button
                   type="button"
                   onClick={() => void dailyQuery.refetch()}
@@ -471,7 +447,6 @@ export function IndexChartModal({
               })()}
             </div>
           )}
-
         </div>
       </DialogContent>
     </Dialog>

@@ -3,13 +3,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { updateGlobalTxn } from "@/lib/world/store";
 import type { GlobalTxn } from "@/lib/world/import";
 
@@ -20,13 +14,7 @@ function toDateInput(iso: string): string {
 }
 
 /** Edit quantity / price / date / notes. Side, symbol and currency are fixed. */
-export function GlobalTxnEditDialog({
-  txn,
-  onOpenChange,
-}: {
-  txn: GlobalTxn | null;
-  onOpenChange: () => void;
-}) {
+export function GlobalTxnEditDialog({ txn, onOpenChange }: { txn: GlobalTxn | null; onOpenChange: () => void }) {
   const [qty, setQty] = useState("");
   const [price, setPrice] = useState("");
   const [date, setDate] = useState("");
@@ -75,37 +63,22 @@ export function GlobalTxnEditDialog({
             Edit {txn?.side} {txn?.symbol || ""}
           </DialogTitle>
           <DialogDescription>
-            Quantity, price ({txn?.currency || "—"}), date and notes. Side, symbol and currency
-            are fixed — delete and re-import to change those.
+            Quantity, price ({txn?.currency || "—"}), date and notes. Side, symbol and currency are fixed — delete and
+            re-import to change those.
           </DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
             <Label htmlFor="gtxn-qty">Quantity</Label>
-            <Input
-              id="gtxn-qty"
-              inputMode="decimal"
-              value={qty}
-              onChange={(e) => setQty(e.target.value)}
-            />
+            <Input id="gtxn-qty" inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value)} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="gtxn-price">Price / share</Label>
-            <Input
-              id="gtxn-price"
-              inputMode="decimal"
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-            />
+            <Input id="gtxn-price" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} />
           </div>
           <div className="col-span-2 space-y-1.5">
             <Label htmlFor="gtxn-date">Date</Label>
-            <Input
-              id="gtxn-date"
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-            />
+            <Input id="gtxn-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
           <div className="col-span-2 space-y-1.5">
             <Label htmlFor="gtxn-notes">Notes</Label>

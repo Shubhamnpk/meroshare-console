@@ -67,44 +67,36 @@ export interface PortfolioTimeline {
 
 export const MARKET_ATTRIBUTION = FEED_ATTRIBUTION;
 
-export const getMarketSnapshot = createServerFn({ method: "GET" }).handler(
-  async (): Promise<MarketSnapshot> => {
-    await requireAuth();
-    const [status, indices, summary, live] = await Promise.all([
-      getMarketStatus(),
-      getIndices(),
-      getMarketSummary(),
-      getLivePrices(),
-    ]);
-    return {
-      status,
-      indices,
-      summary,
-      prices: live.prices,
-      stale: live.stale,
-      fetchedAt: new Date().toISOString(),
-    };
-  },
-);
+export const getMarketSnapshot = createServerFn({ method: "GET" }).handler(async (): Promise<MarketSnapshot> => {
+  await requireAuth();
+  const [status, indices, summary, live] = await Promise.all([
+    getMarketStatus(),
+    getIndices(),
+    getMarketSummary(),
+    getLivePrices(),
+  ]);
+  return {
+    status,
+    indices,
+    summary,
+    prices: live.prices,
+    stale: live.stale,
+    fetchedAt: new Date().toISOString(),
+  };
+});
 
-export const getMarketMovers = createServerFn({ method: "GET" }).handler(
-  async (): Promise<TopStocks> => {
-    await requireAuth();
-    return getTopStocks();
-  },
-);
+export const getMarketMovers = createServerFn({ method: "GET" }).handler(async (): Promise<TopStocks> => {
+  await requireAuth();
+  return getTopStocks();
+});
 
-export const getMarketSectors = createServerFn({ method: "GET" }).handler(
-  async (): Promise<SectorIndex[]> => {
-    await requireAuth();
-    return getSectorIndices();
-  },
-);
+export const getMarketSectors = createServerFn({ method: "GET" }).handler(async (): Promise<SectorIndex[]> => {
+  await requireAuth();
+  return getSectorIndices();
+});
 
 export const getScrip = createServerFn({ method: "POST" })
-  .validator((input: unknown) =>
-    z.object({ symbol: z.string().trim().min(1).max(24) }).parse(input),
-  )
+  .validator((input: unknown) => z.object({ symbol: z.string().trim().min(1).max(24) }).parse(input))
   .handler(async ({ data }): Promise<LivePrice | null> => {
     await requireAuth();
     const { prices } = await getLivePrices();
@@ -112,12 +104,10 @@ export const getScrip = createServerFn({ method: "POST" })
     return prices.find((p) => p.symbol === symbol) ?? null;
   });
 
-export const getProposedDividends = createServerFn({ method: "GET" }).handler(
-  async (): Promise<DividendRow[]> => {
-    await requireAuth();
-    return getDividends();
-  },
-);
+export const getProposedDividends = createServerFn({ method: "GET" }).handler(async (): Promise<DividendRow[]> => {
+  await requireAuth();
+  return getDividends();
+});
 
 export const getIpoArchiveList = createServerFn({ method: "GET" }).handler(
   async (): Promise<{ upcoming: IpoArchiveRow[]; past: IpoArchiveRow[] }> => {
@@ -127,9 +117,7 @@ export const getIpoArchiveList = createServerFn({ method: "GET" }).handler(
 );
 
 export const getIndexGraph = createServerFn({ method: "POST" })
-  .validator((input: unknown) =>
-    z.object({ indexName: z.string().trim().min(1).max(48) }).parse(input),
-  )
+  .validator((input: unknown) => z.object({ indexName: z.string().trim().min(1).max(48) }).parse(input))
   .handler(async ({ data }): Promise<PricePoint[]> => {
     await requireAuth();
     return getIndexHistory(data.indexName);
@@ -167,53 +155,41 @@ export const getPortfolioIntradaySeries = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }): Promise<PortfolioIntraday> => {
     await requireAuth();
-    return fetchPortfolioIntraday(
-      data.holdings.map((h) => ({ symbol: h.scrip, units: h.units, price: h.price })),
-    );
+    return fetchPortfolioIntraday(data.holdings.map((h) => ({ symbol: h.scrip, units: h.units, price: h.price })));
   });
 
 export const getScripDetail = createServerFn({ method: "POST" })
-  .validator((input: unknown) =>
-    z.object({ symbol: z.string().trim().min(1).max(24) }).parse(input),
-  )
+  .validator((input: unknown) => z.object({ symbol: z.string().trim().min(1).max(24) }).parse(input))
   .handler(async ({ data }): Promise<ScripDetail | null> => {
     await requireAuth();
     return fetchScripDetail(data.symbol);
   });
 
 export const getScripFinancials = createServerFn({ method: "POST" })
-  .validator((input: unknown) =>
-    z.object({ symbol: z.string().trim().min(1).max(24) }).parse(input),
-  )
+  .validator((input: unknown) => z.object({ symbol: z.string().trim().min(1).max(24) }).parse(input))
   .handler(async ({ data }): Promise<ScripFinancials | null> => {
     await requireAuth();
     return fetchScripFinancials(data.symbol);
   });
 
 export const getScripFullHistory = createServerFn({ method: "POST" })
-  .validator((input: unknown) =>
-    z.object({ symbol: z.string().trim().min(1).max(24) }).parse(input),
-  )
+  .validator((input: unknown) => z.object({ symbol: z.string().trim().min(1).max(24) }).parse(input))
   .handler(async ({ data }): Promise<DailyBar[]> => {
     await requireAuth();
     return fetchScripFullHistory(data.symbol);
   });
 
 export const getScripFaceValues = createServerFn({ method: "POST" })
-  .validator((input: unknown) =>
-    z.object({ symbols: z.array(z.string().trim().min(1).max(24)).max(200) }).parse(input),
-  )
+  .validator((input: unknown) => z.object({ symbols: z.array(z.string().trim().min(1).max(24)).max(200) }).parse(input))
   .handler(async ({ data }): Promise<Record<string, number>> => {
     await requireAuth();
     return fetchFaceValues(data.symbols);
   });
 
-export const getNews = createServerFn({ method: "GET" }).handler(
-  async (): Promise<ExchangeMessageRow[]> => {
-    await requireAuth();
-    return getExchangeMessages();
-  },
-);
+export const getNews = createServerFn({ method: "GET" }).handler(async (): Promise<ExchangeMessageRow[]> => {
+  await requireAuth();
+  return getExchangeMessages();
+});
 
 // ---------------------------------------------------------------------------
 // Screener data – batch fetch everything needed for the Best Shares page
@@ -226,51 +202,43 @@ export interface ScreenerData {
   financials: Record<string, FinancialReport[]>;
 }
 
-export const getScreenerData = createServerFn({ method: "GET" }).handler(
-  async (): Promise<ScreenerData> => {
-    await requireAuth();
-    const [live, allDividends, allFinancials] = await Promise.all([
-      getLivePrices(),
-      getDividends(),
-      getAllFinancials(),
-    ]);
+export const getScreenerData = createServerFn({ method: "GET" }).handler(async (): Promise<ScreenerData> => {
+  await requireAuth();
+  const [live, allDividends, allFinancials] = await Promise.all([getLivePrices(), getDividends(), getAllFinancials()]);
 
-    // Fetch face values for all symbols (batched, max 200 per call)
-    const symbols = live.prices.map((p) => p.symbol);
-    const faceValues: Record<string, number> = {};
-    for (let i = 0; i < symbols.length; i += 200) {
-      const batch = symbols.slice(i, i + 200);
-      const batchFv = await fetchFaceValues(batch);
-      Object.assign(faceValues, batchFv);
-    }
+  // Fetch face values for all symbols (batched, max 200 per call)
+  const symbols = live.prices.map((p) => p.symbol);
+  const faceValues: Record<string, number> = {};
+  for (let i = 0; i < symbols.length; i += 200) {
+    const batch = symbols.slice(i, i + 200);
+    const batchFv = await fetchFaceValues(batch);
+    Object.assign(faceValues, batchFv);
+  }
 
-    // Group dividends by symbol (sorted by announcement date, newest first)
-    const dividendsBySymbol: Record<string, DividendRow[]> = {};
-    for (const d of allDividends) {
-      const key = d.symbol.toUpperCase();
-      if (!dividendsBySymbol[key]) dividendsBySymbol[key] = [];
-      dividendsBySymbol[key].push(d);
-    }
-    for (const key of Object.keys(dividendsBySymbol)) {
-      dividendsBySymbol[key]?.sort((a, b) =>
-        (b.announcementDate ?? "").localeCompare(a.announcementDate ?? ""),
-      );
-    }
+  // Group dividends by symbol (sorted by announcement date, newest first)
+  const dividendsBySymbol: Record<string, DividendRow[]> = {};
+  for (const d of allDividends) {
+    const key = d.symbol.toUpperCase();
+    if (!dividendsBySymbol[key]) dividendsBySymbol[key] = [];
+    dividendsBySymbol[key].push(d);
+  }
+  for (const key of Object.keys(dividendsBySymbol)) {
+    dividendsBySymbol[key]?.sort((a, b) => (b.announcementDate ?? "").localeCompare(a.announcementDate ?? ""));
+  }
 
-    // Convert financials Map to plain object
-    const financials: Record<string, FinancialReport[]> = {};
-    for (const [sym, reports] of allFinancials) {
-      financials[sym] = reports;
-    }
+  // Convert financials Map to plain object
+  const financials: Record<string, FinancialReport[]> = {};
+  for (const [sym, reports] of allFinancials) {
+    financials[sym] = reports;
+  }
 
-    return {
-      prices: live.prices,
-      dividends: dividendsBySymbol,
-      faceValues,
-      financials,
-    };
-  },
-);
+  return {
+    prices: live.prices,
+    dividends: dividendsBySymbol,
+    faceValues,
+    financials,
+  };
+});
 
 /**
  * Fetch daily bars for a list of symbols (for RSI calculation).
@@ -304,9 +272,7 @@ export const getPortfolioHistorySeries = createServerFn({ method: "POST" })
   .validator((input: unknown) =>
     z
       .object({
-        holdings: z
-          .array(z.object({ scrip: z.string().trim().min(1).max(24), units: z.number().min(0) }))
-          .max(200),
+        holdings: z.array(z.object({ scrip: z.string().trim().min(1).max(24), units: z.number().min(0) })).max(200),
         months: z.number().int().min(0).max(120),
         granularity: z.enum(["day", "month", "year"]).default("day"),
       })
@@ -318,13 +284,21 @@ export const getPortfolioHistorySeries = createServerFn({ method: "POST" })
       const wanted = new Set(data.holdings.map((h) => h.scrip.toUpperCase()));
       const snapshotsBySymbol = new Map<string, UnitSnapshot[]>();
       for (const t of DEMO_TRANSACTIONS) {
-        const key = String((t as Record<string, unknown>)["script"] ?? (t as Record<string, unknown>)["scrip"] ?? "").toUpperCase();
+        const key = String(
+          (t as Record<string, unknown>)["script"] ?? (t as Record<string, unknown>)["scrip"] ?? "",
+        ).toUpperCase();
         if (!wanted.has(key)) continue;
         const time = parseNptEpoch((t as Record<string, unknown>)["transactionDate"] as string);
         if (time == null) continue;
         const snap: UnitSnapshot = {
           time,
-          units: Math.max(0, toNumber((t as Record<string, unknown>)["balanceAfterTransaction"] ?? (t as Record<string, unknown>)["balAfterTrans"])),
+          units: Math.max(
+            0,
+            toNumber(
+              (t as Record<string, unknown>)["balanceAfterTransaction"] ??
+                (t as Record<string, unknown>)["balAfterTrans"],
+            ),
+          ),
         };
         const arr = snapshotsBySymbol.get(key);
         if (arr) arr.push(snap);
@@ -335,10 +309,12 @@ export const getPortfolioHistorySeries = createServerFn({ method: "POST" })
         symbol,
         snapshots,
       }));
-      const failed = [...wanted].filter((s) => !snapshotsBySymbol.has(s)).map((symbol) => ({
-        symbol,
-        message: "No transactions found for this stock in demo portfolio.",
-      }));
+      const failed = [...wanted]
+        .filter((s) => !snapshotsBySymbol.has(s))
+        .map((symbol) => ({
+          symbol,
+          message: "No transactions found for this stock in demo portfolio.",
+        }));
       const points = await getPortfolioHistory(timelines, data.granularity, data.months);
       return {
         points,
@@ -423,10 +399,7 @@ async function fetchAllTransactions(auth: AuthContext): Promise<{
   });
   const rows = [...(first.transactionView ?? [])];
   const total = first.totalItems ?? rows.length;
-  const pages = Math.min(
-    MAX_TRANSACTION_PAGES,
-    Math.max(1, Math.ceil(total / TRANSACTION_PAGE_SIZE)),
-  );
+  const pages = Math.min(MAX_TRANSACTION_PAGES, Math.max(1, Math.ceil(total / TRANSACTION_PAGE_SIZE)));
   for (let page = 2; page <= pages; page++) {
     const next = await fetchTransactions(auth, { symbol: null, page, size: TRANSACTION_PAGE_SIZE });
     rows.push(...(next.transactionView ?? []));
@@ -456,24 +429,18 @@ export const getChartData = createServerFn({ method: "POST" })
     return fetchChartSeries(data.symbol, data.range);
   });
 
-export const getBrokerDirectory = createServerFn({ method: "GET" }).handler(
-  async (): Promise<BrokerRow[]> => {
-    await requireAuth();
-    return fetchBrokers();
-  },
-);
+export const getBrokerDirectory = createServerFn({ method: "GET" }).handler(async (): Promise<BrokerRow[]> => {
+  await requireAuth();
+  return fetchBrokers();
+});
 
-export const getFloorSheetDates = createServerFn({ method: "GET" }).handler(
-  async (): Promise<FloorSheetManifest> => {
-    await requireAuth();
-    return fetchFloorSheetDates();
-  },
-);
+export const getFloorSheetDates = createServerFn({ method: "GET" }).handler(async (): Promise<FloorSheetManifest> => {
+  await requireAuth();
+  return fetchFloorSheetDates();
+});
 
 export const getFloorSheetDayData = createServerFn({ method: "POST" })
-  .validator((input: unknown) =>
-    z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).parse(input),
-  )
+  .validator((input: unknown) => z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).parse(input))
   .handler(async ({ data }): Promise<FloorSheetDay | null> => {
     await requireAuth();
     return fetchFloorSheetDay(data.date);

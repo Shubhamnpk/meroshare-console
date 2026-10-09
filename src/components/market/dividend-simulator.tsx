@@ -3,30 +3,10 @@ import { Calculator, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  formatDate,
-  formatNpr,
-  formatNumber,
-  formatPercent,
-  formatQty,
-  toNumber,
-} from "@/lib/format";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { formatDate, formatNpr, formatNumber, formatPercent, formatQty, toNumber } from "@/lib/format";
 import type { DailyBar, DividendRow } from "@/lib/nepse/types";
 import type { TransactionItem } from "@/lib/meroshare/types";
 import { cn } from "@/lib/utils";
@@ -64,11 +44,7 @@ function toMs(value: unknown): number {
  * cash is paid on the units held at each announcement, bonus units join the
  * holding for every later announcement.
  */
-export function simulateDividends(args: {
-  rows: DividendRow[];
-  startUnits: number;
-  face: number;
-}): SimResult {
+export function simulateDividends(args: { rows: DividendRow[]; startUnits: number; face: number }): SimResult {
   let units = Math.max(0, args.startUnits);
   const steps: SimStep[] = [];
   let totalCash = 0;
@@ -115,9 +91,7 @@ function netCreditedAfter(transactions: TransactionItem[], afterMs: number): num
 
 function oldestFirst(rows: DividendRow[]): DividendRow[] {
   return [...rows].sort((a, b) =>
-    String(a.announcementDate ?? a.fiscalYear ?? "").localeCompare(
-      String(b.announcementDate ?? b.fiscalYear ?? ""),
-    ),
+    String(a.announcementDate ?? a.fiscalYear ?? "").localeCompare(String(b.announcementDate ?? b.fiscalYear ?? "")),
   );
 }
 
@@ -138,10 +112,7 @@ export function actualMatchedTotals(args: {
   if (ordered.length === 0) return none;
   const firstMs = toMs(ordered[0]!.announcementDate ?? ordered[0]!.fiscalYear ?? "");
   if (!Number.isFinite(firstMs)) return none;
-  const startUnits = Math.max(
-    0,
-    Math.floor(args.holdingUnits - netCreditedAfter(args.transactions, firstMs)),
-  );
+  const startUnits = Math.max(0, Math.floor(args.holdingUnits - netCreditedAfter(args.transactions, firstMs)));
   const r = simulateDividends({ rows: ordered, startUnits, face: args.face });
   return { matched: true, totalCash: r.totalCash, totalBonus: r.totalBonus };
 }
@@ -213,10 +184,7 @@ export function DividendSimulator({
   const ordered = useMemo(() => {
     let rows = [...dividends];
     if (period === "Custom") {
-      rows = rows.filter(
-        (d) =>
-          (!fromFy || (d.fiscalYear ?? "") >= fromFy) && (!toFy || (d.fiscalYear ?? "") <= toFy),
-      );
+      rows = rows.filter((d) => (!fromFy || (d.fiscalYear ?? "") >= fromFy) && (!toFy || (d.fiscalYear ?? "") <= toFy));
     } else if (period !== "All") {
       const years = parseInt(period, 10);
       const cutoff = new Date();
@@ -228,21 +196,16 @@ export function DividendSimulator({
       });
     }
     return rows.sort((a, b) =>
-      String(a.announcementDate ?? a.fiscalYear ?? "").localeCompare(
-        String(b.announcementDate ?? b.fiscalYear ?? ""),
-      ),
+      String(a.announcementDate ?? a.fiscalYear ?? "").localeCompare(String(b.announcementDate ?? b.fiscalYear ?? "")),
     );
   }, [dividends, fromFy, toFy, period]);
 
-  const canUseActual =
-    useActual && holdingUnits !== null && holdingUnits > 0 && transactions.length > 0;
+  const canUseActual = useActual && holdingUnits !== null && holdingUnits > 0 && transactions.length > 0;
 
   const startUnits = useMemo(() => {
     if (canUseActual && ordered.length > 0) {
       const firstMs = toMs(ordered[0]!.announcementDate ?? ordered[0]!.fiscalYear ?? "");
-      const base = Number.isFinite(firstMs)
-        ? holdingUnits! - netCreditedAfter(transactions, firstMs)
-        : holdingUnits!;
+      const base = Number.isFinite(firstMs) ? holdingUnits! - netCreditedAfter(transactions, firstMs) : holdingUnits!;
       return Math.max(0, Math.floor(base));
     }
     return Math.max(0, Math.floor(toNumber(unitsInput)));
@@ -266,28 +229,18 @@ export function DividendSimulator({
   const startCost = startPrice !== null ? startUnits * startPrice : null;
   const endValue = currentLtp !== null && currentLtp > 0 ? result.endUnits * currentLtp : null;
   const totalReturn =
-    startCost !== null && startCost > 0 && endValue !== null
-      ? endValue + result.totalCash - startCost
-      : null;
+    startCost !== null && startCost > 0 && endValue !== null ? endValue + result.totalCash - startCost : null;
   const totalReturnPct =
-    totalReturn !== null && startCost !== null && startCost > 0
-      ? (totalReturn / startCost) * 100
-      : null;
+    totalReturn !== null && startCost !== null && startCost > 0 ? (totalReturn / startCost) * 100 : null;
 
   // Summary text like stock-details dividend tab
   const summaryText =
     result.steps.length > 0 ? (
       <p className="rounded-xl bg-gain/10 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-        On your{" "}
-        <span className="num font-semibold text-foreground">
-          {formatQty(result.startUnits)} units
-        </span>
-        , the years shown total an estimated cash{" "}
+        On your <span className="num font-semibold text-foreground">{formatQty(result.startUnits)} units</span>, the
+        years shown total an estimated cash{" "}
         <span className="num font-semibold text-gain">{formatNpr(result.totalCash)}</span> and bonus{" "}
-        <span className="num font-semibold text-foreground">
-          {formatQty(Math.floor(result.totalBonus))} units
-        </span>
-        .
+        <span className="num font-semibold text-foreground">{formatQty(Math.floor(result.totalBonus))} units</span>.
       </p>
     ) : null;
 
@@ -307,11 +260,7 @@ export function DividendSimulator({
 
   // Display latest-first per user request; calculation stays oldest-first
   // When matching actual transactions, only show FYs where you held units then
-  const displaySteps = (
-    canUseActual ? result.steps.filter((s) => s.unitsBefore > 0) : result.steps
-  )
-    .slice()
-    .reverse();
+  const displaySteps = (canUseActual ? result.steps.filter((s) => s.unitsBefore > 0) : result.steps).slice().reverse();
 
   return (
     <div className="space-y-3 rounded-2xl border border-primary/25 bg-card p-4">
@@ -341,9 +290,7 @@ export function DividendSimulator({
             className="num h-10"
           />
           {holdingUnits ? (
-            <p className="text-[0.68rem] text-muted-foreground">
-              You hold {formatQty(holdingUnits)} units
-            </p>
+            <p className="text-[0.68rem] text-muted-foreground">You hold {formatQty(holdingUnits)} units</p>
           ) : null}
         </div>
         <div className="space-y-1.5">
@@ -369,10 +316,7 @@ export function DividendSimulator({
         <div className="grid grid-cols-2 gap-2">
           <div className="space-y-1.5">
             <Label>From FY</Label>
-            <Select
-              value={fromFy ?? "all"}
-              onValueChange={(v) => setFromFy(v === "all" ? null : v)}
-            >
+            <Select value={fromFy ?? "all"} onValueChange={(v) => setFromFy(v === "all" ? null : v)}>
               <SelectTrigger className="h-10">
                 <SelectValue placeholder="All" />
               </SelectTrigger>
@@ -416,8 +360,8 @@ export function DividendSimulator({
           <span>
             <span className="block text-xs font-semibold">Match my actual transactions</span>
             <span className="block text-[0.68rem] leading-snug text-muted-foreground">
-              Works back from your current {formatQty(holdingUnits)} units through your demat
-              movements, so each announcement pays on what you truly held.
+              Works back from your current {formatQty(holdingUnits)} units through your demat movements, so each
+              announcement pays on what you truly held.
             </span>
           </span>
         </label>
@@ -427,18 +371,13 @@ export function DividendSimulator({
 
       {result.steps.length === 0 ? (
         <p className="rounded-xl border border-border/60 bg-surface px-3 py-4 text-center text-xs text-muted-foreground">
-          {startUnits <= 0
-            ? "Enter units above to run the simulation."
-            : "No announcements in this range."}
+          {startUnits <= 0 ? "Enter units above to run the simulation." : "No announcements in this range."}
         </p>
       ) : (
         <>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <Stat label="Cash received" value={formatNpr(result.totalCash)} accent />
-            <Stat
-              label="Bonus earned"
-              value={`${formatQty(Math.floor(result.totalBonus))} units`}
-            />
+            <Stat label="Bonus earned" value={`${formatQty(Math.floor(result.totalBonus))} units`} />
             <Stat label="Final units" value={formatQty(Math.floor(result.endUnits))} />
             <Stat
               label="Total gain"
@@ -477,13 +416,9 @@ export function DividendSimulator({
                     <TableRow key={s.key}>
                       <TableCell className="pl-3">
                         <p className="text-xs font-semibold">{s.fy}</p>
-                        <p className="num text-[0.65rem] text-muted-foreground">
-                          {s.date ? formatDate(s.date) : ""}
-                        </p>
+                        <p className="num text-[0.65rem] text-muted-foreground">{s.date ? formatDate(s.date) : ""}</p>
                       </TableCell>
-                      <TableCell className="num text-right text-xs">
-                        {formatQty(Math.floor(s.unitsBefore))}
-                      </TableCell>
+                      <TableCell className="num text-right text-xs">{formatQty(Math.floor(s.unitsBefore))}</TableCell>
                       <TableCell className="num text-right text-xs text-muted-foreground">
                         {s.cashPct > 0 ? `${s.cashPct}%` : "-"}
                       </TableCell>
@@ -504,14 +439,12 @@ export function DividendSimulator({
           )}
 
           <p className="text-[0.68rem] leading-relaxed text-muted-foreground">
-            Pre-tax estimates on face value Rs {formatNumber(faceValue)}: cash pays on the units
-            held at each announcement and bonus units compound forward.
+            Pre-tax estimates on face value Rs {formatNumber(faceValue)}: cash pays on the units held at each
+            announcement and bonus units compound forward.
             {startCost !== null
               ? ` Started ${formatQty(startUnits)} units at ~${formatNpr(startPrice ?? 0)} (${formatNpr(startCost)}).`
               : " Start price unavailable, so no total-return figure."}
-            {actualCost !== null && actualCost > 0
-              ? ` Your recorded cost basis is ${formatNpr(actualCost)}.`
-              : null}
+            {actualCost !== null && actualCost > 0 ? ` Your recorded cost basis is ${formatNpr(actualCost)}.` : null}
             {canUseActual
               ? " Matched against your demat movements; gaps in early history understate old payouts."
               : null}

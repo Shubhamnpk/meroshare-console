@@ -18,12 +18,7 @@ import {
   getCurrentIssues,
   getOldApplicationReports,
 } from "./meroshare/ipo.functions";
-import {
-  getAccountProfile,
-  getActivityLog,
-  getBanks,
-  getMyDetail,
-} from "./meroshare/account.functions";
+import { getAccountProfile, getActivityLog, getBanks, getMyDetail } from "./meroshare/account.functions";
 import {
   getBrokerDirectory,
   getChartData,
@@ -56,7 +51,14 @@ import {
   checkEdisPoolAccountFn,
   checkEdisWaccLeftFn,
 } from "./meroshare/edis.functions";
-import { getWorldHistory, getWorldQuote, getGlobalValuation, getWorldSearch, getWorldCompany, getGlobalHistory } from "./world/market.functions";
+import {
+  getWorldHistory,
+  getWorldQuote,
+  getGlobalValuation,
+  getWorldSearch,
+  getWorldCompany,
+  getGlobalHistory,
+} from "./world/market.functions";
 import type { GlobalValuationRow } from "./world/market.functions";
 import type { WorldRange } from "./world/feed.server";
 import type { ChartRange, PortfolioGranularity } from "./nepse/types";
@@ -203,21 +205,13 @@ export const portfolioHistoryQuery = (
   enabled = true,
 ) =>
   queryOptions({
-    queryKey: [
-      "portfolio-history",
-      months,
-      granularity,
-      JSON.stringify(holdings.map((h) => h.scrip)),
-    ],
+    queryKey: ["portfolio-history", months, granularity, JSON.stringify(holdings.map((h) => h.scrip))],
     queryFn: () => getPortfolioHistorySeries({ data: { holdings, months, granularity } }),
     enabled: enabled && holdings.length > 0,
     staleTime: 30 * 60_000,
   });
 
-export const portfolioIntradayQuery = (
-  holdings: { scrip: string; units: number; price: number }[],
-  enabled = true,
-) =>
+export const portfolioIntradayQuery = (holdings: { scrip: string; units: number; price: number }[], enabled = true) =>
   queryOptions({
     queryKey: ["portfolio-intraday", JSON.stringify(holdings.map((h) => [h.scrip, h.units]))],
     queryFn: () => getPortfolioIntradaySeries({ data: { holdings } }),
@@ -583,8 +577,7 @@ export const udfHistoryQuery = (
 ) =>
   queryOptions({
     queryKey: ["udf-history", symbol, range, intradayRes ?? ""],
-    queryFn: () =>
-      getUdfHistory({ data: { symbol: symbol!, range: range!, intradayRes: intradayRes ?? null } }),
+    queryFn: () => getUdfHistory({ data: { symbol: symbol!, range: range!, intradayRes: intradayRes ?? null } }),
     enabled: Boolean(symbol && range),
     staleTime: range === "1D" ? 15_000 : 60_000,
     refetchInterval: range === "1D" ? 15_000 : false,
@@ -1065,8 +1058,7 @@ export interface GlobalLotInput {
 export const globalValuationQuery = (holdings: GlobalLotInput[], enabled = true) =>
   queryOptions({
     queryKey: ["global-valuation", JSON.stringify(holdings.map((h) => [h.symbol, h.qty]))],
-    queryFn: async (): Promise<{ rows: GlobalValuationRow[] }> =>
-      getGlobalValuation({ data: { holdings } }),
+    queryFn: async (): Promise<{ rows: GlobalValuationRow[] }> => getGlobalValuation({ data: { holdings } }),
     enabled: enabled && holdings.length > 0,
     staleTime: 60_000,
     retry: false,
@@ -1096,19 +1088,11 @@ export interface GlobalHistoryLot {
   lots: { date: string; side: string; qty: number; price: number }[];
 }
 
-export const globalHistoryQuery = (
-  holdings: GlobalHistoryLot[],
-  range: "1M" | "3M" | "6M" | "1Y" | "MAX",
-) =>
+export const globalHistoryQuery = (holdings: GlobalHistoryLot[], range: "1M" | "3M" | "6M" | "1Y" | "MAX") =>
   queryOptions({
     queryKey: [
       "global-history",
-      JSON.stringify(
-        holdings.map((h) => [
-          h.symbol,
-          h.lots.map((l) => [l.date.slice(0, 10), l.side, l.qty, l.price]),
-        ]),
-      ),
+      JSON.stringify(holdings.map((h) => [h.symbol, h.lots.map((l) => [l.date.slice(0, 10), l.side, l.qty, l.price])])),
       range,
     ],
     queryFn: async () => getGlobalHistory({ data: { holdings, range } }),

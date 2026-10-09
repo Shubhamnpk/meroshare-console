@@ -34,8 +34,7 @@ export function Panel({
         "rounded-2xl border border-border/70 bg-card",
         PADDING[padding],
         shadow && "shadow-sm",
-        interactive &&
-          "transition-colors hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5",
+        interactive && "transition-colors hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5",
         className,
       )}
       {...rest}

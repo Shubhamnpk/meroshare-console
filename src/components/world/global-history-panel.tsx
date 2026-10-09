@@ -126,8 +126,8 @@ export function GlobalHistoryPanel({ txns }: { txns: GlobalTxn[] }) {
             {mode === "profit"
               ? "Profit = value minus what you paid (average cost); Total = value plus cost. "
               : "Total = what you paid plus profit. "}
-            Follows your actual buys and sells — starts at your first buy, not a backcast. Converted
-            at current FX rates.
+            Follows your actual buys and sells — starts at your first buy, not a backcast. Converted at current FX
+            rates.
             {failed.length > 0 ? ` Excludes ${failed.join(", ")} (no history).` : ""}
           </p>
         </>

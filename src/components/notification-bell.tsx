@@ -33,7 +33,6 @@ import { isAlertHit, usePriceAlerts } from "@/lib/price-alerts";
 import { formatNpr } from "@/lib/format";
 import {
   SNOOZE_TOMORROW_MS,
-  arePopupsEnabled,
   buildNotifications,
   dismiss,
   isPushEnabled,
@@ -50,6 +49,7 @@ import {
   type AppNotification,
   type PushState,
 } from "@/lib/notifications";
+import { useSettings } from "@/lib/settings";
 import { cn } from "@/lib/utils";
 import { useWatchlist } from "@/lib/watchlist";
 
@@ -85,11 +85,7 @@ function Row({
         item.urgent && "bg-destructive/5",
       )}
     >
-      <button
-        type="button"
-        onClick={onOpen}
-        className="flex min-w-0 flex-1 items-start gap-2.5 text-left"
-      >
+      <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-start gap-2.5 text-left">
         <span
           className={cn(
             "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full",
@@ -103,9 +99,7 @@ function Row({
             <span className="truncate">{item.title}</span>
             {unread ? <span className="size-1.5 shrink-0 rounded-full bg-primary" /> : null}
           </span>
-          <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">
-            {item.body}
-          </span>
+          <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">{item.body}</span>
         </span>
       </button>
       <div className="mt-1 flex shrink-0 flex-col gap-1 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
@@ -144,6 +138,8 @@ export function NotificationBell() {
   const messages = useQuery(exchangeMessagesQuery());
   const holdings = useQuery(holdingSymbolsQuery());
   const { symbols: watchlisted } = useWatchlist();
+  // Single toast kill-switch (Settings): urgent-item pop-ups obey it too.
+  const { toastsEnabled } = useSettings();
   // Global price-alert watcher: the bell is mounted app-wide, so alerts fire
   // on any page: not only while the broker panel is open.
   const pa = usePriceAlerts();
@@ -198,10 +194,7 @@ export function NotificationBell() {
     ],
   );
   const unread = all.filter((n) => !isRead(n.id));
-  const liveMap = useMemo(
-    () => new Map((liveSnap.data?.prices ?? []).map((p) => [p.symbol, p.ltp])),
-    [liveSnap.data],
-  );
+  const liveMap = useMemo(() => new Map((liveSnap.data?.prices ?? []).map((p) => [p.symbol, p.ltp])), [liveSnap.data]);
 
   const refresh = () => {
     setTick((t) => t + 1);
@@ -213,10 +206,9 @@ export function NotificationBell() {
     const fresh = all.filter((n) => n.urgent && !isRead(n.id) && !wasToasted(n.id)).slice(0, 2);
     if (fresh.length === 0) return;
     markToasted(fresh.map((n) => n.id));
-    const popups = arePopupsEnabled();
     for (const n of fresh) {
       sendBrowserNotification(n.title, n.body, n.id);
-      if (!popups) continue;
+      if (!toastsEnabled) continue;
       toast(n.title, {
         description: n.body,
         action: {
@@ -229,7 +221,7 @@ export function NotificationBell() {
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [all]);
+  }, [all, toastsEnabled]);
 
   const openItem = (item: AppNotification) => {
     markRead(item.id);
@@ -250,10 +242,7 @@ export function NotificationBell() {
           ) : null}
         </Button>
       </PopoverTrigger>
-      <PopoverContent
-        align="end"
-        className="w-screen max-w-[24rem] p-0 sm:w-96 sm:rounded-2xl sm:p-2"
-      >
+      <PopoverContent align="end" className="w-screen max-w-[24rem] p-0 sm:w-96 sm:rounded-2xl sm:p-2">
         <div className="flex items-center justify-between border-b border-border/60 px-4 py-3 sm:border-b-0 sm:px-3">
           <p className="font-display text-sm font-semibold">Notifications</p>
           <div className="flex items-center gap-2">
@@ -313,8 +302,7 @@ export function NotificationBell() {
           </button>
         ) : push === "denied" ? (
           <p className="mb-1 rounded-xl border border-border/60 bg-surface px-3 py-2 text-[11px] text-muted-foreground">
-            Browser alerts are blocked. Allow notifications in your browser's site settings to get
-            them on this device.
+            Browser alerts are blocked. Allow notifications in your browser's site settings to get them on this device.
           </p>
         ) : null}
         {pa.alerts.length > 0 ? (
@@ -327,17 +315,11 @@ export function NotificationBell() {
                 const ltp = liveMap.get(a.symbol);
                 const hit = Boolean(a.hitAt) || isAlertHit(a, ltp);
                 return (
-                  <li
-                    key={a.id}
-                    className="flex items-center justify-between gap-2 rounded-lg px-1 py-1.5"
-                  >
+                  <li key={a.id} className="flex items-center justify-between gap-2 rounded-lg px-1 py-1.5">
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-1.5 text-xs font-medium">
                         <span
-                          className={cn(
-                            "size-1.5 shrink-0 rounded-full",
-                            hit ? "bg-amber-500" : "bg-primary",
-                          )}
+                          className={cn("size-1.5 shrink-0 rounded-full", hit ? "bg-amber-500" : "bg-primary")}
                           aria-hidden
                         />
                         <span className="truncate">
@@ -346,8 +328,7 @@ export function NotificationBell() {
                         </span>
                       </span>
                       <span className="num mt-0.5 block text-[0.68rem] text-muted-foreground">
-                        Live {ltp != null ? formatNpr(ltp) : "-"} ·{" "}
-                        {a.hitAt ? "fired" : hit ? "crossed" : "watching"}
+                        Live {ltp != null ? formatNpr(ltp) : "-"} · {a.hitAt ? "fired" : hit ? "crossed" : "watching"}
                       </span>
                     </span>
                     <span className="flex shrink-0 items-center gap-1">

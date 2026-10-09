@@ -43,26 +43,20 @@ export const MF_ATTRIBUTION_TEXT = MF_ATTRIBUTION;
 
 const pipelineTypeSchema = z.enum(["ipo", "right", "fpo", "debenture", "mfs"]);
 
-export const getMfFeedHealthData = createServerFn({ method: "GET" }).handler(
-  async (): Promise<MfFeedHealth | null> => {
-    await requireAuth();
-    return getMfFeedHealth();
-  },
-);
+export const getMfFeedHealthData = createServerFn({ method: "GET" }).handler(async (): Promise<MfFeedHealth | null> => {
+  await requireAuth();
+  return getMfFeedHealth();
+});
 
-export const getMfManagerList = createServerFn({ method: "GET" }).handler(
-  async (): Promise<MfManager[]> => {
-    await requireAuth();
-    return getMfManagers();
-  },
-);
+export const getMfManagerList = createServerFn({ method: "GET" }).handler(async (): Promise<MfManager[]> => {
+  await requireAuth();
+  return getMfManagers();
+});
 
-export const getMfSchemeList = createServerFn({ method: "GET" }).handler(
-  async (): Promise<MfScheme[]> => {
-    await requireAuth();
-    return getMfSchemes();
-  },
-);
+export const getMfSchemeList = createServerFn({ method: "GET" }).handler(async (): Promise<MfScheme[]> => {
+  await requireAuth();
+  return getMfSchemes();
+});
 
 export const getMfPerformanceData = createServerFn({ method: "POST" })
   .validator((input: unknown) =>
@@ -78,20 +72,16 @@ export const getMfPerformanceData = createServerFn({ method: "POST" })
   });
 
 export const getMfSchemeDetail = createServerFn({ method: "POST" })
-  .validator((input: unknown) =>
-    z.object({ symbol: z.string().trim().min(1).max(24) }).parse(input),
-  )
+  .validator((input: unknown) => z.object({ symbol: z.string().trim().min(1).max(24) }).parse(input))
   .handler(async ({ data }): Promise<MfSchemeBundle> => {
     await requireAuth();
     return getMfSchemeBundle(data.symbol);
   });
 
-export const getMfPipelineData = createServerFn({ method: "GET" }).handler(
-  async (): Promise<MfPipeline> => {
-    await requireAuth();
-    return getMfPipeline("mfs");
-  },
-);
+export const getMfPipelineData = createServerFn({ method: "GET" }).handler(async (): Promise<MfPipeline> => {
+  await requireAuth();
+  return getMfPipeline("mfs");
+});
 
 export const getMfPipelineByType = createServerFn({ method: "POST" })
   .validator((input: unknown) => z.object({ type: pipelineTypeSchema }).parse(input))
@@ -107,26 +97,20 @@ export const getMfPipelineOverviewData = createServerFn({ method: "GET" }).handl
   },
 );
 
-export const getMfApprovalList = createServerFn({ method: "GET" }).handler(
-  async (): Promise<MfApproval[]> => {
-    await requireAuth();
-    return getMfApprovals();
-  },
-);
+export const getMfApprovalList = createServerFn({ method: "GET" }).handler(async (): Promise<MfApproval[]> => {
+  await requireAuth();
+  return getMfApprovals();
+});
 
-export const getMfDebentureData = createServerFn({ method: "GET" }).handler(
-  async (): Promise<MfDebentureSummary> => {
-    await requireAuth();
-    return getMfDebentureHighlights();
-  },
-);
+export const getMfDebentureData = createServerFn({ method: "GET" }).handler(async (): Promise<MfDebentureSummary> => {
+  await requireAuth();
+  return getMfDebentureHighlights();
+});
 
-export const getMfDebentureListData = createServerFn({ method: "GET" }).handler(
-  async (): Promise<MfDebentureList> => {
-    await requireAuth();
-    return getMfDebentureList();
-  },
-);
+export const getMfDebentureListData = createServerFn({ method: "GET" }).handler(async (): Promise<MfDebentureList> => {
+  await requireAuth();
+  return getMfDebentureList();
+});
 
 export const getMfProductCatalog = createServerFn({ method: "GET" }).handler(
   async (): Promise<Record<string, MfProduct[]>> => {
@@ -156,12 +140,10 @@ export const getMfManagerHoldingsMap = createServerFn({ method: "POST" })
     return getMfManagerHoldings(data.slug);
   });
 
-export const getMfMarketHoldingsMap = createServerFn({ method: "GET" }).handler(
-  async (): Promise<MfHoldingsMap> => {
-    await requireAuth();
-    return getMfMarketHoldings();
-  },
-);
+export const getMfMarketHoldingsMap = createServerFn({ method: "GET" }).handler(async (): Promise<MfHoldingsMap> => {
+  await requireAuth();
+  return getMfMarketHoldings();
+});
 
 export const getMfManagerProductData = createServerFn({ method: "POST" })
   .validator((input: unknown) => z.object({ slug: z.string().trim().min(1).max(48) }).parse(input))

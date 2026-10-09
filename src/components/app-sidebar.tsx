@@ -40,9 +40,7 @@ export const IPO_NAV: NavItem[] = [
   { to: "/edis", label: "EDIS Transfer", icon: Send },
 ];
 
-export const TRADE_NAV: NavItem[] = [
-  { to: "/broker", label: "Broker Account", icon: ArrowLeftRight },
-];
+export const TRADE_NAV: NavItem[] = [{ to: "/broker", label: "Broker Account", icon: ArrowLeftRight }];
 
 export const ACCOUNT_NAV: NavItem[] = [
   { to: "/profile", label: "My Profile", icon: UserRound },
@@ -138,12 +136,7 @@ function Brand({ collapsed, onToggle }: { collapsed: boolean; onToggle?: () => v
       )}
     >
       <div className={cn("flex items-center", collapsed ? "flex-col gap-2" : "gap-2.5")}>
-        <img
-          src="/logo.svg"
-          alt="MeroShare Next logo"
-          className="size-9 rounded-xl text-primary"
-          aria-hidden
-        />
+        <img src="/logo.svg" alt="MeroShare Next logo" className="size-9 rounded-xl text-primary" aria-hidden />
         {!collapsed && (
           <div className="leading-tight">
             <p className="font-display text-sm font-semibold">MeroShare</p>
@@ -192,13 +185,7 @@ export function MobileNav() {
   );
 }
 
-export function AppSidebar({
-  collapsed,
-  onToggleCollapsed,
-}: {
-  collapsed: boolean;
-  onToggleCollapsed: () => void;
-}) {
+export function AppSidebar({ collapsed, onToggleCollapsed }: { collapsed: boolean; onToggleCollapsed: () => void }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { edisBeta } = useSettings();
   const connections = useQuery(brokerConnectionsQuery());

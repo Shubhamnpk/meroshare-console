@@ -4,13 +4,7 @@ import { FileDown, FileJson, FileSpreadsheet, FileText } from "lucide-react";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { Button, type ButtonProps } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { isoDate } from "@/lib/format";
 
@@ -44,10 +38,7 @@ export function csvRow(cells: (string | number | undefined | null)[]): string {
 }
 
 /** Build a whole CSV document: quoted header row plus quoted data rows. */
-export function buildCsv(
-  head: (string | number)[] | null,
-  rows: (string | number | undefined | null)[][],
-): string {
+export function buildCsv(head: (string | number)[] | null, rows: (string | number | undefined | null)[][]): string {
   return [...(head ? [csvRow(head)] : []), ...rows.map((r) => csvRow(r))].join("\n");
 }
 
@@ -246,8 +237,7 @@ export function ExportButton({
       downloadText(
         `${name}.${format.extension}`,
         content,
-        format.mime ??
-          (format.extension === "json" ? "application/json" : "text/csv;charset=utf-8"),
+        format.mime ?? (format.extension === "json" ? "application/json" : "text/csv;charset=utf-8"),
       );
     }
     toast.success(`Exported as ${format.title.toUpperCase()}`);
@@ -256,22 +246,14 @@ export function ExportButton({
 
   return (
     <>
-      <Button
-        variant={variant}
-        size={size}
-        className={className}
-        disabled={disabled}
-        onClick={() => setOpen(true)}
-      >
+      <Button variant={variant} size={size} className={className} disabled={disabled} onClick={() => setOpen(true)}>
         <FileDown /> {label}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Export data</DialogTitle>
-            <DialogDescription>
-              Pick a file format. Your current view and filters are included.
-            </DialogDescription>
+            <DialogDescription>Pick a file format. Your current view and filters are included.</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-3 gap-2">
             {formats.map((format) => {

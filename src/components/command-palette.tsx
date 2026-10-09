@@ -51,7 +51,11 @@ export function CommandPalette({
       name: p.name,
       ltp: p.ltp,
       pct: p.percentChange,
-      kind: (p.asset_type === "open_ended_mutual_fund" ? "open_end_mf" : /mutual fund/i.test(p.sector) ? "mutual_fund" : "equity") as "equity" | "mutual_fund" | "open_end_mf",
+      kind: (p.asset_type === "open_ended_mutual_fund"
+        ? "open_end_mf"
+        : /mutual fund/i.test(p.sector)
+          ? "mutual_fund"
+          : "equity") as "equity" | "mutual_fund" | "open_end_mf",
     }));
     for (const s of schemesQ.data ?? []) {
       const sym = s.symbol.toUpperCase();
@@ -94,26 +98,21 @@ export function CommandPalette({
         </CommandEmpty>
         <CommandGroup heading={query ? "Matches" : "Top traded"}>
           {results.map((item) => (
-            <CommandItem
-              key={item.symbol}
-              value={`${item.symbol} ${item.name}`}
-              onSelect={() => pick(item.symbol)}
-            >
+            <CommandItem key={item.symbol} value={`${item.symbol} ${item.name}`} onSelect={() => pick(item.symbol)}>
               <LineChart className="size-4 text-muted-foreground" aria-hidden />
               <span className="min-w-0 flex-1">
                 <span className="font-semibold">{item.symbol}</span>{" "}
                 <span className="truncate text-xs text-muted-foreground">{item.name}</span>
                 {item.kind === "open_end_mf" ? (
-                  <span className="ml-1 rounded bg-primary/10 px-1 py-0.5 text-[0.62rem] font-semibold text-primary">Open-End NAV</span>
+                  <span className="ml-1 rounded bg-primary/10 px-1 py-0.5 text-[0.62rem] font-semibold text-primary">
+                    Open-End NAV
+                  </span>
                 ) : null}
               </span>
               <span className="num text-sm font-medium">{item.ltp != null ? formatNpr(item.ltp) : "NAV"}</span>
               {item.pct != null ? <DeltaPill value={item.pct}>{formatPercent(item.pct)}</DeltaPill> : null}
               {watchlist.has(item.symbol) ? (
-                <Star
-                  className="size-3.5 fill-warning text-warning"
-                  aria-label="On your watchlist"
-                />
+                <Star className="size-3.5 fill-warning text-warning" aria-label="On your watchlist" />
               ) : null}
             </CommandItem>
           ))}

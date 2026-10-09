@@ -48,8 +48,7 @@ export const Route = createFileRoute("/_dash/mutual-funds")({
       { property: "og:title", content: "Mutual Funds | MeroShare Investor Console" },
       {
         property: "og:description",
-        content:
-          "Nepali mutual fund schemes with NAV tracking, discount analytics and manager views.",
+        content: "Nepali mutual fund schemes with NAV tracking, discount analytics and manager views.",
       },
       ogImage(),
     ],
@@ -282,20 +281,14 @@ function MutualFundsPage() {
           }}
         />
       ) : schemes.length === 0 ? (
-        <EmptyBlock
-          title="No mutual funds"
-          description="No mutual fund schemes in the feed right now."
-        />
+        <EmptyBlock title="No mutual funds" description="No mutual fund schemes in the feed right now." />
       ) : tab === "schemes" ? (
         <>
           {stats ? (
             <ChipRow wrap>
               <StatChip label="Schemes" value={formatNumber(schemes.length)} />
               <StatChip label="Trading below NAV" value={formatNumber(stats.bargains)} />
-              <StatChip
-                label="Avg. discount"
-                value={stats.avg !== null ? formatPercent(stats.avg) : "-"}
-              />
+              <StatChip label="Avg. discount" value={stats.avg !== null ? formatPercent(stats.avg) : "-"} />
             </ChipRow>
           ) : null}
           <FundBrowse
@@ -312,10 +305,7 @@ function MutualFundsPage() {
         <>
           <ChipRow wrap>
             <StatChip label="Fund houses" value={formatNumber(managers.length)} />
-            <StatChip
-              label="With schemes live"
-              value={formatNumber(aggs.filter((a) => a.schemes.length > 0).length)}
-            />
+            <StatChip label="With schemes live" value={formatNumber(aggs.filter((a) => a.schemes.length > 0).length)} />
           </ChipRow>
           <ManagerGrid aggs={aggs} onPick={setPickedManager} />
         </>
@@ -337,8 +327,8 @@ function MutualFundsPage() {
 
       {!picked && !pickedManager ? (
         <p className="text-[11px] text-muted-foreground">
-          NAV, holdings, pipeline and notices come from community feeds, indicative only, not
-          investment advice. Past performance doesn't predict future returns.
+          NAV, holdings, pipeline and notices come from community feeds, indicative only, not investment advice. Past
+          performance doesn't predict future returns.
           {healthQ.data ? (
             <>
               {" "}
@@ -362,11 +352,7 @@ function MutualFundsPage() {
 
 function BackButton({ onClick, label }: { onClick: () => void; label: string }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="text-xs font-medium text-muted-foreground hover:text-foreground"
-    >
+    <button type="button" onClick={onClick} className="text-xs font-medium text-muted-foreground hover:text-foreground">
       ← {label}
     </button>
   );

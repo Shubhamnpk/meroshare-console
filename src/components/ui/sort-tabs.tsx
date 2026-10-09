@@ -15,12 +15,7 @@ export function SortTabs<T extends string>({
   className?: string;
 }) {
   return (
-    <div
-      className={cn(
-        "flex items-center gap-1 self-start rounded-xl border border-border/60 bg-card p-1",
-        className,
-      )}
-    >
+    <div className={cn("flex items-center gap-1 self-start rounded-xl border border-border/60 bg-card p-1", className)}>
       {options.map((o) => {
         const active = activeKey === o.key && dir !== "default";
         return (
@@ -30,9 +25,7 @@ export function SortTabs<T extends string>({
             onClick={() => onSelect(o.key)}
             className={cn(
               "inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-colors",
-              active
-                ? "bg-primary/15 text-primary"
-                : "text-muted-foreground hover:text-foreground",
+              active ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground",
             )}
             aria-pressed={active}
           >

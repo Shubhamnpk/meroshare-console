@@ -8,13 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AmountInput } from "@/components/ui/amount-input";
 import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DeltaPill } from "@/components/stat-card";
 import { RangeBar } from "@/components/market/range-bar";
 import {
@@ -37,9 +31,7 @@ import { useBrokerMarketWs } from "@/hooks/use-broker-ws";
 const VALIDITIES = ["DAY", "GTD", "GTC", "IOC", "FOK"] as const;
 
 function num(v: number | null | undefined): string {
-  return typeof v === "number" && Number.isFinite(v)
-    ? v.toLocaleString("en-NP", { maximumFractionDigits: 2 })
-    : "-";
+  return typeof v === "number" && Number.isFinite(v) ? v.toLocaleString("en-NP", { maximumFractionDigits: 2 }) : "-";
 }
 
 /** Plain-language read of top-of-book imbalance (share of visible size on the bid side). */
@@ -56,13 +48,16 @@ export function OrderTicket({
   limitPrice,
 }: {
   symbol: string;
-  limitPrice?: {
-    price: number;
-    side?: "BUY" | "SELL";
-    nonce: number;
-    /** Prefill quantity (order reuse). Omitted by chart-hover drafts. */
-    qty?: number;
-  } | null | undefined;
+  limitPrice?:
+    | {
+        price: number;
+        side?: "BUY" | "SELL";
+        nonce: number;
+        /** Prefill quantity (order reuse). Omitted by chart-hover drafts. */
+        qty?: number;
+      }
+    | null
+    | undefined;
 }) {
   const queryClient = useQueryClient();
   const connections = useQuery(brokerConnectionsQuery());
@@ -144,18 +139,9 @@ export function OrderTicket({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [amo]);
 
-  const holding = useMemo(
-    () => holdings.data?.find((h) => h.symbol === symbol) ?? null,
-    [holdings.data, symbol],
-  );
-  const symbolAmoOrders = useMemo(
-    () => (amoList.data ?? []).filter((o) => o.scrip === symbol),
-    [amoList.data, symbol],
-  );
-  const otherAmoOrders = useMemo(
-    () => (amoList.data ?? []).filter((o) => o.scrip !== symbol),
-    [amoList.data, symbol],
-  );
+  const holding = useMemo(() => holdings.data?.find((h) => h.symbol === symbol) ?? null, [holdings.data, symbol]);
+  const symbolAmoOrders = useMemo(() => (amoList.data ?? []).filter((o) => o.scrip === symbol), [amoList.data, symbol]);
+  const otherAmoOrders = useMemo(() => (amoList.data ?? []).filter((o) => o.scrip !== symbol), [amoList.data, symbol]);
   // Top-of-book size per side for the depth totals + mood gauge below.
   const depthTotals = useMemo(() => {
     const bidQty = (depth.data?.bids ?? []).reduce((s, r) => s + (r.quantity ?? 0), 0);
@@ -180,17 +166,15 @@ export function OrderTicket({
       ? (() => {
           const lower = ltp * 0.85;
           const upper = ltp * 1.15;
-          if (px < lower || px > upper) return `Price must be within ±15% of LTP (Rs ${lower.toFixed(2)} – ${upper.toFixed(2)})`;
+          if (px < lower || px > upper)
+            return `Price must be within ±15% of LTP (Rs ${lower.toFixed(2)} – ${upper.toFixed(2)})`;
           return null;
         })()
       : null;
   const amoOddLot = amo && side === "SELL" && validQty && qty < 10;
   const estimated =
-    validQty && (orderType === "MKT" ? ltp !== null : validPx)
-      ? qty * (orderType === "MKT" ? (ltp ?? 0) : px)
-      : null;
-  const shortfall =
-    side === "SELL" && validQty && holding ? Math.max(0, qty - holding.availableQty) : 0;
+    validQty && (orderType === "MKT" ? ltp !== null : validPx) ? qty * (orderType === "MKT" ? (ltp ?? 0) : px) : null;
+  const shortfall = side === "SELL" && validQty && holding ? Math.max(0, qty - holding.availableQty) : 0;
 
   const place = useMutation({
     mutationFn: async () => {
@@ -205,7 +189,14 @@ export function OrderTicket({
         if (res.error || !res.order) throw new Error(res.error ?? "Paper order failed.");
         saveYoWallet(null, res.wallet);
         // mimic PlaceOrderResult shape
-        return { ok: true as const, message: res.wallet.orders[0]?.status === "filled" ? `Filled ${side} ${qty} ${symbol}` : `Paper order placed: ${side} ${qty} ${symbol}`, tranId: res.order.id } as unknown as Awaited<ReturnType<typeof placeBrokerOrder>>;
+        return {
+          ok: true as const,
+          message:
+            res.wallet.orders[0]?.status === "filled"
+              ? `Filled ${side} ${qty} ${symbol}`
+              : `Paper order placed: ${side} ${qty} ${symbol}`,
+          tranId: res.order.id,
+        } as unknown as Awaited<ReturnType<typeof placeBrokerOrder>>;
       }
       if (amo) {
         const ref = ltp ?? quote.data?.close ?? px;
@@ -283,9 +274,7 @@ export function OrderTicket({
               <div className="text-right">
                 <p className="num text-base font-semibold">{formatNpr(quote.data.ltp ?? 0)}</p>
                 <DeltaPill value={quote.data.changePercent ?? 0}>
-                  {quote.data.changePercent !== null
-                    ? `${quote.data.changePercent.toFixed(2)}%`
-                    : "-"}
+                  {quote.data.changePercent !== null ? `${quote.data.changePercent.toFixed(2)}%` : "-"}
                 </DeltaPill>
                 {!wsReady ? (
                   <p
@@ -301,10 +290,7 @@ export function OrderTicket({
                 ) : null}
               </div>
             ) : (
-              <p
-                className="text-xs text-muted-foreground"
-                title={quote.error ? errorMessage(quote.error, "") : ""}
-              >
+              <p className="text-xs text-muted-foreground" title={quote.error ? errorMessage(quote.error, "") : ""}>
                 {quote.isPending
                   ? "Live quote…"
                   : quote.isError
@@ -330,11 +316,7 @@ export function OrderTicket({
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
-              {s === "BUY" ? (
-                <ArrowUpRight className="size-4" />
-              ) : (
-                <ArrowDownRight className="size-4" />
-              )}
+              {s === "BUY" ? <ArrowUpRight className="size-4" /> : <ArrowDownRight className="size-4" />}
               {s}
             </button>
           ))}
@@ -370,9 +352,7 @@ export function OrderTicket({
                 ? "Executes at the best available price."
                 : `LTP ${num(ltp)} · Close ${num(quote.data?.close)}`}
             </p>
-            {priceBandError ? (
-              <p className="mt-1 text-xs font-medium text-destructive">{priceBandError}</p>
-            ) : null}
+            {priceBandError ? <p className="mt-1 text-xs font-medium text-destructive">{priceBandError}</p> : null}
           </div>
         </div>
 
@@ -436,14 +416,12 @@ export function OrderTicket({
 
         <div className="mt-3 flex items-center justify-between rounded-xl bg-muted/40 px-3 py-2 text-sm">
           <span className="text-muted-foreground">Estimated value</span>
-          <span className="num font-semibold">
-            {estimated !== null ? formatNpr(estimated) : "-"}
-          </span>
+          <span className="num font-semibold">{estimated !== null ? formatNpr(estimated) : "-"}</span>
         </div>
         {shortfall > 0 ? (
           <p className="mt-2 text-xs font-medium text-destructive">
-            You hold {holding?.availableQty ?? 0} but are selling {qty}. Short by {shortfall}.
-            Intraday short-selling is blocked by the broker.
+            You hold {holding?.availableQty ?? 0} but are selling {qty}. Short by {shortfall}. Intraday short-selling is
+            blocked by the broker.
           </p>
         ) : null}
         {amoOddLot ? (
@@ -463,9 +441,9 @@ export function OrderTicket({
 
         {isOpenEnd ? (
           <p className="mt-3 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2.5 text-xs leading-relaxed">
-            <span className="font-semibold">Not tradable.</span> {symbol} is an open-end mutual
-            fund — it has no market price and can&apos;t be bought or sold through a broker.
-            Transact directly with the fund manager at NAV instead.
+            <span className="font-semibold">Not tradable.</span> {symbol} is an open-end mutual fund — it has no market
+            price and can&apos;t be bought or sold through a broker. Transact directly with the fund manager at NAV
+            instead.
           </p>
         ) : null}
         <Button
@@ -475,14 +453,12 @@ export function OrderTicket({
               ? "bg-gain hover:bg-gain/90 text-white"
               : "bg-destructive hover:bg-destructive/90 text-white",
           )}
-          disabled={!validQty || !validPx || !!priceBandError || shortfall > 0 || amoOddLot || isOpenEnd || place.isPending}
+          disabled={
+            !validQty || !validPx || !!priceBandError || shortfall > 0 || amoOddLot || isOpenEnd || place.isPending
+          }
           onClick={() => setConfirmOpen(true)}
         >
-          {place.isPending
-            ? "Sending…"
-            : amo
-              ? `Review ${side} order (AMO)`
-              : `Review ${side} order`}
+          {place.isPending ? "Sending…" : amo ? `Review ${side} order (AMO)` : `Review ${side} order`}
         </Button>
         <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
           <DialogContent className="sm:max-w-md">
@@ -493,7 +469,8 @@ export function OrderTicket({
               <DialogDescription>
                 {brokerId === "yobroker" ? (
                   <>
-                    This is a <strong>paper order</strong> via Yo Broker. No real money moves — fills against live NEPSE prices.
+                    This is a <strong>paper order</strong> via Yo Broker. No real money moves — fills against live NEPSE
+                    prices.
                   </>
                 ) : (
                   <>
@@ -508,9 +485,7 @@ export function OrderTicket({
               <span className="text-muted-foreground">Stock</span>
               <span className="num text-right font-semibold">{symbol}</span>
               <span className="text-muted-foreground">Quantity</span>
-              <span className="num text-right font-semibold">
-                {validQty ? qty.toLocaleString("en-NP") : "-"}
-              </span>
+              <span className="num text-right font-semibold">{validQty ? qty.toLocaleString("en-NP") : "-"}</span>
               <span className="text-muted-foreground">Price</span>
               <span className="num text-right font-semibold">
                 {orderType === "MKT" ? "MARKET" : validPx ? num(px) : "-"}
@@ -521,9 +496,7 @@ export function OrderTicket({
                 {validity !== "DAY" ? ` · ${validity}` : ""}
               </span>
               <span className="text-muted-foreground">Est. value</span>
-              <span className="num text-right font-bold">
-                {estimated !== null ? formatNpr(estimated) : "-"}
-              </span>
+              <span className="num text-right font-bold">{estimated !== null ? formatNpr(estimated) : "-"}</span>
             </div>
             <Button
               className={cn(
@@ -565,9 +538,7 @@ export function OrderTicket({
             disabled={quote.isFetching || depth.isFetching}
             aria-label="Refresh quote and depth"
           >
-            <RefreshCw
-              className={`size-3.5 ${quote.isFetching || depth.isFetching ? "animate-spin" : ""}`}
-            />
+            <RefreshCw className={`size-3.5 ${quote.isFetching || depth.isFetching ? "animate-spin" : ""}`} />
           </Button>
         </div>
         <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
@@ -579,9 +550,7 @@ export function OrderTicket({
               depth.data!.bids.map((r, i) => (
                 <div key={i} className="flex justify-between py-0.5 num">
                   <span>{r.quantity !== null ? r.quantity.toLocaleString("en-NP") : "-"}</span>
-                  <span className="font-semibold text-gain">
-                    {r.price !== null ? num(r.price) : "-"}
-                  </span>
+                  <span className="font-semibold text-gain">{r.price !== null ? num(r.price) : "-"}</span>
                 </div>
               ))
             )}
@@ -599,9 +568,7 @@ export function OrderTicket({
             ) : (
               depth.data!.asks.map((r, i) => (
                 <div key={i} className="flex justify-between py-0.5 num">
-                  <span className="font-semibold text-destructive">
-                    {r.price !== null ? num(r.price) : "-"}
-                  </span>
+                  <span className="font-semibold text-destructive">{r.price !== null ? num(r.price) : "-"}</span>
                   <span>{r.quantity !== null ? r.quantity.toLocaleString("en-NP") : "-"}</span>
                 </div>
               ))
@@ -609,9 +576,7 @@ export function OrderTicket({
             {(depth.data?.asks ?? []).length > 0 ? (
               <div className="num mt-1 flex justify-between border-t border-border/60 pt-1 text-xs font-semibold">
                 <span className="text-muted-foreground">Total</span>
-                <span className="text-destructive">
-                  {depthTotals.askQty.toLocaleString("en-NP")}
-                </span>
+                <span className="text-destructive">{depthTotals.askQty.toLocaleString("en-NP")}</span>
               </div>
             ) : null}
           </div>
@@ -619,9 +584,7 @@ export function OrderTicket({
         {depthTotals.total > 0 ? (
           <div className="mt-3 rounded-xl border border-border/60 bg-muted/10 px-3 py-2.5">
             <div className="flex items-center justify-between gap-2 text-xs">
-              <span className="font-semibold text-foreground">
-                {depthMood(depthTotals.bidPct)}
-              </span>
+              <span className="font-semibold text-foreground">{depthMood(depthTotals.bidPct)}</span>
               <span className="num text-muted-foreground">
                 {depthTotals.bidPct.toFixed(0)}% bid · {(100 - depthTotals.bidPct).toFixed(0)}% ask
               </span>
@@ -642,9 +605,7 @@ export function OrderTicket({
         <div className="mt-3 space-y-3 border-t border-border/60 pt-3 text-xs text-muted-foreground">
           {dayLow > 0 && dayHigh > dayLow && spot > 0 ? (
             <div>
-              <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-muted-foreground">
-                Day range
-              </p>
+              <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-muted-foreground">Day range</p>
               <RangeBar
                 low={dayLow}
                 high={dayHigh}

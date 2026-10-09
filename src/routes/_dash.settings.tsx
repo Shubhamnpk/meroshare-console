@@ -40,13 +40,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Panel } from "@/components/ui/panel";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useSettings, COLOR_OPTIONS, type ThemePref } from "@/lib/settings";
 import { getNumberFormat, setNumberFormat } from "@/components/ui/amount-input";
 import { clearRemembered, loadRemembered } from "@/lib/remember-me";
@@ -66,14 +60,12 @@ import { cn } from "@/lib/utils";
 import { errorMessage, formatDate } from "@/lib/format";
 import {
   NOTIFICATION_CATEGORIES,
-  arePopupsEnabled,
   clearSnoozed,
   isCategoryEnabled,
   isPushEnabled,
   pushState,
   requestPushPermission,
   setCategoryEnabled,
-  setPopupsEnabled,
   setPushEnabled,
   snoozedCount,
   type NotificationCategory,
@@ -223,15 +215,7 @@ function InstallCard() {
   );
 }
 
-function CheckRow({
-  label,
-  state,
-  pendingText,
-}: {
-  label: string;
-  state: boolean | null;
-  pendingText?: string;
-}) {
+function CheckRow({ label, state, pendingText }: { label: string; state: boolean | null; pendingText?: string }) {
   return (
     <div className="flex items-center justify-between gap-3 text-xs">
       <span className="text-muted-foreground">{label}</span>
@@ -281,8 +265,7 @@ function BiometricCard() {
   const username = session.data?.username ?? "";
   const capitalId = session.data?.capitalId ?? null;
   const isDemo = username === "demo" || capitalId === 0;
-  const dpName =
-    capitals.data?.find((c) => c.id === capitalId)?.name ?? (capitalId ? `DP #${capitalId}` : "-");
+  const dpName = capitals.data?.find((c) => c.id === capitalId)?.name ?? (capitalId ? `DP #${capitalId}` : "-");
 
   const openModal = () => {
     setError(null);
@@ -418,12 +401,7 @@ function BiometricCard() {
           <p className="text-xs font-medium text-gain">
             Fingerprint sign-in is saved. Your DP, username and password are stored on this device.
           </p>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onRemoveVault}
-            className="h-7 shrink-0 text-xs"
-          >
+          <Button variant="ghost" size="sm" onClick={onRemoveVault} className="h-7 shrink-0 text-xs">
             Remove
           </Button>
         </div>
@@ -439,9 +417,9 @@ function BiometricCard() {
             </button>
           </TooltipTrigger>
           <TooltipContent className="max-w-xs text-xs leading-relaxed">
-            A convenience lock for this device only. Uses your device&apos;s fingerprint, face, or
-            PIN. When enabled, one-tap sign-in saves your credentials on this device so your
-            fingerprint signs you in next time. Your MeroShare session still expires normally.
+            A convenience lock for this device only. Uses your device&apos;s fingerprint, face, or PIN. When enabled,
+            one-tap sign-in saves your credentials on this device so your fingerprint signs you in next time. Your
+            MeroShare session still expires normally.
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -473,8 +451,8 @@ function BiometricCard() {
             <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3.5 text-xs leading-relaxed">
               <p className="font-semibold text-destructive">Not available on this device</p>
               <p className="mt-1 text-muted-foreground">
-                Fingerprint unlock needs a phone or laptop with fingerprint, face, or screen lock
-                PIN set up, used over HTTPS or the installed app.
+                Fingerprint unlock needs a phone or laptop with fingerprint, face, or screen lock PIN set up, used over
+                HTTPS or the installed app.
               </p>
               <Button size="sm" className="mt-3" onClick={closeModal}>
                 Got it
@@ -499,9 +477,7 @@ function BiometricCard() {
                   <p className="truncate font-medium">{dpName}</p>
                 </div>
                 <div>
-                  <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                    Username
-                  </p>
+                  <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">Username</p>
                   <p className="num truncate font-medium">{username || "-"}</p>
                 </div>
               </div>
@@ -649,15 +625,14 @@ function GlobalDataCard() {
           </Button>
         ) : null}
       </div>
-      <p className="text-xs text-muted-foreground">
-       Trading 212 or standard CSV
-      </p>
+      <p className="text-xs text-muted-foreground">Trading 212 or standard CSV</p>
       <GlobalImportDialog open={importOpen} onOpenChange={setImportOpen} />
     </Panel>
   );
 }
 
-function BrokerConnectionsCard() {  const queryClient = useQueryClient();
+function BrokerConnectionsCard() {
+  const queryClient = useQueryClient();
   const connections = useQuery(brokerConnectionsQuery());
   const vaultStatus = useQuery(brokerVaultStatusQuery());
   const vaultReady = vaultStatus.data?.configured ?? null;
@@ -755,11 +730,10 @@ function BrokerConnectionsCard() {  const queryClient = useQueryClient();
             </button>
           </TooltipTrigger>
           <TooltipContent className="max-w-xs text-xs leading-relaxed">
-            Entirely optional. MeroShare sign-in keeps working exactly as before. A linked broker
-            lets this app sign you into the broker terminal itself, so portfolio, orders and market
-            data can come from your real trading account. Credentials are encrypted with a dedicated
-            server key, stored httpOnly, and never shown back, not even here. Connecting proves the
-            password with one live test login first.
+            Entirely optional. MeroShare sign-in keeps working exactly as before. A linked broker lets this app sign you
+            into the broker terminal itself, so portfolio, orders and market data can come from your real trading
+            account. Credentials are encrypted with a dedicated server key, stored httpOnly, and never shown back, not
+            even here. Connecting proves the password with one live test login first.
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -768,10 +742,9 @@ function BrokerConnectionsCard() {  const queryClient = useQueryClient();
         <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3.5 text-xs leading-relaxed">
           <p className="font-semibold">Broker linking is disabled on this server</p>
           <p className="mt-1 text-muted-foreground">
-            The server has no <span className="num font-medium">BROKER_VAULT_SECRET</span> set, so
-            saving is turned off (testing still works). If you run it locally, restart the dev
-            server so it picks up <span className="num">.env.local</span>; on hosted deploys, add
-            the variable in the dashboard and redeploy.
+            The server has no <span className="num font-medium">BROKER_VAULT_SECRET</span> set, so saving is turned off
+            (testing still works). If you run it locally, restart the dev server so it picks up{" "}
+            <span className="num">.env.local</span>; on hosted deploys, add the variable in the dashboard and redeploy.
           </p>
         </div>
       ) : null}
@@ -790,10 +763,7 @@ function BrokerConnectionsCard() {  const queryClient = useQueryClient();
               yoHoldings = w.holdings.length;
             } catch {}
             return (
-              <div
-                key={broker.id}
-                className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-4"
-              >
+              <div key={broker.id} className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-4">
                 <div className="flex items-center justify-between gap-4">
                   <div className="space-y-0.5">
                     <div className="flex items-center gap-2">
@@ -810,9 +780,7 @@ function BrokerConnectionsCard() {  const queryClient = useQueryClient();
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground">{broker.tagline}</p>
-                    <p className="text-[0.7rem] text-muted-foreground/80">
-                      {broker.capabilities.join(" · ")}
-                    </p>
+                    <p className="text-[0.7rem] text-muted-foreground/80">{broker.capabilities.join(" · ")}</p>
                   </div>
                   <Button
                     size="sm"
@@ -826,15 +794,11 @@ function BrokerConnectionsCard() {  const queryClient = useQueryClient();
                 {yoActive ? (
                   <div className="mt-2.5 grid gap-1 rounded-lg border border-border/60 bg-background px-3 py-2 text-xs sm:grid-cols-3">
                     <div>
-                      <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                        Virtual cash
-                      </p>
+                      <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">Virtual cash</p>
                       <p className="num font-medium">{yoCash.toLocaleString("en-NP")}</p>
                     </div>
                     <div>
-                      <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                        Holdings
-                      </p>
+                      <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">Holdings</p>
                       <p className="font-medium">{yoHoldings} stocks</p>
                     </div>
                     <div>
@@ -861,9 +825,7 @@ function BrokerConnectionsCard() {  const queryClient = useQueryClient();
                     ) : null}
                   </div>
                   <p className="text-xs text-muted-foreground">{broker.tagline}</p>
-                  <p className="text-[0.7rem] text-muted-foreground/80">
-                    {broker.capabilities.join(" · ")}
-                  </p>
+                  <p className="text-[0.7rem] text-muted-foreground/80">{broker.capabilities.join(" · ")}</p>
                 </div>
                 {link ? (
                   <div className="flex shrink-0 gap-2">
@@ -898,21 +860,15 @@ function BrokerConnectionsCard() {  const queryClient = useQueryClient();
               {link ? (
                 <div className="mt-2.5 grid gap-1 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs sm:grid-cols-3">
                   <div>
-                    <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                      Broker user
-                    </p>
+                    <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">Broker user</p>
                     <p className="truncate font-medium">{link.displayName ?? link.username}</p>
                   </div>
                   <div>
-                    <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                      Login email
-                    </p>
+                    <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">Login email</p>
                     <p className="num truncate font-medium">{link.username}</p>
                   </div>
                   <div>
-                    <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                      Last tested
-                    </p>
+                    <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">Last tested</p>
                     <p className="font-medium">{formatDate(link.lastTestedAt)}</p>
                   </div>
                 </div>
@@ -925,10 +881,7 @@ function BrokerConnectionsCard() {  const queryClient = useQueryClient();
 
       {retestMutation.isError ? (
         <p className="text-xs text-destructive">
-          {errorMessage(
-            retestMutation.error,
-            "Retest failed. The saved password may have changed.",
-          )}
+          {errorMessage(retestMutation.error, "Retest failed. The saved password may have changed.")}
         </p>
       ) : null}
       {retestMutation.isSuccess ? (
@@ -936,8 +889,8 @@ function BrokerConnectionsCard() {  const queryClient = useQueryClient();
       ) : null}
 
       <p className="text-[0.7rem] leading-relaxed text-muted-foreground/80">
-        More brokers plug in here later, each one ships its own tested login worker, and nothing is
-        stored until a live test proves it works.
+        More brokers plug in here later, each one ships its own tested login worker, and nothing is stored until a live
+        test proves it works.
       </p>
 
       {dialogFor === "tms" ? (
@@ -964,8 +917,7 @@ function BrokerConnectionsCard() {  const queryClient = useQueryClient();
               <Plug className="size-5 text-primary" /> Connect Naasa X
             </DialogTitle>
             <DialogDescription>
-              Signs into your broker once, right now, to prove the details work, then saves them
-              encrypted.
+              Signs into your broker once, right now, to prove the details work, then saves them encrypted.
             </DialogDescription>
           </DialogHeader>
 
@@ -1029,12 +981,8 @@ function BrokerConnectionsCard() {  const queryClient = useQueryClient();
                   </div>
                 ) : (
                   <div className="space-y-1">
-                    <p className="font-semibold text-destructive">
-                      {testResult.error ?? "Test login failed."}
-                    </p>
-                    {testResult.hint ? (
-                      <p className="text-muted-foreground">{testResult.hint}</p>
-                    ) : null}
+                    <p className="font-semibold text-destructive">{testResult.error ?? "Test login failed."}</p>
+                    {testResult.hint ? <p className="text-muted-foreground">{testResult.hint}</p> : null}
                   </div>
                 )}
               </div>
@@ -1051,10 +999,7 @@ function BrokerConnectionsCard() {  const queryClient = useQueryClient();
                 size="sm"
                 className="flex-1"
                 disabled={busy || !email || !password || !dialogFor}
-                onClick={() =>
-                  dialogFor &&
-                  testMutation.mutate({ brokerId: dialogFor, username: email, password })
-                }
+                onClick={() => dialogFor && testMutation.mutate({ brokerId: dialogFor, username: email, password })}
               >
                 {testMutation.isPending ? "Testing…" : "Test login"}
               </Button>
@@ -1062,10 +1007,7 @@ function BrokerConnectionsCard() {  const queryClient = useQueryClient();
                 size="sm"
                 className="flex-1"
                 disabled={busy || !email || !password || !dialogFor}
-                onClick={() =>
-                  dialogFor &&
-                  saveMutation.mutate({ brokerId: dialogFor, username: email, password })
-                }
+                onClick={() => dialogFor && saveMutation.mutate({ brokerId: dialogFor, username: email, password })}
               >
                 {saveMutation.isPending ? "Connecting…" : "connect"}
               </Button>
@@ -1080,7 +1022,6 @@ function BrokerConnectionsCard() {  const queryClient = useQueryClient();
 function NotificationCard() {
   const [push, setPush] = useState<PushState>(() => pushState());
   const [pushOn, setPushOn] = useState(() => isPushEnabled());
-  const [popupsOn, setPopupsOn] = useState(() => arePopupsEnabled());
   const [snoozed, setSnoozed] = useState(() => snoozedCount());
   const [cats, setCats] = useState<Record<NotificationCategory, boolean>>(() => ({
     ipo: isCategoryEnabled("ipo"),
@@ -1092,7 +1033,6 @@ function NotificationCard() {
   const refresh = () => {
     setPush(pushState());
     setPushOn(isPushEnabled());
-    setPopupsOn(arePopupsEnabled());
     setSnoozed(snoozedCount());
     setCats({
       ipo: isCategoryEnabled("ipo"),
@@ -1133,11 +1073,7 @@ function NotificationCard() {
             <p className="text-xs text-muted-foreground">{pushDescription}</p>
           </div>
           {push === "default" ? (
-            <Button
-              size="sm"
-              onClick={() => void requestPushPermission().then(() => refresh())}
-              className="shrink-0"
-            >
+            <Button size="sm" onClick={() => void requestPushPermission().then(() => refresh())} className="shrink-0">
               Enable
             </Button>
           ) : push === "granted" ? (
@@ -1154,24 +1090,6 @@ function NotificationCard() {
               {push === "unsupported" ? "Unavailable" : "Blocked"}
             </span>
           )}
-        </div>
-
-        {/* In-app pop-up toasts */}
-        <div className="flex items-center justify-between gap-4 rounded-xl border border-border/60 bg-background p-4">
-          <div className="space-y-0.5">
-            <p className="text-sm font-semibold">Pop-up alerts</p>
-            <p className="text-xs text-muted-foreground">
-              Show an in-app toast the first time an urgent item appears.
-            </p>
-          </div>
-          <Switch
-            checked={popupsOn}
-            onCheckedChange={(v) => {
-              setPopupsEnabled(v);
-              refresh();
-            }}
-            aria-label="popup-alerts"
-          />
         </div>
 
         {/* Per-category toggles */}
@@ -1229,8 +1147,8 @@ function NotificationCard() {
       </div>
 
       <p className="text-[0.7rem] leading-relaxed text-muted-foreground/80">
-        Alerts fire for IPOs closing within 3 days, password expiry within 30 days and DEMAT expiry
-        within 90 days, while the app is open.
+        Alerts fire for IPOs closing within 3 days, password expiry within 30 days and DEMAT expiry within 90 days,
+        while the app is open.
       </p>
     </Panel>
   );
@@ -1247,8 +1165,8 @@ function RememberedRow() {
           <p className="text-sm font-semibold">Remembered username</p>
         </div>
         <p className="text-xs text-muted-foreground">
-          <span className="num font-medium text-foreground">{remembered}</span> prefilled on this
-          device&apos;s sign-in form.
+          <span className="num font-medium text-foreground">{remembered}</span> prefilled on this device&apos;s sign-in
+          form.
         </p>
       </div>
       <Button
@@ -1278,8 +1196,7 @@ type TabId = (typeof TABS)[number]["id"];
 
 function MobileTabList({ onPick }: { onPick: (tab: TabId) => void }) {
   const bioOn = getEnrollment() !== null;
-  const statusFor = (id: TabId): string | null =>
-    id === "security" ? (bioOn ? "Fingerprint on" : null) : null;
+  const statusFor = (id: TabId): string | null => (id === "security" ? (bioOn ? "Fingerprint on" : null) : null);
   return (
     <div className="space-y-2">
       {TABS.map((tab) => {
@@ -1296,9 +1213,7 @@ function MobileTabList({ onPick }: { onPick: (tab: TabId) => void }) {
             </span>
             <span className="min-w-0 flex-1">
               <span className="block text-sm font-semibold">{tab.label}</span>
-              <span className="block truncate text-xs text-muted-foreground">
-                {status ?? tab.hint}
-              </span>
+              <span className="block truncate text-xs text-muted-foreground">{status ?? tab.hint}</span>
             </span>
             <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
           </button>
@@ -1320,6 +1235,8 @@ function SettingsPage() {
     setAutoRefresh,
     refreshMinutes,
     setRefreshMinutes,
+    toastsEnabled,
+    setToastsEnabled,
     openPassword,
     openPin,
   } = useSettings();
@@ -1391,18 +1308,14 @@ function SettingsPage() {
                     <span
                       className={cn(
                         "flex size-9 shrink-0 items-center justify-center rounded-lg",
-                        selected
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted text-muted-foreground",
+                        selected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
                       )}
                     >
                       <tab.icon className="size-4" />
                     </span>
                     <span className="min-w-0">
                       <span className="block text-sm font-semibold">{tab.label}</span>
-                      <span className="block truncate text-xs text-muted-foreground">
-                        {tab.hint}
-                      </span>
+                      <span className="block truncate text-xs text-muted-foreground">{tab.hint}</span>
                     </span>
                   </button>
                 );
@@ -1446,9 +1359,7 @@ function SettingsPage() {
                         </div>
                         <div>
                           <p className="text-xs font-semibold">{label}</p>
-                          <p className="mt-0.5 text-[0.65rem] text-muted-foreground/80 leading-tight">
-                            {hint}
-                          </p>
+                          <p className="mt-0.5 text-[0.65rem] text-muted-foreground/80 leading-tight">{hint}</p>
                         </div>
                         {active && (
                           <span className="absolute top-2 right-2 flex size-4 items-center justify-center rounded-full bg-primary text-primary-foreground">
@@ -1462,9 +1373,7 @@ function SettingsPage() {
 
                 {/* Color Theme Picker */}
                 <div className="space-y-3 pt-2">
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Accent Color
-                  </p>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Accent Color</p>
                   <div className="flex items-center gap-2.5">
                     {COLOR_OPTIONS.map(({ value, label, swatch }) => {
                       const active = colorTheme === value;
@@ -1482,9 +1391,7 @@ function SettingsPage() {
                           )}
                           style={{ background: swatch }}
                         >
-                          {active && (
-                            <Check className="size-3.5 text-white drop-shadow-sm" strokeWidth={3} />
-                          )}
+                          {active && <Check className="size-3.5 text-white drop-shadow-sm" strokeWidth={3} />}
                         </button>
                       );
                     })}
@@ -1513,11 +1420,7 @@ function SettingsPage() {
                         Automatically update stock prices and valuation in background.
                       </p>
                     </div>
-                    <Switch
-                      checked={autoRefresh}
-                      onCheckedChange={setAutoRefresh}
-                      aria-label="auto-refresh"
-                    />
+                    <Switch checked={autoRefresh} onCheckedChange={setAutoRefresh} aria-label="auto-refresh" />
                   </div>
 
                   {/* Interval Selector */}
@@ -1528,9 +1431,7 @@ function SettingsPage() {
                           <Clock className="size-4 text-muted-foreground" />
                           <p className="text-sm font-semibold">Refresh Frequency</p>
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                          Background refetch interval.
-                        </p>
+                        <p className="text-xs text-muted-foreground">Background refetch interval.</p>
                       </div>
                       <div className="flex items-center gap-1 rounded-lg border border-border/60 bg-secondary/60 p-1">
                         {intervalOptions.map((m) => (
@@ -1563,10 +1464,24 @@ function SettingsPage() {
                         Show values as Lakhs (L) and Crores (Cr), e.g. NPR 12.5 L.
                       </p>
                     </div>
+                    <Switch checked={compactNumbers} onCheckedChange={setCompactNumbers} aria-label="compact-numbers" />
+                  </div>
+
+                  {/* Toast Notifications Toggle */}
+                  <div className="flex items-center justify-between gap-4 rounded-xl border border-border/60 bg-background p-4">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <Bell className="size-4 text-primary" />
+                        <p className="text-sm font-semibold">Action Toasts</p>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Every in-app pop-up: orders, exports, copies, settings and urgent alerts. Off is total silence.
+                      </p>
+                    </div>
                     <Switch
-                      checked={compactNumbers}
-                      onCheckedChange={setCompactNumbers}
-                      aria-label="compact-numbers"
+                      checked={toastsEnabled}
+                      onCheckedChange={setToastsEnabled}
+                      aria-label="toast-notifications"
                     />
                   </div>
 
@@ -1578,7 +1493,10 @@ function SettingsPage() {
                         <p className="text-sm font-semibold">Number System</p>
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        {numberFormat === "np" ? "Nepali: 1,00,000 • Rs 12,34,567" : "International: 100,000 • Rs 1,234,567"} — affects all amount inputs.
+                        {numberFormat === "np"
+                          ? "Nepali: 1,00,000 • Rs 12,34,567"
+                          : "International: 100,000 • Rs 1,234,567"}{" "}
+                        — affects all amount inputs.
                       </p>
                     </div>
                     <div className="flex items-center gap-1 rounded-lg border border-border/60 bg-secondary/60 p-1">
@@ -1592,7 +1510,9 @@ function SettingsPage() {
                           }}
                           className={cn(
                             "rounded-md px-3 py-1 text-xs font-semibold transition-all",
-                            numberFormat === fmt ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                            numberFormat === fmt
+                              ? "bg-card text-foreground shadow-sm"
+                              : "text-muted-foreground hover:text-foreground",
                           )}
                         >
                           {fmt === "np" ? "Nepali" : "International"}
@@ -1619,10 +1539,7 @@ function SettingsPage() {
                 <div className="space-y-3">
                   <div className="flex items-center gap-3 rounded-xl border border-border/60 bg-muted/30 p-3.5 text-xs text-muted-foreground">
                     <Shield className="size-4 shrink-0 text-gain" />
-                    <span>
-                      Password and PIN changes are submitted directly to CDSC and never stored
-                      locally.
-                    </span>
+                    <span>Password and PIN changes are submitted directly to CDSC and never stored locally.</span>
                   </div>
 
                   <div className="grid gap-3 sm:grid-cols-2">
@@ -1679,10 +1596,7 @@ function SettingsPage() {
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-display text-base font-bold">MeroShare Investor Console</p>
-                      <Badge
-                        variant="secondary"
-                        className="bg-primary/10 text-primary border-primary/20 text-[0.7rem]"
-                      >
+                      <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-[0.7rem]">
                         {APP_VERSION}
                       </Badge>
                     </div>
@@ -1697,15 +1611,14 @@ function SettingsPage() {
                     <Target className="size-4 text-primary" /> Why this exists
                   </p>
                   <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                    The official MeroShare portal works, but watching your portfolio breathe,
-                    tracking IPO history, and understanding your own performance across visits is
-                    painful there. This app wraps the{" "}
-                    <em>same official CDSC data you already own</em> in a fast, readable interface.
-                    One goal: your demat account, finally readable.
+                    The official MeroShare portal works, but watching your portfolio breathe, tracking IPO history, and
+                    understanding your own performance across visits is painful there. This app wraps the{" "}
+                    <em>same official CDSC data you already own</em> in a fast, readable interface. One goal: your demat
+                    account, finally readable.
                   </p>
                   <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                    What we are not: affiliated with CDSC, a broker, or financial advice. Buy and
-                    sell decisions stay entirely yours.
+                    What we are not: affiliated with CDSC, a broker, or financial advice. Buy and sell decisions stay
+                    entirely yours.
                   </p>
                 </div>
 
@@ -1715,24 +1628,22 @@ function SettingsPage() {
                   </p>
                   <ul className="mt-2 list-disc space-y-1.5 pl-5 text-xs leading-relaxed text-muted-foreground">
                     <li>
-                      <span className="font-medium text-foreground">Open source.</span> Every line
-                      is auditable on GitHub. No black boxes holding your money&apos;s data.
+                      <span className="font-medium text-foreground">Open source.</span> Every line is auditable on
+                      GitHub. No black boxes holding your money&apos;s data.
                     </li>
                     <li>
-                      <span className="font-medium text-foreground">Credentials never stored.</span>{" "}
-                      Your password and PIN go straight to CDSC and live only in an encrypted
-                      session cookie that dies after ~2 hours or when you sign out.
+                      <span className="font-medium text-foreground">Credentials never stored.</span> Your password and
+                      PIN go straight to CDSC and live only in an encrypted session cookie that dies after ~2 hours or
+                      when you sign out.
                     </li>
                     <li>
-                      <span className="font-medium text-foreground">Your data stays yours.</span>{" "}
-                      Portfolio and IPO data comes from CDSC&apos;s official API under your own
-                      login. Market prices come from public NEPSE mirrors and the community YONEPSE
-                      feed, indicative only and never used for orders.
+                      <span className="font-medium text-foreground">Your data stays yours.</span> Portfolio and IPO data
+                      comes from CDSC&apos;s official API under your own login. Market prices come from public NEPSE
+                      mirrors and the community YONEPSE feed, indicative only and never used for orders.
                     </li>
                     <li>
-                      <span className="font-medium text-foreground">No accounts, no tracking.</span>{" "}
-                      Settings live in your browser. Fingerprint sign-in, if you enable it, encrypts
-                      credentials on your device alone.
+                      <span className="font-medium text-foreground">No accounts, no tracking.</span> Settings live in
+                      your browser. Fingerprint sign-in, if you enable it, encrypts credentials on your device alone.
                     </li>
                   </ul>
                 </div>
@@ -1756,16 +1667,14 @@ function SettingsPage() {
                 </div>
 
                 <div className="flex flex-wrap gap-1.5">
-                  {["React 19", "TanStack Start", "Tailwind CSS", "PWA ready", "MIT License"].map(
-                    (t) => (
-                      <span
-                        key={t}
-                        className="rounded-full bg-muted px-2.5 py-1 text-[0.68rem] font-medium text-muted-foreground"
-                      >
-                        {t}
-                      </span>
-                    ),
-                  )}
+                  {["React 19", "TanStack Start", "Tailwind CSS", "PWA ready", "MIT License"].map((t) => (
+                    <span
+                      key={t}
+                      className="rounded-full bg-muted px-2.5 py-1 text-[0.68rem] font-medium text-muted-foreground"
+                    >
+                      {t}
+                    </span>
+                  ))}
                 </div>
               </Panel>
               <InstallCard />

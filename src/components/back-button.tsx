@@ -2,13 +2,7 @@ import { useNavigate, useRouter } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 
 /** History-back with a safe fallback when there's nowhere to go back to. */
-export function BackButton({
-  fallback = "/dashboard",
-  label = "Back",
-}: {
-  fallback?: string;
-  label?: string;
-}) {
+export function BackButton({ fallback = "/dashboard", label = "Back" }: { fallback?: string; label?: string }) {
   const router = useRouter();
   const navigate = useNavigate();
   return (

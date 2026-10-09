@@ -6,25 +6,11 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ErrorBlock, EmptyBlock, SkeletonCards } from "@/components/states";
 import { ExportButton, buildCsv } from "@/components/export-dialog";
 import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableFooter,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   holdingSymbolsQuery,
   investmentSummaryQuery,
@@ -50,8 +36,7 @@ export const Route = createFileRoute("/_dash/wacc")({
       { title: "Purchase Source | MeroShare Investor Console" },
       {
         name: "description",
-        content:
-          "Set purchase prices for your transactions and submit them so CDSC calculates your WACC.",
+        content: "Set purchase prices for your transactions and submit them so CDSC calculates your WACC.",
       },
       { property: "og:title", content: "Purchase Source | MeroShare Investor Console" },
       {
@@ -87,10 +72,7 @@ function waccCsv(scrip: string, rows: PurchaseSourceItem[]) {
     String(toNumber(r.userCost)),
     String(r.remarks ?? ""),
   ]);
-  return buildCsv(
-    ["SN", "Stock", "Post date", "Quantity", "Price", "User cost", "Remarks"],
-    lines,
-  );
+  return buildCsv(["SN", "Stock", "Post date", "Quantity", "Price", "User cost", "Remarks"], lines);
 }
 
 type RowSortKey = "date" | "qty" | "price" | "cost";
@@ -370,9 +352,7 @@ function PendingTable({ scrip, rows }: { scrip: string; rows: PurchaseSourceItem
                   type="checkbox"
                   aria-label="Select all rows"
                   checked={allChecked}
-                  onChange={(e) =>
-                    setDrafts((prev) => prev.map((d) => ({ ...d, checked: e.target.checked })))
-                  }
+                  onChange={(e) => setDrafts((prev) => prev.map((d) => ({ ...d, checked: e.target.checked })))}
                 />
               </TableHead>
               <SortableTh
@@ -484,10 +464,7 @@ function PendingTable({ scrip, rows }: { scrip: string; rows: PurchaseSourceItem
                 )}`
               : "Tick rows and set a price above 0 to proceed."}
           </p>
-          <Button
-            disabled={!declared || !selected.length || submit.isPending}
-            onClick={() => submit.mutate()}
-          >
+          <Button disabled={!declared || !selected.length || submit.isPending} onClick={() => submit.mutate()}>
             {submit.isPending ? "Submitting…" : `Proceed (${selected.length})`}
           </Button>
         </div>
@@ -620,28 +597,24 @@ function WaccReportPanel({
               const key = String(h.scrip ?? "").toUpperCase();
               const isHi = highlight !== "" && key === highlight;
               return (
-              <TableRow
-                key={String(h.scrip)}
-                ref={(el) => {
-                  if (el) rowRefs.current.set(key, el);
-                  else rowRefs.current.delete(key);
-                }}
-                onClick={() => onPickScrip(String(h.scrip ?? ""))}
-                title={`View WACC detail for ${String(h.scrip ?? "")}`}
-                className={cn("cursor-pointer hover:bg-accent/30", isHi && "bg-primary/10")}
-              >
-                <TableCell className="px-4 py-2.5 font-semibold">{h.scrip}</TableCell>
-                <TableCell className="num px-4 py-2.5 text-right">
-                  {formatQty(toNumber(h.totalQuantity))}
-                </TableCell>
-                <TableCell className="num px-4 py-2.5 text-right">
-                  {formatNpr(toNumber(h.averageBuyRate))}
-                </TableCell>
-                <TableCell className="num px-4 py-2.5 text-right">{formatNpr(toNumber(h.totalCost))}</TableCell>
-                <TableCell className="hidden px-4 py-2.5 text-muted-foreground md:table-cell">
-                  {h.lastModifiedDate ?? ""}
-                </TableCell>
-              </TableRow>
+                <TableRow
+                  key={String(h.scrip)}
+                  ref={(el) => {
+                    if (el) rowRefs.current.set(key, el);
+                    else rowRefs.current.delete(key);
+                  }}
+                  onClick={() => onPickScrip(String(h.scrip ?? ""))}
+                  title={`View WACC detail for ${String(h.scrip ?? "")}`}
+                  className={cn("cursor-pointer hover:bg-accent/30", isHi && "bg-primary/10")}
+                >
+                  <TableCell className="px-4 py-2.5 font-semibold">{h.scrip}</TableCell>
+                  <TableCell className="num px-4 py-2.5 text-right">{formatQty(toNumber(h.totalQuantity))}</TableCell>
+                  <TableCell className="num px-4 py-2.5 text-right">{formatNpr(toNumber(h.averageBuyRate))}</TableCell>
+                  <TableCell className="num px-4 py-2.5 text-right">{formatNpr(toNumber(h.totalCost))}</TableCell>
+                  <TableCell className="hidden px-4 py-2.5 text-muted-foreground md:table-cell">
+                    {h.lastModifiedDate ?? ""}
+                  </TableCell>
+                </TableRow>
               );
             })}
           </TableBody>
@@ -704,9 +677,7 @@ function WaccPage() {
         waccRate: reportRate > 0 ? reportRate : reportUnits > 0 ? reportCost / reportUnits : 0,
         status: "calculated" as const,
       }
-    : ((investment.data?.scrips ?? []).find(
-        (s) => s.scrip === upperScrip && s.cost > 0 && s.units > 0,
-      ) ?? null);
+    : ((investment.data?.scrips ?? []).find((s) => s.scrip === upperScrip && s.cost > 0 && s.units > 0) ?? null);
   const searchHasSummary = (search.data?.waccSummaryResponse ?? []).length > 0;
   // Calculated WACC renders its SummaryTable by default from the known basis
   // when the per-scrip search can't supply its own rows (blocked or empty).
@@ -728,9 +699,7 @@ function WaccPage() {
         ]
       : [];
   // Pending estimates keep the compact banner (no table to fill).
-  const showBasisBanner = Boolean(
-    scrip && basisEntry && basisEntry.status === "pending" && !search.isPending,
-  );
+  const showBasisBanner = Boolean(scrip && basisEntry && basisEntry.status === "pending" && !search.isPending);
 
   const pendingList = pendingScrips.data?.scrips ?? [];
   const pendingFailed = pendingScrips.data?.failed === true;
@@ -750,9 +719,7 @@ function WaccPage() {
     [investment.data],
   );
   const todoScrips = useMemo(() => {
-    const fromPending = pendingList.filter(
-      (s) => !doneScrips.some((d) => d.scrip === s),
-    );
+    const fromPending = pendingList.filter((s) => !doneScrips.some((d) => d.scrip === s));
     if (fromPending.length > 0) return fromPending;
     return (investment.data?.scrips ?? [])
       .filter((s) => s.status !== "calculated")
@@ -798,9 +765,7 @@ function WaccPage() {
         Set the price you paid for each transaction and submit it so CDSC calculates your WACC.
       </p>
 
-      {symbols.isError ? (
-        <ErrorBlock error={symbols.error} retry={() => void symbols.refetch()} />
-      ) : null}
+      {symbols.isError ? <ErrorBlock error={symbols.error} retry={() => void symbols.refetch()} /> : null}
 
       <div className="space-y-3 rounded-2xl border border-border/70 bg-card p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -836,9 +801,7 @@ function WaccPage() {
             </SelectContent>
           </Select>
           {pendingScrips.isLoading || symbols.isLoading ? (
-            <span className="animate-pulse text-xs text-muted-foreground">
-              Checking pending stocks…
-            </span>
+            <span className="animate-pulse text-xs text-muted-foreground">Checking pending stocks…</span>
           ) : null}
           {scrip ? (
             <Button
@@ -950,14 +913,9 @@ function WaccPage() {
                           className="num px-4 py-2.5 text-right"
                           title="Average WACC across calculated stocks (total cost / total units)"
                         >
-                          {formatNpr(
-                            Math.round((doneTotals.cost / Math.max(1, doneTotals.units)) * 100) /
-                              100,
-                          )}
+                          {formatNpr(Math.round((doneTotals.cost / Math.max(1, doneTotals.units)) * 100) / 100)}
                         </TableCell>
-                        <TableCell className="num px-4 py-2.5 text-right">
-                          {formatNpr(doneTotals.cost)}
-                        </TableCell>
+                        <TableCell className="num px-4 py-2.5 text-right">{formatNpr(doneTotals.cost)}</TableCell>
                       </TableRow>
                     </TableFooter>
                   </Table>
@@ -973,8 +931,7 @@ function WaccPage() {
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  These still need their purchase prices confirmed. Tap one to jump straight
-                  into its calculation.
+                  These still need their purchase prices confirmed. Tap one to jump straight into its calculation.
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {todoScrips.map((s) => (
@@ -992,17 +949,13 @@ function WaccPage() {
             ) : null}
           </div>
         ) : (
-          <EmptyBlock
-            title="Select a stock"
-            description="Pick a stock above to load its purchase source entries."
-          />
+          <EmptyBlock title="Select a stock" description="Pick a stock above to load its purchase source entries." />
         )
       ) : search.isPending ? (
         <SkeletonCards count={2} />
       ) : search.isError ? (
         <ErrorBlock error={search.error} retry={() => void search.refetch()} />
-      ) : (search.data?.waccUpdateResponse ?? []).length > 0 ||
-        (search.data?.waccSummaryResponse ?? []).length > 0 ? (
+      ) : (search.data?.waccUpdateResponse ?? []).length > 0 || (search.data?.waccSummaryResponse ?? []).length > 0 ? (
         <div className="space-y-8">
           {(search.data?.waccUpdateResponse ?? []).length > 0 ? (
             <PendingTable key={scrip} scrip={scrip} rows={search.data!.waccUpdateResponse!} />
@@ -1020,10 +973,7 @@ function WaccPage() {
           <SummaryTable scrip={scrip} rows={fallbackSummaryRows} />
         </section>
       ) : (
-        <EmptyBlock
-          title="Nothing to do"
-          description={`No purchase source entries found for ${scrip}.`}
-        />
+        <EmptyBlock title="Nothing to do" description={`No purchase source entries found for ${scrip}.`} />
       )}
 
       <WaccReportPanel

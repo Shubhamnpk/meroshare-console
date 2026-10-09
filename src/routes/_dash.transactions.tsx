@@ -4,23 +4,10 @@ import { toast } from "sonner";
 import { ErrorBlock, LoadingBlock, EmptyBlock } from "@/components/states";
 import { useMemo, useState } from "react";
 import { ArrowDownRight, ArrowUpRight, FileUp, Pencil, Search, Trash2 } from "lucide-react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ExportButton, buildCsv } from "@/components/export-dialog";
 import { Button } from "@/components/ui/button";
 import { GlobalImportDialog } from "@/components/world/global-import-dialog";
@@ -58,7 +45,8 @@ export const Route = createFileRoute("/_dash/transactions")({
   component: TransactionsPage,
 });
 
-function transactionsCsv(items: TransactionItem[]) {  const rows = items.map((t, i) => [
+function transactionsCsv(items: TransactionItem[]) {
+  const rows = items.map((t, i) => [
     i + 1,
     formatDate(t.transactionDate),
     t.script ?? "",
@@ -98,10 +86,7 @@ function globalTxnsCsv(items: GlobalTxn[]) {
     t.costGbp != null ? t.costGbp.toFixed(2) : "",
     t.notes,
   ]);
-  return buildCsv(
-    ["Date", "Type", "Symbol", "Name", "Qty", "Price", "Currency", "Total GBP", "Notes"],
-    rows,
-  );
+  return buildCsv(["Date", "Type", "Symbol", "Name", "Qty", "Price", "Currency", "Total GBP", "Notes"], rows);
 }
 
 function TransactionsPage() {
@@ -117,9 +102,7 @@ function TransactionsPage() {
   const [selected, setSelected] = useState<string[]>([]);
   const [confirmBulk, setConfirmBulk] = useState(false);
   const globalTxns = useGlobalTxns();
-  const { sort, toggle } = useSort<
-    "date" | "script" | "description" | "credit" | "debit" | "balance"
-  >(
+  const { sort, toggle } = useSort<"date" | "script" | "description" | "credit" | "debit" | "balance">(
     { key: "date", dir: "desc" },
     {
       date: "number",
@@ -169,9 +152,7 @@ function TransactionsPage() {
   const gFiltered = useMemo(() => {
     const term = gSearch.trim().toLowerCase();
     const rows = term
-      ? globalTxns.filter((t) =>
-          [t.symbol, t.name, t.notes, t.side].some((s) => s.toLowerCase().includes(term)),
-        )
+      ? globalTxns.filter((t) => [t.symbol, t.name, t.notes, t.side].some((s) => s.toLowerCase().includes(term)))
       : globalTxns;
     return [...rows].sort((a, b) => b.date.localeCompare(a.date));
   }, [globalTxns, gSearch]);
@@ -185,10 +166,7 @@ function TransactionsPage() {
     setSelected((prev) =>
       allVisibleSelected ? prev.filter((id) => !visibleIds.includes(id)) : [...new Set([...prev, ...visibleIds])],
     );
-  const selectedRows = useMemo(
-    () => gFiltered.filter((t) => selected.includes(t.id)),
-    [gFiltered, selected],
-  );
+  const selectedRows = useMemo(() => gFiltered.filter((t) => selected.includes(t.id)), [gFiltered, selected]);
 
   return (
     <div className="space-y-5">
@@ -199,67 +177,62 @@ function TransactionsPage() {
         <div className="flex items-center gap-2">
           {txTab === "meroshare" ? (
             <>
-          <Select value={symbol} onValueChange={setSymbol}>
-            <SelectTrigger className="w-44">
-              <SelectValue placeholder="All stocks" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All stocks</SelectItem>
-              {(symbols.data ?? []).map((s) => (
-                <SelectItem key={s} value={s}>
-                  {s}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <ExportButton
-            disabled={filtered.length === 0}
-            formats={[
-              {
-                title: "CSV",
-                description: "Every credit, debit and running balance",
-                filename: `transactions-${symbol === "all" ? "all" : symbol}`,
-                extension: "csv",
-                build: () => transactionsCsv(filtered),
-              },
-              {
-                title: "JSON",
-                description: "Raw demat movement records",
-                filename: `transactions-${symbol === "all" ? "all" : symbol}`,
-                extension: "json",
-                build: () => JSON.stringify(filtered, null, 2),
-              },
-              {
-                title: "PDF",
-                description: "Formatted statement for printing or sharing",
-                filename: `transactions-${symbol === "all" ? "all" : symbol}`,
-                extension: "pdf",
-                build: () => "",
-                pdf: () => ({
-                  title: "Demat transaction history",
-                  head: ["SN", "Date", "Script", "Description", "Credit", "Debit", "Balance"],
-                  body: filtered.map((t, i) => [
-                    i + 1,
-                    formatDate(t.transactionDate),
-                    t.script ?? "",
-                    t.historyDescription ?? "",
-                    toNumber(t.creditQuantity) > 0 ? `+${formatQty(t.creditQuantity)}` : "",
-                    toNumber(t.debitQuantity) > 0 ? `−${formatQty(t.debitQuantity)}` : "",
-                    formatQty(toNumber(t.balanceAfterTransaction)),
-                  ]),
-                }),
-              },
-            ]}
-          />
+              <Select value={symbol} onValueChange={setSymbol}>
+                <SelectTrigger className="w-44">
+                  <SelectValue placeholder="All stocks" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All stocks</SelectItem>
+                  {(symbols.data ?? []).map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <ExportButton
+                disabled={filtered.length === 0}
+                formats={[
+                  {
+                    title: "CSV",
+                    description: "Every credit, debit and running balance",
+                    filename: `transactions-${symbol === "all" ? "all" : symbol}`,
+                    extension: "csv",
+                    build: () => transactionsCsv(filtered),
+                  },
+                  {
+                    title: "JSON",
+                    description: "Raw demat movement records",
+                    filename: `transactions-${symbol === "all" ? "all" : symbol}`,
+                    extension: "json",
+                    build: () => JSON.stringify(filtered, null, 2),
+                  },
+                  {
+                    title: "PDF",
+                    description: "Formatted statement for printing or sharing",
+                    filename: `transactions-${symbol === "all" ? "all" : symbol}`,
+                    extension: "pdf",
+                    build: () => "",
+                    pdf: () => ({
+                      title: "Demat transaction history",
+                      head: ["SN", "Date", "Script", "Description", "Credit", "Debit", "Balance"],
+                      body: filtered.map((t, i) => [
+                        i + 1,
+                        formatDate(t.transactionDate),
+                        t.script ?? "",
+                        t.historyDescription ?? "",
+                        toNumber(t.creditQuantity) > 0 ? `+${formatQty(t.creditQuantity)}` : "",
+                        toNumber(t.debitQuantity) > 0 ? `−${formatQty(t.debitQuantity)}` : "",
+                        formatQty(toNumber(t.balanceAfterTransaction)),
+                      ]),
+                    }),
+                  },
+                ]}
+              />
             </>
           ) : (
             <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setImportOpen(true)}
-                className="gap-1.5"
-              >
+              <Button variant="outline" size="sm" onClick={() => setImportOpen(true)} className="gap-1.5">
                 <FileUp className="size-3.5" /> Import
               </Button>
               <ExportButton
@@ -286,11 +259,7 @@ function TransactionsPage() {
         </div>
       </div>
 
-      <Tabs
-        value={txTab}
-        onValueChange={(v) => setTxTab(v as "meroshare" | "global")}
-        className="self-start"
-      >
+      <Tabs value={txTab} onValueChange={(v) => setTxTab(v as "meroshare" | "global")} className="self-start">
         <TabsList>
           <TabsTrigger value="meroshare">MeroShare</TabsTrigger>
           <TabsTrigger value="global">
@@ -301,133 +270,128 @@ function TransactionsPage() {
 
       {txTab === "meroshare" ? (
         <>
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by stock or description…"
-          className="h-10 rounded-xl pl-9"
-        />
-      </div>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by stock or description…"
+              className="h-10 rounded-xl pl-9"
+            />
+          </div>
 
-      <ChipRow wrap>
-        <StatChip
-          icon={<ArrowDownRight className="size-4 text-gain" />}
-          label="Records"
-          value={formatQty(q.data?.total ?? 0)}
-        />
-        <StatChip
-          icon={<ArrowDownRight className="size-4 text-gain" />}
-          label="Total credited"
-          value={formatQty(totalCredit)}
-          valueClass="text-gain"
-        />
-        <StatChip
-          icon={<ArrowUpRight className="size-4 text-loss" />}
-          label="Total debited"
-          value={formatQty(totalDebit)}
-          valueClass="text-loss"
-        />
-      </ChipRow>
+          <ChipRow wrap>
+            <StatChip
+              icon={<ArrowDownRight className="size-4 text-gain" />}
+              label="Records"
+              value={formatQty(q.data?.total ?? 0)}
+            />
+            <StatChip
+              icon={<ArrowDownRight className="size-4 text-gain" />}
+              label="Total credited"
+              value={formatQty(totalCredit)}
+              valueClass="text-gain"
+            />
+            <StatChip
+              icon={<ArrowUpRight className="size-4 text-loss" />}
+              label="Total debited"
+              value={formatQty(totalDebit)}
+              valueClass="text-loss"
+            />
+          </ChipRow>
 
-      {q.isLoading ? (
-        <LoadingBlock label="Loading transactions" />
-      ) : q.isError ? (
-        <ErrorBlock error={q.error} retry={() => void q.refetch()} />
-      ) : items.length === 0 ? (
-        <EmptyBlock
-          title="No transactions"
-          description="No movement recorded for this selection."
-        />
-      ) : filtered.length === 0 ? (
-        <EmptyBlock
-          title="No matches"
-          description="Nothing matches your search. Try a different stock or description."
-        />
-      ) : (
-        <div className="overflow-clip rounded-2xl border border-border/70 bg-card">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/40 hover:bg-muted/40">
-                <TableHead className="w-10 pl-4">SN</TableHead>
-                <SortableTh
-                  label="Date"
-                  active={sort.key === "date"}
-                  dir={sort.dir}
-                  onClick={() => toggle("date")}
-                  align="left"
-                />
-                <SortableTh
-                  label="Script"
-                  active={sort.key === "script"}
-                  dir={sort.dir}
-                  onClick={() => toggle("script")}
-                  align="left"
-                  kind="text"
-                />
-                <SortableTh
-                  label="Description"
-                  active={sort.key === "description"}
-                  dir={sort.dir}
-                  onClick={() => toggle("description")}
-                  align="left"
-                  className="hidden md:table-cell"
-                  kind="text"
-                />
-                <SortableTh
-                  label="Credit"
-                  active={sort.key === "credit"}
-                  dir={sort.dir}
-                  onClick={() => toggle("credit")}
-                  align="right"
-                />
-                <SortableTh
-                  label="Debit"
-                  active={sort.key === "debit"}
-                  dir={sort.dir}
-                  onClick={() => toggle("debit")}
-                  align="right"
-                />
-                <SortableTh
-                  label="Balance"
-                  active={sort.key === "balance"}
-                  dir={sort.dir}
-                  onClick={() => toggle("balance")}
-                  align="right"
-                  className="pr-4"
-                />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((t, idx) => (
-                <TableRow key={`${t.script}-${String(t.transactionDate)}-${idx}`}>
-                  <TableCell className="pl-4 text-xs text-muted-foreground">{idx + 1}</TableCell>
-                  <TableCell className="whitespace-nowrap text-xs">
-                    {formatDate(t.transactionDate)}
-                  </TableCell>
-                  <TableCell className="font-semibold">{t.script}</TableCell>
-                  <TableCell
-                    className="hidden max-w-72 truncate text-xs text-muted-foreground md:table-cell"
-                    title={t.historyDescription}
-                  >
-                    {t.historyDescription ?? "-"}
-                  </TableCell>
-                  <TableCell className="num text-right font-semibold text-gain">
-                    {toNumber(t.creditQuantity) > 0 ? `+${formatQty(t.creditQuantity)}` : "-"}
-                  </TableCell>
-                  <TableCell className="num text-right font-semibold text-loss">
-                    {toNumber(t.debitQuantity) > 0 ? `−${formatQty(t.debitQuantity)}` : "-"}
-                  </TableCell>
-                  <TableCell className="num pr-4 text-right text-muted-foreground">
-                    {formatQty(t.balanceAfterTransaction)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+          {q.isLoading ? (
+            <LoadingBlock label="Loading transactions" />
+          ) : q.isError ? (
+            <ErrorBlock error={q.error} retry={() => void q.refetch()} />
+          ) : items.length === 0 ? (
+            <EmptyBlock title="No transactions" description="No movement recorded for this selection." />
+          ) : filtered.length === 0 ? (
+            <EmptyBlock
+              title="No matches"
+              description="Nothing matches your search. Try a different stock or description."
+            />
+          ) : (
+            <div className="overflow-clip rounded-2xl border border-border/70 bg-card">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/40 hover:bg-muted/40">
+                    <TableHead className="w-10 pl-4">SN</TableHead>
+                    <SortableTh
+                      label="Date"
+                      active={sort.key === "date"}
+                      dir={sort.dir}
+                      onClick={() => toggle("date")}
+                      align="left"
+                    />
+                    <SortableTh
+                      label="Script"
+                      active={sort.key === "script"}
+                      dir={sort.dir}
+                      onClick={() => toggle("script")}
+                      align="left"
+                      kind="text"
+                    />
+                    <SortableTh
+                      label="Description"
+                      active={sort.key === "description"}
+                      dir={sort.dir}
+                      onClick={() => toggle("description")}
+                      align="left"
+                      className="hidden md:table-cell"
+                      kind="text"
+                    />
+                    <SortableTh
+                      label="Credit"
+                      active={sort.key === "credit"}
+                      dir={sort.dir}
+                      onClick={() => toggle("credit")}
+                      align="right"
+                    />
+                    <SortableTh
+                      label="Debit"
+                      active={sort.key === "debit"}
+                      dir={sort.dir}
+                      onClick={() => toggle("debit")}
+                      align="right"
+                    />
+                    <SortableTh
+                      label="Balance"
+                      active={sort.key === "balance"}
+                      dir={sort.dir}
+                      onClick={() => toggle("balance")}
+                      align="right"
+                      className="pr-4"
+                    />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filtered.map((t, idx) => (
+                    <TableRow key={`${t.script}-${String(t.transactionDate)}-${idx}`}>
+                      <TableCell className="pl-4 text-xs text-muted-foreground">{idx + 1}</TableCell>
+                      <TableCell className="whitespace-nowrap text-xs">{formatDate(t.transactionDate)}</TableCell>
+                      <TableCell className="font-semibold">{t.script}</TableCell>
+                      <TableCell
+                        className="hidden max-w-72 truncate text-xs text-muted-foreground md:table-cell"
+                        title={t.historyDescription}
+                      >
+                        {t.historyDescription ?? "-"}
+                      </TableCell>
+                      <TableCell className="num text-right font-semibold text-gain">
+                        {toNumber(t.creditQuantity) > 0 ? `+${formatQty(t.creditQuantity)}` : "-"}
+                      </TableCell>
+                      <TableCell className="num text-right font-semibold text-loss">
+                        {toNumber(t.debitQuantity) > 0 ? `−${formatQty(t.debitQuantity)}` : "-"}
+                      </TableCell>
+                      <TableCell className="num pr-4 text-right text-muted-foreground">
+                        {formatQty(t.balanceAfterTransaction)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </>
       ) : (
         <>
@@ -452,9 +416,7 @@ function TransactionsPage() {
 
           {selected.length > 0 ? (
             <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-card px-3 py-2">
-              <span className="text-xs font-semibold">
-                {selected.length} selected
-              </span>
+              <span className="text-xs font-semibold">{selected.length} selected</span>
               {confirmBulk ? (
                 <Button
                   size="sm"
@@ -573,9 +535,7 @@ function TransactionsPage() {
                         />
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">{idx + 1}</TableCell>
-                      <TableCell className="whitespace-nowrap text-xs">
-                        {formatDate(t.date)}
-                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-xs">{formatDate(t.date)}</TableCell>
                       <TableCell>
                         <span
                           className={`num inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${GLOBAL_SIDE_TONE[t.side]}`}
@@ -585,21 +545,13 @@ function TransactionsPage() {
                       </TableCell>
                       <TableCell>
                         <p className="font-semibold">{t.symbol || "—"}</p>
-                        {t.name ? (
-                          <p className="max-w-52 truncate text-xs text-muted-foreground">
-                            {t.name}
-                          </p>
-                        ) : null}
+                        {t.name ? <p className="max-w-52 truncate text-xs text-muted-foreground">{t.name}</p> : null}
                       </TableCell>
-                      <TableCell className="num text-right">
-                        {t.qty > 0 ? formatShares(t.qty) : "-"}
-                      </TableCell>
+                      <TableCell className="num text-right">{t.qty > 0 ? formatShares(t.qty) : "-"}</TableCell>
                       <TableCell className="num text-right text-muted-foreground">
                         {t.price > 0 ? `${t.price} ${t.currency}` : "-"}
                       </TableCell>
-                      <TableCell className="num text-right font-medium">
-                        {formatGbp(t.costGbp)}
-                      </TableCell>
+                      <TableCell className="num text-right font-medium">{formatGbp(t.costGbp)}</TableCell>
                       <TableCell className="pr-4">
                         <div className="flex items-center justify-end gap-1">
                           <button

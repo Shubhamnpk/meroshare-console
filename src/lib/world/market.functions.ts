@@ -19,17 +19,12 @@ import { toNpr } from "./fx";
 import { yahooSymbolFor } from "./import";
 const WORLD_RANGES = ["1D", "1W", "1M", "3M", "6M", "1Y", "2Y", "5Y", "MAX"] as const;
 
-async function resolveSymbol(
-  raw: string,
-  currency?: string,
-): Promise<{ symbol: string; quote: WorldQuote } | null> {
+async function resolveSymbol(raw: string, currency?: string): Promise<{ symbol: string; quote: WorldQuote } | null> {
   const base = normalizeWorldSymbol(raw);
   if (!base) throw new Error("Invalid stock symbol.");
   // Currency-aware first guess (GBX → .L), then the generic suffix ladder.
   const first = currency ? yahooSymbolFor(base, currency) : base;
-  const candidates = [first, ...worldCandidates(base)].filter(
-    (c, i, arr) => arr.indexOf(c) === i,
-  );
+  const candidates = [first, ...worldCandidates(base)].filter((c, i, arr) => arr.indexOf(c) === i);
   for (const candidate of candidates) {
     const quote = await worldQuote(candidate);
     if (quote) return { symbol: candidate, quote };
@@ -39,9 +34,7 @@ async function resolveSymbol(
 
 export const getWorldQuote = createServerFn({ method: "POST" })
   .validator((input: unknown) =>
-    z
-      .object({ symbol: z.string().trim().min(1).max(24), currency: z.string().trim().max(8).optional() })
-      .parse(input),
+    z.object({ symbol: z.string().trim().min(1).max(24), currency: z.string().trim().max(8).optional() }).parse(input),
   )
   .handler(async ({ data }): Promise<WorldQuote | null> => {
     await requireAuth();
@@ -59,20 +52,20 @@ export const getWorldHistory = createServerFn({ method: "POST" })
       })
       .parse(input),
   )
-  .handler(async ({ data }): Promise<{ symbol: string; bars: WorldBar[]; source: WorldSource | null; range: WorldRange }> => {
-    await requireAuth();
-    const base = normalizeWorldSymbol(data.symbol);
-    if (!base) throw new Error("Invalid stock symbol.");
-    const first = data.currency ? yahooSymbolFor(base, data.currency) : base;
-    const candidates = [first, ...worldCandidates(base)].filter(
-      (c, i, arr) => arr.indexOf(c) === i,
-    );
-    for (const candidate of candidates) {
-      const { bars, source } = await worldHistory(candidate, data.range);
-      if (bars.length > 0) return { symbol: candidate, bars, source, range: data.range };
-    }
-    return { symbol: base, bars: [], source: null, range: data.range };
-  });
+  .handler(
+    async ({ data }): Promise<{ symbol: string; bars: WorldBar[]; source: WorldSource | null; range: WorldRange }> => {
+      await requireAuth();
+      const base = normalizeWorldSymbol(data.symbol);
+      if (!base) throw new Error("Invalid stock symbol.");
+      const first = data.currency ? yahooSymbolFor(base, data.currency) : base;
+      const candidates = [first, ...worldCandidates(base)].filter((c, i, arr) => arr.indexOf(c) === i);
+      for (const candidate of candidates) {
+        const { bars, source } = await worldHistory(candidate, data.range);
+        if (bars.length > 0) return { symbol: candidate, bars, source, range: data.range };
+      }
+      return { symbol: base, bars: [], source: null, range: data.range };
+    },
+  );
 
 export interface GlobalValuationRow {
   symbol: string;
@@ -134,10 +127,23 @@ export const getGlobalValuation = createServerFn({ method: "POST" })
       }
       if (!quote) {
         rows.push({
-          symbol: base, name: "", currency: h.currency.toUpperCase(), qty: h.qty,
-          avgBuyNpr: 0, ltpNpr: 0, prevNpr: 0, valueNpr: 0, prevValueNpr: 0,
-          dayChangeNpr: 0, pct: 0, ltpNative: 0, prevNative: 0, liveCcy: h.currency.toUpperCase(),
-          source: null, sector: null, ok: false,
+          symbol: base,
+          name: "",
+          currency: h.currency.toUpperCase(),
+          qty: h.qty,
+          avgBuyNpr: 0,
+          ltpNpr: 0,
+          prevNpr: 0,
+          valueNpr: 0,
+          prevValueNpr: 0,
+          dayChangeNpr: 0,
+          pct: 0,
+          ltpNative: 0,
+          prevNative: 0,
+          liveCcy: h.currency.toUpperCase(),
+          source: null,
+          sector: null,
+          ok: false,
         });
         continue;
       }
@@ -150,10 +156,23 @@ export const getGlobalValuation = createServerFn({ method: "POST" })
       const prevNpr = await toNpr(quote.previousClose, quote.currency);
       if (avgBuyNpr == null || ltpNpr == null || prevNpr == null) {
         rows.push({
-          symbol: base, name: quote.name ?? "", currency: h.currency.toUpperCase(), qty: h.qty,
-          avgBuyNpr: 0, ltpNpr: 0, prevNpr: 0, valueNpr: 0, prevValueNpr: 0,
-          dayChangeNpr: 0, pct: 0, ltpNative: quote.ltp, prevNative: quote.previousClose, liveCcy: quote.currency ?? h.currency.toUpperCase(),
-          source: quote.source, sector: quote.sector ?? quote.industry ?? null, ok: false,
+          symbol: base,
+          name: quote.name ?? "",
+          currency: h.currency.toUpperCase(),
+          qty: h.qty,
+          avgBuyNpr: 0,
+          ltpNpr: 0,
+          prevNpr: 0,
+          valueNpr: 0,
+          prevValueNpr: 0,
+          dayChangeNpr: 0,
+          pct: 0,
+          ltpNative: quote.ltp,
+          prevNative: quote.previousClose,
+          liveCcy: quote.currency ?? h.currency.toUpperCase(),
+          source: quote.source,
+          sector: quote.sector ?? quote.industry ?? null,
+          ok: false,
         });
         continue;
       }
@@ -164,8 +183,7 @@ export const getGlobalValuation = createServerFn({ method: "POST" })
       const dayPct = prevNpr > 0 ? ((ltpNpr - prevNpr) / prevNpr) * 100 : 0;
       // Yahoo meta often lacks sector/industry (notably non-US listings);
       // Finnhub industry fills the gap so allocation rarely says Unclassified.
-      const sector =
-        quote.sector ?? quote.industry ?? (await finnhubCompany(base))?.industry ?? null;
+      const sector = quote.sector ?? quote.industry ?? (await finnhubCompany(base))?.industry ?? null;
       rows.push({
         symbol: base,
         name: quote.name ?? "",
@@ -190,18 +208,14 @@ export const getGlobalValuation = createServerFn({ method: "POST" })
   });
 
 export const getWorldSearch = createServerFn({ method: "POST" })
-  .validator((input: unknown) =>
-    z.object({ query: z.string().trim().min(1).max(48) }).parse(input),
-  )
+  .validator((input: unknown) => z.object({ query: z.string().trim().min(1).max(48) }).parse(input))
   .handler(async ({ data }): Promise<{ hits: WorldSearchHit[] }> => {
     await requireAuth();
     return { hits: await worldSearch(data.query) };
   });
 
 export const getWorldCompany = createServerFn({ method: "POST" })
-  .validator((input: unknown) =>
-    z.object({ symbol: z.string().trim().min(1).max(24) }).parse(input),
-  )
+  .validator((input: unknown) => z.object({ symbol: z.string().trim().min(1).max(24) }).parse(input))
   .handler(async ({ data }): Promise<{ company: WorldCompany | null }> => {
     await requireAuth();
     const base = normalizeWorldSymbol(data.symbol);
@@ -235,26 +249,22 @@ export const getGlobalHistory = createServerFn({ method: "POST" })
       })
       .parse(input),
   )
-  .handler(
-    async ({ data }): Promise<{ points: { time: number; value: number; cost: number }[]; failed: string[] }> => {
-      await requireAuth();
-      const { toNpr } = await import("./fx");
-      const series = await Promise.all(
-        data.holdings.map(async (h) => {
-          const base = normalizeWorldSymbol(h.symbol);
-          const rate = h.currency ? await toNpr(1, h.currency).catch(() => null) : null;
-          if (!base) return { symbol: h.symbol, rate, lots: [], bars: [] };
-          const first = yahooSymbolFor(base, h.currency);
-          const candidates = [first, ...worldCandidates(base)].filter(
-            (c, i, arr) => arr.indexOf(c) === i,
-          );
-          for (const candidate of candidates) {
-            const { bars } = await worldHistory(candidate, data.range);
-            if (bars.length > 0) return { symbol: base, rate, lots: h.lots, bars };
-          }
-          return { symbol: base, rate, lots: h.lots, bars: [] };
-        }),
-      );
-      return mergeGlobalHistory(series);
-    },
-  );
+  .handler(async ({ data }): Promise<{ points: { time: number; value: number; cost: number }[]; failed: string[] }> => {
+    await requireAuth();
+    const { toNpr } = await import("./fx");
+    const series = await Promise.all(
+      data.holdings.map(async (h) => {
+        const base = normalizeWorldSymbol(h.symbol);
+        const rate = h.currency ? await toNpr(1, h.currency).catch(() => null) : null;
+        if (!base) return { symbol: h.symbol, rate, lots: [], bars: [] };
+        const first = yahooSymbolFor(base, h.currency);
+        const candidates = [first, ...worldCandidates(base)].filter((c, i, arr) => arr.indexOf(c) === i);
+        for (const candidate of candidates) {
+          const { bars } = await worldHistory(candidate, data.range);
+          if (bars.length > 0) return { symbol: base, rate, lots: h.lots, bars };
+        }
+        return { symbol: base, rate, lots: h.lots, bars: [] };
+      }),
+    );
+    return mergeGlobalHistory(series);
+  });

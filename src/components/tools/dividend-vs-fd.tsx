@@ -2,14 +2,7 @@ import { useMemo, useState } from "react";
 import { Calculator } from "lucide-react";
 import { formatNpr } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 export function DividendVsFd() {
   const [investment, setInvestment] = useState(100_000);
@@ -43,10 +36,8 @@ export function DividendVsFd() {
     const totalStockReturn = stockValues[years - 1] - investment;
     const totalFdReturn = fdValues[years - 1] - investment;
     const totalDividends = stockDividends.reduce((a, b) => a + b, 0);
-    const effectiveStockYield =
-      (totalStockReturn / investment / years) * 100;
-    const effectiveFdYield =
-      (totalFdReturn / investment / years) * 100;
+    const effectiveStockYield = (totalStockReturn / investment / years) * 100;
+    const effectiveFdYield = (totalFdReturn / investment / years) * 100;
 
     return {
       stockFinal: stockValues[years - 1],
@@ -109,9 +100,7 @@ export function DividendVsFd() {
           },
         ].map((inp) => (
           <div key={inp.label}>
-            <label className="mb-1 block text-[0.65rem] text-muted-foreground">
-              {inp.label}
-            </label>
+            <label className="mb-1 block text-[0.65rem] text-muted-foreground">{inp.label}</label>
             <input
               type="number"
               value={inp.value}
@@ -129,18 +118,14 @@ export function DividendVsFd() {
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
           <p className="text-[0.65rem] text-emerald-400">Stocks (dividends reinvested)</p>
-          <p className="mt-1 text-xl font-bold text-emerald-400">
-            {formatNpr(results.stockFinal)}
-          </p>
+          <p className="mt-1 text-xl font-bold text-emerald-400">{formatNpr(results.stockFinal)}</p>
           <p className="mt-0.5 text-[0.65rem] text-emerald-400/70">
             +{formatNpr(results.totalStockReturn)} ({results.effectiveStockYield.toFixed(1)}%/yr)
           </p>
         </div>
         <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 p-4">
           <p className="text-[0.65rem] text-blue-400">Fixed Deposit</p>
-          <p className="mt-1 text-xl font-bold text-blue-400">
-            {formatNpr(results.fdFinal)}
-          </p>
+          <p className="mt-1 text-xl font-bold text-blue-400">{formatNpr(results.fdFinal)}</p>
           <p className="mt-0.5 text-[0.65rem] text-blue-400/70">
             +{formatNpr(results.totalFdReturn)} ({results.effectiveFdYield.toFixed(1)}%/yr)
           </p>
@@ -181,10 +166,7 @@ export function DividendVsFd() {
           />
         </div>
         <div className="mt-1.5 flex justify-between text-[0.6rem] text-muted-foreground/70">
-          <span>
-            Dividends:{" "}
-            {((results.totalDividends / results.stockFinal) * 100).toFixed(0)}%
-          </span>
+          <span>Dividends: {((results.totalDividends / results.stockFinal) * 100).toFixed(0)}%</span>
           <span>Price gain: the rest</span>
         </div>
       </div>
@@ -197,9 +179,7 @@ export function DividendVsFd() {
             onClick={() => setActiveTab(t)}
             className={cn(
               "rounded-md px-3 py-1 text-xs font-medium transition-colors",
-              activeTab === t
-                ? "bg-primary/15 text-primary"
-                : "text-muted-foreground hover:text-foreground",
+              activeTab === t ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground",
             )}
           >
             {t === "summary" ? "Summary" : "Year-by-Year"}
@@ -223,21 +203,15 @@ export function DividendVsFd() {
               {results.stockValues.map((sv, i) => (
                 <TableRow key={i} className="border-b border-border/20">
                   <TableCell className="px-3 py-1.5">{i + 1}</TableCell>
-                  <TableCell className="px-3 py-1.5 text-right text-emerald-400">
-                    {formatNpr(sv)}
-                  </TableCell>
+                  <TableCell className="px-3 py-1.5 text-right text-emerald-400">{formatNpr(sv)}</TableCell>
                   <TableCell className="px-3 py-1.5 text-right text-blue-400">
                     {formatNpr(results.fdValues[i])}
                   </TableCell>
-                  <TableCell className="px-3 py-1.5 text-right">
-                    {formatNpr(results.stockDividends[i])}
-                  </TableCell>
+                  <TableCell className="px-3 py-1.5 text-right">{formatNpr(results.stockDividends[i])}</TableCell>
                   <TableCell
                     className={cn(
                       "px-3 py-1.5 text-right font-medium",
-                      sv > results.fdValues[i]
-                        ? "text-emerald-400"
-                        : "text-red-400",
+                      sv > results.fdValues[i] ? "text-emerald-400" : "text-red-400",
                     )}
                   >
                     {sv > results.fdValues[i] ? "+" : ""}

@@ -75,9 +75,7 @@ export function SwipeableCards({
                   : "h-2 w-2 bg-muted-foreground/40 hover:bg-muted-foreground/60",
               )}
             >
-              {active === i ? (
-                <div className="absolute inset-0 animate-pulse rounded-full bg-primary/30" />
-              ) : null}
+              {active === i ? <div className="absolute inset-0 animate-pulse rounded-full bg-primary/30" /> : null}
             </button>
           ))}
         </div>
@@ -114,16 +112,6 @@ export function SwipeStrip({
 }
 
 /** Fixed-width peeking item for {@link SwipeStrip} on phones, fluid in grids. */
-export function SwipeItem({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={cn("w-[15.5rem] shrink-0 snap-start sm:w-auto", className)}>
-      {children}
-    </div>
-  );
+export function SwipeItem({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={cn("w-[15.5rem] shrink-0 snap-start sm:w-auto", className)}>{children}</div>;
 }

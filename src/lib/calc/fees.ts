@@ -159,7 +159,12 @@ export function sellProceeds(input: {
  * Price at which selling `units` returns exactly the cost basis after all charges.
  * Solved numerically because commission slabs are piecewise and DP is a flat fee.
  */
-export function breakEvenPrice(units: number, avgCost: number, holdingDays = 400, opts?: { isOpenEnd?: boolean }): number {
+export function breakEvenPrice(
+  units: number,
+  avgCost: number,
+  holdingDays = 400,
+  opts?: { isOpenEnd?: boolean },
+): number {
   if (!(units > 0) || !(avgCost > 0)) return 0;
   if (opts?.isOpenEnd) return avgCost;
   let lo = avgCost;

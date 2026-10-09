@@ -5,21 +5,13 @@ type LovableErrorOptions = {
 };
 
 type LovableEvents = {
-  captureException?: (
-    error: unknown,
-    context?: Record<string, unknown>,
-    options?: LovableErrorOptions,
-  ) => void;
+  captureException?: (error: unknown, context?: Record<string, unknown>, options?: LovableErrorOptions) => void;
 };
 
 declare global {
   interface Window {
     __lovableEvents?: LovableEvents;
-    __lovableReportRuntimeError?: (payload: {
-      message: string;
-      stack?: string;
-      filename?: string;
-    }) => void;
+    __lovableReportRuntimeError?: (payload: { message: string; stack?: string; filename?: string }) => void;
   }
 }
 

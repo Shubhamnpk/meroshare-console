@@ -3,21 +3,8 @@ import { Building2, Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Panel } from "@/components/ui/panel";
 import { SortableTh } from "@/components/sortable-table";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DeltaPill } from "@/components/stat-card";
 import { ModeSwitch } from "@/components/market/heatmap-controls";
 import { SortTabs } from "@/components/ui/sort-tabs";
@@ -110,8 +97,7 @@ function describeFund(fund: BrowseFund) {
   const closeEnd = scheme.fundType === "close_end";
   // Open-end rows in the live file carry the mapped daily NAV (value, previous
   // close and day change), so show that instead of the weekly figure.
-  const omfLive =
-    !closeEnd && live?.assetType === "open_ended_mutual_fund" && live.ltp > 0 ? live : null;
+  const omfLive = !closeEnd && live?.assetType === "open_ended_mutual_fund" && live.ltp > 0 ? live : null;
   return {
     nav,
     ltp,
@@ -166,9 +152,7 @@ function FundCard({ fund, onPick }: { fund: BrowseFund; onPick: (symbol: string)
           <p className="num text-xl font-bold">
             {navValue != null ? formatNpr(navValue) : "-"}{" "}
             {omfLive ? (
-              <DeltaPill value={omfLive.percentChange}>
-                {formatPercent(omfLive.percentChange)}
-              </DeltaPill>
+              <DeltaPill value={omfLive.percentChange}>{formatPercent(omfLive.percentChange)}</DeltaPill>
             ) : null}
           </p>
         </div>
@@ -177,11 +161,7 @@ function FundCard({ fund, onPick }: { fund: BrowseFund; onPick: (symbol: string)
             <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">Market</p>
             <p className="num text-sm font-semibold">
               {ltp != null ? formatNpr(ltp) : "-"}{" "}
-              {live ? (
-                <DeltaPill value={live.percentChange}>
-                  {formatPercent(live.percentChange)}
-                </DeltaPill>
-              ) : null}
+              {live ? <DeltaPill value={live.percentChange}>{formatPercent(live.percentChange)}</DeltaPill> : null}
             </p>
           </div>
         ) : null}
@@ -246,9 +226,7 @@ export function FundBrowse({
       if (manager && f.scheme.managerSlug !== manager && f.scheme.manager !== manager) return false;
       if (type !== "all" && f.scheme.fundType !== type) return false;
       if (!term) return true;
-      return (
-        f.scheme.symbol.toLowerCase().includes(term) || f.scheme.name.toLowerCase().includes(term)
-      );
+      return f.scheme.symbol.toLowerCase().includes(term) || f.scheme.name.toLowerCase().includes(term);
     });
     if (sort.dir === "default") return [...rows];
     const mul = sort.dir === "asc" ? 1 : -1;
@@ -284,8 +262,7 @@ export function FundBrowse({
       if (va == null && vb == null) return 0;
       if (va == null) return 1;
       if (vb == null) return -1;
-      if (typeof va === "string" || typeof vb === "string")
-        return String(va).localeCompare(String(vb)) * mul;
+      if (typeof va === "string" || typeof vb === "string") return String(va).localeCompare(String(vb)) * mul;
       return (va - vb) * mul;
     });
   }, [funds, search, manager, type, sort]);
@@ -360,12 +337,7 @@ export function FundBrowse({
             className="shrink-0"
           />
         ) : null}
-        <ViewToggle
-          value={viewMode}
-          onChange={setViewMode}
-          modes={["cards", "list"]}
-          className="ml-auto shrink-0"
-        />
+        <ViewToggle value={viewMode} onChange={setViewMode} modes={["cards", "list"]} className="ml-auto shrink-0" />
         <span className="num shrink-0 text-[11px] text-muted-foreground">
           {visible.length} of {funds.length}
         </span>
@@ -380,13 +352,69 @@ export function FundBrowse({
           <Table className="min-w-[760px]">
             <TableHeader className="bg-muted">
               <TableRow className="bg-muted/40 hover:bg-muted/40">
-                <SortableTh label="Symbol" active={sort.key === "symbol"} dir={sort.dir} kind="text" align="left" onClick={() => toggle("symbol")} className="py-2.5 pl-4 pr-2" />
-                <SortableTh label="NAV" active={sort.key === "nav"} dir={sort.dir} kind="number" align="right" onClick={() => toggle("nav")} className="py-2.5 px-3" />
-                <SortableTh label="Market" active={sort.key === "ltp"} dir={sort.dir} kind="number" align="right" onClick={() => toggle("ltp")} className="py-2.5 px-3" />
-                <SortableTh label="Discount" active={sort.key === "discount"} dir={sort.dir} kind="text" align="right" onClick={() => toggle("discount")} className="py-2.5 px-3" />
-                <SortableTh label="Payout" active={sort.key === "dividend"} dir={sort.dir} kind="number" align="right" onClick={() => toggle("dividend")} className="py-2.5 px-3 hidden sm:table-cell" />
-                <SortableTh label="Size" active={sort.key === "size"} dir={sort.dir} kind="number" align="right" onClick={() => toggle("size")} className="py-2.5 px-3 hidden md:table-cell" />
-                <SortableTh label="Holdings" active={sort.key === "holdings"} dir={sort.dir} kind="number" align="right" onClick={() => toggle("holdings")} className="py-2.5 px-3 hidden lg:table-cell" />
+                <SortableTh
+                  label="Symbol"
+                  active={sort.key === "symbol"}
+                  dir={sort.dir}
+                  kind="text"
+                  align="left"
+                  onClick={() => toggle("symbol")}
+                  className="py-2.5 pl-4 pr-2"
+                />
+                <SortableTh
+                  label="NAV"
+                  active={sort.key === "nav"}
+                  dir={sort.dir}
+                  kind="number"
+                  align="right"
+                  onClick={() => toggle("nav")}
+                  className="py-2.5 px-3"
+                />
+                <SortableTh
+                  label="Market"
+                  active={sort.key === "ltp"}
+                  dir={sort.dir}
+                  kind="number"
+                  align="right"
+                  onClick={() => toggle("ltp")}
+                  className="py-2.5 px-3"
+                />
+                <SortableTh
+                  label="Discount"
+                  active={sort.key === "discount"}
+                  dir={sort.dir}
+                  kind="text"
+                  align="right"
+                  onClick={() => toggle("discount")}
+                  className="py-2.5 px-3"
+                />
+                <SortableTh
+                  label="Payout"
+                  active={sort.key === "dividend"}
+                  dir={sort.dir}
+                  kind="number"
+                  align="right"
+                  onClick={() => toggle("dividend")}
+                  className="py-2.5 px-3 hidden sm:table-cell"
+                />
+                <SortableTh
+                  label="Size"
+                  active={sort.key === "size"}
+                  dir={sort.dir}
+                  kind="number"
+                  align="right"
+                  onClick={() => toggle("size")}
+                  className="py-2.5 px-3 hidden md:table-cell"
+                />
+                <SortableTh
+                  label="Holdings"
+                  active={sort.key === "holdings"}
+                  dir={sort.dir}
+                  kind="number"
+                  align="right"
+                  onClick={() => toggle("holdings")}
+                  className="py-2.5 px-3 hidden lg:table-cell"
+                />
                 <TableHead className="py-2.5 pl-2 pr-4">Manager</TableHead>
               </TableRow>
             </TableHeader>
@@ -395,16 +423,10 @@ export function FundBrowse({
                 const d = describeFund(f);
                 const size = f.perf?.totalPaidUp ?? f.scheme.paidUp ?? null;
                 return (
-                  <TableRow
-                    key={f.scheme.symbol}
-                    className="cursor-pointer"
-                    onClick={() => onPick(f.scheme.symbol)}
-                  >
+                  <TableRow key={f.scheme.symbol} className="cursor-pointer" onClick={() => onPick(f.scheme.symbol)}>
                     <TableCell className="py-2.5 pl-4 pr-2">
                       <p className="font-semibold">{f.scheme.symbol}</p>
-                      <p className="max-w-44 truncate text-xs text-muted-foreground">
-                        {f.scheme.name}
-                      </p>
+                      <p className="max-w-44 truncate text-xs text-muted-foreground">{f.scheme.name}</p>
                     </TableCell>
                     <TableCell className="num py-2.5 px-3 text-right">
                       {d.navValue != null ? formatNpr(d.navValue) : "-"}
@@ -449,5 +471,3 @@ export function FundBrowse({
     </div>
   );
 }
-
-

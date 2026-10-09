@@ -15,15 +15,7 @@ import {
   mfPipelineByTypeQuery,
 } from "@/lib/queries";
 import { deleteIpoApply } from "@/lib/meroshare/ipo.functions";
-import {
-  daysUntil,
-  errorMessage,
-  formatDate,
-  formatNpr,
-  formatNumber,
-  formatQty,
-  toNumber,
-} from "@/lib/format";
+import { daysUntil, errorMessage, formatDate, formatNpr, formatNumber, formatQty, toNumber } from "@/lib/format";
 import type { ApplicableIssue } from "@/lib/meroshare/types";
 import type { IpoArchiveRow } from "@/lib/nepse/types";
 import type { MfPipelineType } from "@/lib/mutual-funds/types";
@@ -103,10 +95,7 @@ function UpcomingSection({
       </h2>
       <ul className="grid gap-2 md:grid-cols-2">
         {cdscUpcoming.map((issue) => (
-          <li
-            key={issue.companyShareId}
-            className="rounded-xl border border-border/60 bg-surface p-3"
-          >
+          <li key={issue.companyShareId} className="rounded-xl border border-border/60 bg-surface p-3">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold">{issue.companyName}</p>
@@ -127,10 +116,7 @@ function UpcomingSection({
           const live = range ? today >= range.start.getTime() && today <= range.end.getTime() : null;
           const units = row.units ? toNumber(row.units) : 0;
           return (
-            <li
-              key={`arch-${row.company}-${i}`}
-              className="rounded-xl border border-border/60 bg-surface p-3"
-            >
+            <li key={`arch-${row.company}-${i}`} className="rounded-xl border border-border/60 bg-surface p-3">
               <div className="flex items-start justify-between gap-3">
                 <p className="min-w-0 truncate text-sm font-semibold" title={row.company}>
                   {row.company}
@@ -201,10 +187,7 @@ function CalendarView() {
       ) : issues.isError ? (
         <ErrorBlock error={issues.error} retry={() => void issues.refetch()} />
       ) : list.length === 0 && !hasArchive && !archive.isLoading ? (
-        <EmptyBlock
-          title="No issues found"
-          description="Nothing open, upcoming or recently closed right now."
-        />
+        <EmptyBlock title="No issues found" description="Nothing open, upcoming or recently closed right now." />
       ) : (
         <>
           <section className="space-y-2">
@@ -221,10 +204,7 @@ function CalendarView() {
             ) : (
               <ul className="grid gap-2 md:grid-cols-2">
                 {groups.open.map((issue) => (
-                  <li
-                    key={issue.companyShareId}
-                    className="rounded-xl border border-border/60 bg-surface p-3"
-                  >
+                  <li key={issue.companyShareId} className="rounded-xl border border-border/60 bg-surface p-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold">{issue.companyName}</p>
@@ -248,7 +228,10 @@ function CalendarView() {
 
           <section className="space-y-2">
             <h2 className="font-display text-base font-semibold">Recently closed</h2>
-            {groups.closed.length === 0 && archivePast.length === 0 && archiveClosed.length === 0 && !archive.isLoading ? (
+            {groups.closed.length === 0 &&
+            archivePast.length === 0 &&
+            archiveClosed.length === 0 &&
+            !archive.isLoading ? (
               <p className="rounded-xl border border-border/60 bg-surface px-3 py-2.5 text-sm text-muted-foreground">
                 Nothing closed recently.
               </p>
@@ -261,8 +244,8 @@ function CalendarView() {
                   >
                     <p className="truncate text-sm font-semibold">{issue.companyName}</p>
                     <p className="num mt-1 text-xs text-muted-foreground">
-                      {issue.scrip} · closed {formatDate(issue.issueCloseDate)} · Rs{" "}
-                      {formatNumber(issue.sharePerUnit)}/unit
+                      {issue.scrip} · closed {formatDate(issue.issueCloseDate)} · Rs {formatNumber(issue.sharePerUnit)}
+                      /unit
                     </p>
                   </li>
                 ))}
@@ -341,9 +324,7 @@ function ArchiveView() {
           <>
             <p className="num text-xs text-muted-foreground">
               {pipeline.count} pending ·{" "}
-              {pipeline.totalAmount != null
-                ? formatNpr(pipeline.totalAmount, { compact: true })
-                : ""}
+              {pipeline.totalAmount != null ? formatNpr(pipeline.totalAmount, { compact: true }) : ""}
               {pipeline.asOfBs ? ` · as of ${pipeline.asOfBs}` : ""}
             </p>
             <ul className="grid gap-2 md:grid-cols-2">
@@ -376,9 +357,7 @@ function ArchiveView() {
               ))}
             </ul>
             {pipeline.items.length > 8 ? (
-              <p className="num text-xs text-muted-foreground">
-                +{pipeline.items.length - 8} more in the pipeline
-              </p>
+              <p className="num text-xs text-muted-foreground">+{pipeline.items.length - 8} more in the pipeline</p>
             ) : null}
           </>
         )}
@@ -399,21 +378,14 @@ function ArchiveView() {
             ) : (
               <ul className="grid gap-2 md:grid-cols-2">
                 {data.past.map((row, i) => (
-                  <li
-                    key={`${row.company}-${i}`}
-                    className="min-w-0 rounded-xl border border-border/60 bg-surface p-3"
-                  >
+                  <li key={`${row.company}-${i}`} className="min-w-0 rounded-xl border border-border/60 bg-surface p-3">
                     <p className="truncate text-sm font-semibold" title={row.company}>
                       {row.company}
                     </p>
                     <p
                       className="num mt-1 truncate text-xs text-muted-foreground"
                       title={
-                        [
-                          row.units ? `${row.units} units` : null,
-                          row.dateRange,
-                          row.announcementDate,
-                        ]
+                        [row.units ? `${row.units} units` : null, row.dateRange, row.announcementDate]
                           .filter(Boolean)
                           .join(" · ") || undefined
                       }
@@ -522,11 +494,7 @@ function IpoPage() {
   const list = issues.data ?? [];
   const calendar = useQuery(currentIssuesQuery());
   const archive = useQuery(ipoArchiveQuery());
-  const { cdscUpcoming, archUpcoming } = upcomingMerged(
-    list,
-    calendar.data ?? [],
-    archive.data?.upcoming ?? [],
-  );
+  const { cdscUpcoming, archUpcoming } = upcomingMerged(list, calendar.data ?? [], archive.data?.upcoming ?? []);
 
   return (
     <div className="space-y-5">
@@ -601,12 +569,8 @@ function IpoPage() {
                             companyName: issue.companyName,
                             scrip: issue.scrip,
                             applicantFormId: applied.applicantFormId ?? 0,
-                            appliedKitta: appliedDetail
-                              ? Number(appliedDetail["appliedKitta"] ?? 10)
-                              : 10,
-                            bankId: appliedDetail
-                              ? Number(appliedDetail["bankId"] ?? 0) || undefined
-                              : undefined,
+                            appliedKitta: appliedDetail ? Number(appliedDetail["appliedKitta"] ?? 10) : 10,
+                            bankId: appliedDetail ? Number(appliedDetail["bankId"] ?? 0) || undefined : undefined,
                             accountNumber: appliedDetail
                               ? String(appliedDetail["accountNumber"] ?? "") || undefined
                               : undefined,
@@ -629,76 +593,75 @@ function IpoPage() {
                         return null;
                       })();
                       return (
-                      <li key={issue.companyShareId}>
-                        <div
-                          onClick={openThis}
-                          className="flex w-full cursor-pointer items-center gap-4 px-4 py-4 text-left transition-colors hover:bg-muted/40 sm:px-5 sm:py-5"
-                        >
-                          <span
-                            aria-hidden
-                            className="num flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary"
+                        <li key={issue.companyShareId}>
+                          <div
+                            onClick={openThis}
+                            className="flex w-full cursor-pointer items-center gap-4 px-4 py-4 text-left transition-colors hover:bg-muted/40 sm:px-5 sm:py-5"
                           >
-                            {String(issue.companyName ?? issue.scrip ?? "?").trim().charAt(0).toUpperCase() || "?"}
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="flex flex-wrap items-center gap-1.5">
-                              <span
-                                className="truncate font-display text-sm font-semibold"
-                                title={issue.companyName}
-                              >
-                                {issue.companyName}
-                              </span>
-                              {typeLabel ? (
-                                <span className="num shrink-0 rounded-full border border-border/70 px-2 py-0.5 text-[0.68rem] font-semibold text-muted-foreground">
-                                  {typeLabel}
+                            <span
+                              aria-hidden
+                              className="num flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary"
+                            >
+                              {String(issue.companyName ?? issue.scrip ?? "?")
+                                .trim()
+                                .charAt(0)
+                                .toUpperCase() || "?"}
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="flex flex-wrap items-center gap-1.5">
+                                <span className="truncate font-display text-sm font-semibold" title={issue.companyName}>
+                                  {issue.companyName}
                                 </span>
-                              ) : null}
-                              {applied ? (
-                                <span className="num inline-flex shrink-0 items-center gap-1 rounded-full bg-gain/15 px-2 py-0.5 text-[0.68rem] font-semibold text-gain">
-                                  <CheckCircle2 className="size-3" />
-                                  Applied
-                                  {appliedDetail?.["appliedKitta"]
-                                    ? ` · ${formatNumber(appliedDetail["appliedKitta"])} kitta`
-                                    : ""}
+                                {typeLabel ? (
+                                  <span className="num shrink-0 rounded-full border border-border/70 px-2 py-0.5 text-[0.68rem] font-semibold text-muted-foreground">
+                                    {typeLabel}
+                                  </span>
+                                ) : null}
+                                {applied ? (
+                                  <span className="num inline-flex shrink-0 items-center gap-1 rounded-full bg-gain/15 px-2 py-0.5 text-[0.68rem] font-semibold text-gain">
+                                    <CheckCircle2 className="size-3" />
+                                    Applied
+                                    {appliedDetail?.["appliedKitta"]
+                                      ? ` · ${formatNumber(appliedDetail["appliedKitta"])} kitta`
+                                      : ""}
+                                  </span>
+                                ) : null}
+                                <span
+                                  className={
+                                    daysLeft !== null && daysLeft < 0
+                                      ? "num shrink-0 rounded-full bg-muted px-2 py-0.5 text-[0.68rem] font-semibold text-muted-foreground"
+                                      : urgent
+                                        ? "num shrink-0 rounded-full bg-loss/15 px-2 py-0.5 text-[0.68rem] font-semibold text-loss"
+                                        : "num shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[0.68rem] font-semibold text-primary"
+                                  }
+                                >
+                                  {timeLabel}
                                 </span>
-                              ) : null}
-                              <span
-                                className={
-                                  daysLeft !== null && daysLeft < 0
-                                    ? "num shrink-0 rounded-full bg-muted px-2 py-0.5 text-[0.68rem] font-semibold text-muted-foreground"
-                                    : urgent
-                                      ? "num shrink-0 rounded-full bg-loss/15 px-2 py-0.5 text-[0.68rem] font-semibold text-loss"
-                                      : "num shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[0.68rem] font-semibold text-primary"
-                                }
-                              >
-                                {timeLabel}
+                              </span>
+                              <span className="num mt-0.5 block truncate text-xs text-muted-foreground">
+                                {issue.scrip} · {formatDate(issue.issueOpenDate)} to {formatDate(issue.issueCloseDate)}
+                              </span>
+                              <span className="num mt-0.5 block text-xs text-muted-foreground">
+                                {issue.sharePerUnit ? `Rs ${formatNumber(issue.sharePerUnit)}/unit` : ""}
+                                {issue.sharePerUnit && (issue.minUnit || issue.maxUnit) ? " · " : ""}
+                                {issue.minUnit || issue.maxUnit
+                                  ? `${formatNumber(issue.minUnit)}-${formatNumber(issue.maxUnit)} units`
+                                  : ""}
                               </span>
                             </span>
-                            <span className="num mt-0.5 block truncate text-xs text-muted-foreground">
-                              {issue.scrip} · {formatDate(issue.issueOpenDate)} to{" "}
-                              {formatDate(issue.issueCloseDate)}
-                            </span>
-                            <span className="num mt-0.5 block text-xs text-muted-foreground">
-                              {issue.sharePerUnit ? `Rs ${formatNumber(issue.sharePerUnit)}/unit` : ""}
-                              {issue.sharePerUnit && (issue.minUnit || issue.maxUnit) ? " · " : ""}
-                              {issue.minUnit || issue.maxUnit
-                                ? `${formatNumber(issue.minUnit)}-${formatNumber(issue.maxUnit)} units`
-                                : ""}
-                            </span>
-                          </span>
-                          <Button
-                            size="sm"
-                            variant={applied ? "outline" : "default"}
-                            className="shrink-0"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openThis();
-                            }}
-                          >
-                            {applied ? "Edit" : "Apply"}
-                          </Button>
-                        </div>
-                      </li>
+                            <Button
+                              size="sm"
+                              variant={applied ? "outline" : "default"}
+                              className="shrink-0"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openThis();
+                              }}
+                            >
+                              {applied ? "Edit" : "Apply"}
+                            </Button>
+                          </div>
+                        </li>
                       );
                     })}
                   </ul>
@@ -719,9 +682,7 @@ function IpoPage() {
                 applicantFormId: item.applicantFormId ?? 0,
                 appliedKitta: detail ? Number(detail["appliedKitta"] ?? 10) : 10,
                 bankId: detail ? Number(detail["bankId"] ?? 0) || undefined : undefined,
-                accountNumber: detail
-                  ? String(detail["accountNumber"] ?? "") || undefined
-                  : undefined,
+                accountNumber: detail ? String(detail["accountNumber"] ?? "") || undefined : undefined,
                 crnNumber: detail ? String(detail["crnNumber"] ?? "") || undefined : undefined,
               })
             }

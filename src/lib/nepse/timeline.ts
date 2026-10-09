@@ -61,9 +61,7 @@ function cutoff5yMs(): number {
  */
 export function avgCashLast5Y(rows: DatedDividend[]): number | null {
   const cutoffMs = cutoff5yMs();
-  const paid = rows.filter(
-    (d) => d.cashDividend > 0 && inLast5Years(d.announcementDate, cutoffMs),
-  );
+  const paid = rows.filter((d) => d.cashDividend > 0 && inLast5Years(d.announcementDate, cutoffMs));
   if (paid.length === 0) return null;
   return paid.reduce((s, d) => s + d.cashDividend, 0) / 5;
 }
@@ -71,9 +69,7 @@ export function avgCashLast5Y(rows: DatedDividend[]): number | null {
 /** Same calendar window for total (cash + bonus) dividends. */
 export function avgTotalLast5Y(rows: DatedDividend[]): number | null {
   const cutoffMs = cutoff5yMs();
-  const paid = rows.filter(
-    (d) => d.totalDividend > 0 && inLast5Years(d.announcementDate, cutoffMs),
-  );
+  const paid = rows.filter((d) => d.totalDividend > 0 && inLast5Years(d.announcementDate, cutoffMs));
   if (paid.length === 0) return null;
   return paid.reduce((s, d) => s + d.totalDividend, 0) / 5;
 }

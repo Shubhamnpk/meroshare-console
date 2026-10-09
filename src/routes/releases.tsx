@@ -1,15 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import {
-  ArrowLeft,
-  Calendar,
-  ExternalLink,
-  Github,
-  Loader2,
-  RefreshCw,
-  Sparkles,
-  Tag,
-} from "lucide-react";
+import { ArrowLeft, Calendar, ExternalLink, Github, Loader2, RefreshCw, Sparkles, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -30,8 +21,7 @@ export const Route = createFileRoute("/releases")({
       { property: "og:title", content: "Release Notes | MeroShare Console" },
       {
         property: "og:description",
-        content:
-          "Explore the latest updates, features, improvements, and changelog for MeroShare Console.",
+        content: "Explore the latest updates, features, improvements, and changelog for MeroShare Console.",
       },
       ogImage(),
     ],
@@ -81,10 +71,7 @@ function renderMarkdown(md: string): string {
       // Inline code
       .replace(/`([^`]+)`/g, "<code>$1</code>")
       // Links (URLs already escaped by escapeHtml, but &amp; in href needs fixing)
-      .replace(
-        /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g,
-        '<a href="$2" target="_blank" rel="noreferrer">$1</a>',
-      )
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>')
       // Bullet lists
       .replace(/^- (.+)$/gm, "<li>$1</li>")
       .replace(/(<li>.*<\/li>)/gs, "<ul>$1</ul>")
@@ -117,31 +104,17 @@ function ReleasesPage() {
       <header className="sticky top-0 z-30 border-b border-border/70 bg-background/85 px-4 backdrop-blur-xl sm:px-8">
         <div className="mx-auto flex h-16 max-w-5xl items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              asChild
-              className="gap-2 text-muted-foreground hover:text-foreground"
-            >
+            <Button variant="ghost" size="sm" asChild className="gap-2 text-muted-foreground hover:text-foreground">
               <Link to={isAuthenticated ? "/dashboard" : "/"}>
                 <ArrowLeft className="size-4" />
-                <span className="hidden sm:inline">
-                  {isAuthenticated ? "Back to Dashboard" : "Back to Sign In"}
-                </span>
+                <span className="hidden sm:inline">{isAuthenticated ? "Back to Dashboard" : "Back to Sign In"}</span>
                 <span className="sm:hidden">Back</span>
               </Link>
             </Button>
             <div className="h-4 w-px bg-border" aria-hidden />
             <div className="flex items-center gap-2.5">
-              <img
-                src="/logo-512.png"
-                alt="MeroShare logo"
-                className="size-7 rounded-lg"
-                aria-hidden
-              />
-              <span className="font-display text-sm font-semibold tracking-tight">
-                MeroShare Console
-              </span>
+              <img src="/logo-512.png" alt="MeroShare logo" className="size-7 rounded-lg" aria-hidden />
+              <span className="font-display text-sm font-semibold tracking-tight">MeroShare Console</span>
             </div>
           </div>
 
@@ -169,9 +142,7 @@ function ReleasesPage() {
             <Sparkles className="size-3.5" />
             <span>Live from GitHub</span>
           </div>
-          <h1 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">
-            Releases &amp; Updates
-          </h1>
+          <h1 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">Releases &amp; Updates</h1>
           <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">
             All release notes are fetched live from the{" "}
             <a
@@ -196,20 +167,13 @@ function ReleasesPage() {
 
         {releasesQuery.isError && (
           <div className="mt-16 rounded-2xl border border-destructive/30 bg-destructive/5 p-8 text-center space-y-4">
-            <p className="text-sm font-semibold text-destructive">
-              Could not load releases from GitHub
-            </p>
+            <p className="text-sm font-semibold text-destructive">Could not load releases from GitHub</p>
             <p className="text-xs text-muted-foreground">
-              You may be offline, or the GitHub API rate limit was reached. Try again later or visit
-              the releases page directly.
+              You may be offline, or the GitHub API rate limit was reached. Try again later or visit the releases page
+              directly.
             </p>
             <div className="flex flex-wrap justify-center gap-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => releasesQuery.refetch()}
-                className="gap-2"
-              >
+              <Button variant="outline" size="sm" onClick={() => releasesQuery.refetch()} className="gap-2">
                 <RefreshCw className="size-3.5" />
                 Retry
               </Button>
@@ -227,9 +191,7 @@ function ReleasesPage() {
           <div className="mt-16 rounded-2xl border border-border/70 bg-muted/30 p-10 text-center space-y-2">
             <Tag className="mx-auto size-8 text-muted-foreground/50" />
             <p className="text-sm font-medium">No published releases yet</p>
-            <p className="text-xs text-muted-foreground">
-              Check back after the first GitHub Release is published.
-            </p>
+            <p className="text-xs text-muted-foreground">Check back after the first GitHub Release is published.</p>
           </div>
         )}
 
@@ -251,9 +213,7 @@ function ReleasesPage() {
                       className="group flex items-center gap-2 hover:underline"
                     >
                       <Tag className="size-4 text-primary shrink-0" />
-                      <span className="font-display text-2xl font-bold tracking-tight">
-                        {release.tag_name}
-                      </span>
+                      <span className="font-display text-2xl font-bold tracking-tight">{release.tag_name}</span>
                     </a>
 
                     {idx === 0 && (
@@ -268,9 +228,7 @@ function ReleasesPage() {
                     )}
 
                     {release.name && release.name !== release.tag_name && (
-                      <span className="text-base font-semibold text-foreground/80 sm:text-lg">
-                        {release.name}
-                      </span>
+                      <span className="text-base font-semibold text-foreground/80 sm:text-lg">{release.name}</span>
                     )}
                   </div>
 
@@ -343,8 +301,7 @@ function ReleasesPage() {
         <div className="mt-12 rounded-2xl border border-border/70 bg-card p-6 text-center space-y-3 shadow-sm">
           <p className="text-sm font-semibold">Have feedback or feature requests?</p>
           <p className="text-xs text-muted-foreground max-w-md mx-auto">
-            MeroShare Console is open source. Report bugs, request features, or contribute directly
-            on GitHub.
+            MeroShare Console is open source. Report bugs, request features, or contribute directly on GitHub.
           </p>
           <div className="pt-2 flex flex-wrap justify-center gap-3">
             <a
@@ -373,12 +330,7 @@ function ReleasesPage() {
       <footer className="mt-16 border-t border-border/70 bg-card/40 py-8 px-4 text-center text-xs text-muted-foreground">
         <div className="mx-auto flex max-w-5xl flex-col items-center justify-between gap-4 sm:flex-row">
           <div className="flex items-center gap-2">
-            <img
-              src="/logo-512.png"
-              alt="MeroShare logo"
-              className="size-5 rounded-md"
-              aria-hidden
-            />
+            <img src="/logo-512.png" alt="MeroShare logo" className="size-5 rounded-md" aria-hidden />
             <span className="font-display font-semibold text-foreground">MeroShare Console</span>
             <span className="text-muted-foreground/40">•</span>
             <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[0.7rem] font-semibold text-primary">

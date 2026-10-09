@@ -2,13 +2,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { FileUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { downloadText } from "@/components/export-dialog";
 import {
   DEMO_GLOBAL_CSV,
@@ -23,13 +17,7 @@ import { appendGlobalTxns, replaceGlobalTxns } from "@/lib/world/store";
  * Shared Trading 212 / standard CSV importer for Global (non-NEPSE) data.
  * Usable from Transactions and Settings; the device store notifies listeners.
  */
-export function GlobalImportDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
+export function GlobalImportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const [fileName, setFileName] = useState("");
   const [parsed, setParsed] = useState<ImportResult | null>(null);
   const [unrecognized, setUnrecognized] = useState(false);
@@ -60,7 +48,8 @@ export function GlobalImportDialog({
 
   const commit = (mode: "append" | "replace") => {
     if (!parsed) return;
-    const added = mode === "append" ? appendGlobalTxns(parsed.txns) : (replaceGlobalTxns(parsed.txns), parsed.txns.length);
+    const added =
+      mode === "append" ? appendGlobalTxns(parsed.txns) : (replaceGlobalTxns(parsed.txns), parsed.txns.length);
     if (parsed.errors.length > 0) {
       toast.warning(
         `Imported ${mode === "append" ? added : parsed.txns.length} rows, skipped ${parsed.errors.length}.`,
@@ -86,8 +75,7 @@ export function GlobalImportDialog({
         <DialogHeader>
           <DialogTitle>Import global data</DialogTitle>
           <DialogDescription>
-            Trading 212 statements or our standard CSV. Foreign holdings only — never mixed with
-            NEPSE demat data.
+            Trading 212 statements or our standard CSV. Foreign holdings only — never mixed with NEPSE demat data.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
@@ -123,15 +111,13 @@ export function GlobalImportDialog({
           </div>
           {unrecognized ? (
             <p className="rounded-xl border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-              Unrecognized format — expected a Trading 212 statement or the standard
-              symbol,name,side,… template.
+              Unrecognized format — expected a Trading 212 statement or the standard symbol,name,side,… template.
             </p>
           ) : null}
           {parsed ? (
             <div className="rounded-xl border border-border/60 bg-surface px-3 py-2 text-xs">
               <p className="font-semibold">
-                {parsed.format === "trading212" ? "Trading 212 statement" : "Standard CSV"} ·{" "}
-                {parsed.txns.length} rows
+                {parsed.format === "trading212" ? "Trading 212 statement" : "Standard CSV"} · {parsed.txns.length} rows
                 {parsed.errors.length > 0 ? ` · ${parsed.errors.length} skipped` : ""}
               </p>
               {parsed.errors.slice(0, 3).map((e) => (

@@ -1,46 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
 import { ErrorBlock, LoadingBlock, EmptyBlock } from "@/components/states";
 import { useEffect, useMemo, useState } from "react";
-import {
-  ArrowDown,
-  ArrowUp,
-  ArrowUpDown,
-  CheckCircle2,
-  Clock,
-  Lock,
-  Search,
-  XCircle,
-} from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, CheckCircle2, Clock, Lock, Search, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ExportButton, buildCsv } from "@/components/export-dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  applicationDetailsQuery,
-  applicationReportsQuery,
-  oldApplicationReportsQuery,
-} from "@/lib/queries";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { applicationDetailsQuery, applicationReportsQuery, oldApplicationReportsQuery } from "@/lib/queries";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { formatDateTime, formatQty, toNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { ApplicationReportItem, JsonRecord, JsonValue } from "@/lib/meroshare/types";
@@ -295,10 +265,7 @@ const SORT_LABELS: Record<SortKey, string> = {
   amount: "Amount",
 };
 
-function sortValue(
-  pair: { item: ApplicationReportItem; detail: JsonRecord | null },
-  key: SortKey,
-): string | number {
+function sortValue(pair: { item: ApplicationReportItem; detail: JsonRecord | null }, key: SortKey): string | number {
   const { item, detail } = pair;
   switch (key) {
     case "companyName":
@@ -324,10 +291,7 @@ function comparePairs(
 ): number {
   const av = sortValue(a, key);
   const bv = sortValue(b, key);
-  const cmp =
-    typeof av === "number" && typeof bv === "number"
-      ? av - bv
-      : String(av).localeCompare(String(bv));
+  const cmp = typeof av === "number" && typeof bv === "number" ? av - bv : String(av).localeCompare(String(bv));
   return dir === "asc" ? cmp : -cmp;
 }
 
@@ -396,20 +360,7 @@ function reportCsv(items: ApplicationReportItem[], details: (JsonRecord | null)[
       d ? String(d["meroshareRemark"] ?? "") : "",
     ];
   });
-  return buildCsv(
-    [
-      "SN",
-      "Company",
-      "Stock",
-      "Applied",
-      "Allotted",
-      "Amount",
-      "Status",
-      "Stage",
-      "Remark",
-    ],
-    rows,
-  );
+  return buildCsv(["SN", "Company", "Stock", "Applied", "Allotted", "Amount", "Status", "Stage", "Remark"], rows);
 }
 
 function ReportList({
@@ -446,20 +397,13 @@ function ReportList({
   }, [items, details, search, sortKey, sortCycle]);
 
   if (items.length === 0) {
-    return (
-      <EmptyBlock
-        title="No applications"
-        description="Applications you submit will be listed here."
-      />
-    );
+    return <EmptyBlock title="No applications" description="Applications you submit will be listed here." />;
   }
 
   return (
     <div className="space-y-4">
       <Summary details={details} />
-      {loadingDetails && (
-        <p className="text-xs text-muted-foreground">Loading application results…</p>
-      )}
+      {loadingDetails && <p className="text-xs text-muted-foreground">Loading application results…</p>}
       {shown.items.length === 0 ? (
         <EmptyBlock title="No matches" description="Nothing matches your search." />
       ) : (
@@ -469,11 +413,7 @@ function ReportList({
               Showing {shown.items.length} of {items.length} applications.
             </p>
           ) : null}
-          <Accordion
-            type="single"
-            collapsible
-            className="overflow-hidden rounded-2xl border border-border/70 bg-card"
-          >
+          <Accordion type="single" collapsible className="overflow-hidden rounded-2xl border border-border/70 bg-card">
             {shown.items.map((item, idx) => {
               const detail = shown.details[idx] ?? null;
               const outcome = detail ? deriveOutcome(detail, detailClosed(detail).closed) : null;
@@ -484,9 +424,7 @@ function ReportList({
                 >
                   <AccordionTrigger className="gap-3 overflow-hidden px-4">
                     <span className="min-w-0 flex-1 overflow-hidden text-left">
-                      <span className="block w-full truncate text-sm font-semibold">
-                        {item.companyName}
-                      </span>
+                      <span className="block w-full truncate text-sm font-semibold">{item.companyName}</span>
                       <span className="num block w-full truncate text-xs text-muted-foreground">
                         {item.scrip} · {item.shareTypeName} {item.shareGroupName}
                       </span>
@@ -520,11 +458,7 @@ function ReportList({
                       return (
                         <div className="mt-3 flex flex-wrap gap-2 border-t border-border/60 pt-3">
                           {onEdit ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => onEdit(item, detail)}
-                            >
+                            <Button size="sm" variant="outline" onClick={() => onEdit(item, detail)}>
                               Edit
                             </Button>
                           ) : null}
@@ -560,8 +494,8 @@ function ReportList({
                 <DialogTitle>Withdraw application</DialogTitle>
               </DialogHeader>
               <p className="text-sm text-muted-foreground">
-                Withdraw {withdrawTarget?.item.companyName} ({withdrawTarget?.item.scrip})? This
-                cannot be undone while the issue is open.
+                Withdraw {withdrawTarget?.item.companyName} ({withdrawTarget?.item.scrip})? This cannot be undone while
+                the issue is open.
               </p>
               <div className="space-y-2">
                 <Label htmlFor="withdraw-pin">Transaction PIN</Label>
@@ -571,9 +505,7 @@ function ReportList({
                   inputMode="numeric"
                   maxLength={8}
                   value={withdrawTarget?.pin ?? ""}
-                  onChange={(e) =>
-                    setWithdrawTarget((prev) => (prev ? { ...prev, pin: e.target.value } : null))
-                  }
+                  onChange={(e) => setWithdrawTarget((prev) => (prev ? { ...prev, pin: e.target.value } : null))}
                   placeholder="4 digit PIN"
                 />
               </div>
@@ -616,20 +548,15 @@ export function ApplicationReports({
   const [oldFrom, setOldFrom] = useState("");
   const [oldTo, setOldTo] = useState("");
   const [showOld, setShowOld] = useState(false);
-  const cycleSort = () =>
-    setSortCycle((c) => (c === "asc" ? "desc" : c === "desc" ? "default" : "asc"));
+  const cycleSort = () => setSortCycle((c) => (c === "asc" ? "desc" : c === "desc" ? "default" : "asc"));
   const currentItems = current.data ?? [];
   const oldItems = old.data ?? [];
   const currentDetails = useQuery({
-    ...applicationDetailsQuery(
-      currentItems.map((i) => ({ formId: i.applicantFormId ?? 0, old: false })),
-    ),
+    ...applicationDetailsQuery(currentItems.map((i) => ({ formId: i.applicantFormId ?? 0, old: false }))),
     enabled: currentItems.length > 0,
   });
   const oldDetails = useQuery({
-    ...applicationDetailsQuery(
-      oldItems.map((i) => ({ formId: i.applicantFormId ?? 0, old: true })),
-    ),
+    ...applicationDetailsQuery(oldItems.map((i) => ({ formId: i.applicantFormId ?? 0, old: true }))),
     enabled: oldItems.length > 0,
   });
   return (
@@ -744,12 +671,7 @@ export function ApplicationReports({
             Load
           </Button>
           {showOld ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 text-xs"
-              onClick={() => setShowOld(false)}
-            >
+            <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => setShowOld(false)}>
               Hide
             </Button>
           ) : null}
@@ -761,9 +683,7 @@ export function ApplicationReports({
               if (!oldFrom && !oldTo) return { items: oldItems, details: oldDetails.data ?? [] };
               const pairs = oldItems.map((it, i) => ({ it, det: oldDetails.data?.[i] ?? null }));
               const kept = pairs.filter(({ det }) => {
-                const raw = det
-                  ? String((det as any)["appliedDate"] ?? (det as any)["recordedDate"] ?? "")
-                  : "";
+                const raw = det ? String((det as any)["appliedDate"] ?? (det as any)["recordedDate"] ?? "") : "";
                 const day = raw ? raw.slice(0, 10) : "";
                 if (!day) return true;
                 if (oldFrom && day < oldFrom) return false;
@@ -773,8 +693,7 @@ export function ApplicationReports({
               return { items: kept.map((p) => p.it), details: kept.map((p) => p.det) };
             })();
             if (old.isLoading) return <LoadingBlock label="Loading history" />;
-            if (old.isError)
-              return <ErrorBlock error={old.error} retry={() => void old.refetch()} />;
+            if (old.isError) return <ErrorBlock error={old.error} retry={() => void old.refetch()} />;
             return (
               <ReportList
                 items={filtered.items}

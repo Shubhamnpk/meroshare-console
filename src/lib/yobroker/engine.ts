@@ -132,9 +132,7 @@ export function cancelYoOrder(w: YoWallet, orderId: string): YoWallet {
 
 export function matchYoOrders(w: YoWallet, priceMap: Map<string, number>): YoWallet {
   let cur = w;
-  for (const o of w.orders.filter(
-    (x) => x.status === "open" && x.orderType === "LMT" && x.price != null,
-  )) {
+  for (const o of w.orders.filter((x) => x.status === "open" && x.orderType === "LMT" && x.price != null)) {
     const ltp = priceMap.get(o.symbol);
     if (ltp == null) continue;
     const hit = o.side === "BUY" ? ltp <= o.price! : ltp >= o.price!;

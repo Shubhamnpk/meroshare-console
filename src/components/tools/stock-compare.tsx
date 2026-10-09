@@ -7,14 +7,7 @@ import { formatNpr, formatPercent } from "@/lib/format";
 import { ScripSheet } from "@/components/market/scrip-sheet";
 import { cn } from "@/lib/utils";
 import { Panel } from "@/components/ui/panel";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 interface CompareRow {
   symbol: string;
@@ -30,22 +23,11 @@ interface CompareRow {
   score: LongTermScore | null;
 }
 
-function CompareBar({
-  value,
-  max,
-  color,
-}: {
-  value: number;
-  max: number;
-  color: string;
-}) {
+function CompareBar({ value, max, color }: { value: number; max: number; color: string }) {
   const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
   return (
     <div className="h-1.5 w-full rounded-full bg-muted/50">
-      <div
-        className={cn("h-full rounded-full", color)}
-        style={{ width: `${pct}%` }}
-      />
+      <div className={cn("h-full rounded-full", color)} style={{ width: `${pct}%` }} />
     </div>
   );
 }
@@ -73,22 +55,11 @@ export function StockCompare() {
         const pe = report?.pe ?? null;
         const eps = report?.eps ?? null;
         const netWorth = report?.netWorthPerShare ?? null;
-        const roe =
-          eps != null && netWorth != null && netWorth > 0
-            ? Math.round((eps / netWorth) * 1000) / 10
-            : null;
-        const pb =
-          netWorth != null && netWorth > 0 ? price.ltp / netWorth : null;
+        const roe = eps != null && netWorth != null && netWorth > 0 ? Math.round((eps / netWorth) * 1000) / 10 : null;
+        const pb = netWorth != null && netWorth > 0 ? price.ltp / netWorth : null;
         const latestDiv = symDividends[0] ?? null;
-        const dividendYield =
-          latestDiv && fv > 0 && price.ltp > 0
-            ? (latestDiv.totalDividend * fv) / price.ltp
-            : null;
-        const fiscalYears = [
-          ...new Set(symDividends.map((d) => d.fiscalYear).filter(Boolean)),
-        ]
-          .sort()
-          .reverse();
+        const dividendYield = latestDiv && fv > 0 && price.ltp > 0 ? (latestDiv.totalDividend * fv) / price.ltp : null;
+        const fiscalYears = [...new Set(symDividends.map((d) => d.fiscalYear).filter(Boolean))].sort().reverse();
         let streak = 0;
         if (fiscalYears.length > 0) {
           let exp = parseInt(fiscalYears[0]!);
@@ -101,12 +72,7 @@ export function StockCompare() {
           }
         }
 
-        const score = computeLongTermScore(
-          price,
-          symFinancials,
-          symDividends,
-          fv,
-        );
+        const score = computeLongTermScore(price, symFinancials, symDividends, fv);
 
         return {
           symbol: sym,
@@ -117,10 +83,7 @@ export function StockCompare() {
           pb,
           roe,
           eps,
-          dividendYield:
-            dividendYield != null
-              ? Math.round(dividendYield * 100) / 100
-              : null,
+          dividendYield: dividendYield != null ? Math.round(dividendYield * 100) / 100 : null,
           dividendStreak: streak,
           score,
         };
@@ -147,18 +110,24 @@ export function StockCompare() {
     { key: "pb" as const, label: "P/B", format: (r: CompareRow) => (r.pb != null ? String(r.pb) : "-") },
     { key: "roe" as const, label: "ROE", format: (r: CompareRow) => (r.roe != null ? `${r.roe}%` : "-") },
     { key: "eps" as const, label: "EPS", format: (r: CompareRow) => (r.eps != null ? formatNpr(r.eps) : "-") },
-    { key: "dividendYield" as const, label: "Div Yield", format: (r: CompareRow) => (r.dividendYield != null ? `${r.dividendYield}%` : "-") },
+    {
+      key: "dividendYield" as const,
+      label: "Div Yield",
+      format: (r: CompareRow) => (r.dividendYield != null ? `${r.dividendYield}%` : "-"),
+    },
     { key: "dividendStreak" as const, label: "Streak", format: (r: CompareRow) => `${r.dividendStreak}y` },
-    { key: "score" as const, label: "Score", format: (r: CompareRow) => (r.score?.score != null ? String(r.score.score) : "-") },
+    {
+      key: "score" as const,
+      label: "Score",
+      format: (r: CompareRow) => (r.score?.score != null ? String(r.score.score) : "-"),
+    },
   ];
 
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
         <GitCompareArrows className="size-4 text-muted-foreground" />
-        <span className="text-xs text-muted-foreground">
-          Compare up to 4 stocks side-by-side.
-        </span>
+        <span className="text-xs text-muted-foreground">Compare up to 4 stocks side-by-side.</span>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -168,10 +137,7 @@ export function StockCompare() {
             className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-card px-3 py-1 text-sm font-medium"
           >
             {sym}
-            <button
-              onClick={() => removeSymbol(sym)}
-              className="ml-0.5 text-muted-foreground hover:text-foreground"
-            >
+            <button onClick={() => removeSymbol(sym)} className="ml-0.5 text-muted-foreground hover:text-foreground">
               <X className="size-3" />
             </button>
           </span>
@@ -185,10 +151,7 @@ export function StockCompare() {
               placeholder="Add symbol..."
               className="w-24 rounded-full border border-border/70 bg-card px-3 py-1 text-sm outline-none focus:border-primary/50"
             />
-            <button
-              onClick={addSymbol}
-              className="rounded-full bg-primary/15 p-1 text-primary hover:bg-primary/25"
-            >
+            <button onClick={addSymbol} className="rounded-full bg-primary/15 p-1 text-primary hover:bg-primary/25">
               <Plus className="size-3.5" />
             </button>
           </div>
@@ -200,14 +163,9 @@ export function StockCompare() {
           <Table className="min-w-[760px]">
             <TableHeader className="bg-muted">
               <TableRow className="bg-muted/40 hover:bg-muted/40">
-                <TableHead className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
-                  Metric
-                </TableHead>
+                <TableHead className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Metric</TableHead>
                 {rows.map((r) => (
-                  <TableHead
-                    key={r.symbol}
-                    className="px-3 py-2 text-right text-xs font-medium text-muted-foreground"
-                  >
+                  <TableHead key={r.symbol} className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">
                     {r.symbol}
                   </TableHead>
                 ))}
@@ -216,14 +174,9 @@ export function StockCompare() {
             <TableBody>
               {rows.length > 0 && (
                 <TableRow className="border-b border-border/30 bg-muted/10">
-                  <TableCell className="px-3 py-1.5 text-xs text-muted-foreground">
-                    Name
-                  </TableCell>
+                  <TableCell className="px-3 py-1.5 text-xs text-muted-foreground">Name</TableCell>
                   {rows.map((r) => (
-                    <TableCell
-                      key={r.symbol}
-                      className="px-3 py-1.5 text-right text-xs"
-                    >
+                    <TableCell key={r.symbol} className="px-3 py-1.5 text-right text-xs">
                       {r.name}
                     </TableCell>
                   ))}
@@ -231,13 +184,10 @@ export function StockCompare() {
               )}
               {metrics.map((m) => (
                 <TableRow key={m.key} className="border-b border-border/20">
-                  <TableCell className="px-3 py-2 text-xs text-muted-foreground">
-                    {m.label}
-                  </TableCell>
+                  <TableCell className="px-3 py-2 text-xs text-muted-foreground">{m.label}</TableCell>
                   {rows.map((r) => {
                     const val = r[m.key as keyof CompareRow];
-                    const numVal =
-                      typeof val === "number" ? val : null;
+                    const numVal = typeof val === "number" ? val : null;
                     const allVals = rows
                       .map((rr) => rr[m.key as keyof CompareRow])
                       .filter((v): v is number => typeof v === "number");
@@ -262,21 +212,15 @@ export function StockCompare() {
                         )}
                       >
                         {m.format(r)}
-                        {numVal != null &&
-                          m.key !== "ltp" &&
-                          m.key !== "score" && (
-                            <div className="mt-1">
-                              <CompareBar
-                                value={numVal}
-                                max={maxVal}
-                                color={
-                                  numVal >= 0
-                                    ? "bg-emerald-400"
-                                    : "bg-red-400"
-                                }
-                              />
-                            </div>
-                          )}
+                        {numVal != null && m.key !== "ltp" && m.key !== "score" && (
+                          <div className="mt-1">
+                            <CompareBar
+                              value={numVal}
+                              max={maxVal}
+                              color={numVal >= 0 ? "bg-emerald-400" : "bg-red-400"}
+                            />
+                          </div>
+                        )}
                       </TableCell>
                     );
                   })}
@@ -293,13 +237,7 @@ export function StockCompare() {
         </div>
       )}
 
-      {picked && (
-        <ScripSheet
-          symbol={picked}
-          open={!!picked}
-          onOpenChange={() => setPicked(null)}
-        />
-      )}
+      {picked && <ScripSheet symbol={picked} open={!!picked} onOpenChange={() => setPicked(null)} />}
     </div>
   );
 }

@@ -1,24 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import {
-  AreaChart,
-  Area,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis, YAxis, type TooltipProps } from "recharts";
 import { dividendsQuery, faceValuesQuery, indexDailyQuery, indexGraphQuery } from "@/lib/queries";
 import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Activity,
   Layers,
@@ -49,7 +35,6 @@ import { Heatmap, type HeatTile } from "@/components/market/heatmap";
 import { SectorBadge } from "@/components/market/sector-icon";
 import { CompactNpr, CompactQty } from "@/components/market/compact-value";
 import { cn } from "@/lib/utils";
-
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -195,12 +180,7 @@ export function SentimentGauge({ score, compact = false }: { score: number; comp
       >
         <title>{`${label} ${Math.round(display)}`}</title>
         {zones.map((z, i) => (
-          <path
-            key={i}
-            d={arcPath(z.from, z.to, 40, 58)}
-            fill={z.color}
-            opacity={i === activeZone ? 0.95 : 0.22}
-          />
+          <path key={i} d={arcPath(z.from, z.to, 40, 58)} fill={z.color} opacity={i === activeZone ? 0.95 : 0.22} />
         ))}
         {[180, 144, 108, 72, 36, 0].map((deg) => {
           const a = pt(deg, 58);
@@ -289,15 +269,12 @@ function IntelCard({
         <span className={cn("flex size-5 items-center justify-center rounded-md", color)}>
           <Icon className="size-3 text-white" />
         </span>
-        <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-          {title}
-        </span>
+        <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">{title}</span>
       </div>
       {children}
     </div>
   );
 }
-
 
 function IndexCard({
   name,
@@ -389,15 +366,27 @@ function IndexCard({
               {close.toLocaleString("en-NP", { maximumFractionDigits: 2 })}
             </p>
             <span className={cn("num text-xs font-medium", isUp ? "text-emerald-400/80" : "text-red-400/80")}>
-              {isUp ? "+" : ""}{formatNumber(pointChange)}
+              {isUp ? "+" : ""}
+              {formatNumber(pointChange)}
             </span>
           </div>
         )}
 
-        <div className="mt-1.5 h-14">
+        {data && (
+          <div className="mt-1 flex justify-between text-[0.6rem] text-muted-foreground/70">
+            <span className="flex items-center gap-0.5">
+              <TrendingUp className="size-2.5 text-emerald-400/60" /> {formatNumber(data.high)}
+            </span>
+            <span className="flex items-center gap-0.5">
+              <TrendingDown className="size-2.5 text-red-400/60" /> {formatNumber(data.low)}
+            </span>
+          </div>
+        )}
+
+        <div className="relative -mx-3.5 -mb-3.5 mt-1.5 h-16 overflow-hidden rounded-b-2xl">
           {chartData.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
+              <AreaChart data={chartData} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
                 <defs>
                   <linearGradient id={chartGradientId(name)} x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor={color} stopOpacity={0.35} />
@@ -405,12 +394,7 @@ function IndexCard({
                   </linearGradient>
                 </defs>
                 <XAxis dataKey="t" type="number" domain={["dataMin", "dataMax"]} hide />
-                <YAxis
-                  type="number"
-                  domain={yDomain ?? ["dataMin", "dataMax"]}
-                  hide
-                  allowDataOverflow={false}
-                />
+                <YAxis type="number" domain={yDomain ?? ["dataMin", "dataMax"]} hide allowDataOverflow={false} />
                 <Area
                   type="monotone"
                   dataKey="v"
@@ -429,8 +413,29 @@ function IndexCard({
                     background: "hsl(var(--card))",
                     color: "hsl(var(--foreground))",
                   }}
-                  formatter={(val: number) => [val.toLocaleString("en-NP", { maximumFractionDigits: 2 }), name]}
-                  labelFormatter={(t) => new Date(t as number).toLocaleDateString("en-NP")}
+                  content={(props: TooltipProps<number, string>) => {
+                    const entry = props.payload?.[0] as { value?: number; payload?: { t?: number } } | undefined;
+                    if (!props.active || entry == null) return null;
+                    const cur = typeof entry.value === "number" ? entry.value : 0;
+                    const first = chartData[0]?.v ?? 0;
+                    const pct = first > 0 ? ((cur - first) / first) * 100 : 0;
+                    const t = entry.payload?.t ?? 0;
+                    return (
+                      <div className="num leading-tight font-semibold whitespace-nowrap">
+                        <p className={pct >= 0 ? "text-sm text-emerald-400" : "text-sm text-red-400"}>
+                          {formatPercent(pct)}
+                        </p>
+                        <p className="text-[0.65rem] font-normal text-muted-foreground">
+                          {t > 0
+                            ? new Date(t).toLocaleTimeString("en-NP", {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : ""}
+                        </p>
+                      </div>
+                    );
+                  }}
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -461,17 +466,6 @@ function IndexCard({
             </div>
           )}
         </div>
-
-        {data && (
-          <div className="mt-1.5 flex justify-between text-[0.6rem] text-muted-foreground/70">
-            <span className="flex items-center gap-0.5">
-              <TrendingUp className="size-2.5 text-emerald-400/60" /> {formatNumber(data.high)}
-            </span>
-            <span className="flex items-center gap-0.5">
-              <TrendingDown className="size-2.5 text-red-400/60" /> {formatNumber(data.low)}
-            </span>
-          </div>
-        )}
       </div>
     </button>
   );
@@ -686,9 +680,7 @@ function BenchmarksSection({
               </button>
             ))}
           </div>
-          <span className="hidden text-[11px] text-muted-foreground/70 sm:inline">
-            Click a card for the full chart
-          </span>
+          <span className="hidden text-[11px] text-muted-foreground/70 sm:inline">Click a card for the full chart</span>
         </div>
       </div>
 
@@ -713,9 +705,7 @@ function BenchmarksSection({
             >
               <span className={cn("size-1.5 rounded-full", up ? "bg-emerald-500" : "bg-red-500")} />
               {o.label}
-              <span className={cn("num", up ? "text-emerald-400" : "text-red-400")}>
-                {formatPercent(pct)}
-              </span>
+              <span className={cn("num", up ? "text-emerald-400" : "text-red-400")}>{formatPercent(pct)}</span>
             </button>
           );
         })}
@@ -768,11 +758,7 @@ export function MoverRows({
         <p
           className={cn(
             "text-[11px] font-bold uppercase tracking-wider",
-            tone === "gain"
-              ? "text-emerald-400"
-              : tone === "loss"
-                ? "text-red-400"
-                : "text-muted-foreground",
+            tone === "gain" ? "text-emerald-400" : tone === "loss" ? "text-red-400" : "text-muted-foreground",
           )}
         >
           {title}
@@ -798,9 +784,7 @@ export function MoverRows({
                   {ordinal(i + 1)}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-xs font-bold text-foreground">
-                    {p.symbol}
-                  </span>
+                  <span className="block truncate text-xs font-bold text-foreground">{p.symbol}</span>
                   <span className="num block truncate text-[10px] text-muted-foreground">
                     {formatNpr(p.ltp)} · <CompactNpr value={p.turnover} />
                   </span>
@@ -832,15 +816,7 @@ export function MoverRows({
 
 export type MarketDepthViewMode = "matrix" | "stocks" | "treemap";
 
-type DepthSortKey =
-  | "sector"
-  | "points"
-  | "turnover"
-  | "share"
-  | "yield"
-  | "breadth"
-  | "performer"
-  | "traded";
+type DepthSortKey = "sector" | "points" | "turnover" | "share" | "yield" | "breadth" | "performer" | "traded";
 
 export function MarketOverview({
   prices,
@@ -865,9 +841,7 @@ export function MarketOverview({
     sectorName?: string;
   }>({ open: false, title: "" });
 
-  const nepseIndex = indices.find(
-    (i) => /nepse/i.test(i.name) && !/sensitive|float/i.test(i.name),
-  );
+  const nepseIndex = indices.find((i) => /nepse/i.test(i.name) && !/sensitive|float/i.test(i.name));
 
   // Build sector map for fast code/name lookups
   const sectorIndexMap = useMemo(() => {
@@ -894,9 +868,7 @@ export function MarketOverview({
           normalizeSectorKey(si.code) === aliased ||
           (si.sector != null && normalizeSectorKey(si.sector) === aliased),
       ) ??
-      [...sectorIndexMap.values()].find((si) =>
-        si.name.toLowerCase().includes(lower.split(" ")[0] ?? ""),
-      )
+      [...sectorIndexMap.values()].find((si) => si.name.toLowerCase().includes(lower.split(" ")[0] ?? ""))
     );
   };
 
@@ -950,8 +922,7 @@ export function MarketOverview({
     const advancers = prices.filter((p) => p.percentChange > 0).length;
     const decliners = prices.filter((p) => p.percentChange < 0).length;
     const unchanged = total - advancers - decliners;
-    const avgChange =
-      total > 0 ? prices.reduce((s, p) => s + p.percentChange, 0) / total : 0;
+    const avgChange = total > 0 ? prices.reduce((s, p) => s + p.percentChange, 0) / total : 0;
     const grandTurnover = prices.reduce((s, p) => s + p.turnover, 0);
     const grandVolume = prices.reduce((s, p) => s + p.volume, 0);
 
@@ -985,15 +956,9 @@ export function MarketOverview({
           sector,
           sectorIndex: si,
           items: sortedByTurnover,
-          avgYield5:
-            memberYields.length > 0
-              ? memberYields.reduce((s, y) => s + y, 0) / memberYields.length
-              : null,
+          avgYield5: memberYields.length > 0 ? memberYields.reduce((s, y) => s + y, 0) / memberYields.length : null,
           yieldMembers: memberYields.length,
-          avgChange:
-            items.length > 0
-              ? items.reduce((s, p) => s + p.percentChange, 0) / items.length
-              : 0,
+          avgChange: items.length > 0 ? items.reduce((s, p) => s + p.percentChange, 0) / items.length : 0,
           sectorPoints: si?.close ?? null,
           sectorPointChange: si?.change ?? null,
           sectorPercentChange: si?.percentChange ?? null,
@@ -1048,7 +1013,10 @@ export function MarketOverview({
 
   // ── Volume Surge / Most Active ──
   const volumeSurge = useMemo(() => {
-    return [...prices].filter((p) => p.turnover > 0).sort((a, b) => b.turnover - a.turnover).slice(0, 5);
+    return [...prices]
+      .filter((p) => p.turnover > 0)
+      .sort((a, b) => b.turnover - a.turnover)
+      .slice(0, 5);
   }, [prices]);
 
   // ── Sector Rotation (vs market avg) ──
@@ -1073,19 +1041,20 @@ export function MarketOverview({
   }, [prices]);
 
   const sentimentLabel =
-    sentimentScore >= 80 ? "Strong Bull"
-      : sentimentScore >= 60 ? "Mild Bull"
-        : sentimentScore >= 40 ? "Neutral"
-          : sentimentScore >= 20 ? "Mild Bear"
+    sentimentScore >= 80
+      ? "Strong Bull"
+      : sentimentScore >= 60
+        ? "Mild Bull"
+        : sentimentScore >= 40
+          ? "Neutral"
+          : sentimentScore >= 20
+            ? "Mild Bear"
             : "Strong Bear";
-
 
   const treemapTiles: HeatTile[] = useMemo(() => {
     return [...prices]
       .filter((p) => p.ltp > 0)
-      .sort((a, b) =>
-        treemapMetric === "turnover" ? b.turnover - a.turnover : b.volume - a.volume,
-      )
+      .sort((a, b) => (treemapMetric === "turnover" ? b.turnover - a.turnover : b.volume - a.volume))
       .slice(0, 80)
       .map((p) => {
         const val = treemapMetric === "turnover" ? p.turnover : p.volume;
@@ -1107,11 +1076,7 @@ export function MarketOverview({
     return sectors.filter(
       (s) =>
         s.sector.toLowerCase().includes(term) ||
-        s.items.some(
-          (p) =>
-            p.symbol.toLowerCase().includes(term) ||
-            p.name.toLowerCase().includes(term),
-        ),
+        s.items.some((p) => p.symbol.toLowerCase().includes(term) || p.name.toLowerCase().includes(term)),
     );
   }, [sectors, searchQuery]);
 
@@ -1121,10 +1086,7 @@ export function MarketOverview({
     const term = searchQuery.toLowerCase().trim();
     if (!term) return [];
     return [...prices]
-      .filter(
-        (p) =>
-          p.symbol.toLowerCase().includes(term) || p.name.toLowerCase().includes(term),
-      )
+      .filter((p) => p.symbol.toLowerCase().includes(term) || p.name.toLowerCase().includes(term))
       .sort((a, b) => b.turnover - a.turnover)
       .slice(0, 12);
   }, [prices, searchQuery]);
@@ -1222,6 +1184,8 @@ export function MarketOverview({
         : breadth.avgChange >= -1
           ? "Weak Bearish"
           : "Heavy Bearish";
+  // White position needle on the breadth bar (same touch as sector details).
+  const breadthNeedle = Math.max(3, Math.min(97, breadth.advPct));
 
   return (
     <div className="space-y-5">
@@ -1237,9 +1201,7 @@ export function MarketOverview({
             indexName: idx,
           })
         }
-        onSelectSector={(sec) =>
-          void navigate({ to: "/sectors/$sectorName", params: { sectorName: sec } })
-        }
+        onSelectSector={(sec) => void navigate({ to: "/sectors/$sectorName", params: { sectorName: sec } })}
         onSelectScrip={(sym) => setPickedScrip(sym)}
       />
 
@@ -1264,15 +1226,11 @@ export function MarketOverview({
         <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
           <div className="flex items-center gap-2">
             <Activity className="size-4 text-primary" />
-            <h3 className="font-display text-sm font-semibold text-foreground">
-              Market Breadth &amp; Flow
-            </h3>
+            <h3 className="font-display text-sm font-semibold text-foreground">Market Breadth &amp; Flow</h3>
             <span
               className={cn(
                 "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase",
-                breadth.avgChange >= 0
-                  ? "bg-emerald-500/15 text-emerald-400"
-                  : "bg-red-500/15 text-red-400",
+                breadth.avgChange >= 0 ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400",
               )}
             >
               {sentiment} · {formatPercent(breadth.avgChange)}
@@ -1281,48 +1239,59 @@ export function MarketOverview({
 
           <div className="flex items-center gap-4 text-xs">
             <span className="text-muted-foreground">
-              Turnover:{" "}
-              <CompactNpr value={totalMarketTurnover} className="font-bold text-foreground" />
+              Turnover: <CompactNpr value={totalMarketTurnover} className="font-bold text-foreground" />
             </span>
             <span className="text-muted-foreground">
-              Volume:{" "}
-              <CompactQty value={totalMarketVolume} className="font-bold text-foreground" />
+              Volume: <CompactQty value={totalMarketVolume} className="font-bold text-foreground" />
             </span>
           </div>
         </div>
 
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
           <div className="min-w-0 flex-1">
-            {/* Breadth Bar */}
-            <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted/40">
+            {/* Breadth Bar with position needle */}
+            <div className="relative mt-8">
               <div
-                className="bg-emerald-500 transition-all"
-                style={{ width: `${breadth.advPct}%` }}
-                title={`${breadth.advancers} Advancers`}
-              />
+                className="absolute -top-7 -translate-x-1/2 transition-all duration-500"
+                style={{ left: `${breadthNeedle}%` }}
+              >
+                <span className="num rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[11px] font-bold whitespace-nowrap text-emerald-400">
+                  ▲ {breadth.advPct}%
+                </span>
+              </div>
               <div
-                className="bg-muted-foreground/30 transition-all"
-                style={{
-                  width: `${breadth.total > 0 ? Math.round((breadth.unchanged / breadth.total) * 100) : 0}%`,
-                }}
-                title={`${breadth.unchanged} Unchanged`}
+                className="absolute -top-1.5 bottom-0 w-[3px] -translate-x-1/2 rounded-full bg-white shadow-[0_0_10px_rgba(255,255,255,0.9)] transition-all duration-500"
+                style={{ left: `${breadthNeedle}%` }}
+                title={`${breadth.advancers} advancing (${breadth.advPct}%)`}
               />
-              <div
-                className="bg-red-500 transition-all"
-                style={{
-                  width: `${breadth.total > 0 ? Math.round((breadth.decliners / breadth.total) * 100) : 0}%`,
-                }}
-                title={`${breadth.decliners} Decliners`}
-              />
+              <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted/40">
+                <div
+                  className="bg-emerald-500 transition-all"
+                  style={{ width: `${breadth.advPct}%` }}
+                  title={`${breadth.advancers} Advancers`}
+                />
+                <div
+                  className="bg-muted-foreground/30 transition-all"
+                  style={{
+                    width: `${breadth.total > 0 ? Math.round((breadth.unchanged / breadth.total) * 100) : 0}%`,
+                  }}
+                  title={`${breadth.unchanged} Unchanged`}
+                />
+                <div
+                  className="bg-red-500 transition-all"
+                  style={{
+                    width: `${breadth.total > 0 ? Math.round((breadth.decliners / breadth.total) * 100) : 0}%`,
+                  }}
+                  title={`${breadth.decliners} Decliners`}
+                />
+              </div>
             </div>
 
             <div className="mt-2 flex justify-between text-xs text-muted-foreground">
               <span className="font-semibold text-emerald-400">
                 ▲ {breadth.advancers} Advancing ({breadth.advPct}%)
               </span>
-              <span className="text-muted-foreground/80">
-                - {breadth.unchanged} Unchanged
-              </span>
+              <span className="text-muted-foreground/80">- {breadth.unchanged} Unchanged</span>
               <span className="font-semibold text-red-400">
                 ▼ {breadth.decliners} Declining (
                 {breadth.total > 0 ? Math.round((breadth.decliners / breadth.total) * 100) : 0}%)
@@ -1343,9 +1312,7 @@ export function MarketOverview({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <Layers className="size-4 text-primary" />
-            <h2 className="font-display text-base font-bold text-foreground">
-              Market Depth &amp; Sector Heatmap
-            </h2>
+            <h2 className="font-display text-base font-bold text-foreground">Market Depth &amp; Sector Heatmap</h2>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -1450,14 +1417,67 @@ export function MarketOverview({
               <Table className="text-left text-xs">
                 <TableHeader>
                   <TableRow className="bg-muted/40 hover:bg-muted/40">
-                    <SortableTh label="Sector" active={depthSort.key === "sector"} dir={depthSort.dir} onClick={() => toggleDepthSort("sector")} kind="text" className="py-2.5 pl-4 pr-2 font-semibold" />
-                    <SortableTh label="Index Points" active={depthSort.key === "points"} dir={depthSort.dir} onClick={() => toggleDepthSort("points")} align="right" className="py-2.5 px-3 font-semibold" />
-                    <SortableTh label="Turnover" active={depthSort.key === "turnover"} dir={depthSort.dir} onClick={() => toggleDepthSort("turnover")} align="right" className="py-2.5 px-3 font-semibold" />
-                    <SortableTh label="Mkt Share" active={depthSort.key === "share"} dir={depthSort.dir} onClick={() => toggleDepthSort("share")} align="right" className="py-2.5 px-3 font-semibold" />
-                    <SortableTh label="Yield 5Y" active={depthSort.key === "yield"} dir={depthSort.dir} onClick={() => toggleDepthSort("yield")} align="right" className="py-2.5 px-3 font-semibold" />
-                    <SortableTh label="Breadth" active={depthSort.key === "breadth"} dir={depthSort.dir} onClick={() => toggleDepthSort("breadth")} className="py-2.5 px-3 text-center min-w-[120px] font-semibold" />
-                    <SortableTh label="Top Performer" active={depthSort.key === "performer"} dir={depthSort.dir} onClick={() => toggleDepthSort("performer")} className="py-2.5 px-3 font-semibold" />
-                    <SortableTh label="Heaviest Stock" active={depthSort.key === "traded"} dir={depthSort.dir} onClick={() => toggleDepthSort("traded")} className="py-2.5 px-3 font-semibold" />
+                    <SortableTh
+                      label="Sector"
+                      active={depthSort.key === "sector"}
+                      dir={depthSort.dir}
+                      onClick={() => toggleDepthSort("sector")}
+                      kind="text"
+                      className="py-2.5 pl-4 pr-2 font-semibold"
+                    />
+                    <SortableTh
+                      label="Index Points"
+                      active={depthSort.key === "points"}
+                      dir={depthSort.dir}
+                      onClick={() => toggleDepthSort("points")}
+                      align="right"
+                      className="py-2.5 px-3 font-semibold"
+                    />
+                    <SortableTh
+                      label="Turnover"
+                      active={depthSort.key === "turnover"}
+                      dir={depthSort.dir}
+                      onClick={() => toggleDepthSort("turnover")}
+                      align="right"
+                      className="py-2.5 px-3 font-semibold"
+                    />
+                    <SortableTh
+                      label="Mkt Share"
+                      active={depthSort.key === "share"}
+                      dir={depthSort.dir}
+                      onClick={() => toggleDepthSort("share")}
+                      align="right"
+                      className="py-2.5 px-3 font-semibold"
+                    />
+                    <SortableTh
+                      label="Yield 5Y"
+                      active={depthSort.key === "yield"}
+                      dir={depthSort.dir}
+                      onClick={() => toggleDepthSort("yield")}
+                      align="right"
+                      className="py-2.5 px-3 font-semibold"
+                    />
+                    <SortableTh
+                      label="Breadth"
+                      active={depthSort.key === "breadth"}
+                      dir={depthSort.dir}
+                      onClick={() => toggleDepthSort("breadth")}
+                      className="py-2.5 px-3 text-center min-w-[120px] font-semibold"
+                    />
+                    <SortableTh
+                      label="Top Performer"
+                      active={depthSort.key === "performer"}
+                      dir={depthSort.dir}
+                      onClick={() => toggleDepthSort("performer")}
+                      className="py-2.5 px-3 font-semibold"
+                    />
+                    <SortableTh
+                      label="Heaviest Stock"
+                      active={depthSort.key === "traded"}
+                      dir={depthSort.dir}
+                      onClick={() => toggleDepthSort("traded")}
+                      className="py-2.5 px-3 font-semibold"
+                    />
                     <TableHead className="py-2.5 pr-4 pl-2 text-right">Chart</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1504,16 +1524,9 @@ export function MarketOverview({
                                   : undefined
                               }
                             >
-                              {s.sectorPoints != null
-                                ? formatNumber(s.sectorPoints)
-                                : "—"}
+                              {s.sectorPoints != null ? formatNumber(s.sectorPoints) : "—"}
                             </span>
-                            <span
-                              className={cn(
-                                "num text-[11px] font-semibold",
-                                isUp ? "text-gain" : "text-loss",
-                              )}
-                            >
+                            <span className={cn("num text-[11px] font-semibold", isUp ? "text-gain" : "text-loss")}>
                               {s.sectorPercentChange != null && s.sectorPointChange != null
                                 ? `${s.sectorPointChange >= 0 ? "+" : ""}${formatNumber(s.sectorPointChange)} (${formatPercent(s.sectorPercentChange)})`
                                 : formatPercent(s.sectorPercentChange ?? s.avgChange)}
@@ -1532,9 +1545,7 @@ export function MarketOverview({
 
                         <TableCell className="py-3 px-3 text-right">
                           <div className="flex flex-col items-end gap-1">
-                            <span className="num font-semibold text-foreground">
-                              {s.marketSharePct.toFixed(1)}%
-                            </span>
+                            <span className="num font-semibold text-foreground">{s.marketSharePct.toFixed(1)}%</span>
                             <div className="h-1.5 w-14 rounded-full bg-muted overflow-hidden">
                               <div
                                 className="h-full bg-primary"
@@ -1557,28 +1568,37 @@ export function MarketOverview({
 
                         <TableCell className="py-3 px-3 text-center">
                           <div className="flex flex-col items-center gap-1">
-                            <div className="flex h-2 w-28 overflow-hidden rounded-full bg-muted">
+                            <div className="relative">
                               <div
-                                className="bg-emerald-500"
+                                className="absolute -top-0.5 -bottom-0.5 w-[2px] -translate-x-1/2 rounded-full bg-white shadow-[0_0_6px_rgba(255,255,255,0.9)]"
                                 style={{
-                                  width: `${(s.advancers / s.items.length) * 100}%`,
+                                  left: `${Math.max(4, Math.min(96, (s.advancers / s.items.length) * 100))}%`,
                                 }}
-                                title={`${s.advancers} Up`}
+                                title={`${s.advancers} of ${s.items.length} advancing`}
                               />
-                              <div
-                                className="bg-muted-foreground/30"
-                                style={{
-                                  width: `${(s.unchanged / s.items.length) * 100}%`,
-                                }}
-                                title={`${s.unchanged} Flat`}
-                              />
-                              <div
-                                className="bg-red-500"
-                                style={{
-                                  width: `${(s.decliners / s.items.length) * 100}%`,
-                                }}
-                                title={`${s.decliners} Down`}
-                              />
+                              <div className="flex h-2 w-28 overflow-hidden rounded-full bg-muted">
+                                <div
+                                  className="bg-emerald-500"
+                                  style={{
+                                    width: `${(s.advancers / s.items.length) * 100}%`,
+                                  }}
+                                  title={`${s.advancers} Up`}
+                                />
+                                <div
+                                  className="bg-muted-foreground/30"
+                                  style={{
+                                    width: `${(s.unchanged / s.items.length) * 100}%`,
+                                  }}
+                                  title={`${s.unchanged} Flat`}
+                                />
+                                <div
+                                  className="bg-red-500"
+                                  style={{
+                                    width: `${(s.decliners / s.items.length) * 100}%`,
+                                  }}
+                                  title={`${s.decliners} Down`}
+                                />
+                              </div>
                             </div>
                             <span className="text-[10px] text-muted-foreground">
                               <span className="text-emerald-400 font-semibold">{s.advancers}↑</span>{" "}
@@ -1623,7 +1643,10 @@ export function MarketOverview({
                               <span className="font-bold text-foreground group-hover/trade:text-primary">
                                 {s.topTraded.symbol}
                               </span>{" "}
-                              <CompactNpr value={s.topTraded.turnover} className="num text-[10px] text-muted-foreground" />
+                              <CompactNpr
+                                value={s.topTraded.turnover}
+                                className="num text-[10px] text-muted-foreground"
+                              />
                             </button>
                           ) : (
                             <span className="text-muted-foreground/60">—</span>
@@ -1656,8 +1679,8 @@ export function MarketOverview({
         )}
 
         {/* View Mode 2: All Stocks (filterable, sortable table) */}
-        {viewMode === "stocks" && (
-          stockRows.length === 0 ? (
+        {viewMode === "stocks" &&
+          (stockRows.length === 0 ? (
             <EmptyBlock
               title="No matches"
               description={
@@ -1672,44 +1695,77 @@ export function MarketOverview({
                 <Table className="text-left text-xs">
                   <TableHeader>
                     <TableRow className="bg-muted/40 hover:bg-muted/40">
-                      <SortableTh label="Stock" active={stockSort.key === "symbol"} dir={stockSort.dir} onClick={() => toggleStockSort("symbol")} kind="text" className="py-2.5 pl-4 pr-2 font-semibold" />
-                      <SortableTh label="Sector" active={stockSort.key === "sector"} dir={stockSort.dir} onClick={() => toggleStockSort("sector")} kind="text" className="hidden py-2.5 px-3 font-semibold lg:table-cell" />
-                      <SortableTh label="LTP" active={stockSort.key === "ltp"} dir={stockSort.dir} onClick={() => toggleStockSort("ltp")} align="right" className="py-2.5 px-3 font-semibold" />
-                      <SortableTh label="Change" active={stockSort.key === "percentChange"} dir={stockSort.dir} onClick={() => toggleStockSort("percentChange")} align="right" className="py-2.5 px-3 font-semibold" />
-                      <SortableTh label="Volume" active={stockSort.key === "volume"} dir={stockSort.dir} onClick={() => toggleStockSort("volume")} align="right" className="hidden py-2.5 px-3 font-semibold sm:table-cell" />
-                      <SortableTh label="Turnover" active={stockSort.key === "turnover"} dir={stockSort.dir} onClick={() => toggleStockSort("turnover")} align="right" className="hidden py-2.5 px-3 font-semibold md:table-cell" />
-                      <SortableTh label="Yield 5Y" active={stockSort.key === "yield"} dir={stockSort.dir} onClick={() => toggleStockSort("yield")} align="right" className="py-2.5 px-3 font-semibold" />
+                      <SortableTh
+                        label="Stock"
+                        active={stockSort.key === "symbol"}
+                        dir={stockSort.dir}
+                        onClick={() => toggleStockSort("symbol")}
+                        kind="text"
+                        className="py-2.5 pl-4 pr-2 font-semibold"
+                      />
+                      <SortableTh
+                        label="Sector"
+                        active={stockSort.key === "sector"}
+                        dir={stockSort.dir}
+                        onClick={() => toggleStockSort("sector")}
+                        kind="text"
+                        className="hidden py-2.5 px-3 font-semibold lg:table-cell"
+                      />
+                      <SortableTh
+                        label="LTP"
+                        active={stockSort.key === "ltp"}
+                        dir={stockSort.dir}
+                        onClick={() => toggleStockSort("ltp")}
+                        align="right"
+                        className="py-2.5 px-3 font-semibold"
+                      />
+                      <SortableTh
+                        label="Change"
+                        active={stockSort.key === "percentChange"}
+                        dir={stockSort.dir}
+                        onClick={() => toggleStockSort("percentChange")}
+                        align="right"
+                        className="py-2.5 px-3 font-semibold"
+                      />
+                      <SortableTh
+                        label="Yield 5Y"
+                        active={stockSort.key === "yield"}
+                        dir={stockSort.dir}
+                        onClick={() => toggleStockSort("yield")}
+                        align="right"
+                        className="py-2.5 px-3 font-semibold"
+                      />
+                      <SortableTh
+                        label="Volume"
+                        active={stockSort.key === "volume"}
+                        dir={stockSort.dir}
+                        onClick={() => toggleStockSort("volume")}
+                        align="right"
+                        className="hidden py-2.5 px-3 font-semibold sm:table-cell"
+                      />
+                      <SortableTh
+                        label="Turnover"
+                        active={stockSort.key === "turnover"}
+                        dir={stockSort.dir}
+                        onClick={() => toggleStockSort("turnover")}
+                        align="right"
+                        className="hidden py-2.5 px-3 font-semibold md:table-cell"
+                      />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {stockRows.map((p) => (
-                      <TableRow
-                        key={p.symbol}
-                        className="cursor-pointer"
-                        onClick={() => setPickedScrip(p.symbol)}
-                      >
+                      <TableRow key={p.symbol} className="cursor-pointer" onClick={() => setPickedScrip(p.symbol)}>
                         <TableCell className="py-2.5 pl-4 pr-2">
                           <p className="font-semibold">{p.symbol}</p>
-                          <p className="max-w-52 truncate text-[11px] text-muted-foreground">
-                            {p.name}
-                          </p>
+                          <p className="max-w-52 truncate text-[11px] text-muted-foreground">{p.name}</p>
                         </TableCell>
                         <TableCell className="hidden py-2.5 px-3 text-muted-foreground lg:table-cell">
                           {p.sector ?? "Others"}
                         </TableCell>
-                        <TableCell className="num py-2.5 px-3 text-right font-medium">
-                          {formatNpr(p.ltp)}
-                        </TableCell>
+                        <TableCell className="num py-2.5 px-3 text-right font-medium">{formatNpr(p.ltp)}</TableCell>
                         <TableCell className="py-2.5 px-3 text-right">
-                          <DeltaPill value={p.percentChange}>
-                            {formatPercent(p.percentChange)}
-                          </DeltaPill>
-                        </TableCell>
-                        <TableCell className="num hidden py-2.5 px-3 text-right text-muted-foreground sm:table-cell">
-                          {formatQty(p.volume)}
-                        </TableCell>
-                        <TableCell className="num hidden py-2.5 px-3 text-right text-muted-foreground md:table-cell">
-                          {formatNpr(p.turnover, { compact: true })}
+                          <DeltaPill value={p.percentChange}>{formatPercent(p.percentChange)}</DeltaPill>
                         </TableCell>
                         <TableCell
                           className="num py-2.5 px-3 text-right font-semibold text-primary"
@@ -1719,9 +1775,13 @@ export function MarketOverview({
                               : "No in-window dividends"
                           }
                         >
-                          {stockYield.get(p.symbol) != null
-                            ? `${stockYield.get(p.symbol)!.toFixed(2)}%`
-                            : "—"}
+                          {stockYield.get(p.symbol) != null ? `${stockYield.get(p.symbol)!.toFixed(2)}%` : "—"}
+                        </TableCell>
+                        <TableCell className="num hidden py-2.5 px-3 text-right text-muted-foreground sm:table-cell">
+                          {formatQty(p.volume)}
+                        </TableCell>
+                        <TableCell className="num hidden py-2.5 px-3 text-right text-muted-foreground md:table-cell">
+                          {formatNpr(p.turnover, { compact: true })}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -1729,8 +1789,7 @@ export function MarketOverview({
                 </Table>
               </div>
             </div>
-          )
-        )}
+          ))}
 
         {/* View Mode 3: Treemap View */}
         {viewMode === "treemap" && (

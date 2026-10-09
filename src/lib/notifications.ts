@@ -8,14 +8,7 @@ import { daysUntil, formatDate } from "./format";
 import type { ApplicableIssue } from "./meroshare/types";
 
 export type NotificationKind =
-  | "ipo-open"
-  | "ipo-closing"
-  | "ipo-upcoming"
-  | "password"
-  | "demat"
-  | "dividend"
-  | "holding-news"
-  | "market-news";
+  "ipo-open" | "ipo-closing" | "ipo-upcoming" | "password" | "demat" | "dividend" | "holding-news" | "market-news";
 
 export interface AppNotification {
   id: string;
@@ -140,8 +133,7 @@ function migrateLegacy(): void {
     // Dismissed
     try {
       const raw = JSON.parse(localStorage.getItem("ms-notif-dismissed.v1") ?? "[]");
-      if (Array.isArray(raw))
-        state.dismissed = raw.filter((v): v is string => typeof v === "string");
+      if (Array.isArray(raw)) state.dismissed = raw.filter((v): v is string => typeof v === "string");
     } catch {
       /* ignore */
     }
@@ -385,7 +377,13 @@ export function buildNotifications(args: {
   archiveUpcoming?: { company: string; units?: string | null; dateRange?: string | null }[];
   passwordExpiryDate?: string | null;
   dematExpiryDate?: string | null;
-  dividends?: { symbol: string; bonusShare?: number; cashDividend?: number; announcementDate?: string | null; fiscalYear?: string | null }[];
+  dividends?: {
+    symbol: string;
+    bonusShare?: number;
+    cashDividend?: number;
+    announcementDate?: string | null;
+    fiscalYear?: string | null;
+  }[];
   messages?: { id: number; symbol?: string | null; title: string; body?: string | null; publishedAt?: string | null }[];
   holdings?: string[];
   watchlist?: string[];
@@ -398,38 +396,38 @@ export function buildNotifications(args: {
 
   if (cats.ipo) {
     for (const issue of args.issues) {
-    const group = statusGroup(issue);
-    const name = issueName(issue);
-    if (group === "upcoming") {
-      out.push({
-        id: `ipo-upcoming-${issue.companyShareId}`,
-        kind: "ipo-upcoming",
-        title: `${name} announced`,
-        body: `Opens ${formatDate(issue.issueOpenDate)} · Rs ${issue.sharePerUnit ?? "-"}/unit`,
-        href: "/ipo?tab=calendar",
-      });
-    } else if (group === "open") {
-      const closes = daysUntil(issue.issueCloseDate);
-      if (closes !== null && closes <= 3 && closes >= 0) {
+      const group = statusGroup(issue);
+      const name = issueName(issue);
+      if (group === "upcoming") {
         out.push({
-          id: `ipo-closing-${issue.companyShareId}`,
-          kind: "ipo-closing",
-          title: `${name} closes ${closes === 0 ? "today" : closes === 1 ? "tomorrow" : `in ${closes} days`}`,
-          body: `Last chance to apply · closes ${formatDate(issue.issueCloseDate)}`,
+          id: `ipo-upcoming-${issue.companyShareId}`,
+          kind: "ipo-upcoming",
+          title: `${name} announced`,
+          body: `Opens ${formatDate(issue.issueOpenDate)} · Rs ${issue.sharePerUnit ?? "-"}/unit`,
           href: "/ipo?tab=calendar",
-          urgent: true,
         });
-      } else {
-        out.push({
-          id: `ipo-open-${issue.companyShareId}`,
-          kind: "ipo-open",
-          title: `${name} is open`,
-          body: `Apply by ${formatDate(issue.issueCloseDate)} · Rs ${issue.sharePerUnit ?? "-"}/unit`,
-          href: "/ipo",
-        });
+      } else if (group === "open") {
+        const closes = daysUntil(issue.issueCloseDate);
+        if (closes !== null && closes <= 3 && closes >= 0) {
+          out.push({
+            id: `ipo-closing-${issue.companyShareId}`,
+            kind: "ipo-closing",
+            title: `${name} closes ${closes === 0 ? "today" : closes === 1 ? "tomorrow" : `in ${closes} days`}`,
+            body: `Last chance to apply · closes ${formatDate(issue.issueCloseDate)}`,
+            href: "/ipo?tab=calendar",
+            urgent: true,
+          });
+        } else {
+          out.push({
+            id: `ipo-open-${issue.companyShareId}`,
+            kind: "ipo-open",
+            title: `${name} is open`,
+            body: `Apply by ${formatDate(issue.issueCloseDate)} · Rs ${issue.sharePerUnit ?? "-"}/unit`,
+            href: "/ipo",
+          });
+        }
       }
     }
-  }
   }
 
   // Archive announcements CDSC doesn't list yet (deduped by company).
@@ -441,9 +439,7 @@ export function buildNotifications(args: {
       id: `ipo-upcoming-arch-${row.company.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
       kind: "ipo-upcoming",
       title: `${row.company} announced`,
-      body: [row.units ? `${row.units} units` : null, row.dateRange ?? null]
-        .filter(Boolean)
-        .join(" · "),
+      body: [row.units ? `${row.units} units` : null, row.dateRange ?? null].filter(Boolean).join(" · "),
       href: "/ipo?tab=calendar",
     });
   }
@@ -476,7 +472,9 @@ export function buildNotifications(args: {
   // Exact symbol match against holdings + watchlist; nothing else notifies.
   if (cats.dividends) {
     for (const div of args.dividends ?? []) {
-      const symbol = String(div.symbol ?? "").trim().toUpperCase();
+      const symbol = String(div.symbol ?? "")
+        .trim()
+        .toUpperCase();
       if (!symbol || !followed.has(symbol)) continue;
       const at = eventTime(div.announcementDate);
       if (at === null || daysSince(at) > DIVIDEND_WINDOW_DAYS) continue;
@@ -511,7 +509,9 @@ export function buildNotifications(args: {
     for (const msg of args.messages ?? []) {
       const at = eventTime(msg.publishedAt);
       if (at === null || daysSince(at) > NEWS_WINDOW_DAYS) continue;
-      const symbol = String(msg.symbol ?? "").trim().toUpperCase();
+      const symbol = String(msg.symbol ?? "")
+        .trim()
+        .toUpperCase();
       if (symbol !== "" && !followed.has(symbol)) continue;
       const mine = symbol !== "" && held.has(symbol);
       const broadcast = symbol === "";

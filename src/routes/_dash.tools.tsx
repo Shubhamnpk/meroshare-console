@@ -37,16 +37,14 @@ const TOOLS = [
     to: "/best-shares",
     icon: TrendingUp,
     title: "Best Shares",
-    description:
-      "Top-ranked NEPSE stocks by short-term momentum and long-term fundamentals, with red-flag checks.",
+    description: "Top-ranked NEPSE stocks by short-term momentum and long-term fundamentals, with red-flag checks.",
     tag: "Screener",
   },
   {
     to: "/market-depth",
     icon: Globe,
     title: "Market Depth",
-    description:
-      "Live ticker tape, all-time charts for indices & sectors, market breadth, and sector depth matrix.",
+    description: "Live ticker tape, all-time charts for indices & sectors, market breadth, and sector depth matrix.",
     tag: "Market",
   },
   {
@@ -67,24 +65,21 @@ const TOOLS = [
     to: "/mutual-funds",
     icon: PiggyBank,
     title: "Mutual Funds",
-    description:
-      "Every mutual fund scheme listed on NEPSE with live price, distributions and yield in one table.",
+    description: "Every mutual fund scheme listed on NEPSE with live price, distributions and yield in one table.",
     tag: "Funds",
   },
   {
     to: "/brokers",
     icon: Building2,
     title: "Brokers",
-    description:
-      "Daily floor sheet, money flow, biggest trades and the full NEPSE broker directory.",
+    description: "Daily floor sheet, money flow, biggest trades and the full NEPSE broker directory.",
     tag: "Market flow",
   },
   {
     to: "/ipo-pipeline",
     icon: ClipboardList,
     title: "IPO Pipeline",
-    description:
-      "Every IPO, right, FPO and debenture issue waiting on SEBON approval, plus fresh approvals.",
+    description: "Every IPO, right, FPO and debenture issue waiting on SEBON approval, plus fresh approvals.",
     tag: "Pipeline",
   },
   {
@@ -98,8 +93,7 @@ const TOOLS = [
     to: "/time-machine",
     icon: Clock,
     title: "Time Machine",
-    description:
-      "What if you had bought then? Backtest SIP, bonus and cash dividends against every close.",
+    description: "What if you had bought then? Backtest SIP, bonus and cash dividends against every close.",
     tag: "Backtester",
   },
 ] as const;
@@ -115,9 +109,7 @@ function ToolsPage() {
     return TOOLS.filter(
       (t) =>
         (tag === "All" || t.tag === tag) &&
-        (!term ||
-          t.title.toLowerCase().includes(term) ||
-          t.description.toLowerCase().includes(term)),
+        (!term || t.title.toLowerCase().includes(term) || t.description.toLowerCase().includes(term)),
     );
   }, [query, tag]);
 
@@ -130,8 +122,7 @@ function ToolsPage() {
         <div className="min-w-0">
           <h1 className="font-display text-2xl font-semibold sm:text-3xl">Tools</h1>
           <p className="mt-0.5 hidden text-sm text-muted-foreground sm:block">
-            Small helpers for researching the Nepali market. Informational only not
-            financial advice.
+            Small helpers for researching the Nepali market. Informational only not financial advice.
           </p>
         </div>
       </div>
@@ -206,9 +197,7 @@ function ToolsPage() {
               </div>
               <div className="relative mt-3 min-w-0 flex-1">
                 <p className="font-display text-base font-semibold sm:text-lg">{tool.title}</p>
-                <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-muted-foreground">
-                  {tool.description}
-                </p>
+                <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-muted-foreground">{tool.description}</p>
               </div>
               <span className="relative mt-3 flex items-center gap-1 text-xs font-semibold text-primary opacity-0 transition-opacity group-hover:opacity-100">
                 Open tool <ArrowRight className="size-3.5" />

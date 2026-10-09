@@ -1,14 +1,5 @@
 import { useMemo } from "react";
-import {
-  ArrowUpRight,
-  BadgePercent,
-  Eye,
-  FileText,
-  Hourglass,
-  Landmark,
-  PieChart,
-  Stamp,
-} from "lucide-react";
+import { ArrowUpRight, BadgePercent, Eye, FileText, Hourglass, Landmark, PieChart, Stamp } from "lucide-react";
 import { formatNpr } from "@/lib/format";
 import { useDocViewer } from "@/components/ui/use-doc-viewer";
 import {
@@ -102,11 +93,7 @@ export function MarketView({
       const p = performances.get(s.symbol);
       const w = p?.totalPaidUp ?? s.paidUp ?? 0;
       size += w;
-      if (
-        p &&
-        w > 0 &&
-        (p.capitalMarketPct ?? 0) + (p.fixedIncomePct ?? 0) + (p.cashPct ?? 0) > 0
-      ) {
+      if (p && w > 0 && (p.capitalMarketPct ?? 0) + (p.fixedIncomePct ?? 0) + (p.cashPct ?? 0) > 0) {
         cap += (p.capitalMarketPct ?? 0) * w;
         fix += (p.fixedIncomePct ?? 0) * w;
         cash += (p.cashPct ?? 0) * w;
@@ -161,8 +148,8 @@ export function MarketView({
           />
         </div>
         <p className="mt-3 text-[0.68rem] leading-relaxed text-muted-foreground">
-          Weighted by fund size from the latest disclosed portfolios. When this tilts toward cash,
-          managers are waiting, often the brave moment to buy discounted units.
+          Weighted by fund size from the latest disclosed portfolios. When this tilts toward cash, managers are waiting,
+          often the brave moment to buy discounted units.
         </p>
       </Panel>
 
@@ -229,9 +216,7 @@ export function MarketView({
                     <span className="block truncate text-[13px] font-bold">{item.company}</span>
                     <span className="num block text-[11px] text-muted-foreground">
                       {item.amount != null ? formatNpr(item.amount, { compact: true }) : ""}
-                      {item.units != null
-                        ? ` · ${formatNpr(item.units, { compact: true })} units`
-                        : ""}
+                      {item.units != null ? ` · ${formatNpr(item.units, { compact: true })} units` : ""}
                       {item.issueType ? ` · ${item.issueType}` : ""}
                       {item.sector ? ` · ${item.sector}` : ""}
                       {item.appliedDate ? ` · applied ${item.appliedDate}` : ""}
@@ -242,9 +227,7 @@ export function MarketView({
                       {item.status}
                     </span>
                   ) : null}
-                  {listed ? (
-                    <ArrowUpRight className="size-4 shrink-0 text-muted-foreground" />
-                  ) : null}
+                  {listed ? <ArrowUpRight className="size-4 shrink-0 text-muted-foreground" /> : null}
                 </>
               );
               return (
@@ -288,12 +271,8 @@ export function MarketView({
                   >
                     <FileText className="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px] font-medium group-hover:text-primary">
-                        {a.title}
-                      </span>
-                      <span className="num block text-[11px] text-muted-foreground">
-                        {a.bsDate ?? a.adDate ?? ""}
-                      </span>
+                      <span className="block truncate text-[13px] font-medium group-hover:text-primary">{a.title}</span>
+                      <span className="num block text-[11px] text-muted-foreground">{a.bsDate ?? a.adDate ?? ""}</span>
                     </span>
                     <Eye className="size-3.5 shrink-0 text-muted-foreground group-hover:text-primary" />
                   </button>
@@ -302,9 +281,7 @@ export function MarketView({
                     <FileText className="size-4 shrink-0 text-muted-foreground" />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[13px] font-medium">{a.title}</span>
-                      <span className="num block text-[11px] text-muted-foreground">
-                        {a.bsDate ?? a.adDate ?? ""}
-                      </span>
+                      <span className="num block text-[11px] text-muted-foreground">{a.bsDate ?? a.adDate ?? ""}</span>
                     </span>
                   </div>
                 )}
@@ -337,16 +314,12 @@ export function MarketView({
                     "num flex size-11 shrink-0 flex-col items-center justify-center rounded-xl bg-gain/10 font-bold text-gain",
                   )}
                 >
-                  <span className="text-sm leading-none">
-                    {d.couponPct != null ? d.couponPct.toFixed(2) : "-"}
-                  </span>
+                  <span className="text-sm leading-none">{d.couponPct != null ? d.couponPct.toFixed(2) : "-"}</span>
                   <span className="text-[0.6rem] font-medium">%</span>
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[13px] font-bold">{d.issuer}</span>
-                  <span className="block truncate text-[11px] text-muted-foreground">
-                    {d.instrument}
-                  </span>
+                  <span className="block truncate text-[11px] text-muted-foreground">{d.instrument}</span>
                   <span className="num block text-[11px] text-muted-foreground">
                     {d.dateBs ? `${d.dateBs}` : ""}
                     {d.issueManager ? ` · ${d.issueManager}` : ""}
@@ -357,8 +330,8 @@ export function MarketView({
           </ul>
           <p className="mt-2 flex items-start gap-1 text-[0.68rem] leading-relaxed text-muted-foreground">
             <BadgePercent className="mt-0.5 size-3 shrink-0" />
-            Compare these locked-in coupons against a fund's expected payout before choosing between
-            steady income and market upside.
+            Compare these locked-in coupons against a fund's expected payout before choosing between steady income and
+            market upside.
           </p>
         </Panel>
       ) : null}

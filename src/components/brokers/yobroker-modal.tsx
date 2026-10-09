@@ -1,13 +1,7 @@
 import { useEffect, useState } from "react";
 import { FlaskConical, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatNpr } from "@/lib/format";
 import { loadYoWallet, saveYoWallet } from "@/lib/yobroker/store";
 import { YO_INITIAL_CASH } from "@/lib/yobroker/types";
@@ -29,13 +23,7 @@ function dematForKey(): string | null {
   return null;
 }
 
-export function YoBrokerModal({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-}) {
+export function YoBrokerModal({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const [wallet, setWallet] = useState(() => loadYoWallet(dematForKey()));
   useEffect(() => {
     if (open) setWallet(loadYoWallet(dematForKey()));
@@ -77,15 +65,13 @@ export function YoBrokerModal({
             </span>
             Yo Broker
           </DialogTitle>
-          <DialogDescription>
-           practice without real money or settlement.
-          </DialogDescription>
+          <DialogDescription>practice without real money or settlement.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3 rounded-2xl border border-border/60 bg-muted/20 p-3 text-sm leading-relaxed">
           <p>
-            This is a practice account. You get a virtual {formatNpr(YO_INITIAL_CASH)} to buy and
-            sell at live NEPSE prices. Orders fill against the live feed, not a broker.
+            This is a practice account. You get a virtual {formatNpr(YO_INITIAL_CASH)} to buy and sell at live NEPSE
+            prices. Orders fill against the live feed, not a broker.
           </p>
           <ul className="list-disc space-y-1 pl-5 text-xs text-muted-foreground">
             <li>No real orders, no demat debit, no broker needed.</li>
@@ -96,19 +82,14 @@ export function YoBrokerModal({
 
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/60 bg-surface px-3 py-2.5 text-sm">
           <span className="text-muted-foreground">Status</span>
-          <span
-            className={
-              wallet.active ? "font-semibold text-gain" : "font-semibold text-muted-foreground"
-            }
-          >
+          <span className={wallet.active ? "font-semibold text-gain" : "font-semibold text-muted-foreground"}>
             {wallet.active ? "Active" : "Not active"}
           </span>
         </div>
         {wallet.active ? (
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
             <span>
-              Virtual cash {formatNpr(wallet.cash)} · {wallet.holdings.length} holdings ·{" "}
-              {wallet.trades.length} trades
+              Virtual cash {formatNpr(wallet.cash)} · {wallet.holdings.length} holdings · {wallet.trades.length} trades
             </span>
             <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={reset}>
               <RotateCcw className="size-3" /> Reset balance

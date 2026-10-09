@@ -27,38 +27,32 @@ function resolveDocUrls(obj: unknown): unknown {
   if (obj && typeof obj === "object") {
     const out: Record<string, unknown> = {};
     for (const [k, val] of Object.entries(obj as Record<string, unknown>)) {
-      out[k] = /prospectus|document|attachment|filepath|fileurl|notice/i.test(k)
-        ? resolveDocUrls(val)
-        : val;
+      out[k] = /prospectus|document|attachment|filepath|fileurl|notice/i.test(k) ? resolveDocUrls(val) : val;
     }
     return out;
   }
   return obj;
 }
 
-export const getApplicableIssues = createServerFn({ method: "GET" }).handler(
-  async (): Promise<ApplicableIssue[]> => {
-    const auth = await requireAuth();
-    if (auth.demo) return [];
-    const res = await fetchApplicableIssues(auth);
-    return res.object ?? [];
-  },
-);
+export const getApplicableIssues = createServerFn({ method: "GET" }).handler(async (): Promise<ApplicableIssue[]> => {
+  const auth = await requireAuth();
+  if (auth.demo) return [];
+  const res = await fetchApplicableIssues(auth);
+  return res.object ?? [];
+});
 
-export const getCurrentIssues = createServerFn({ method: "GET" }).handler(
-  async (): Promise<ApplicableIssue[]> => {
-    const auth = await requireAuth();
-    if (auth.demo) return [];
-    try {
-      const res = await fetchCurrentIssues(auth);
-      if (res.object?.length) return res.object;
-    } catch {
-      // fall through to the applicable list
-    }
-    const fallback = await fetchApplicableIssues(auth);
-    return fallback.object ?? [];
-  },
-);
+export const getCurrentIssues = createServerFn({ method: "GET" }).handler(async (): Promise<ApplicableIssue[]> => {
+  const auth = await requireAuth();
+  if (auth.demo) return [];
+  try {
+    const res = await fetchCurrentIssues(auth);
+    if (res.object?.length) return res.object;
+  } catch {
+    // fall through to the applicable list
+  }
+  const fallback = await fetchApplicableIssues(auth);
+  return fallback.object ?? [];
+});
 
 export const getApplicationReports = createServerFn({ method: "GET" }).handler(
   async (): Promise<ApplicationReportItem[]> => {
@@ -79,11 +73,10 @@ export const getOldApplicationReports = createServerFn({ method: "GET" }).handle
 );
 
 export const getIssueDetail = createServerFn({ method: "POST" })
-  .validator((input: unknown) =>
-    z.object({ companyShareId: z.number().int().positive() }).parse(input),
-  )
-  .handler(async ({ data }): Promise<JsonRecord> =>
-    resolveDocUrls(await fetchIssueManagerDetail(await requireAuth(), data.companyShareId)) as JsonRecord,
+  .validator((input: unknown) => z.object({ companyShareId: z.number().int().positive() }).parse(input))
+  .handler(
+    async ({ data }): Promise<JsonRecord> =>
+      resolveDocUrls(await fetchIssueManagerDetail(await requireAuth(), data.companyShareId)) as JsonRecord,
   );
 
 export const getAppliedDetail = createServerFn({ method: "POST" })
@@ -95,8 +88,9 @@ export const getAppliedDetail = createServerFn({ method: "POST" })
       })
       .parse(input),
   )
-  .handler(async ({ data }): Promise<JsonRecord> =>
-    resolveDocUrls(await fetchAppliedDetail(await requireAuth(), data.formId, data.old === true)) as JsonRecord,
+  .handler(
+    async ({ data }): Promise<JsonRecord> =>
+      resolveDocUrls(await fetchAppliedDetail(await requireAuth(), data.formId, data.old === true)) as JsonRecord,
   );
 
 export const getApplicationDetails = createServerFn({ method: "POST" })
@@ -118,22 +112,16 @@ export const getApplicationDetails = createServerFn({ method: "POST" })
     const chunkSize = 6;
     for (let i = 0; i < data.items.length; i += chunkSize) {
       const chunk = data.items.slice(i, i + chunkSize);
-      const settled = await Promise.allSettled(
-        chunk.map((it) => fetchAppliedDetail(auth, it.formId, it.old === true)),
-      );
-      results.push(...settled.map((r) => (r.status === "fulfilled" ? resolveDocUrls(r.value) as JsonRecord : null)));
+      const settled = await Promise.allSettled(chunk.map((it) => fetchAppliedDetail(auth, it.formId, it.old === true)));
+      results.push(...settled.map((r) => (r.status === "fulfilled" ? (resolveDocUrls(r.value) as JsonRecord) : null)));
       if (i + chunkSize < data.items.length) await new Promise((r) => setTimeout(r, 250));
     }
     return results;
   });
 
 export const canApplyToIssue = createServerFn({ method: "POST" })
-  .validator((input: unknown) =>
-    z.object({ companyShareId: z.number().int().positive() }).parse(input),
-  )
-  .handler(async ({ data }): Promise<JsonRecord> =>
-    checkCanApply(await requireAuth(), data.companyShareId),
-  );
+  .validator((input: unknown) => z.object({ companyShareId: z.number().int().positive() }).parse(input))
+  .handler(async ({ data }): Promise<JsonRecord> => checkCanApply(await requireAuth(), data.companyShareId));
 
 const applySchema = z.object({
   companyShareId: z.number().int().positive(),
@@ -149,14 +137,10 @@ const applySchema = z.object({
 
 export const applyForIpo = createServerFn({ method: "POST" })
   .validator((input: unknown) => applySchema.parse(input))
-  .handler(async ({ data }): Promise<JsonRecord> =>
-    submitIpoApplication(await requireAuth(), data),
-  );
+  .handler(async ({ data }): Promise<JsonRecord> => submitIpoApplication(await requireAuth(), data));
 
 export const editIpoApply = createServerFn({ method: "POST" })
-  .validator((input: unknown) =>
-    applySchema.extend({ applicantFormId: z.number().int().positive() }).parse(input),
-  )
+  .validator((input: unknown) => applySchema.extend({ applicantFormId: z.number().int().positive() }).parse(input))
   .handler(async ({ data }): Promise<JsonRecord> => editIpoApplication(await requireAuth(), data));
 
 export const deleteIpoApply = createServerFn({ method: "POST" })
@@ -169,6 +153,4 @@ export const deleteIpoApply = createServerFn({ method: "POST" })
       })
       .parse(input),
   )
-  .handler(async ({ data }): Promise<JsonRecord> =>
-    deleteIpoApplication(await requireAuth(), data),
-  );
+  .handler(async ({ data }): Promise<JsonRecord> => deleteIpoApplication(await requireAuth(), data));

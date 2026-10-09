@@ -23,10 +23,7 @@ export function SkeletonLines({ rows = 2, className }: { rows?: number; classNam
   return (
     <div className={cn("space-y-2", className)} role="status" aria-live="polite">
       {Array.from({ length: rows }).map((_, i) => (
-        <Skeleton
-          key={i}
-          className={cn("h-3 rounded-full", i === rows - 1 && rows > 1 ? "w-2/3" : "w-full")}
-        />
+        <Skeleton key={i} className={cn("h-3 rounded-full", i === rows - 1 && rows > 1 ? "w-2/3" : "w-full")} />
       ))}
     </div>
   );

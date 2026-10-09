@@ -108,11 +108,7 @@
   --sidebar-ring: oklch(0.76 0.145 168);
 
   --gradient-brand: linear-gradient(135deg, oklch(0.76 0.145 168), oklch(0.72 0.13 218));
-  --gradient-surface: linear-gradient(
-    160deg,
-    color-mix(in oklab, var(--card) 92%, var(--primary) 8%),
-    var(--card)
-  );
+  --gradient-surface: linear-gradient(160deg, color-mix(in oklab, var(--card) 92%, var(--primary) 8%), var(--card));
   --shadow-elevated: 0 24px 60px -32px color-mix(in oklab, oklch(0 0 0) 85%, transparent);
   --shadow-glow:
     0 0 0 1px color-mix(in oklab, var(--primary) 26%, transparent),
@@ -361,20 +357,6 @@ html.light[data-color="pink"] {
   --sidebar-accent: oklch(0.955 0.008 340);
 }
 
-/* Sonner hangs its dismiss button outside the toast card by default — pull
- * it inside the top-right corner and reserve room so text never slides under
- * it. Scoped to our toaster so the library default stays intact elsewhere. */
-.toaster [data-sonner-toast] [data-close-button] {
-  top: 8px;
-  left: auto;
-  right: 8px;
-  transform: none;
-}
-
-.toaster [data-sonner-toast]:has([data-close-button]) {
-  padding-right: 36px;
-}
-
 /* Continuous financial ticker marquee */
 @keyframes marquee-scroll {
   from {
@@ -396,4 +378,3 @@ html.light[data-color="pink"] {
 .animate-marquee-scroll[data-paused="true"] {
   animation-play-state: paused;
 }
-

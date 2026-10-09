@@ -2,22 +2,11 @@ import { useCallback, useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Eye, EyeOff, Plug, RefreshCw, WandSparkles } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  getTmsCaptcha,
-  saveTmsConnection,
-  testTmsConnection,
-  verifyTmsOtp,
-} from "@/lib/brokers/brokers.functions";
+import { getTmsCaptcha, saveTmsConnection, testTmsConnection, verifyTmsOtp } from "@/lib/brokers/brokers.functions";
 import type { TmsCaptcha, TmsTestResult } from "@/lib/brokers/tms.server";
 import { solveCaptcha } from "@/lib/captcha-solver";
 import { errorMessage } from "@/lib/format";
@@ -30,13 +19,7 @@ const DEFAULT_HOST = "https://tms77.nepsetms.com.np";
  * (OTP?) → save. Nothing is stored until a live test proves it works;
  * saving consumes a server-side proof token, never a replayed login.
  */
-export function TmsConnectDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
+export function TmsConnectDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const queryClient = useQueryClient();
   const [host, setHost] = useState(DEFAULT_HOST);
   const [username, setUsername] = useState("");
@@ -154,10 +137,7 @@ export function TmsConnectDialog({
   }, [open]);
 
   const canTest =
-    username.trim().length > 0 &&
-    password.length > 0 &&
-    captchaText.trim().length > 0 &&
-    !testMut.isPending;
+    username.trim().length > 0 && password.length > 0 && captchaText.trim().length > 0 && !testMut.isPending;
   const showOtpStep = result?.needsOtp === true && result.pendingId;
   const showSave = result?.ok === true && result.proofId;
 
@@ -252,11 +232,7 @@ export function TmsConnectDialog({
                 <span
                   className={cn(
                     "text-[0.65rem]",
-                    confidence >= 70
-                      ? "text-gain"
-                      : confidence >= 40
-                        ? "text-muted-foreground"
-                        : "text-destructive",
+                    confidence >= 70 ? "text-gain" : confidence >= 40 ? "text-muted-foreground" : "text-destructive",
                   )}
                 >
                   {confidence >= 70 ? "Auto-solved" : "Low confidence"} ({confidence}%)
@@ -289,9 +265,7 @@ export function TmsConnectDialog({
 
           {result && !showOtpStep && !showSave ? (
             <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-xs">
-              <p className="font-semibold text-destructive">
-                {result.error ?? "Test login failed."}
-              </p>
+              <p className="font-semibold text-destructive">{result.error ?? "Test login failed."}</p>
               {result.hint ? <p className="mt-0.5 text-muted-foreground">{result.hint}</p> : null}
             </div>
           ) : null}
@@ -309,11 +283,7 @@ export function TmsConnectDialog({
                   maxLength={16}
                   className="num flex-1"
                 />
-                <Button
-                  size="sm"
-                  disabled={!otp || otpMut.isPending}
-                  onClick={() => otpMut.mutate()}
-                >
+                <Button size="sm" disabled={!otp || otpMut.isPending} onClick={() => otpMut.mutate()}>
                   {otpMut.isPending ? "Verifying…" : "Verify"}
                 </Button>
               </div>
@@ -331,28 +301,16 @@ export function TmsConnectDialog({
             </div>
           ) : null}
           {saveMut.isError ? (
-            <p className="text-xs text-destructive">
-              {errorMessage(saveMut.error, "Could not save the connection.")}
-            </p>
+            <p className="text-xs text-destructive">{errorMessage(saveMut.error, "Could not save the connection.")}</p>
           ) : null}
 
           <div className="flex gap-2">
             {!showSave ? (
-              <Button
-                size="sm"
-                className="flex-1"
-                disabled={!canTest}
-                onClick={() => testMut.mutate()}
-              >
+              <Button size="sm" className="flex-1" disabled={!canTest} onClick={() => testMut.mutate()}>
                 {testMut.isPending ? "Testing…" : "Test login"}
               </Button>
             ) : (
-              <Button
-                size="sm"
-                className="flex-1"
-                disabled={saveMut.isPending}
-                onClick={() => saveMut.mutate()}
-              >
+              <Button size="sm" className="flex-1" disabled={saveMut.isPending} onClick={() => saveMut.mutate()}>
                 {saveMut.isPending ? "Saving…" : "Save connection"}
               </Button>
             )}

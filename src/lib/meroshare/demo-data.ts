@@ -76,10 +76,7 @@ export const DEMO_PORTFOLIO: PortfolioResponse = {
     valueOfPrevClosingPrice: String(qty * ((BUY_RATES[scrip] ?? 500) - 10)),
   })),
   totalItems: Object.keys(HELD).length,
-  totalValueAsOfLastTransactionPrice: Object.entries(HELD).reduce(
-    (s, [k, q]) => s + q * (BUY_RATES[k] ?? 500),
-    0,
-  ),
+  totalValueAsOfLastTransactionPrice: Object.entries(HELD).reduce((s, [k, q]) => s + q * (BUY_RATES[k] ?? 500), 0),
   totalValueAsOfPreviousClosingPrice: Object.entries(HELD).reduce(
     (s, [k, q]) => s + q * ((BUY_RATES[k] ?? 500) - 10),
     0,
@@ -338,21 +335,19 @@ export const DEMO_WACC_REPORT: WaccReport = {
   })),
 };
 
-export const DEMO_PURCHASE_SOURCES: PurchaseSourceItem[] = Object.entries(HELD).map(
-  ([scrip, qty]) => ({
-    scrip,
-    quantity: qty,
-    rate: BUY_RATES[scrip] ?? 500,
-    amount: qty * (BUY_RATES[scrip] ?? 500),
-    transactionDate: daysAgo(30),
-    source: "Secondary Market",
-    purchaseSource: "Secondary Market",
-    purchasePrice: BUY_RATES[scrip] ?? 500,
-    transactionQuantity: qty,
-    userPrice: BUY_RATES[scrip] ?? 500,
-    userCost: qty * (BUY_RATES[scrip] ?? 500),
-    remarks: "Demo purchase",
-    postDate: daysAgo(30),
-    updatedDate: daysAgo(1),
-  }),
-);
+export const DEMO_PURCHASE_SOURCES: PurchaseSourceItem[] = Object.entries(HELD).map(([scrip, qty]) => ({
+  scrip,
+  quantity: qty,
+  rate: BUY_RATES[scrip] ?? 500,
+  amount: qty * (BUY_RATES[scrip] ?? 500),
+  transactionDate: daysAgo(30),
+  source: "Secondary Market",
+  purchaseSource: "Secondary Market",
+  purchasePrice: BUY_RATES[scrip] ?? 500,
+  transactionQuantity: qty,
+  userPrice: BUY_RATES[scrip] ?? 500,
+  userCost: qty * (BUY_RATES[scrip] ?? 500),
+  remarks: "Demo purchase",
+  postDate: daysAgo(30),
+  updatedDate: daysAgo(1),
+}));

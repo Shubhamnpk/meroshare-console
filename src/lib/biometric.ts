@@ -110,9 +110,7 @@ export async function enrollBiometric(username: string): Promise<BiometricEnroll
           authenticatorAttachment: "platform",
           userVerification: "preferred",
         },
-        excludeCredentials: existing
-          ? [{ id: base64urlDecode(existing.credentialId), type: "public-key" }]
-          : [],
+        excludeCredentials: existing ? [{ id: base64urlDecode(existing.credentialId), type: "public-key" }] : [],
         timeout: 60_000,
         attestation: "none",
       },

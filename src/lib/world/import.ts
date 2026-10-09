@@ -46,8 +46,8 @@ export interface ImportResult {
 /** Our standard import format (also downloadable as a template). */
 export const STANDARD_CSV_TEMPLATE = [
   "symbol,name,side,quantity,price,currency,date,fees,notes",
-  '# side is one of BUY, SELL, DIV, CASH; date is YYYY-MM-DD or ISO; lines starting with # are ignored',
-  '# example: AAPL,Apple,BUY,0.5,307.9,USD,2026-07-06,0.1,first lot',
+  "# side is one of BUY, SELL, DIV, CASH; date is YYYY-MM-DD or ISO; lines starting with # are ignored",
+  "# example: AAPL,Apple,BUY,0.5,307.9,USD,2026-07-06,0.1,first lot",
 ].join("\n");
 
 /** Try-it-now data in the standard format (a few real-world-shaped lots). */
@@ -288,7 +288,11 @@ function parseStandard(text: string): ImportResult {
 
 /** Auto-detect the CSV dialect; null when unrecognized. */
 export function detectImportFormat(text: string): GlobalTxnSource | null {
-  const first = text.split("\n").map((l) => l.trim()).find((l) => l !== "" && !l.startsWith("#")) ?? "";
+  const first =
+    text
+      .split("\n")
+      .map((l) => l.trim())
+      .find((l) => l !== "" && !l.startsWith("#")) ?? "";
   if (first.toUpperCase().startsWith("ACTION,")) return "trading212";
   if (first.toUpperCase().startsWith("SYMBOL,")) return "standard";
   return null;

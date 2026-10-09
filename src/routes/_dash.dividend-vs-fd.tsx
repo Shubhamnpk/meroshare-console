@@ -9,8 +9,7 @@ export const Route = createFileRoute("/_dash/dividend-vs-fd")({
       { title: "Dividend vs FD | MeroShare Investor Console" },
       {
         name: "description",
-        content:
-          "Compare dividend investing with fixed deposit returns over time with reinvestment.",
+        content: "Compare dividend investing with fixed deposit returns over time with reinvestment.",
       },
       { property: "og:title", content: "Dividend vs FD Calculator | MeroShare" },
     ],
@@ -39,9 +38,7 @@ function DividendVsFdPage() {
           <Calculator className="size-5" />
         </span>
         <div>
-          <h1 className="font-display text-2xl font-semibold sm:text-3xl">
-            Dividend vs FD
-          </h1>
+          <h1 className="font-display text-2xl font-semibold sm:text-3xl">Dividend vs FD</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
             See if dividend investing beats fixed deposits over your time horizon.
           </p>

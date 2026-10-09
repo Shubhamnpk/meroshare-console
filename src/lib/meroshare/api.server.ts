@@ -91,10 +91,7 @@ export async function fetchBankList(auth: AuthContext): Promise<BankListItem[]> 
   return cdscRequest<BankListItem[]>(CDSC_URLS.bankList, { token: auth.token });
 }
 
-export async function fetchBankDetail(
-  auth: AuthContext,
-  bankId: number | string,
-): Promise<BankDetail> {
+export async function fetchBankDetail(auth: AuthContext, bankId: number | string): Promise<BankDetail> {
   return cdscRequest<BankDetail>(CDSC_URLS.bankDetail(bankId), { token: auth.token });
 }
 
@@ -190,10 +187,7 @@ export async function fetchBankRequest(auth: AuthContext, bankCode: string): Pro
   return cdscRequest<JsonRecord>(CDSC_URLS.bankRequest(bankCode), { token: auth.token });
 }
 
-export async function checkCanApply(
-  auth: AuthContext,
-  companyShareId: number,
-): Promise<JsonRecord> {
+export async function checkCanApply(auth: AuthContext, companyShareId: number): Promise<JsonRecord> {
   return cdscRequest<JsonRecord>(CDSC_URLS.canApply(companyShareId, auth.demat), {
     token: auth.token,
   });
@@ -245,20 +239,13 @@ export async function fetchOldApplicationReports(
   });
 }
 
-export async function fetchIssueManagerDetail(
-  auth: AuthContext,
-  companyShareId: number,
-): Promise<JsonRecord> {
+export async function fetchIssueManagerDetail(auth: AuthContext, companyShareId: number): Promise<JsonRecord> {
   return cdscRequest<JsonRecord>(CDSC_URLS.issueManagerDetail(companyShareId), {
     token: auth.token,
   });
 }
 
-export async function fetchAppliedDetail(
-  auth: AuthContext,
-  formId: number,
-  old = false,
-): Promise<JsonRecord> {
+export async function fetchAppliedDetail(auth: AuthContext, formId: number, old = false): Promise<JsonRecord> {
   const url = old ? CDSC_URLS.oldAppliedDetail(formId) : CDSC_URLS.appliedDetail(formId);
   return cdscRequest<JsonRecord>(url, { token: auth.token });
 }
@@ -275,10 +262,7 @@ export interface ApplyIpoInput {
   transactionPIN: string;
 }
 
-export async function submitIpoApplication(
-  auth: AuthContext,
-  input: ApplyIpoInput,
-): Promise<JsonRecord> {
+export async function submitIpoApplication(auth: AuthContext, input: ApplyIpoInput): Promise<JsonRecord> {
   const payload: Record<string, unknown> = {
     accountBranchId: input.accountBranchId,
     accountNumber: input.accountNumber,
@@ -376,10 +360,7 @@ export async function fetchActivityLog(
   });
 }
 
-export async function fetchWaccPending(
-  auth: AuthContext,
-  scrip: string,
-): Promise<WaccSearchResponse> {
+export async function fetchWaccPending(auth: AuthContext, scrip: string): Promise<WaccSearchResponse> {
   return cdscRequest<WaccSearchResponse>(CDSC_URLS.waccPending, {
     method: "POST",
     token: auth.token,
@@ -428,8 +409,7 @@ export async function fetchWaccPendingScrips(auth: AuthContext): Promise<WaccPen
         ? ((res as JsonRecord)["scrips"] as WaccPendingScrip[])
         : [];
   return rows.filter(
-    (r): r is WaccPendingScrip =>
-      typeof r === "string" || (typeof r === "object" && r !== null && "scrip" in r),
+    (r): r is WaccPendingScrip => typeof r === "string" || (typeof r === "object" && r !== null && "scrip" in r),
   );
 }
 
@@ -456,10 +436,7 @@ export async function fetchWaccCalculated(auth: AuthContext, scrip: string): Pro
   });
 }
 
-export async function submitWacc(
-  auth: AuthContext,
-  rows: PurchaseSourceItem[],
-): Promise<JsonRecord> {
+export async function submitWacc(auth: AuthContext, rows: PurchaseSourceItem[]): Promise<JsonRecord> {
   // The portal echoes the search rows back with isEdit=true plus any user-set
   // price/remarks; rows without a set price keep their original rate.
   const payload = rows.map((row) => ({
@@ -490,10 +467,7 @@ export async function changePassword(
   });
 }
 
-export async function changePin(
-  auth: AuthContext,
-  input: { oldPin: string; newPin: string },
-): Promise<JsonRecord> {
+export async function changePin(auth: AuthContext, input: { oldPin: string; newPin: string }): Promise<JsonRecord> {
   return cdscRequest<JsonRecord>(CDSC_URLS.changePin, {
     method: "POST",
     retry: false,
@@ -548,10 +522,7 @@ export async function fetchEdisTransferActive(
   });
 }
 
-export async function fetchEdisTransferDetail(
-  auth: AuthContext,
-  transferId: number,
-): Promise<EdisTransferDetail> {
+export async function fetchEdisTransferDetail(auth: AuthContext, transferId: number): Promise<EdisTransferDetail> {
   return cdscRequest<EdisTransferDetail>(CDSC_URLS.edisTransferDetail(transferId), {
     token: auth.token,
   });

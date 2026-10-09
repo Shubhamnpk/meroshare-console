@@ -7,31 +7,12 @@ import { SortableTh, useSort, type SortKind } from "@/components/sortable-table"
 import { SortTabs } from "@/components/ui/sort-tabs";
 import { ViewToggle } from "@/components/ui/view-toggle";
 import { Panel } from "@/components/ui/panel";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ErrorBlock, EmptyBlock, LoadingBlock } from "@/components/states";
 import { StatChip, ChipRow } from "@/components/stat-chip";
 import { BackButton } from "@/components/back-button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { mfDebentureListQuery } from "@/lib/queries";
 import { formatNpr, formatQty } from "@/lib/format";
 import type { MfDebenture } from "@/lib/mutual-funds/types";
@@ -121,21 +102,15 @@ function DebentureDetail({ d, onClose }: { d: MfDebenture | null; onClose: () =>
             <CouponBadge value={d?.couponPct ?? null} />
             <span className="min-w-0">
               <span className="block truncate">{d?.issuer}</span>
-              <span className="block truncate text-xs font-normal text-muted-foreground">
-                {d?.instrument}
-              </span>
+              <span className="block truncate text-xs font-normal text-muted-foreground">{d?.instrument}</span>
             </span>
           </DialogTitle>
-          <DialogDescription className="text-left">
-            Full issue record from SEBON public data.
-          </DialogDescription>
+          <DialogDescription className="text-left">Full issue record from SEBON public data.</DialogDescription>
         </DialogHeader>
         <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm">
           {facts.map(([label, value]) => (
             <div key={label}>
-              <dt className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                {label}
-              </dt>
+              <dt className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">{label}</dt>
               <dd className="num mt-0.5 font-semibold">{value}</dd>
             </div>
           ))}
@@ -143,12 +118,8 @@ function DebentureDetail({ d, onClose }: { d: MfDebenture | null; onClose: () =>
         {registered != null && registered > 0 ? (
           <div className="rounded-xl border border-border/60 bg-muted/30 p-3">
             <p className="flex items-baseline justify-between text-xs">
-              <span className="font-semibold uppercase tracking-wide text-muted-foreground">
-                Registered size
-              </span>
-              <span className="num text-sm font-bold">
-                {formatNpr(registered, { compact: true })}
-              </span>
+              <span className="font-semibold uppercase tracking-wide text-muted-foreground">Registered size</span>
+              <span className="num text-sm font-bold">{formatNpr(registered, { compact: true })}</span>
             </p>
             {pub != null || priv != null ? (
               <>
@@ -174,8 +145,7 @@ function DebentureDetail({ d, onClose }: { d: MfDebenture | null; onClose: () =>
           </div>
         ) : null}
         <p className="text-[0.68rem] leading-relaxed text-muted-foreground">
-          Indicative only, not investment advice. Coupons are annual rates before tax; payout
-          frequency varies by issue.
+          Indicative only, not investment advice. Coupons are annual rates before tax; payout frequency varies by issue.
         </p>
       </DialogContent>
     </Dialog>
@@ -233,17 +203,14 @@ function DebenturesPage() {
     return [...rows].sort((a, b) => {
       const va = score(a);
       const vb = score(b);
-      if (typeof va === "string" || typeof vb === "string")
-        return String(va).localeCompare(String(vb)) * mul;
+      if (typeof va === "string" || typeof vb === "string") return String(va).localeCompare(String(vb)) * mul;
       return ((va as number) - (vb as number)) * mul;
     });
   }, [all, search, sector, sort]);
 
   const toggleCompare = (d: MfDebenture) => {
     const k = keyOf(d);
-    setCompared((cur) =>
-      cur.includes(k) ? cur.filter((x) => x !== k) : cur.length >= 3 ? cur : [...cur, k],
-    );
+    setCompared((cur) => (cur.includes(k) ? cur.filter((x) => x !== k) : cur.length >= 3 ? cur : [...cur, k]));
   };
   const compareRows = useMemo(
     () => compared.flatMap((k) => all.filter((d) => keyOf(d) === k)),
@@ -273,10 +240,7 @@ function DebenturesPage() {
       ) : listQ.isError ? (
         <ErrorBlock error={listQ.error} retry={() => void listQ.refetch()} />
       ) : all.length === 0 ? (
-        <EmptyBlock
-          title="No debentures"
-          description="No debenture records in the feed right now."
-        />
+        <EmptyBlock title="No debentures" description="No debenture records in the feed right now." />
       ) : (
         <>
           <ChipRow wrap>
@@ -290,9 +254,7 @@ function DebenturesPage() {
                   : "-"
               }
             />
-            {compared.length > 0 ? (
-              <StatChip label="Comparing" value={`${compared.length} / 3`} />
-            ) : null}
+            {compared.length > 0 ? <StatChip label="Comparing" value={`${compared.length} / 3`} /> : null}
           </ChipRow>
 
           {compareRows.length >= 2 ? (
@@ -313,22 +275,11 @@ function DebenturesPage() {
                   <span className="text-xs text-muted-foreground">/ yr each</span>
                 </div>
               </div>
-              <div
-                className={cn(
-                  "grid gap-2",
-                  compareRows.length >= 3 ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2",
-                )}
-              >
+              <div className={cn("grid gap-2", compareRows.length >= 3 ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2")}>
                 {compareRows.map((d) => {
-                  const annual =
-                    principalValid && d.couponPct != null
-                      ? (principalNum * d.couponPct) / 100
-                      : null;
+                  const annual = principalValid && d.couponPct != null ? (principalNum * d.couponPct) / 100 : null;
                   return (
-                    <div
-                      key={keyOf(d)}
-                      className="relative rounded-xl border border-border/60 bg-surface p-3"
-                    >
+                    <div key={keyOf(d)} className="relative rounded-xl border border-border/60 bg-surface p-3">
                       <button
                         type="button"
                         aria-label={`Remove ${d.issuer}`}
@@ -343,10 +294,7 @@ function DebenturesPage() {
                       <p className="mt-1 truncate text-[13px] font-bold" title={d.issuer}>
                         {d.issuer}
                       </p>
-                      <p
-                        className="truncate text-[11px] text-muted-foreground"
-                        title={d.instrument}
-                      >
+                      <p className="truncate text-[11px] text-muted-foreground" title={d.instrument}>
                         {d.instrument}
                       </p>
                       <dl className="num mt-2 space-y-1 text-[11px] text-muted-foreground">
@@ -367,9 +315,7 @@ function DebenturesPage() {
                         <div className="flex justify-between gap-2">
                           <dt>Public issue</dt>
                           <dd className="font-semibold text-foreground">
-                            {d.publicIssueAmount != null
-                              ? formatNpr(d.publicIssueAmount, { compact: true })
-                              : "-"}
+                            {d.publicIssueAmount != null ? formatNpr(d.publicIssueAmount, { compact: true }) : "-"}
                           </dd>
                         </div>
                         <div className="flex justify-between gap-2 border-t border-border/60 pt-1">
@@ -413,10 +359,7 @@ function DebenturesPage() {
                   ))}
                 </SelectContent>
               </Select>
-              <Select
-                value={sort.dir === "default" ? "" : sort.key}
-                onValueChange={(v) => toggle(v as SortKey)}
-              >
+              <Select value={sort.dir === "default" ? "" : sort.key} onValueChange={(v) => toggle(v as SortKey)}>
                 <SelectTrigger
                   className="h-10 min-w-0 flex-1 rounded-xl text-xs sm:hidden"
                   aria-label="Sort debentures"
@@ -461,10 +404,42 @@ function DebenturesPage() {
               <Table className="min-w-[760px]">
                 <TableHeader className="bg-muted">
                   <TableRow className="bg-muted/40 hover:bg-muted/40">
-                    <SortableTh label="Coupon" active={sort.key === "coupon"} dir={sort.dir} kind="number" align="left" onClick={() => toggle("coupon")} className="py-2.5 pl-4 pr-2" />
-                    <SortableTh label="Issuer" active={sort.key === "issuer"} dir={sort.dir} kind="text" align="left" onClick={() => toggle("issuer")} className="py-2.5 px-3" />
-                    <SortableTh label="Issue size" active={sort.key === "amount"} dir={sort.dir} kind="number" align="right" onClick={() => toggle("amount")} className="py-2.5 px-3" />
-                    <SortableTh label="Record" active={sort.key === "recent"} dir={sort.dir} kind="number" align="right" onClick={() => toggle("recent")} className="py-2.5 px-3 hidden sm:table-cell" />
+                    <SortableTh
+                      label="Coupon"
+                      active={sort.key === "coupon"}
+                      dir={sort.dir}
+                      kind="number"
+                      align="left"
+                      onClick={() => toggle("coupon")}
+                      className="py-2.5 pl-4 pr-2"
+                    />
+                    <SortableTh
+                      label="Issuer"
+                      active={sort.key === "issuer"}
+                      dir={sort.dir}
+                      kind="text"
+                      align="left"
+                      onClick={() => toggle("issuer")}
+                      className="py-2.5 px-3"
+                    />
+                    <SortableTh
+                      label="Issue size"
+                      active={sort.key === "amount"}
+                      dir={sort.dir}
+                      kind="number"
+                      align="right"
+                      onClick={() => toggle("amount")}
+                      className="py-2.5 px-3"
+                    />
+                    <SortableTh
+                      label="Record"
+                      active={sort.key === "recent"}
+                      dir={sort.dir}
+                      kind="number"
+                      align="right"
+                      onClick={() => toggle("recent")}
+                      className="py-2.5 px-3 hidden sm:table-cell"
+                    />
                     <TableHead className="py-2.5 pl-2 pr-4 text-right">Compare</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -474,11 +449,7 @@ function DebenturesPage() {
                     const picked = compared.includes(k);
                     const size = d.publicIssueAmount ?? d.amountRegistered ?? null;
                     return (
-                      <TableRow
-                        key={k}
-                        className="cursor-pointer"
-                        onClick={() => setDetail(d)}
-                      >
+                      <TableRow key={k} className="cursor-pointer" onClick={() => setDetail(d)}>
                         <TableCell className="py-2.5 pl-4 pr-2">
                           <CouponBadge value={d.couponPct} />
                         </TableCell>
@@ -534,10 +505,7 @@ function DebenturesPage() {
                     <div className="flex items-start gap-3">
                       <CouponBadge value={d.couponPct} />
                       <div className="min-w-0 flex-1">
-                        <p
-                          className="truncate text-[15px] font-bold leading-tight"
-                          title={d.issuer}
-                        >
+                        <p className="truncate text-[15px] font-bold leading-tight" title={d.issuer}>
                           {d.issuer}
                         </p>
                         <p className="truncate text-xs text-muted-foreground" title={d.instrument}>
@@ -568,17 +536,13 @@ function DebenturesPage() {
                       <div className="rounded-lg bg-surface px-2.5 py-1.5">
                         <dt className="text-muted-foreground">Public issue</dt>
                         <dd className="font-bold">
-                          {d.publicIssueAmount != null
-                            ? formatNpr(d.publicIssueAmount, { compact: true })
-                            : "-"}
+                          {d.publicIssueAmount != null ? formatNpr(d.publicIssueAmount, { compact: true }) : "-"}
                         </dd>
                       </div>
                     </dl>
 
                     <div className="mt-auto flex items-center justify-between gap-2 border-t border-border/60 pt-2.5 text-[11px] text-muted-foreground">
-                      <span className="truncate">
-                        {d.issueManager ? `via ${d.issueManager}` : "-"}
-                      </span>
+                      <span className="truncate">{d.issueManager ? `via ${d.issueManager}` : "-"}</span>
                       <span className="flex shrink-0 gap-1.5">
                         <button
                           type="button"
@@ -615,8 +579,8 @@ function DebenturesPage() {
             </div>
           )}
           <p className="text-[11px] text-muted-foreground">
-            Issue records from SEBON public data. Indicative only, not investment advice. Coupons
-            are annual rates before tax; payout frequency varies by issue.
+            Issue records from SEBON public data. Indicative only, not investment advice. Coupons are annual rates
+            before tax; payout frequency varies by issue.
           </p>
         </>
       )}

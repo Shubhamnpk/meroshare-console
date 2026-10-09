@@ -20,23 +20,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { BackButton } from "@/components/back-button";
 import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ErrorBlock, EmptyBlock, LoadingBlock } from "@/components/states";
 import { StatChip, ChipRow } from "@/components/stat-chip";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ExportButton, buildCsv } from "@/components/export-dialog";
 import { activityLogQuery, defaultActivityRange } from "@/lib/queries";
 import { formatDate, formatDateTime, formatNumber } from "@/lib/format";
@@ -197,15 +184,7 @@ function CopyIpButton({ ip }: { ip: string }) {
   );
 }
 
-function LocationCell({
-  ip,
-  loc,
-  locating,
-}: {
-  ip: string;
-  loc?: IpLocation | undefined;
-  locating: boolean;
-}) {
+function LocationCell({ ip, loc, locating }: { ip: string; loc?: IpLocation | undefined; locating: boolean }) {
   if (!ip) return <span className="text-muted-foreground">-</span>;
   if (locating && !loc) {
     return (
@@ -317,10 +296,7 @@ function ActivityPage() {
     return sortBy(items, getter, sort.dir);
   }, [items, locations, sort]);
 
-  const uniqueIps = useMemo(
-    () => new Set(all.map((i) => clean(i.ipAddress)).filter(Boolean)).size,
-    [all],
-  );
+  const uniqueIps = useMemo(() => new Set(all.map((i) => clean(i.ipAddress)).filter(Boolean)).size, [all]);
   const uniqueBrowsers = useMemo(
     () => new Set(all.map((i) => clean(i.browserName).toLowerCase()).filter(Boolean)).size,
     [all],
@@ -391,9 +367,7 @@ function ActivityPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl font-semibold sm:text-3xl">Activity Log</h1>
-          <p className="mt-1 hidden text-sm text-muted-foreground sm:block">
-            Last 30 days of account activity.
-          </p>
+          <p className="mt-1 hidden text-sm text-muted-foreground sm:block">Last 30 days of account activity.</p>
         </div>
         <ExportButton
           disabled={items.length === 0}
@@ -449,21 +423,9 @@ function ActivityPage() {
       </div>
 
       <ChipRow wrap>
-        <StatChip
-          icon={<History className="size-4" />}
-          label="Records"
-          value={formatNumber(all.length)}
-        />
-        <StatChip
-          icon={<Globe className="size-4" />}
-          label="Unique IPs"
-          value={formatNumber(uniqueIps)}
-        />
-        <StatChip
-          icon={<MapPin className="size-4" />}
-          label="Countries"
-          value={formatNumber(uniqueCountries)}
-        />
+        <StatChip icon={<History className="size-4" />} label="Records" value={formatNumber(all.length)} />
+        <StatChip icon={<Globe className="size-4" />} label="Unique IPs" value={formatNumber(uniqueIps)} />
+        <StatChip icon={<MapPin className="size-4" />} label="Countries" value={formatNumber(uniqueCountries)} />
         <StatChip
           icon={<MonitorSmartphone className="size-4" />}
           label="Browsers"
@@ -542,9 +504,7 @@ function ActivityPage() {
                       }}
                       tabIndex={0}
                     >
-                      <TableCell className="pl-4 align-top text-xs text-muted-foreground">
-                        {idx + 1}
-                      </TableCell>
+                      <TableCell className="pl-4 align-top text-xs text-muted-foreground">{idx + 1}</TableCell>
                       <TableCell className="max-w-56 align-top">
                         <div className="flex items-start gap-2">
                           <span
@@ -560,9 +520,7 @@ function ActivityPage() {
                               {item.description ?? item.activityType ?? "-"}
                             </p>
                             {item.activityType && item.description !== item.activityType ? (
-                              <p className="truncate text-[11px] text-muted-foreground">
-                                {item.activityType}
-                              </p>
+                              <p className="truncate text-[11px] text-muted-foreground">{item.activityType}</p>
                             ) : null}
                           </div>
                         </div>
@@ -572,18 +530,14 @@ function ActivityPage() {
                           <BrowserIcon className="size-3.5 text-muted-foreground" />
                           {browserLabel(item)}
                         </p>
-                        <p className="mt-0.5 pl-5 text-[11px] text-muted-foreground">
-                          {osLabel(item)}
-                        </p>
+                        <p className="mt-0.5 pl-5 text-[11px] text-muted-foreground">{osLabel(item)}</p>
                       </TableCell>
                       <TableCell className="min-w-44 align-top">
                         <LocationCell ip={ip} loc={loc} locating={isLocating} />
                       </TableCell>
                       <TableCell className="num whitespace-nowrap pr-4 text-right align-top">
                         <p className="text-xs">{formatDateTime(item.recordedDate)}</p>
-                        {ago ? (
-                          <p className="mt-0.5 text-[11px] text-muted-foreground">{ago}</p>
-                        ) : null}
+                        {ago ? <p className="mt-0.5 text-[11px] text-muted-foreground">{ago}</p> : null}
                       </TableCell>
                     </TableRow>
                   );
@@ -592,8 +546,7 @@ function ActivityPage() {
             </Table>
           </div>
           <p className="border-t border-border/70 px-4 py-2.5 text-[11px] text-muted-foreground">
-            Locations are estimated from the IP address and may be approximate. Click a row for
-            details.
+            Locations are estimated from the IP address and may be approximate. Click a row for details.
           </p>
         </div>
       )}
@@ -630,9 +583,7 @@ function ActivityPage() {
                   </DialogTitle>
                   <DialogDescription>
                     {formatDateTime(selected.recordedDate)}
-                    {relativeTime(selected.recordedDate)
-                      ? ` · ${relativeTime(selected.recordedDate)}`
-                      : null}
+                    {relativeTime(selected.recordedDate) ? ` · ${relativeTime(selected.recordedDate)}` : null}
                   </DialogDescription>
                 </div>
               </div>
@@ -657,11 +608,7 @@ function ActivityPage() {
                 </p>
                 <p className="mt-1.5 flex items-center gap-1.5 text-sm font-semibold">
                   {selectedLoc?.flag ? (
-                    <CountryFlag
-                      code={selectedLoc.countryCode}
-                      emoji={selectedLoc.flag}
-                      size={16}
-                    />
+                    <CountryFlag code={selectedLoc.countryCode} emoji={selectedLoc.flag} size={16} />
                   ) : null}
                   {selectedLoc && !selectedLoc.private
                     ? selectedLoc.label
@@ -673,9 +620,7 @@ function ActivityPage() {
                   {selectedIp || "-"}
                   {selectedIp ? <CopyIpButton ip={selectedIp} /> : null}
                 </p>
-                {selectedLoc?.org ? (
-                  <p className="mt-1 text-[11px] text-muted-foreground">{selectedLoc.org}</p>
-                ) : null}
+                {selectedLoc?.org ? <p className="mt-1 text-[11px] text-muted-foreground">{selectedLoc.org}</p> : null}
                 {mapUrl ? (
                   <a
                     href={mapUrl}
@@ -713,9 +658,7 @@ function ActivityPage() {
                     </p>
                   </div>
                   <div className="rounded-lg bg-muted/50 px-2.5 py-2">
-                    <p className="num text-lg font-semibold">
-                      {formatNumber(selectedGroup.logins)}
-                    </p>
+                    <p className="num text-lg font-semibold">{formatNumber(selectedGroup.logins)}</p>
                     <p className="text-[11px] text-muted-foreground">logins</p>
                   </div>
                   <div className="rounded-lg bg-muted/50 px-2.5 py-2">
@@ -734,10 +677,7 @@ function ActivityPage() {
                 {typeBreakdown.length > 1 ? (
                   <div className="mt-2.5 flex flex-wrap gap-1.5">
                     {typeBreakdown.map(([type, count]) => (
-                      <span
-                        key={type}
-                        className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground"
-                      >
+                      <span key={type} className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
                         {type} · <span className="num font-semibold">{count}</span>
                       </span>
                     ))}
@@ -803,9 +743,7 @@ function ActivityPage() {
                               ? group.loc.label
                               : (group.loc?.label ?? "Unknown location")}
                           </span>
-                          <span className="num block truncate text-[11px] text-muted-foreground">
-                            {group.ip}
-                          </span>
+                          <span className="num block truncate text-[11px] text-muted-foreground">{group.ip}</span>
                         </span>
                         <span className="num shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
                           {group.count}×

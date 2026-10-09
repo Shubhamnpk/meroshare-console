@@ -20,11 +20,7 @@ export function normalizeUsername(value: unknown): string {
   return raw;
 }
 
-export function toSessionUser(
-  detail: OwnDetail,
-  capitalId: number,
-  expiresAt: number,
-): SessionUser {
+export function toSessionUser(detail: OwnDetail, capitalId: number, expiresAt: number): SessionUser {
   return {
     name: String(detail.name ?? ""),
     username: normalizeUsername(detail.username),
@@ -63,9 +59,7 @@ export async function performLogin(input: {
   const token = headers.get("Authorization") ?? headers.get("authorization");
   if (!token) {
     const message =
-      typeof data?.["message"] === "string"
-        ? (data["message"] as string)
-        : "MeroShare rejected those credentials.";
+      typeof data?.["message"] === "string" ? (data["message"] as string) : "MeroShare rejected those credentials.";
     throw new CdscError(message, 401);
   }
 

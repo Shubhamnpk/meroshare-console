@@ -89,9 +89,7 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
       >
         <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border/70 bg-background/85 px-4 backdrop-blur-xl sm:px-6">
           <div className="min-w-0 flex-1">
-            <p className="truncate font-display text-sm font-semibold sm:text-base">
-              {user.name || user.username}
-            </p>
+            <p className="truncate font-display text-sm font-semibold sm:text-base">{user.name || user.username}</p>
             <p className="num truncate text-xs text-muted-foreground">BOID {user.demat}</p>
           </div>
 
@@ -150,9 +148,7 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
           >
             <Search className="size-3.5" aria-hidden />
             <span>Search stocks…</span>
-            <kbd className="num rounded-md bg-muted px-1.5 py-0.5 font-sans text-[0.65rem]">
-              Ctrl K
-            </kbd>
+            <kbd className="num rounded-md bg-muted px-1.5 py-0.5 font-sans text-[0.65rem]">Ctrl K</kbd>
           </button>
           <Button
             variant="ghost"
@@ -183,12 +179,8 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
             <DropdownMenuContent align="end" className="w-60">
               <DropdownMenuLabel>
                 <div className="flex flex-col">
-                  <span className="truncate font-display font-semibold">
-                    {user.name || user.username}
-                  </span>
-                  <span className="num truncate text-xs font-normal text-muted-foreground">
-                    BOID {user.demat}
-                  </span>
+                  <span className="truncate font-display font-semibold">{user.name || user.username}</span>
+                  <span className="num truncate text-xs font-normal text-muted-foreground">BOID {user.demat}</span>
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
@@ -236,11 +228,7 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
 
       <MobileNav />
 
-      <CommandPalette
-        open={paletteOpen}
-        setOpen={setPaletteOpen}
-        onPick={(symbol) => setPickedScrip(symbol)}
-      />
+      <CommandPalette open={paletteOpen} setOpen={setPaletteOpen} onPick={(symbol) => setPickedScrip(symbol)} />
       <ScripSheet
         symbol={pickedScrip}
         onOpenChange={(open) => {

@@ -104,7 +104,18 @@ export function clearGlobalTxns(): void {
 
 /** Average-cost holdings derived from buys/sells. DIV/CASH never enter pools. */
 export function deriveHoldings(txns: GlobalTxn[]): GlobalHolding[] {
-  const pools = new Map<string, { qty: number; costNative: number; costGbp: number; gbpKnown: boolean; name: string; isin: string; currency: string }>();
+  const pools = new Map<
+    string,
+    {
+      qty: number;
+      costNative: number;
+      costGbp: number;
+      gbpKnown: boolean;
+      name: string;
+      isin: string;
+      currency: string;
+    }
+  >();
   const ordered = [...txns].sort((a, b) => a.date.localeCompare(b.date));
   for (const t of ordered) {
     if (t.side !== "BUY" && t.side !== "SELL") continue;

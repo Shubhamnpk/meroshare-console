@@ -1,10 +1,4 @@
-import {
-  breakEvenPrice,
-  buyCost,
-  sellProceeds,
-  type BuyCost,
-  type SellResult,
-} from "./fees";
+import { breakEvenPrice, buyCost, sellProceeds, type BuyCost, type SellResult } from "./fees";
 
 export interface NetPosition {
   buy: BuyCost;

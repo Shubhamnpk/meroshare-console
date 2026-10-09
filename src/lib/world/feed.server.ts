@@ -95,7 +95,13 @@ type YahooChart = {
       meta?: Record<string, unknown>;
       timestamp?: number[];
       indicators?: {
-        quote?: { open?: (number | null)[]; high?: (number | null)[]; low?: (number | null)[]; close?: (number | null)[]; volume?: (number | null)[] }[];
+        quote?: {
+          open?: (number | null)[];
+          high?: (number | null)[];
+          low?: (number | null)[];
+          close?: (number | null)[];
+          volume?: (number | null)[];
+        }[];
         adjclose?: { adjclose?: (number | null)[] }[];
       };
     }[];
@@ -144,7 +150,10 @@ const YAHOO_RANGE: Record<WorldRange, { range: string; interval: string }> = {
   MAX: { range: "max", interval: "1wk" },
 };
 
-async function yahooDocument(symbol: string, range: WorldRange): Promise<{ bars: WorldBar[]; meta: Record<string, unknown> } | null> {
+async function yahooDocument(
+  symbol: string,
+  range: WorldRange,
+): Promise<{ bars: WorldBar[]; meta: Record<string, unknown> } | null> {
   const { range: r, interval } = YAHOO_RANGE[range];
   const key = `world:yahoo:${symbol}:${range}`;
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${r}&interval=${interval}&events=div%2Csplits`;
@@ -169,9 +178,7 @@ function yahooQuoteFrom(symbol: string, parsed: { bars: WorldBar[]; meta: Record
   const nameRaw = meta["longName"] ?? meta["shortName"];
   const sectorRaw = meta["sector"];
   const industryRaw = meta["industry"];
-  const period = meta["currentTradingPeriod"] as
-    | { regular?: { start?: unknown; end?: unknown } }
-    | undefined;
+  const period = meta["currentTradingPeriod"] as { regular?: { start?: unknown; end?: unknown } } | undefined;
   const sessionStart = num(period?.regular?.start);
   const sessionEnd = num(period?.regular?.end);
   return {
@@ -316,19 +323,38 @@ export async function worldQuote(symbol: string): Promise<WorldQuote | null> {
 }
 
 /** Bars with fallback: Yahoo full history, else Finnhub daily (keyed), else empty. */
-export async function worldHistory(symbol: string, range: WorldRange): Promise<{ bars: WorldBar[]; source: WorldSource | null }> {
+export async function worldHistory(
+  symbol: string,
+  range: WorldRange,
+): Promise<{ bars: WorldBar[]; source: WorldSource | null }> {
   const upper = symbol.toUpperCase();
   const parsed = await yahooDocument(upper, range);
   if (parsed) return { bars: parsed.bars, source: "yahoo" };
   if (WORLD_API_KEY) {
     const months: Record<WorldRange, number> = {
-      "1D": 1, "1W": 1, "1M": 1, "3M": 3, "6M": 6, "1Y": 12, "2Y": 24, "5Y": 60, MAX: 120,
+      "1D": 1,
+      "1W": 1,
+      "1M": 1,
+      "3M": 3,
+      "6M": 6,
+      "1Y": 12,
+      "2Y": 24,
+      "5Y": 60,
+      MAX: 120,
     };
     const to = Math.floor(Date.now() / 1000);
     const from = to - months[range] * 30 * 86400;
     const key = `world:finnhub-h:${upper}:${range}`;
     const url = `https://finnhub.io/api/v1/stock/candle?symbol=${encodeURIComponent(upper)}&resolution=D&from=${from}&to=${to}&token=${encodeURIComponent(WORLD_API_KEY)}`;
-    const { data } = await cachedJson<{ s?: string; t?: number[]; o?: number[]; h?: number[]; l?: number[]; c?: number[]; v?: number[] }>(key, url, TTL_HISTORY);
+    const { data } = await cachedJson<{
+      s?: string;
+      t?: number[];
+      o?: number[];
+      h?: number[];
+      l?: number[];
+      c?: number[];
+      v?: number[];
+    }>(key, url, TTL_HISTORY);
     if (data?.s === "ok" && Array.isArray(data.t) && Array.isArray(data.c)) {
       const bars: WorldBar[] = [];
       for (let i = 0; i < data.t.length; i += 1) {
@@ -403,10 +429,7 @@ export function mergeGlobalHistory(
     bySymbol.set(symbol, m);
   }
   const sorted = [...dates].sort();
-  const orderedLots = new Map<
-    string,
-    { date: string; side: string; qty: number; price: number }[]
-  >();
+  const orderedLots = new Map<string, { date: string; side: string; qty: number; price: number }[]>();
   for (const { symbol, lots } of input) {
     orderedLots.set(
       symbol,
@@ -502,10 +525,12 @@ export async function finnhubCompany(symbol: string): Promise<WorldCompany | nul
   ]);
   const profile = (profileRes ?? {}) as Record<string, unknown>;
   const metric = ((metricRes as Record<string, unknown> | null)?.["metric"] ?? {}) as Record<string, unknown>;
-  const name = typeof profile["name"] === "string" && (profile["name"] as string).trim() !== "" ? (profile["name"] as string) : null;
+  const name =
+    typeof profile["name"] === "string" && (profile["name"] as string).trim() !== ""
+      ? (profile["name"] as string)
+      : null;
   if (!name) return null;
-  const str = (v: unknown): string | null =>
-    typeof v === "string" && v.trim() !== "" ? v : null;
+  const str = (v: unknown): string | null => (typeof v === "string" && v.trim() !== "" ? v : null);
   const company: WorldCompany = {
     symbol: upper,
     name,
@@ -513,7 +538,12 @@ export async function finnhubCompany(symbol: string): Promise<WorldCompany | nul
     currency: str(profile["currency"]),
     exchange: str(profile["exchange"]),
     ipo: str(profile["ipo"]),
-    marketCap: num(metric["marketCapitalization"]) > 0 ? num(metric["marketCapitalization"]) * 1_000_000 : (num(profile["marketCapitalization"]) > 0 ? num(profile["marketCapitalization"]) * 1_000_000 : null),
+    marketCap:
+      num(metric["marketCapitalization"]) > 0
+        ? num(metric["marketCapitalization"]) * 1_000_000
+        : num(profile["marketCapitalization"]) > 0
+          ? num(profile["marketCapitalization"]) * 1_000_000
+          : null,
     sharesOut: num(profile["shareOutstanding"]) > 0 ? num(profile["shareOutstanding"]) * 1_000_000 : null,
     website: str(profile["weburl"]),
     industry: str(profile["finnhubIndustry"]) ?? str(profile["industry"]),

@@ -18,21 +18,8 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EmptyBlock } from "@/components/states";
 import { ViewToggle } from "@/components/ui/view-toggle";
 import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
@@ -77,10 +64,7 @@ function BrokerAvatar({ broker, className }: { broker: BrokerRow; className?: st
   }
   return (
     <div
-      className={cn(
-        "num flex items-center justify-center rounded-xl bg-primary/10 font-bold text-primary",
-        className,
-      )}
+      className={cn("num flex items-center justify-center rounded-xl bg-primary/10 font-bold text-primary", className)}
     >
       {broker.code}
     </div>
@@ -123,9 +107,7 @@ function PodiumHero({
         <div className="mb-4 flex items-center justify-between">
           <div>
             <h3 className="text-sm font-bold text-foreground">Top Brokers</h3>
-            <p className="mt-0.5 text-[11px] text-muted-foreground">
-              Leading performers this period
-            </p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">Leading performers this period</p>
           </div>
           <div className="inline-flex items-center gap-0.5 rounded-full border bg-muted/60 p-0.5 shadow-sm">
             {(["today", "month", "review"] as const).map((m) => (
@@ -157,9 +139,7 @@ function PodiumHero({
                   broker={broker}
                   className={cn(
                     "rounded-full ring-2 shadow-md group-hover:ring-primary/30 transition-all",
-                    place === 1
-                      ? "size-11 ring-amber-300/50 sm:size-12"
-                      : "size-9 sm:size-11 ring-muted-foreground/20",
+                    place === 1 ? "size-11 ring-amber-300/50 sm:size-12" : "size-9 sm:size-11 ring-muted-foreground/20",
                   )}
                 />
                 <span
@@ -172,9 +152,7 @@ function PodiumHero({
                 </span>
               </div>
               <div className="text-center">
-                <div className="line-clamp-1 text-xs font-semibold leading-tight">
-                  {broker.name}
-                </div>
+                <div className="line-clamp-1 text-xs font-semibold leading-tight">{broker.name}</div>
                 <div className="num mt-0.5 text-[10px] text-muted-foreground">
                   {metricLabel(metric, metricValue(broker, metric))}
                   {metric === "month" && broker.thirtyDaysTurnover > 0 ? (
@@ -184,12 +162,7 @@ function PodiumHero({
                   ) : null}
                 </div>
               </div>
-              <div
-                className={cn(
-                  "mt-2 w-full rounded-t-xl border bg-gradient-to-t shadow-inner",
-                  barClass[place],
-                )}
-              />
+              <div className={cn("mt-2 w-full rounded-t-xl border bg-gradient-to-t shadow-inner", barClass[place])} />
             </div>
           ))}
         </div>
@@ -199,15 +172,7 @@ function PodiumHero({
 }
 
 /** Ranked broker card (cards view). */
-function BrokerCard({
-  broker,
-  rank,
-  onSelect,
-}: {
-  broker: BrokerRow;
-  rank: number;
-  onSelect: (b: BrokerRow) => void;
-}) {
+function BrokerCard({ broker, rank, onSelect }: { broker: BrokerRow; rank: number; onSelect: (b: BrokerRow) => void }) {
   return (
     <button
       type="button"
@@ -256,9 +221,7 @@ function BrokerCard({
               {broker.rating.averageRating.toFixed(1)} ({broker.rating.totalRatings})
             </span>
           ) : null}
-          {broker.todayStats?.topStock ? (
-            <span className="num">Top: {broker.todayStats.topStock.symbol}</span>
-          ) : null}
+          {broker.todayStats?.topStock ? <span className="num">Top: {broker.todayStats.topStock.symbol}</span> : null}
         </div>
       </div>
     </button>
@@ -284,17 +247,13 @@ function BrokerListRow({
         !broker.active && "opacity-60",
       )}
     >
-      <span className="num w-6 shrink-0 text-center text-xs font-bold text-muted-foreground">
-        {rank}
-      </span>
+      <span className="num w-6 shrink-0 text-center text-xs font-bold text-muted-foreground">{rank}</span>
       <BrokerAvatar broker={broker} className="size-9 shrink-0" />
       <div className="min-w-0 flex-1">
         <p className="truncate text-[0.8125rem] font-medium">{broker.name}</p>
         <p className="truncate text-[0.68rem] text-muted-foreground">
           {broker.districts.slice(0, 2).join(", ") || "-"}
-          {broker.rating && broker.rating.totalRatings > 0
-            ? ` · ★ ${broker.rating.averageRating.toFixed(1)}`
-            : ""}
+          {broker.rating && broker.rating.totalRatings > 0 ? ` · ★ ${broker.rating.averageRating.toFixed(1)}` : ""}
         </p>
       </div>
       <div className="hidden text-right sm:block">
@@ -304,9 +263,7 @@ function BrokerListRow({
         <p className="text-[0.65rem] text-muted-foreground">today</p>
       </div>
       <div className="text-right">
-        <p className="num text-[0.8125rem] font-semibold">
-          {formatNpr(broker.thirtyDaysTurnover, { compact: true })}
-        </p>
+        <p className="num text-[0.8125rem] font-semibold">{formatNpr(broker.thirtyDaysTurnover, { compact: true })}</p>
         <p className="text-[0.65rem] text-muted-foreground">30d</p>
       </div>
     </button>
@@ -375,10 +332,7 @@ export function BrokerDetail({
 
       <header className="overflow-hidden rounded-2xl border bg-gradient-to-br from-primary/10 via-background to-primary/5 shadow-sm">
         <div className="flex flex-wrap items-start gap-5 p-5 sm:p-6">
-          <BrokerAvatar
-            broker={broker}
-            className="size-20 shrink-0 rounded-2xl ring-2 ring-border/60 sm:size-24"
-          />
+          <BrokerAvatar broker={broker} className="size-20 shrink-0 rounded-2xl ring-2 ring-border/60 sm:size-24" />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <span className="num rounded-md bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary">
@@ -395,9 +349,7 @@ export function BrokerDetail({
                 </span>
               ) : null}
             </div>
-            <h2 className="mt-2 font-display text-2xl font-semibold leading-tight">
-              {broker.name}
-            </h2>
+            <h2 className="mt-2 font-display text-2xl font-semibold leading-tight">{broker.name}</h2>
             <p className="mt-1 text-sm text-muted-foreground">{broker.membershipType}</p>
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
               <span className="inline-flex items-center gap-1.5">
@@ -480,20 +432,12 @@ export function BrokerDetail({
               : undefined
           }
         />
-        <DetailStat
-          label="Latest session"
-          icon={Clock}
-          value={formatNpr(broker.latestTurnover, { compact: true })}
-        />
+        <DetailStat label="Latest session" icon={Clock} value={formatNpr(broker.latestTurnover, { compact: true })} />
         <DetailStat
           label="Community rating"
           icon={Star}
           value={rating && rating.totalRatings > 0 ? `★ ${rating.averageRating.toFixed(1)}` : "-"}
-          hint={
-            rating
-              ? `${rating.totalRatings} review${rating.totalRatings === 1 ? "" : "s"}`
-              : "No reviews yet"
-          }
+          hint={rating ? `${rating.totalRatings} review${rating.totalRatings === 1 ? "" : "s"}` : "No reviews yet"}
         />
       </div>
 
@@ -505,21 +449,15 @@ export function BrokerDetail({
           </h3>
           <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
             <div>
-              <dt className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                Branches
-              </dt>
+              <dt className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">Branches</dt>
               <dd className="num mt-1 text-base font-semibold">{branches}</dd>
             </div>
             <div>
-              <dt className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                Provinces
-              </dt>
+              <dt className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">Provinces</dt>
               <dd className="mt-1 text-base font-semibold">{broker.provinces.length}</dd>
             </div>
             <div className="col-span-2">
-              <dt className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                Districts
-              </dt>
+              <dt className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">Districts</dt>
               <dd className="mt-1.5 flex flex-wrap gap-1.5">
                 {broker.districts.length > 0 ? (
                   broker.districts.map((d) => (
@@ -550,10 +488,7 @@ export function BrokerDetail({
               topStock={todayStats.topStock?.symbol ?? null}
             />
           ) : (
-            <EmptyBlock
-              title="No session data"
-              description="Today's floor sheet hasn't been published yet."
-            />
+            <EmptyBlock title="No session data" description="Today's floor sheet hasn't been published yet." />
           )}
         </section>
       </div>
@@ -570,20 +505,12 @@ export function BrokerDetail({
               <p className="num mt-1 text-lg font-semibold">★ {rating.averageRating.toFixed(1)}</p>
             </div>
             <div>
-              <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                Share transfer
-              </p>
-              <p className="num mt-1 text-lg font-semibold">
-                {rating.averageShareTransferDays.toFixed(1)}d
-              </p>
+              <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">Share transfer</p>
+              <p className="num mt-1 text-lg font-semibold">{rating.averageShareTransferDays.toFixed(1)}d</p>
             </div>
             <div>
-              <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                Cash deposit
-              </p>
-              <p className="num mt-1 text-lg font-semibold">
-                {rating.averageCashDepositDays.toFixed(1)}d
-              </p>
+              <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">Cash deposit</p>
+              <p className="num mt-1 text-lg font-semibold">{rating.averageCashDepositDays.toFixed(1)}d</p>
             </div>
           </div>
           <p className="mt-2 text-[11px] text-muted-foreground">
@@ -600,22 +527,16 @@ export function BrokerDetail({
         </h3>
         <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
           <div>
-            <dt className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-              NEPSE code
-            </dt>
+            <dt className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">NEPSE code</dt>
             <dd className="num mt-1 text-base font-semibold">#{broker.code}</dd>
           </div>
           <div>
-            <dt className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-              Membership
-            </dt>
+            <dt className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">Membership</dt>
             <dd className="mt-1 text-base font-semibold">{broker.membershipType}</dd>
           </div>
           <div>
             <dt className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">Status</dt>
-            <dd className="mt-1 text-base font-semibold">
-              {broker.active ? "Active member" : "Inactive"}
-            </dd>
+            <dd className="mt-1 text-base font-semibold">{broker.active ? "Active member" : "Inactive"}</dd>
           </div>
           <div>
             <dt className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">Dealer</dt>
@@ -627,24 +548,10 @@ export function BrokerDetail({
   );
 }
 
-function BuySellBars({
-  buy,
-  sell,
-  topStock,
-}: {
-  buy: number;
-  sell: number;
-  topStock: string | null;
-}) {
+function BuySellBars({ buy, sell, topStock }: { buy: number; sell: number; topStock: string | null }) {
   const total = buy + sell;
   if (total <= 0) {
-    return (
-      <EmptyBlock
-        title="No activity"
-        description="This broker recorded no trades today."
-        className="mt-3"
-      />
-    );
+    return <EmptyBlock title="No activity" description="This broker recorded no trades today." className="mt-3" />;
   }
   const buyPct = (buy / total) * 100;
   const sellPct = 100 - buyPct;
@@ -665,18 +572,12 @@ function BuySellBars({
       <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
         <span className="inline-flex items-center gap-1.5 text-muted-foreground">
           <ArrowUpCircle className="size-3.5 text-emerald-600" aria-hidden />
-          Bought{" "}
-          <span className="num font-semibold text-foreground">
-            {formatNpr(buy, { compact: true })}
-          </span>
+          Bought <span className="num font-semibold text-foreground">{formatNpr(buy, { compact: true })}</span>
           <span className="text-muted-foreground">({buyPct.toFixed(0)}%)</span>
         </span>
         <span className="inline-flex items-center gap-1.5 text-muted-foreground">
           <ArrowDownCircle className="size-3.5 text-rose-600" aria-hidden />
-          Sold{" "}
-          <span className="num font-semibold text-foreground">
-            {formatNpr(sell, { compact: true })}
-          </span>
+          Sold <span className="num font-semibold text-foreground">{formatNpr(sell, { compact: true })}</span>
           <span className="text-muted-foreground">({sellPct.toFixed(0)}%)</span>
         </span>
       </div>
@@ -805,9 +706,7 @@ function BrokerTable({
                 <p className="truncate text-[0.68rem] text-muted-foreground">
                   #{b.code}
                   {b.isDealer ? " · Dealer" : ""}
-                  {b.rating && b.rating.totalRatings > 0
-                    ? ` · ★ ${b.rating.averageRating.toFixed(1)}`
-                    : ""}
+                  {b.rating && b.rating.totalRatings > 0 ? ` · ★ ${b.rating.averageRating.toFixed(1)}` : ""}
                 </p>
               </TableCell>
               <TableCell className="num py-2 text-right text-xs">
@@ -822,9 +721,7 @@ function BrokerTable({
                 {b.districts.length > 2 ? ` +${b.districts.length - 2}` : ""}
               </TableCell>
               <TableCell className="num py-2 text-right text-xs">
-                {b.rating && b.rating.totalRatings > 0
-                  ? `★ ${b.rating.averageRating.toFixed(1)}`
-                  : "-"}
+                {b.rating && b.rating.totalRatings > 0 ? `★ ${b.rating.averageRating.toFixed(1)}` : "-"}
               </TableCell>
             </TableRow>
           ))}
@@ -924,8 +821,7 @@ export function BrokerLeaderboard({
     return [...set].sort((a, b) => a.localeCompare(b));
   }, [brokers]);
 
-  const pickedBroker =
-    pickedCode !== null ? (brokers.find((b) => b.code === pickedCode) ?? null) : null;
+  const pickedBroker = pickedCode !== null ? (brokers.find((b) => b.code === pickedCode) ?? null) : null;
 
   if (pickedBroker) {
     return (
@@ -943,12 +839,7 @@ export function BrokerLeaderboard({
   return (
     <div className="space-y-4">
       {top3 ? (
-        <PodiumHero
-          top3={top3}
-          metric={metric}
-          onMetricChange={setMetric}
-          onSelect={(b) => setPickedCode(b.code)}
-        />
+        <PodiumHero top3={top3} metric={metric} onMetricChange={setMetric} onSelect={(b) => setPickedCode(b.code)} />
       ) : null}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1012,10 +903,7 @@ export function BrokerLeaderboard({
       </div>
 
       {filtered.length === 0 ? (
-        <EmptyBlock
-          title="No brokers match"
-          description="Try a different name, code, membership type or district."
-        />
+        <EmptyBlock title="No brokers match" description="Try a different name, code, membership type or district." />
       ) : view === "cards" ? (
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((b) => (
@@ -1039,17 +927,12 @@ export function BrokerLeaderboard({
           ))}
         </div>
       ) : (
-        <BrokerTable
-          brokers={filtered}
-          ranks={categoryRankByCode}
-          onSelect={(row) => setPickedCode(row.code)}
-        />
+        <BrokerTable brokers={filtered} ranks={categoryRankByCode} onSelect={(row) => setPickedCode(row.code)} />
       )}
 
       {search ? (
         <p className="text-center text-[11px] text-muted-foreground">
-          Showing {filtered.length} of {brokers.length}. Rankings stay fixed. Search never
-          re-orders the leaderboard.
+          Showing {filtered.length} of {brokers.length}. Rankings stay fixed. Search never re-orders the leaderboard.
         </p>
       ) : null}
     </div>

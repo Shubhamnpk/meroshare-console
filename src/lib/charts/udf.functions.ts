@@ -3,10 +3,7 @@ import { fetchUdfHistory, udfResolutionFor, udfToBars } from "./udf";
 import type { UdfResolution } from "./udf";
 
 export const getUdfHistory = createServerFn({ method: "GET" })
-  .validator(
-    (input: unknown) =>
-      input as { symbol: string; range: string; intradayRes?: UdfResolution | null },
-  )
+  .validator((input: unknown) => input as { symbol: string; range: string; intradayRes?: UdfResolution | null })
   .handler(async ({ data }) => {
     const sym = data.symbol.toUpperCase();
     const r = data.range as Parameters<typeof udfResolutionFor>[0];

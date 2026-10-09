@@ -17,17 +17,14 @@ async function yahooFxRate(pair: string): Promise<number | null> {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 8000);
     try {
-      const res = await fetch(
-        `https://query1.finance.yahoo.com/v8/finance/chart/${pair}?range=5d&interval=1d`,
-        {
-          headers: {
-            Accept: "application/json",
-            "User-Agent":
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
-          },
-          signal: ctrl.signal,
+      const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${pair}?range=5d&interval=1d`, {
+        headers: {
+          Accept: "application/json",
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
         },
-      );
+        signal: ctrl.signal,
+      });
       if (!res.ok) return hit?.rate ?? null;
       const doc = (await res.json()) as {
         chart?: { result?: { meta?: { regularMarketPrice?: number } }[] };
@@ -82,11 +79,7 @@ export async function toNpr(amount: number, currency: string | null): Promise<nu
     return amount * usdPerGbp * usdNpr;
   }
   if (cur === "EUR") {
-    const [eurGbp, usdPerGbp, usdNpr] = await Promise.all([
-      eurGbpRate(),
-      gbpUsdRate(),
-      usdNprRate(),
-    ]);
+    const [eurGbp, usdPerGbp, usdNpr] = await Promise.all([eurGbpRate(), gbpUsdRate(), usdNprRate()]);
     if (!eurGbp || !usdPerGbp || !usdNpr) return null;
     return amount * eurGbp * usdPerGbp * usdNpr;
   }

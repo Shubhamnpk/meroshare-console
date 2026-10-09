@@ -2,30 +2,14 @@ import type { ReactNode } from "react";
 import { useState } from "react";
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import { Panel } from "@/components/ui/panel";
-import {
-  Table,
-  TableBody,
-  TableCaption,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { SortableTh, type SortKind, type SortState } from "@/components/sortable-table";
 import { DeltaPill } from "@/components/stat-card";
 import { formatNpr, formatQty } from "@/lib/format";
 import { netPosition } from "@/lib/calc/position";
 
 export type HoldingsSortKey =
-  | "scrip"
-  | "units"
-  | "ltp"
-  | "previousClose"
-  | "value"
-  | "avgBuy"
-  | "unrealized"
-  | "percentChange"
-  | "weight";
+  "scrip" | "units" | "ltp" | "previousClose" | "value" | "avgBuy" | "unrealized" | "percentChange" | "weight";
 
 export interface HoldingTableRow {
   key: string;
@@ -60,14 +44,12 @@ export interface HoldingTableRow {
   pl: { value: number; pct: number; title: string } | null;
 }
 
-export function WeightBar({ pct, barClass }: { pct: number; barClass: string }) {  return (
+export function WeightBar({ pct, barClass }: { pct: number; barClass: string }) {
+  return (
     <div className="flex flex-col items-end gap-1">
       <span className="num text-xs text-muted-foreground">{pct.toFixed(1)}%</span>
       <div className="h-1 w-14 overflow-hidden rounded-full bg-muted" aria-hidden>
-        <div
-          className={`h-full rounded-full ${barClass}`}
-          style={{ width: `${Math.min(100, pct)}%` }}
-        />
+        <div className={`h-full rounded-full ${barClass}`} style={{ width: `${Math.min(100, pct)}%` }} />
       </div>
     </div>
   );
@@ -105,7 +87,8 @@ export function HoldingsTable({
     align: "left" | "right";
     kind: SortKind;
     className?: string;
-  }[] = [    { key: "scrip", label: "Stock", align: "left", kind: "text" },
+  }[] = [
+    { key: "scrip", label: "Stock", align: "left", kind: "text" },
     { key: "units", label: "Units", align: "right", kind: "number" },
     { key: "ltp", label: "LTP", align: "right", kind: "number" },
     { key: "previousClose", label: "Prev close", align: "right", kind: "number" },
@@ -160,12 +143,8 @@ export function HoldingsTable({
             >
               <TableCell className="pl-4 text-xs text-muted-foreground">{idx + 1}</TableCell>
               <TableCell>
-                <p className="font-semibold transition-colors hover:text-primary">
-                  {row.scrip}
-                </p>
-                <p className="max-w-52 truncate text-xs text-muted-foreground">
-                  {row.description}
-                </p>
+                <p className="font-semibold transition-colors hover:text-primary">{row.scrip}</p>
+                <p className="max-w-52 truncate text-xs text-muted-foreground">{row.description}</p>
               </TableCell>
               <TableCell className="num text-right">{row.unitsDisplay ?? formatQty(row.units)}</TableCell>
               <TableCell className="text-right">
@@ -188,13 +167,8 @@ export function HoldingsTable({
               <TableCell className="num text-right text-muted-foreground">
                 {row.previousClose > 0 ? (row.prevDisplay ?? formatNpr(row.previousClose)) : "-"}
               </TableCell>
-              <TableCell className="num text-right font-medium">
-                {row.valueDisplay ?? formatNpr(row.value)}
-              </TableCell>
-              <TableCell
-                className="num text-right text-muted-foreground"
-                title={row.avg?.cellTitle}
-              >
+              <TableCell className="num text-right font-medium">{row.valueDisplay ?? formatNpr(row.value)}</TableCell>
+              <TableCell className="num text-right text-muted-foreground" title={row.avg?.cellTitle}>
                 {row.avg && row.avg.value != null ? (
                   <span title={row.avg.title}>
                     {row.avg.prefix}
@@ -313,9 +287,7 @@ export function toPaperRows(
       dayChange: h.dayChange,
       dayPct: h.percentChange,
       weight: totalValue > 0 ? (h.value / totalValue) * 100 : 0,
-      avg: hasBasis
-        ? { value: h.avgBuy, cellTitle: labels.avgTitle }
-        : { value: null, cellTitle: labels.noBasisTitle },
+      avg: hasBasis ? { value: h.avgBuy, cellTitle: labels.avgTitle } : { value: null, cellTitle: labels.noBasisTitle },
       pl: hasBasis
         ? {
             value: pl,

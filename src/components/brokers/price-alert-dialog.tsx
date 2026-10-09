@@ -28,8 +28,7 @@ export function PriceAlertDialog({
   const [target, setTarget] = useState("");
   const [direction, setDirection] = useState<"above" | "below">("above");
 
-  const base =
-    defaultPrice && Number.isFinite(defaultPrice) && defaultPrice > 0 ? defaultPrice : null;
+  const base = defaultPrice && Number.isFinite(defaultPrice) && defaultPrice > 0 ? defaultPrice : null;
 
   useEffect(() => {
     if (open) {
@@ -67,11 +66,7 @@ export function PriceAlertDialog({
               <BellRing className="size-4" />
             </span>
             {symbol.toUpperCase()}
-            {base ? (
-              <span className="num text-base font-semibold text-muted-foreground">
-                {formatNpr(base)}
-              </span>
-            ) : null}
+            {base ? <span className="num text-base font-semibold text-muted-foreground">{formatNpr(base)}</span> : null}
           </DialogTitle>
         </DialogHeader>
 
@@ -89,9 +84,7 @@ export function PriceAlertDialog({
               aria-pressed={direction === d}
               className={cn(
                 "flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left transition-colors",
-                direction === d
-                  ? "border-amber-500/50 bg-amber-500/10"
-                  : "border-border/60 hover:border-amber-500/30",
+                direction === d ? "border-amber-500/50 bg-amber-500/10" : "border-border/60 hover:border-amber-500/30",
               )}
             >
               <Icon
@@ -100,12 +93,7 @@ export function PriceAlertDialog({
                   direction === d ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground",
                 )}
               />
-              <span
-                className={cn(
-                  "text-sm font-semibold",
-                  direction === d ? "" : "text-muted-foreground",
-                )}
-              >
+              <span className={cn("text-sm font-semibold", direction === d ? "" : "text-muted-foreground")}>
                 {label}
               </span>
             </button>
@@ -160,9 +148,7 @@ export function PriceAlertDialog({
                 <span>
                   {a.direction === "above" ? "≥" : "≤"}{" "}
                   <span className="num font-semibold">{a.target.toLocaleString("en-NP")}</span>{" "}
-                  <span className="text-xs text-muted-foreground">
-                    · {a.hitAt ? "fired" : "watching"}
-                  </span>
+                  <span className="text-xs text-muted-foreground">· {a.hitAt ? "fired" : "watching"}</span>
                 </span>
                 <Button
                   variant="ghost"

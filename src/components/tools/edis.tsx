@@ -9,24 +9,11 @@ import {
   edisWaccLeftQuery,
 } from "@/lib/queries";
 import { useSort, sortBy, SortableTh } from "@/components/sortable-table";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EmptyBlock, LoadingBlock } from "@/components/states";
 import { formatQty } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import type { EdisTransferItem } from "@/lib/meroshare/types";
 
@@ -44,12 +31,7 @@ function StatusBadge({ status }: { status: string | undefined }) {
   const normalized = status.toUpperCase();
   const colors = STATUS_COLORS[normalized] ?? "bg-gray-100 text-gray-800 border-gray-200";
   return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium",
-        colors,
-      )}
-    >
+    <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium", colors)}>
       {status}
     </span>
   );
@@ -88,13 +70,7 @@ function getObligationField(item: EdisTransferItem, field: string): unknown {
   return obligation?.[field];
 }
 
-function TransferDetailDialog({
-  item,
-  onClose,
-}: {
-  item: EdisTransferItem | null;
-  onClose: () => void;
-}) {
+function TransferDetailDialog({ item, onClose }: { item: EdisTransferItem | null; onClose: () => void }) {
   if (!item) return null;
   const map = item["contractObligationMap"] as Record<string, unknown> | undefined;
   const obligation = map?.["obligation"] as Record<string, unknown> | undefined;
@@ -240,9 +216,7 @@ export function EdisTransferList() {
                   className="border-b border-border/50 transition-colors hover:bg-muted/30 last:border-0"
                 >
                   <TableCell className="whitespace-nowrap px-4 py-3 font-medium">
-                    {String(
-                      item["settleDate"] ?? getObligationField(item, "settlementDate") ?? "-",
-                    )}
+                    {String(item["settleDate"] ?? getObligationField(item, "settlementDate") ?? "-")}
                   </TableCell>
                   <TableCell className="whitespace-nowrap px-4 py-3">
                     <span className="font-mono text-xs font-semibold">
@@ -250,9 +224,7 @@ export function EdisTransferList() {
                     </span>
                   </TableCell>
                   <TableCell className="whitespace-nowrap px-4 py-3 text-right font-mono">
-                    {formatQty(
-                      Number(item["quantity"] ?? getObligationField(item, "quantity") ?? 0),
-                    )}
+                    {formatQty(Number(item["quantity"] ?? getObligationField(item, "quantity") ?? 0))}
                   </TableCell>
                   <TableCell className="whitespace-nowrap px-4 py-3">
                     <StatusBadge status={String(reqStatus?.["name"] ?? item["statusName"] ?? "")} />
@@ -276,23 +248,13 @@ export function EdisTransferList() {
 
       {data.total > 50 && (
         <div className="flex items-center justify-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page === 1}
-          >
+          <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
             Previous
           </Button>
           <span className="text-xs text-muted-foreground">
             Page {page} of {Math.ceil(data.total / 50)}
           </span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage((p) => p + 1)}
-            disabled={page * 50 >= data.total}
-          >
+          <Button variant="outline" size="sm" onClick={() => setPage((p) => p + 1)} disabled={page * 50 >= data.total}>
             Next
           </Button>
         </div>
@@ -402,9 +364,7 @@ export function EdisNodelTrades() {
                   {String(item["tradeDate"] ?? item["settleDate"] ?? "-")}
                 </TableCell>
                 <TableCell className="whitespace-nowrap px-4 py-3">
-                  <span className="font-mono text-xs font-semibold">
-                    {String(item["scriptCode"] ?? "-")}
-                  </span>
+                  <span className="font-mono text-xs font-semibold">{String(item["scriptCode"] ?? "-")}</span>
                 </TableCell>
                 <TableCell className="whitespace-nowrap px-4 py-3 text-right font-mono">
                   {formatQty(Number(item["quantity"] ?? 0))}
@@ -423,23 +383,13 @@ export function EdisNodelTrades() {
 
       {data.total > 50 && (
         <div className="flex items-center justify-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page === 1}
-          >
+          <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
             Previous
           </Button>
           <span className="text-xs text-muted-foreground">
             Page {page} of {Math.ceil(data.total / 50)}
           </span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage((p) => p + 1)}
-            disabled={page * 50 >= data.total}
-          >
+          <Button variant="outline" size="sm" onClick={() => setPage((p) => p + 1)} disabled={page * 50 >= data.total}>
             Next
           </Button>
         </div>
@@ -475,15 +425,11 @@ export function EdisPoolAccountStatus() {
                   : "Regular Account"
           }
           icon={Layers}
-          color={
-            poolQ.data ? "text-orange-500" : poolError ? "text-muted-foreground" : "text-green-500"
-          }
+          color={poolQ.data ? "text-orange-500" : poolError ? "text-muted-foreground" : "text-green-500"}
         />
         <StatCard
           label="WACC Available"
-          value={
-            waccQ.isLoading ? "Checking..." : waccError ? "Unavailable" : waccQ.data ? "Yes" : "No"
-          }
+          value={waccQ.isLoading ? "Checking..." : waccError ? "Unavailable" : waccQ.data ? "Yes" : "No"}
           icon={ShieldCheck}
           color={waccQ.data ? "text-green-500" : "text-muted-foreground"}
         />
@@ -506,9 +452,8 @@ export function EdisPoolAccountStatus() {
       {anyFailed && allDone && (
         <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-200">
           <p className="text-xs">
-            Some EDIS data could not be loaded. This may be because your session has expired or EDIS
-            is not available for your account. Transfer and no-delivery trade data may still be
-            accessible from the tabs below.
+            Some EDIS data could not be loaded. This may be because your session has expired or EDIS is not available
+            for your account. Transfer and no-delivery trade data may still be accessible from the tabs below.
           </p>
         </div>
       )}
@@ -520,8 +465,8 @@ export function EdisPoolAccountStatus() {
             <div>
               <p className="font-semibold">Pool Account Detected</p>
               <p className="mt-1 text-xs">
-                Your account is registered as a pool account. Share transfers may have different
-                requirements. Please contact your DP for more information.
+                Your account is registered as a pool account. Share transfers may have different requirements. Please
+                contact your DP for more information.
               </p>
             </div>
           </div>

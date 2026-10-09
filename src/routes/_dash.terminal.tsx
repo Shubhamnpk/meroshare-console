@@ -56,12 +56,7 @@ import {
   scripFinancialsQuery,
   udfHistoryQuery,
 } from "@/lib/queries";
-import {
-  cancelBrokerAmo,
-  cancelBrokerOrder,
-  modifyBrokerOrder,
-  placeBrokerAmo,
-} from "@/lib/brokers/brokers.functions";
+import { cancelBrokerAmo, cancelBrokerOrder, modifyBrokerOrder, placeBrokerAmo } from "@/lib/brokers/brokers.functions";
 import type { BrokerId, BrokerOrder } from "@/lib/brokers/types";
 import { TmsReauthModal } from "@/components/brokers/tms-reauth-modal";
 import { useTmsReauth } from "@/hooks/use-tms-reauth";
@@ -80,13 +75,7 @@ import {
 } from "@/lib/orders";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSettings, useWatchlist, type TerminalState } from "@/lib/prefs";
 import { ogImage, canonicalLink } from "@/lib/seo";
 
@@ -164,12 +153,7 @@ function aggregateBars(bars: ChartBar[], agg: BarAgg): ChartBar[] {
   if (agg === "day" || bars.length === 0) return bars;
   const buckets = new Map<string, ChartBar[]>();
   for (const b of bars) {
-    const key =
-      agg === "week"
-        ? sundayKey(b.date)
-        : agg === "month"
-          ? b.date.slice(0, 7)
-          : b.date.slice(0, 4);
+    const key = agg === "week" ? sundayKey(b.date) : agg === "month" ? b.date.slice(0, 7) : b.date.slice(0, 4);
     const arr = buckets.get(key);
     if (arr) arr.push(b);
     else buckets.set(key, [b]);
@@ -273,20 +257,10 @@ function TmsOrderDetails({ o, onReuse }: { o: BrokerOrder; onReuse?: () => void 
       />
       <DetailField label="Exch. order no." value={o.exchangeOrderNo || "—"} />
       {o.orderId ? (
-        <DetailField
-          label="Order ID"
-          value={o.orderId}
-          wide
-          onCopy={() => copyText(o.orderId, "Order ID")}
-        />
+        <DetailField label="Order ID" value={o.orderId} wide onCopy={() => copyText(o.orderId, "Order ID")} />
       ) : null}
       {o.tranId ? (
-        <DetailField
-          label="Tran ID"
-          value={o.tranId}
-          wide
-          onCopy={() => copyText(o.tranId, "Tran ID")}
-        />
+        <DetailField label="Tran ID" value={o.tranId} wide onCopy={() => copyText(o.tranId, "Tran ID")} />
       ) : null}
       {onReuse ? (
         <div className="col-span-2 pt-1">
@@ -314,15 +288,10 @@ function AmoOrderDetails({
   const alert = a.alertName;
   return (
     <div className="mt-2 grid grid-cols-2 gap-2 border-t border-border/60 pt-2">
-      <DetailField
-        label="Trigger"
-        value={a.triggerPrice != null ? formatNpr(a.triggerPrice) : "—"}
-      />
+      <DetailField label="Trigger" value={a.triggerPrice != null ? formatNpr(a.triggerPrice) : "—"} />
       <DetailField label="Valid till" value={a.validTill ?? "—"} />
       <DetailField label="Status" value={a.status ?? "Active"} />
-      {alert ? (
-        <DetailField label="Alert" value={alert} onCopy={() => copyText(alert, "Alert name")} />
-      ) : null}
+      {alert ? <DetailField label="Alert" value={alert} onCopy={() => copyText(alert, "Alert name")} /> : null}
       {onReuse ? (
         <div className="col-span-2 pt-1">
           <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs" onClick={onReuse}>
@@ -339,10 +308,7 @@ function TerminalPage() {
   const [light, setLight] = useState(false);
   useEffect(() => {
     const resolve = () =>
-      setLight(
-        theme === "light" ||
-          (theme === "system" && window.matchMedia("(prefers-color-scheme: light)").matches),
-      );
+      setLight(theme === "light" || (theme === "system" && window.matchMedia("(prefers-color-scheme: light)").matches));
     resolve();
     const mq = window.matchMedia("(prefers-color-scheme: light)");
     mq.addEventListener("change", resolve);
@@ -411,9 +377,7 @@ function TerminalPage() {
     });
     toast.success("Ticket filled from order — review and place");
     requestAnimationFrame(() =>
-      document
-        .getElementById("order-ticket")
-        ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      document.getElementById("order-ticket")?.scrollIntoView({ behavior: "smooth", block: "start" }),
     );
   };
   const [alertAt, setAlertAt] = useState<number | null>(null);
@@ -555,18 +519,9 @@ function TerminalPage() {
   const amoRows = termAmos.data ?? [];
   const amoKeyOf = (o: (typeof amoRows)[number], i: number) =>
     o.alertName || `${o.scrip}-${o.side}-${o.price}-${o.quantity}-${i}`;
-  const amoIndexed = useMemo(
-    () => (termAmos.data ?? []).map((a, i) => ({ a, i })),
-    [termAmos.data],
-  );
-  const amoActiveList = useMemo(
-    () => amoIndexed.filter(({ a }) => amoIsActiveRow(a)),
-    [amoIndexed],
-  );
-  const amoDisabledList = useMemo(
-    () => amoIndexed.filter(({ a }) => !amoIsActiveRow(a)),
-    [amoIndexed],
-  );
+  const amoIndexed = useMemo(() => (termAmos.data ?? []).map((a, i) => ({ a, i })), [termAmos.data]);
+  const amoActiveList = useMemo(() => amoIndexed.filter(({ a }) => amoIsActiveRow(a)), [amoIndexed]);
+  const amoDisabledList = useMemo(() => amoIndexed.filter(({ a }) => !amoIsActiveRow(a)), [amoIndexed]);
   const amoBuyCount = amoActiveList.filter(({ a }) => a.side === "BUY").length;
   const amoSellCount = amoActiveList.filter(({ a }) => a.side === "SELL").length;
   // Live orders always on top; everything settled (filled / rejected /
@@ -593,16 +548,10 @@ function TerminalPage() {
   // inside the AMO bands.
   const unifiedRows = useMemo(
     () => [
-      ...sortedTodayOrders
-        .filter((o) => orderBand(o) === 0)
-        .map((o) => ({ kind: "tms" as const, o })),
+      ...sortedTodayOrders.filter((o) => orderBand(o) === 0).map((o) => ({ kind: "tms" as const, o })),
       ...amoActiveList.map(({ a, i }) => ({ kind: "amo" as const, a, i, active: true })),
-      ...sortedTodayOrders
-        .filter((o) => orderBand(o) === 1)
-        .map((o) => ({ kind: "tms" as const, o })),
-      ...sortedTodayOrders
-        .filter((o) => orderBand(o) === 2)
-        .map((o) => ({ kind: "tms" as const, o })),
+      ...sortedTodayOrders.filter((o) => orderBand(o) === 1).map((o) => ({ kind: "tms" as const, o })),
+      ...sortedTodayOrders.filter((o) => orderBand(o) === 2).map((o) => ({ kind: "tms" as const, o })),
       ...amoDisabledList.map(({ a, i }) => ({ kind: "amo" as const, a, i, active: false })),
     ],
     [sortedTodayOrders, amoActiveList, amoDisabledList],
@@ -675,8 +624,7 @@ function TerminalPage() {
           confirmed: true as const,
         },
       });
-      if (!placed.ok)
-        throw new Error(`Old order cancelled, but replacement failed: ${placed.message}`);
+      if (!placed.ok) throw new Error(`Old order cancelled, but replacement failed: ${placed.message}`);
       return placed.message;
     },
     onSuccess: (message) => {
@@ -747,12 +695,7 @@ function TerminalPage() {
   // Live tick for crazy 1m: when broker linked, poll broker quote every 5s and patch last candle
   const liveTick = useQuery({
     ...brokerQuoteQuery(termBrokerId, state.range === "1D" && !isIndexEarly ? state.symbol : null),
-    enabled:
-      brokerLinked &&
-      mode === "scrip" &&
-      state.range === "1D" &&
-      Boolean(state.symbol) &&
-      !isIndexEarly,
+    enabled: brokerLinked && mode === "scrip" && state.range === "1D" && Boolean(state.symbol) && !isIndexEarly,
     refetchInterval: brokerLinked && state.range === "1D" && !isIndexEarly ? 5000 : false,
     refetchIntervalInBackground: true,
     staleTime: 3000,
@@ -824,9 +767,7 @@ function TerminalPage() {
   const fundSector = fundOv?.sector ?? null;
   const fundPeriod = [
     fundRep?.quarter ?? null,
-    fundRep?.fy
-      ? `${fundRep.fy}${fundRep.fyNepali ? ` (${fundRep.fyNepali})` : ""}`
-      : null,
+    fundRep?.fy ? `${fundRep.fy}${fundRep.fyNepali ? ` (${fundRep.fyNepali})` : ""}` : null,
   ]
     .filter((x): x is string => !!x)
     .join(" · ");
@@ -951,9 +892,7 @@ function TerminalPage() {
   const selectedPoint = useMemo(() => {
     if (mode !== "portfolio" || !selectedDate) return null;
     const points = netWorth.data?.points ?? [];
-    const exact =
-      points.find((p) => new Date(p.time * 1000).toISOString().slice(0, 10) === selectedDate) ??
-      null;
+    const exact = points.find((p) => new Date(p.time * 1000).toISOString().slice(0, 10) === selectedDate) ?? null;
     if (exact) return exact;
     // Fall back to the nearest point (within 3 days) so a pinned date
     // can never silently resolve to nothing.
@@ -1239,13 +1178,10 @@ function TerminalPage() {
   // trailing daily bars) or the UDF fallback. Reads the live 1D view queries
   // while parked on 1D, the probes otherwise.
   const oneDProbeBars = state.range === "1D" ? mirrorBars : (scrip1DProbe.data?.bars ?? NO_BARS);
-  const oneDProbeIntraday =
-    state.range === "1D" ? mirrorIntraday : (scrip1DProbe.data?.intraday ?? NO_POINTS);
+  const oneDProbeIntraday = state.range === "1D" ? mirrorIntraday : (scrip1DProbe.data?.intraday ?? NO_POINTS);
   const oneDProbeUdf = state.range === "1D" ? udf.data : udf1DProbe.data;
   const oneDProbeSettled =
-    state.range === "1D"
-      ? !series.isPending && !udf.isPending
-      : !scrip1DProbe.isPending && !udf1DProbe.isPending;
+    state.range === "1D" ? !series.isPending && !udf.isPending : !scrip1DProbe.isPending && !udf1DProbe.isPending;
   const scrip1DEmpty =
     mode === "scrip" &&
     !isIndexEarly &&
@@ -1264,11 +1200,9 @@ function TerminalPage() {
         ? state.range === "1D"
           ? indexHistory.isPending
           : state.range === "1W"
-            ? indexDaily.isPending ||
-              ((indexDaily.data ?? []).length === 0 && indexHistory.isPending)
+            ? indexDaily.isPending || ((indexDaily.data ?? []).length === 0 && indexHistory.isPending)
             : indexDaily.isPending
-        : series.isPending ||
-          (useUdf ? false : udf.isPending && state.range === "1D" && !hasMirrorIntraday);
+        : series.isPending || (useUdf ? false : udf.isPending && state.range === "1D" && !hasMirrorIntraday);
   // 1D preference on every chart open: picking another symbol (watchlist,
   // search, orders, holdings, deep link) restarts at 1D; the effect below
   // parks it on 1W if that symbol has no intraday source.
@@ -1292,9 +1226,7 @@ function TerminalPage() {
   const chartHeight = expanded ? 640 : isMobile ? 320 : 400;
   const indicators: IndicatorConfig = useMemo(
     () =>
-      mode === "portfolio"
-        ? { ...state.indicators, volume: false, vwap: false, bollinger: false }
-        : state.indicators,
+      mode === "portfolio" ? { ...state.indicators, volume: false, vwap: false, bollinger: false } : state.indicators,
     [mode, state.indicators],
   );
 
@@ -1321,9 +1253,7 @@ function TerminalPage() {
           low: pinnedPoint.value,
           close: pinnedPoint.value,
           volume: 0,
-          changePercent: intradayFirst
-            ? ((pinnedPoint.value - intradayFirst) / intradayFirst) * 100
-            : 0,
+          changePercent: intradayFirst ? ((pinnedPoint.value - intradayFirst) / intradayFirst) * 100 : 0,
           pinned: true,
         }
       : hover;
@@ -1446,13 +1376,9 @@ function TerminalPage() {
                         type="button"
                         onClick={() => {
                           watchlist.toggle(s);
-                          toast.success(
-                            inList ? "Removed from watchlist" : "Added to watchlist",
-                          );
+                          toast.success(inList ? "Removed from watchlist" : "Added to watchlist");
                         }}
-                        aria-label={
-                          inList ? `Remove ${s} from watchlist` : `Add ${s} to watchlist`
-                        }
+                        aria-label={inList ? `Remove ${s} from watchlist` : `Add ${s} to watchlist`}
                         title={inList ? `Remove ${s} from watchlist` : `Add ${s} to watchlist`}
                         className={cn(
                           "absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full border bg-card shadow-sm transition-all",
@@ -1554,9 +1480,7 @@ function TerminalPage() {
                   onClick={() => setState((prev) => ({ ...prev, range: r }))}
                   className={cn(
                     "rounded-lg px-2 py-1 text-xs font-medium transition-colors",
-                    state.range === r
-                      ? "bg-primary/15 text-primary"
-                      : "text-muted-foreground hover:bg-muted/60",
+                    state.range === r ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-muted/60",
                     unavailable && "cursor-not-allowed opacity-40 hover:bg-transparent",
                   )}
                 >
@@ -1591,9 +1515,7 @@ function TerminalPage() {
                 <span className="text-xs text-muted-foreground">Interval</span>
                 <Select
                   value={intradayRes}
-                  onValueChange={(v) =>
-                    setIntradayRes(v as import("@/lib/charts/udf").UdfResolution)
-                  }
+                  onValueChange={(v) => setIntradayRes(v as import("@/lib/charts/udf").UdfResolution)}
                 >
                   <SelectTrigger className="h-7 w-24 text-xs">
                     <SelectValue />
@@ -1619,9 +1541,7 @@ function TerminalPage() {
                 onClick={() => setState((prev) => ({ ...prev, style: s.key }))}
                 className={cn(
                   "rounded-lg px-2 py-1 text-xs font-medium transition-colors",
-                  state.style === s.key
-                    ? "bg-primary/15 text-primary"
-                    : "text-muted-foreground hover:bg-muted/60",
+                  state.style === s.key ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-muted/60",
                 )}
               >
                 {s.label}
@@ -1665,14 +1585,8 @@ function TerminalPage() {
               onClick={() => setWatchlistOpen(true)}
               aria-label="Open watchlist"
             >
-              <Star
-                className={
-                  watchlist.symbols.length > 0 ? "size-3.5 fill-warning text-warning" : "size-3.5"
-                }
-              />
-              {watchlist.symbols.length > 0 ? (
-                <span className="num">{watchlist.symbols.length}</span>
-              ) : null}
+              <Star className={watchlist.symbols.length > 0 ? "size-3.5 fill-warning text-warning" : "size-3.5"} />
+              {watchlist.symbols.length > 0 ? <span className="num">{watchlist.symbols.length}</span> : null}
               <span className="hidden sm:inline">Watchlist</span>
             </Button>
             <Popover>
@@ -1686,9 +1600,7 @@ function TerminalPage() {
                   <div key={item.key} className="flex items-center justify-between gap-3">
                     <Label htmlFor={item.key} className="cursor-pointer">
                       <span className="text-sm font-medium">{item.label}</span>
-                      <span className="block text-[11px] font-normal text-muted-foreground">
-                        {item.hint}
-                      </span>
+                      <span className="block text-[11px] font-normal text-muted-foreground">{item.hint}</span>
                     </Label>
                     <Switch
                       id={item.key}
@@ -1733,8 +1645,8 @@ function TerminalPage() {
 
         {costMissing ? (
           <p className="border-b border-border/60 bg-warning/10 px-3 py-2 text-[11px] text-muted-foreground">
-            Profit needs your WACC cost basis, which is not available yet. Finish the purchase
-            source calculation on the WACC page, then switch back. Showing full value meanwhile.
+            Profit needs your WACC cost basis, which is not available yet. Finish the purchase source calculation on the
+            WACC page, then switch back. Showing full value meanwhile.
           </p>
         ) : null}
 
@@ -1743,8 +1655,8 @@ function TerminalPage() {
             {profitInfo.estimated.length > 0 ? (
               <>
                 Est. cost for pending WACC ({profitInfo.estimated.slice(0, 4).join(", ")}
-                {profitInfo.estimated.length > 4 ? ` +${profitInfo.estimated.length - 4} more` : ""}
-                ){profitInfo.excluded.length > 0 ? " · " : "."}
+                {profitInfo.estimated.length > 4 ? ` +${profitInfo.estimated.length - 4} more` : ""})
+                {profitInfo.excluded.length > 0 ? " · " : "."}
               </>
             ) : null}
             {profitInfo.excluded.length > 0 ? (
@@ -1776,9 +1688,7 @@ function TerminalPage() {
                 ))}
             </select>
             {compareSymbol && (
-              <span className="text-muted-foreground">
-                shown as an indexed % line against {state.symbol}
-              </span>
+              <span className="text-muted-foreground">shown as an indexed % line against {state.symbol}</span>
             )}
             {udfBadge ? (
               <span className="ml-auto rounded-full bg-primary/10 px-2 py-0.5 text-[0.68rem] font-semibold text-primary">
@@ -1814,9 +1724,7 @@ function TerminalPage() {
                 const err = mode === "portfolio" ? netWorth.error : series.error;
                 if (!err) return null;
                 return (
-                  <p className="max-w-md text-xs">
-                    {err instanceof Error ? err.message : "Feed request failed."}
-                  </p>
+                  <p className="max-w-md text-xs">{err instanceof Error ? err.message : "Feed request failed."}</p>
                 );
               })()}
               <Button
@@ -1847,11 +1755,7 @@ function TerminalPage() {
               logScale={state.logScale}
               light={light}
               height={chartHeight}
-              wacc={
-                mode === "scrip" && !isIndex
-                  ? (costByScrip.get(state.symbol.toUpperCase())?.rate ?? null)
-                  : null
-              }
+              wacc={mode === "scrip" && !isIndex ? (costByScrip.get(state.symbol.toUpperCase())?.rate ?? null) : null}
               includeWaccDomain={state.range === "MAX"}
               onHover={setHover}
               tradeMarkers={tradeMarkers}
@@ -1861,16 +1765,12 @@ function TerminalPage() {
                   ? ({ price, side }) => {
                       setTicketPrice({ price, side, nonce: Date.now() });
                       requestAnimationFrame(() =>
-                        document
-                          .getElementById("order-ticket")
-                          ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+                        document.getElementById("order-ticket")?.scrollIntoView({ behavior: "smooth", block: "start" }),
                       );
                     }
                   : undefined
               }
-              onCreateAlert={
-                mode === "scrip" && !isIndex ? (price) => setAlertAt(price) : undefined
-              }
+              onCreateAlert={mode === "scrip" && !isIndex ? (price) => setAlertAt(price) : undefined}
               onSelectBar={
                 mode === "portfolio"
                   ? (d) => setSelectedDate((cur) => (cur === d ? null : d))
@@ -1883,9 +1783,7 @@ function TerminalPage() {
                       setPinned((cur) => (cur && bar && cur.date === bar.date ? null : bar));
                     }
               }
-              onSelectPoint={(p) =>
-                setPinnedPoint((cur) => (cur && p && cur.time === p.time ? null : p))
-              }
+              onSelectPoint={(p) => setPinnedPoint((cur) => (cur && p && cur.time === p.time ? null : p))}
             />
           )}
         </div>
@@ -1911,9 +1809,7 @@ function TerminalPage() {
                     onClick={() => {
                       setTicketPrice({ price: spot!.close, nonce: Date.now() });
                       requestAnimationFrame(() =>
-                        document
-                          .getElementById("order-ticket")
-                          ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+                        document.getElementById("order-ticket")?.scrollIntoView({ behavior: "smooth", block: "start" }),
                       );
                     }}
                     className="inline-flex items-center gap-1 rounded-lg bg-primary/15 px-2 py-1 font-semibold text-primary transition-colors hover:bg-primary/25"
@@ -1931,33 +1827,27 @@ function TerminalPage() {
               </span>
             ) : null}
           </div>
-          )}
-        </div>
+        )}
+      </div>
 
       {showFundamentals ? (
         <section aria-label="Fundamentals">
           <div className="mb-2 flex items-baseline justify-between gap-2 px-1">
             <h2 className="font-display text-sm font-semibold">Fundamentals</h2>
-            {fundPeriod ? (
-              <p className="text-[0.68rem] text-muted-foreground">{fundPeriod}</p>
-            ) : null}
+            {fundPeriod ? <p className="text-[0.68rem] text-muted-foreground">{fundPeriod}</p> : null}
           </div>
           <ChipRow>
             {fundSector ? <StatChip label="Sector" value={fundSector} /> : null}
-            {fundMcap > 0 ? (
-              <StatChip label="Market cap" value={formatNpr(fundMcap, { compact: true })} />
-            ) : null}
+            {fundMcap > 0 ? <StatChip label="Market cap" value={formatNpr(fundMcap, { compact: true })} /> : null}
             {fundPe != null ? <StatChip label="P/E" value={formatNumber(fundPe)} /> : null}
             {fundEps != null ? <StatChip label="EPS" value={formatNpr(fundEps)} /> : null}
-            {fundNwps != null ? (
-              <StatChip label="Net worth / share" value={formatNpr(fundNwps)} />
-            ) : null}
+            {fundNwps != null ? <StatChip label="Net worth / share" value={formatNpr(fundNwps)} /> : null}
             {fundFace > 0 ? <StatChip label="Face value" value={formatNpr(fundFace)} /> : null}
           </ChipRow>
         </section>
       ) : null}
 
-        {mode === "portfolio" && (selectedPoint ?? pinnedIntradayPoint) && (
+      {mode === "portfolio" && (selectedPoint ?? pinnedIntradayPoint) && (
         <PointBreakdown
           point={(selectedPoint ?? pinnedIntradayPoint)!}
           formatLabel={(t) =>
@@ -2020,18 +1910,13 @@ function TerminalPage() {
             <p className="text-sm font-semibold">
               Orders · {(todayOrders.data ?? []).length + (termAmos.data ?? []).length}
             </p>
-            <Link
-              to="/broker"
-              search={{ tab: "orders" }}
-              className="text-xs font-medium text-primary hover:underline"
-            >
+            <Link to="/broker" search={{ tab: "orders" }} className="text-xs font-medium text-primary hover:underline">
               Full order book
             </Link>
           </div>
           {(termAmos.data ?? []).length > 0 ? (
             <p className="px-4 pb-2 text-[0.7rem] text-muted-foreground">
-              Includes {(termAmos.data ?? []).length} AMO for next session · {amoBuyCount} buy ·{" "}
-              {amoSellCount} sell
+              Includes {(termAmos.data ?? []).length} AMO for next session · {amoBuyCount} buy · {amoSellCount} sell
               {amoDisabledList.length > 0 ? ` · ${amoDisabledList.length} disabled` : ""}
             </p>
           ) : null}
@@ -2040,8 +1925,7 @@ function TerminalPage() {
           !todayOrders.isPending &&
           !termAmos.isPending ? (
             <p className="px-4 pb-3 text-xs text-muted-foreground">
-              Nothing here yet. Orders you place from the ticket land here — AMOs queue while the
-              market is closed.
+              Nothing here yet. Orders you place from the ticket land here — AMOs queue while the market is closed.
             </p>
           ) : unifiedRows.length === 0 && (todayOrders.isPending || termAmos.isPending) ? (
             <p className="px-4 pb-2 text-xs text-muted-foreground">Loading orders…</p>
@@ -2072,9 +1956,7 @@ function TerminalPage() {
                           >
                             <span className="text-sm">
                               <span className="font-bold text-muted-foreground">{a.side}</span>{" "}
-                              <span className="num font-semibold">
-                                {a.quantity.toLocaleString("en-NP")}
-                              </span>{" "}
+                              <span className="num font-semibold">{a.quantity.toLocaleString("en-NP")}</span>{" "}
                               <span className="font-semibold">{a.scrip}</span>{" "}
                               <span className="num text-muted-foreground">
                                 @ {a.price !== null ? a.price.toLocaleString("en-NP") : "-"}
@@ -2084,9 +1966,7 @@ function TerminalPage() {
                               </span>
                             </span>
                             {amoMeta ? (
-                              <span className="num mt-0.5 block text-[0.7rem] text-muted-foreground">
-                                {amoMeta}
-                              </span>
+                              <span className="num mt-0.5 block text-[0.7rem] text-muted-foreground">{amoMeta}</span>
                             ) : null}
                           </button>
                           <div className="flex shrink-0 items-center gap-1.5">
@@ -2098,12 +1978,7 @@ function TerminalPage() {
                               title="Order details"
                               className="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                             >
-                              <ChevronDown
-                                className={cn(
-                                  "size-4 transition-transform",
-                                  expanded && "rotate-180",
-                                )}
-                              />
+                              <ChevronDown className={cn("size-4 transition-transform", expanded && "rotate-180")} />
                             </button>
                             <button
                               type="button"
@@ -2138,9 +2013,7 @@ function TerminalPage() {
                   const armed = amoArmed === key;
                   const editingThis = amoEditKey === key;
                   const expanded = detailsKey === key;
-                  const amoMeta = [a.validTill ? `till ${a.validTill}` : null, a.alertName]
-                    .filter(Boolean)
-                    .join(" · ");
+                  const amoMeta = [a.validTill ? `till ${a.validTill}` : null, a.alertName].filter(Boolean).join(" · ");
                   return (
                     <li key={key} className="rounded-xl px-2 py-2 hover:bg-muted/40">
                       <div className="flex items-center justify-between gap-3">
@@ -2152,17 +2025,10 @@ function TerminalPage() {
                           aria-expanded={expanded}
                         >
                           <span className="text-sm">
-                            <span
-                              className={cn(
-                                "font-bold",
-                                a.side === "BUY" ? "text-gain" : "text-destructive",
-                              )}
-                            >
+                            <span className={cn("font-bold", a.side === "BUY" ? "text-gain" : "text-destructive")}>
                               {a.side}
                             </span>{" "}
-                            <span className="num font-semibold">
-                              {a.quantity.toLocaleString("en-NP")}
-                            </span>{" "}
+                            <span className="num font-semibold">{a.quantity.toLocaleString("en-NP")}</span>{" "}
                             <span className="font-semibold">{a.scrip}</span>{" "}
                             <span className="num text-muted-foreground">
                               @ {a.price !== null ? a.price.toLocaleString("en-NP") : "-"}
@@ -2172,9 +2038,7 @@ function TerminalPage() {
                             </span>
                           </span>
                           {amoMeta ? (
-                            <span className="num mt-0.5 block text-[0.7rem] text-muted-foreground">
-                              {amoMeta}
-                            </span>
+                            <span className="num mt-0.5 block text-[0.7rem] text-muted-foreground">{amoMeta}</span>
                           ) : null}
                         </button>
                         <div className="flex shrink-0 items-center gap-1.5">
@@ -2186,12 +2050,7 @@ function TerminalPage() {
                             title="Order details"
                             className="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                           >
-                            <ChevronDown
-                              className={cn(
-                                "size-4 transition-transform",
-                                expanded && "rotate-180",
-                              )}
-                            />
+                            <ChevronDown className={cn("size-4 transition-transform", expanded && "rotate-180")} />
                           </button>
                           <button
                             type="button"
@@ -2228,10 +2087,7 @@ function TerminalPage() {
                               onClick={() => {
                                 if (!armed) {
                                   setAmoArmed(key);
-                                  setTimeout(
-                                    () => setAmoArmed((cur) => (cur === key ? null : cur)),
-                                    4000,
-                                  );
+                                  setTimeout(() => setAmoArmed((cur) => (cur === key ? null : cur)), 4000);
                                   return;
                                 }
                                 cancelAmoQuick.mutate({
@@ -2261,9 +2117,7 @@ function TerminalPage() {
                               id={`tamo-qty-${key}`}
                               inputMode="numeric"
                               value={aqty}
-                              onChange={(e) =>
-                                setAqty(e.target.value.replace(/[^0-9]/g, "").slice(0, 6))
-                              }
+                              onChange={(e) => setAqty(e.target.value.replace(/[^0-9]/g, "").slice(0, 6))}
                               className="h-7 text-xs"
                             />
                           </div>
@@ -2275,9 +2129,7 @@ function TerminalPage() {
                               id={`tamo-price-${key}`}
                               inputMode="decimal"
                               value={aprice}
-                              onChange={(e) =>
-                                setAprice(e.target.value.replace(/[^0-9.]/g, "").slice(0, 12))
-                              }
+                              onChange={(e) => setAprice(e.target.value.replace(/[^0-9.]/g, "").slice(0, 12))}
                               className="h-7 text-xs"
                             />
                           </div>
@@ -2337,26 +2189,17 @@ function TerminalPage() {
                         aria-expanded={expanded}
                       >
                         <span className="text-sm">
-                          <span
-                            className={cn(
-                              "font-bold",
-                              o.side === "BUY" ? "text-gain" : "text-destructive",
-                            )}
-                          >
+                          <span className={cn("font-bold", o.side === "BUY" ? "text-gain" : "text-destructive")}>
                             {o.side}
                           </span>{" "}
-                          <span className="num font-semibold">
-                            {o.quantity.toLocaleString("en-NP")}
-                          </span>{" "}
+                          <span className="num font-semibold">{o.quantity.toLocaleString("en-NP")}</span>{" "}
                           <span className="font-semibold">{o.symbol}</span>{" "}
                           <span className="num text-muted-foreground">
                             @ {o.price !== null ? o.price.toLocaleString("en-NP") : "MKT"}
                           </span>
                         </span>
                         {slimMeta ? (
-                          <span className="num mt-0.5 block text-[0.7rem] text-muted-foreground">
-                            {slimMeta}
-                          </span>
+                          <span className="num mt-0.5 block text-[0.7rem] text-muted-foreground">{slimMeta}</span>
                         ) : null}
                       </button>
                       <div className="flex shrink-0 items-center gap-1.5">
@@ -2368,9 +2211,7 @@ function TerminalPage() {
                           title="Order details"
                           className="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                         >
-                          <ChevronDown
-                            className={cn("size-4 transition-transform", expanded && "rotate-180")}
-                          />
+                          <ChevronDown className={cn("size-4 transition-transform", expanded && "rotate-180")} />
                         </button>
                         <button
                           type="button"
@@ -2393,9 +2234,7 @@ function TerminalPage() {
                                   setModKey(null);
                                 } else {
                                   setModKey(key);
-                                  setMqty(
-                                    String(Math.max(1, Math.floor(o.remainingQty || o.quantity))),
-                                  );
+                                  setMqty(String(Math.max(1, Math.floor(o.remainingQty || o.quantity))));
                                   setMprice(o.price !== null ? String(o.price) : "");
                                   setArmedOrder(null);
                                 }
@@ -2411,10 +2250,7 @@ function TerminalPage() {
                               onClick={() => {
                                 if (!armed) {
                                   setArmedOrder(key);
-                                  setTimeout(
-                                    () => setArmedOrder((cur) => (cur === key ? null : cur)),
-                                    4000,
-                                  );
+                                  setTimeout(() => setArmedOrder((cur) => (cur === key ? null : cur)), 4000);
                                   return;
                                 }
                                 cancelTodayOrder.mutate({
@@ -2481,9 +2317,7 @@ function TerminalPage() {
                             id={`tmod-qty-${key}`}
                             inputMode="numeric"
                             value={mqty}
-                            onChange={(e) =>
-                              setMqty(e.target.value.replace(/[^0-9]/g, "").slice(0, 6))
-                            }
+                            onChange={(e) => setMqty(e.target.value.replace(/[^0-9]/g, "").slice(0, 6))}
                             className="h-7 text-xs"
                           />
                         </div>
@@ -2496,9 +2330,7 @@ function TerminalPage() {
                             inputMode="decimal"
                             value={mprice}
                             disabled={isMktRow}
-                            onChange={(e) =>
-                              setMprice(e.target.value.replace(/[^0-9.]/g, "").slice(0, 12))
-                            }
+                            onChange={(e) => setMprice(e.target.value.replace(/[^0-9.]/g, "").slice(0, 12))}
                             className="h-7 text-xs"
                           />
                         </div>
@@ -2563,20 +2395,15 @@ function TerminalPage() {
         </div>
       ) : null}
 
-      {mode === "scrip" &&
-      !isIndex &&
-      position &&
-      costByScrip.get(state.symbol.toUpperCase()) &&
-      quote?.ltp ? (
+      {mode === "scrip" && !isIndex && position && costByScrip.get(state.symbol.toUpperCase()) && quote?.ltp ? (
         <PositionPnlCard
           symbol={state.symbol}
           units={position.units}
           avgCost={costByScrip.get(state.symbol.toUpperCase())!.rate}
           ltp={quote.ltp}
           waccStatus={
-            investment.data?.scrips.find(
-              (s) => s.scrip.toUpperCase() === state.symbol.toUpperCase(),
-            )?.status ?? "pending"
+            investment.data?.scrips.find((s) => s.scrip.toUpperCase() === state.symbol.toUpperCase())?.status ??
+            "pending"
           }
         />
       ) : null}

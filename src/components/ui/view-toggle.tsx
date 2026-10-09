@@ -31,12 +31,7 @@ export function ViewToggle<T extends ViewOption>({
   className?: string;
 }) {
   return (
-    <div
-      className={cn(
-        "inline-flex items-center gap-0.5 rounded-full border bg-muted/60 p-0.5 shadow-sm",
-        className,
-      )}
-    >
+    <div className={cn("inline-flex items-center gap-0.5 rounded-full border bg-muted/60 p-0.5 shadow-sm", className)}>
       {modes.map((v) => {
         const Icon: LucideIcon = ICONS[v];
         return (

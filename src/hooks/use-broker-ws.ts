@@ -20,8 +20,10 @@ function parseDepthSegments(raw: string): BrokerDepthRow[][] {
     const bsr = Number(p[3]);
     const bsq = Number(p[4]?.replace(/,/g, ""));
     const so = Number(p[5]);
-    if (Number.isFinite(bbr) && Number.isFinite(bbq)) bids.push({ side: "bid", price: bbr, quantity: bbq, orders: Number.isFinite(bo) ? bo : null });
-    if (Number.isFinite(bsr) && Number.isFinite(bsq)) asks.push({ side: "ask", price: bsr, quantity: bsq, orders: Number.isFinite(so) ? so : null });
+    if (Number.isFinite(bbr) && Number.isFinite(bbq))
+      bids.push({ side: "bid", price: bbr, quantity: bbq, orders: Number.isFinite(bo) ? bo : null });
+    if (Number.isFinite(bsr) && Number.isFinite(bsq))
+      asks.push({ side: "ask", price: bsr, quantity: bsq, orders: Number.isFinite(so) ? so : null });
   }
   return [bids.slice(0, 5), asks.slice(0, 5)];
 }
@@ -115,7 +117,8 @@ export function useBrokerMarketWs(brokerId: BrokerId | null, symbol: string | nu
                 const r = row as Record<string, unknown>;
                 const ltp = typeof r["LTP"] === "number" ? r["LTP"] : typeof r["ltp"] === "number" ? r["ltp"] : null;
                 if (ltp !== null) {
-                  const prev: BrokerQuote | null = queryClient.getQueryData(["broker-quote", brokerId, cleanSymbol]) ?? null;
+                  const prev: BrokerQuote | null =
+                    queryClient.getQueryData(["broker-quote", brokerId, cleanSymbol]) ?? null;
                   if (prev) queryClient.setQueryData(["broker-quote", brokerId, cleanSymbol], { ...prev, ltp });
                 }
               }
@@ -146,7 +149,11 @@ export function useBrokerMarketWs(brokerId: BrokerId | null, symbol: string | nu
         };
 
         ws.onerror = () => {
-          try { ws.close(); } catch { /* */ }
+          try {
+            ws.close();
+          } catch {
+            /* */
+          }
         };
       } catch {
         if (!closed) retryRef.current = window.setTimeout(connect, 1000) as unknown as number;
@@ -164,8 +171,14 @@ export function useBrokerMarketWs(brokerId: BrokerId | null, symbol: string | nu
         try {
           ws.send(`DELETE^1^25.1!${cleanSymbol}`);
           ws.send(`DELETE^1^25.2!${cleanSymbol}`);
-        } catch { /* */ }
-        try { ws.close(); } catch { /* */ }
+        } catch {
+          /* */
+        }
+        try {
+          ws.close();
+        } catch {
+          /* */
+        }
       }
       wsRef.current = null;
     };

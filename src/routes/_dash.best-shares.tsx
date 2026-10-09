@@ -1,16 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import {
-  BarChart3,
-  Coins,
-  Filter,
-  Flame,
-  Target,
-  TrendingDown,
-  TrendingUp,
-  Zap,
-} from "lucide-react";
+import { BarChart3, Coins, Filter, Flame, Target, TrendingDown, TrendingUp, Zap } from "lucide-react";
 import { BackButton } from "@/components/back-button";
 import { ErrorBlock, LoadingBlock } from "@/components/states";
 import { DeltaPill } from "@/components/stat-card";
@@ -30,14 +21,7 @@ import { formatNpr, formatPercent, formatNumber, formatQty } from "@/lib/format"
 import { cn } from "@/lib/utils";
 import { SortableTh, sortBy, useSort, type SortKind } from "@/components/sortable-table";
 import { Panel } from "@/components/ui/panel";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ogImage, canonicalLink } from "@/lib/seo";
 
 export const Route = createFileRoute("/_dash/best-shares")({
@@ -46,8 +30,7 @@ export const Route = createFileRoute("/_dash/best-shares")({
       { title: "Best Shares | MeroShare Investor Console" },
       {
         name: "description",
-        content:
-          "Discover top-ranked NEPSE stocks by short-term momentum and long-term fundamentals.",
+        content: "Discover top-ranked NEPSE stocks by short-term momentum and long-term fundamentals.",
       },
       { property: "og:title", content: "Best Shares | MeroShare Investor Console" },
       {
@@ -151,10 +134,7 @@ interface DividendStock extends RankedStock {
 function BestSharesPage() {
   const [tab, setTab] = useState<"short" | "long" | "dividends">("short");
   const [signalFilter, setSignalFilter] = useState<string>("ALL");
-  const { sort, toggle, reset } = useSort<SortKey>(
-    { key: "score", dir: "desc" },
-    SORT_KINDS,
-  );
+  const { sort, toggle, reset } = useSort<SortKey>({ key: "score", dir: "desc" }, SORT_KINDS);
   const [picked, setPicked] = useState<string | null>(null);
   const [simulatorStock, setSimulatorStock] = useState<string | null>(null);
 
@@ -217,22 +197,16 @@ function BestSharesPage() {
   const shortSignals = ["ALL", "BREAKOUT", "MOMENTUM", "OVERSOLD", "WATCHLIST"];
   const longSignals = ["ALL", "LEGENDARY", "VALUE", "INCOME", "GROWTH", "BLUECHIP", "WATCHLIST"];
   const dividendSignals = ["ALL", "HIGH_YIELD", "CONSISTENT", "INCOME"];
-  const activeSignals =
-    tab === "short" ? shortSignals : tab === "long" ? longSignals : dividendSignals;
+  const activeSignals = tab === "short" ? shortSignals : tab === "long" ? longSignals : dividendSignals;
 
   // Apply signal filter
   const filtered = useMemo(() => {
     if (tab === "dividends") {
-      const withDividends = ranked.filter(
-        (s) => s.longTerm?.dividendYield != null && s.longTerm.dividendYield > 0,
-      );
+      const withDividends = ranked.filter((s) => s.longTerm?.dividendYield != null && s.longTerm.dividendYield > 0);
       if (signalFilter === "ALL") return withDividends;
-      if (signalFilter === "HIGH_YIELD")
-        return withDividends.filter((s) => (s.longTerm?.dividendYield ?? 0) > 4);
-      if (signalFilter === "CONSISTENT")
-        return withDividends.filter((s) => (s.longTerm?.dividendStreak ?? 0) >= 3);
-      if (signalFilter === "INCOME")
-        return withDividends.filter((s) => s.longTerm?.signal === "INCOME");
+      if (signalFilter === "HIGH_YIELD") return withDividends.filter((s) => (s.longTerm?.dividendYield ?? 0) > 4);
+      if (signalFilter === "CONSISTENT") return withDividends.filter((s) => (s.longTerm?.dividendStreak ?? 0) >= 3);
+      if (signalFilter === "INCOME") return withDividends.filter((s) => s.longTerm?.signal === "INCOME");
       return withDividends;
     }
     if (signalFilter === "ALL") return ranked;
@@ -284,11 +258,8 @@ function BestSharesPage() {
     if (!ranked.length) return null;
     const shortTermStocks = ranked.filter((s) => s.shortTerm);
     const longTermStocks = ranked.filter((s) => s.longTerm);
-    const avgRsi =
-      shortTermStocks.reduce((a, s) => a + (s.shortTerm?.rsi ?? 0), 0) /
-      (shortTermStocks.length || 1);
-    const avgPe =
-      longTermStocks.reduce((a, s) => a + (s.longTerm?.pe ?? 0), 0) / (longTermStocks.length || 1);
+    const avgRsi = shortTermStocks.reduce((a, s) => a + (s.shortTerm?.rsi ?? 0), 0) / (shortTermStocks.length || 1);
+    const avgPe = longTermStocks.reduce((a, s) => a + (s.longTerm?.pe ?? 0), 0) / (longTermStocks.length || 1);
     const breakouts = ranked.filter((s) => s.shortTerm?.signal === "BREAKOUT").length;
     const oversold = ranked.filter((s) => s.shortTerm?.signal === "OVERSOLD").length;
     const valuePicks = ranked.filter((s) => s.longTerm?.signal === "VALUE").length;
@@ -320,16 +291,14 @@ function BestSharesPage() {
       <div className="flex gap-1 rounded-xl border border-border/70 bg-card p-1">
         <button
           type="button"
-            onClick={() => {
-              setTab("short");
-              setSignalFilter("ALL");
-              reset({ key: "score", dir: "desc" });
-            }}
+          onClick={() => {
+            setTab("short");
+            setSignalFilter("ALL");
+            reset({ key: "score", dir: "desc" });
+          }}
           className={cn(
             "flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors",
-            tab === "short"
-              ? "bg-primary text-primary-foreground"
-              : "text-muted-foreground hover:text-foreground",
+            tab === "short" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
           )}
         >
           <Zap className="size-4" />
@@ -338,16 +307,14 @@ function BestSharesPage() {
         </button>
         <button
           type="button"
-            onClick={() => {
-              setTab("long");
-              setSignalFilter("ALL");
-              reset({ key: "score", dir: "desc" });
-            }}
+          onClick={() => {
+            setTab("long");
+            setSignalFilter("ALL");
+            reset({ key: "score", dir: "desc" });
+          }}
           className={cn(
             "flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors",
-            tab === "long"
-              ? "bg-primary text-primary-foreground"
-              : "text-muted-foreground hover:text-foreground",
+            tab === "long" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
           )}
         >
           <BarChart3 className="size-4" />
@@ -356,16 +323,14 @@ function BestSharesPage() {
         </button>
         <button
           type="button"
-            onClick={() => {
-              setTab("dividends");
-              setSignalFilter("ALL");
-              reset({ key: "yield", dir: "desc" });
-            }}
+          onClick={() => {
+            setTab("dividends");
+            setSignalFilter("ALL");
+            reset({ key: "yield", dir: "desc" });
+          }}
           className={cn(
             "flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors",
-            tab === "dividends"
-              ? "bg-primary text-primary-foreground"
-              : "text-muted-foreground hover:text-foreground",
+            tab === "dividends" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
           )}
         >
           <Coins className="size-4" />
@@ -440,9 +405,7 @@ function BestSharesPage() {
                 ) : (
                   <span className="ml-1.5 text-[0.65rem] opacity-60">
                     {tab === "dividends"
-                      ? ranked.filter(
-                          (s) => s.longTerm?.dividendYield != null && s.longTerm.dividendYield > 0,
-                        ).length
+                      ? ranked.filter((s) => s.longTerm?.dividendYield != null && s.longTerm.dividendYield > 0).length
                       : ranked.length}
                   </span>
                 )}
@@ -455,16 +418,8 @@ function BestSharesPage() {
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {tab === "short" ? (
                 <>
-                  <StatCard
-                    icon={<Target className="size-4" />}
-                    label="Stocks Scored"
-                    value={String(stats.total)}
-                  />
-                  <StatCard
-                    icon={<TrendingUp className="size-4" />}
-                    label="Avg RSI"
-                    value={String(stats.avgRsi)}
-                  />
+                  <StatCard icon={<Target className="size-4" />} label="Stocks Scored" value={String(stats.total)} />
+                  <StatCard icon={<TrendingUp className="size-4" />} label="Avg RSI" value={String(stats.avgRsi)} />
                   <StatCard
                     icon={<Flame className="size-4" />}
                     label="Breakouts"
@@ -480,16 +435,8 @@ function BestSharesPage() {
                 </>
               ) : tab === "long" ? (
                 <>
-                  <StatCard
-                    icon={<Target className="size-4" />}
-                    label="Stocks Scored"
-                    value={String(stats.total)}
-                  />
-                  <StatCard
-                    icon={<TrendingUp className="size-4" />}
-                    label="Avg P/E"
-                    value={String(stats.avgPe)}
-                  />
+                  <StatCard icon={<Target className="size-4" />} label="Stocks Scored" value={String(stats.total)} />
+                  <StatCard icon={<TrendingUp className="size-4" />} label="Avg P/E" value={String(stats.avgPe)} />
                   <StatCard
                     icon={<Coins className="size-4" />}
                     label="Value Picks"
@@ -509,25 +456,19 @@ function BestSharesPage() {
                     icon={<Coins className="size-4" />}
                     label="Dividend Stocks"
                     value={String(
-                      ranked.filter(
-                        (s) => s.longTerm?.dividendYield != null && s.longTerm.dividendYield > 0,
-                      ).length,
+                      ranked.filter((s) => s.longTerm?.dividendYield != null && s.longTerm.dividendYield > 0).length,
                     )}
                   />
                   <StatCard
                     icon={<TrendingUp className="size-4" />}
                     label="High Yield (>4%)"
-                    value={String(
-                      ranked.filter((s) => (s.longTerm?.dividendYield ?? 0) > 4).length,
-                    )}
+                    value={String(ranked.filter((s) => (s.longTerm?.dividendYield ?? 0) > 4).length)}
                     accent="text-emerald-400"
                   />
                   <StatCard
                     icon={<Flame className="size-4" />}
                     label="Consistent (3y+)"
-                    value={String(
-                      ranked.filter((s) => (s.longTerm?.dividendStreak ?? 0) >= 3).length,
-                    )}
+                    value={String(ranked.filter((s) => (s.longTerm?.dividendStreak ?? 0) >= 3).length)}
                     accent="text-amber-400"
                   />
                   <StatCard
@@ -547,33 +488,169 @@ function BestSharesPage() {
               <TableHeader className="bg-muted">
                 <TableRow className="bg-muted/40 hover:bg-muted/40">
                   <TableHead className="px-3 py-3 pl-4 sm:pl-4">#</TableHead>
-                  <SortableTh label="Stock" active={sort.key === "symbol"} dir={sort.dir} kind="text" align="left" onClick={() => toggle("symbol")} className="px-3 py-3" />
-                  <SortableTh label="LTP" active={sort.key === "ltp"} dir={sort.dir} kind="number" align="right" onClick={() => toggle("ltp")} className="num px-3 py-3 text-right" />
-                  <SortableTh label="Chg%" active={sort.key === "change"} dir={sort.dir} kind="number" align="right" onClick={() => toggle("change")} className="num px-3 py-3 text-right" />
+                  <SortableTh
+                    label="Stock"
+                    active={sort.key === "symbol"}
+                    dir={sort.dir}
+                    kind="text"
+                    align="left"
+                    onClick={() => toggle("symbol")}
+                    className="px-3 py-3"
+                  />
+                  <SortableTh
+                    label="LTP"
+                    active={sort.key === "ltp"}
+                    dir={sort.dir}
+                    kind="number"
+                    align="right"
+                    onClick={() => toggle("ltp")}
+                    className="num px-3 py-3 text-right"
+                  />
+                  <SortableTh
+                    label="Chg%"
+                    active={sort.key === "change"}
+                    dir={sort.dir}
+                    kind="number"
+                    align="right"
+                    onClick={() => toggle("change")}
+                    className="num px-3 py-3 text-right"
+                  />
                   {tab === "dividends" ? (
                     <>
-                      <SortableTh label="Yield" active={sort.key === "yield"} dir={sort.dir} kind="number" align="right" onClick={() => toggle("yield")} className="num px-3 py-3 text-right" />
-                      <SortableTh label="Streak" active={sort.key === "streak"} dir={sort.dir} kind="number" align="right" onClick={() => toggle("streak")} className="num px-3 py-3 text-right hidden sm:table-cell" />
-                      <SortableTh label="Cash/Bonus" active={sort.key === "records"} dir={sort.dir} kind="number" align="left" onClick={() => toggle("records")} className="px-3 py-3 text-center hidden md:table-cell" />
-                      <SortableTh label="Signal" active={sort.key === "signal"} dir={sort.dir} kind="text" align="left" onClick={() => toggle("signal")} className="px-3 py-3 text-center" />
+                      <SortableTh
+                        label="Yield"
+                        active={sort.key === "yield"}
+                        dir={sort.dir}
+                        kind="number"
+                        align="right"
+                        onClick={() => toggle("yield")}
+                        className="num px-3 py-3 text-right"
+                      />
+                      <SortableTh
+                        label="Streak"
+                        active={sort.key === "streak"}
+                        dir={sort.dir}
+                        kind="number"
+                        align="right"
+                        onClick={() => toggle("streak")}
+                        className="num px-3 py-3 text-right hidden sm:table-cell"
+                      />
+                      <SortableTh
+                        label="Cash/Bonus"
+                        active={sort.key === "records"}
+                        dir={sort.dir}
+                        kind="number"
+                        align="left"
+                        onClick={() => toggle("records")}
+                        className="px-3 py-3 text-center hidden md:table-cell"
+                      />
+                      <SortableTh
+                        label="Signal"
+                        active={sort.key === "signal"}
+                        dir={sort.dir}
+                        kind="text"
+                        align="left"
+                        onClick={() => toggle("signal")}
+                        className="px-3 py-3 text-center"
+                      />
                     </>
                   ) : (
                     <>
-                      <SortableTh label="Score" active={sort.key === "score"} dir={sort.dir} kind="number" align="right" onClick={() => toggle("score")} className="num px-3 py-3 text-right" />
+                      <SortableTh
+                        label="Score"
+                        active={sort.key === "score"}
+                        dir={sort.dir}
+                        kind="number"
+                        align="right"
+                        onClick={() => toggle("score")}
+                        className="num px-3 py-3 text-right"
+                      />
                       {tab === "short" ? (
                         <>
-                          <SortableTh label="RSI" active={sort.key === "rsi"} dir={sort.dir} kind="number" align="right" onClick={() => toggle("rsi")} className="num px-3 py-3 text-right" />
-                          <SortableTh label="Volume" active={sort.key === "volume"} dir={sort.dir} kind="number" align="right" onClick={() => toggle("volume")} className="num px-3 py-3 text-right hidden sm:table-cell" />
-                          <SortableTh label="Signal" active={sort.key === "signal"} dir={sort.dir} kind="text" align="left" onClick={() => toggle("signal")} className="px-3 py-3 text-center" />
+                          <SortableTh
+                            label="RSI"
+                            active={sort.key === "rsi"}
+                            dir={sort.dir}
+                            kind="number"
+                            align="right"
+                            onClick={() => toggle("rsi")}
+                            className="num px-3 py-3 text-right"
+                          />
+                          <SortableTh
+                            label="Volume"
+                            active={sort.key === "volume"}
+                            dir={sort.dir}
+                            kind="number"
+                            align="right"
+                            onClick={() => toggle("volume")}
+                            className="num px-3 py-3 text-right hidden sm:table-cell"
+                          />
+                          <SortableTh
+                            label="Signal"
+                            active={sort.key === "signal"}
+                            dir={sort.dir}
+                            kind="text"
+                            align="left"
+                            onClick={() => toggle("signal")}
+                            className="px-3 py-3 text-center"
+                          />
                         </>
                       ) : (
                         <>
-                          <SortableTh label="P/E" active={sort.key === "pe"} dir={sort.dir} kind="number" align="right" onClick={() => toggle("pe")} className="num px-3 py-3 text-right" />
-                          <SortableTh label="P/B" active={sort.key === "pb"} dir={sort.dir} kind="number" align="right" onClick={() => toggle("pb")} className="num px-3 py-3 text-right hidden sm:table-cell" />
-                          <SortableTh label="ROE" active={sort.key === "roe"} dir={sort.dir} kind="number" align="right" onClick={() => toggle("roe")} className="num px-3 py-3 text-right hidden md:table-cell" />
-                          <SortableTh label="Yield" active={sort.key === "yield"} dir={sort.dir} kind="number" align="right" onClick={() => toggle("yield")} className="num px-3 py-3 text-right hidden sm:table-cell" />
-                          <SortableTh label="Streak" active={sort.key === "streak"} dir={sort.dir} kind="number" align="right" onClick={() => toggle("streak")} className="num px-3 py-3 text-right hidden md:table-cell" />
-                          <SortableTh label="Signal" active={sort.key === "signal"} dir={sort.dir} kind="text" align="left" onClick={() => toggle("signal")} className="px-3 py-3 text-center" />
+                          <SortableTh
+                            label="P/E"
+                            active={sort.key === "pe"}
+                            dir={sort.dir}
+                            kind="number"
+                            align="right"
+                            onClick={() => toggle("pe")}
+                            className="num px-3 py-3 text-right"
+                          />
+                          <SortableTh
+                            label="P/B"
+                            active={sort.key === "pb"}
+                            dir={sort.dir}
+                            kind="number"
+                            align="right"
+                            onClick={() => toggle("pb")}
+                            className="num px-3 py-3 text-right hidden sm:table-cell"
+                          />
+                          <SortableTh
+                            label="ROE"
+                            active={sort.key === "roe"}
+                            dir={sort.dir}
+                            kind="number"
+                            align="right"
+                            onClick={() => toggle("roe")}
+                            className="num px-3 py-3 text-right hidden md:table-cell"
+                          />
+                          <SortableTh
+                            label="Yield"
+                            active={sort.key === "yield"}
+                            dir={sort.dir}
+                            kind="number"
+                            align="right"
+                            onClick={() => toggle("yield")}
+                            className="num px-3 py-3 text-right hidden sm:table-cell"
+                          />
+                          <SortableTh
+                            label="Streak"
+                            active={sort.key === "streak"}
+                            dir={sort.dir}
+                            kind="number"
+                            align="right"
+                            onClick={() => toggle("streak")}
+                            className="num px-3 py-3 text-right hidden md:table-cell"
+                          />
+                          <SortableTh
+                            label="Signal"
+                            active={sort.key === "signal"}
+                            dir={sort.dir}
+                            kind="text"
+                            align="left"
+                            onClick={() => toggle("signal")}
+                            className="px-3 py-3 text-center"
+                          />
                         </>
                       )}
                     </>
@@ -590,9 +667,7 @@ function BestSharesPage() {
                       className={cn(
                         "transition-colors hover:bg-accent/10",
                         "cursor-pointer",
-                        isDividendTab &&
-                          (simulatorStock ? simulatorStock === stock.symbol : i === 0) &&
-                          "bg-accent/20",
+                        isDividendTab && (simulatorStock ? simulatorStock === stock.symbol : i === 0) && "bg-accent/20",
                       )}
                       onClick={() => {
                         setPicked(stock.symbol);
@@ -606,9 +681,7 @@ function BestSharesPage() {
                           {stock.name}
                         </p>
                       </TableCell>
-                      <TableCell className="num px-3 py-3 text-right font-medium">
-                        {formatNpr(stock.ltp)}
-                      </TableCell>
+                      <TableCell className="num px-3 py-3 text-right font-medium">{formatNpr(stock.ltp)}</TableCell>
                       <TableCell className="px-3 py-3 text-right">
                         <DeltaPill value={stock.percentChange} className="inline-flex">
                           {formatPercent(stock.percentChange)}
@@ -635,8 +708,7 @@ function BestSharesPage() {
                             )}
                           </TableCell>
                           <TableCell className="num hidden px-3 py-3 text-right text-xs sm:table-cell">
-                            {stock.longTerm?.dividendStreak != null &&
-                            stock.longTerm.dividendStreak > 0 ? (
+                            {stock.longTerm?.dividendStreak != null && stock.longTerm.dividendStreak > 0 ? (
                               <span
                                 className={cn(
                                   stock.longTerm.dividendStreak >= 5
@@ -655,9 +727,7 @@ function BestSharesPage() {
                           <TableCell className="hidden px-3 py-3 text-center md:table-cell">
                             <div className="flex flex-col items-center gap-0.5">
                               {stock.longTerm?.dividendYield != null && (
-                                <span className="text-[0.65rem] text-amber-400">
-                                  {stock.longTerm.dividendYield}%
-                                </span>
+                                <span className="text-[0.65rem] text-amber-400">{stock.longTerm.dividendYield}%</span>
                               )}
                               {divHistory.length > 0 && (
                                 <span className="text-[0.55rem] text-muted-foreground">
@@ -673,13 +743,9 @@ function BestSharesPage() {
                             <span
                               className={cn(
                                 "inline-flex size-8 items-center justify-center rounded-full text-xs font-bold",
-                                ((tab === "short"
-                                  ? stock.shortTerm?.score
-                                  : stock.longTerm?.score) ?? 0 >= 70)
+                                ((tab === "short" ? stock.shortTerm?.score : stock.longTerm?.score) ?? 0 >= 70)
                                   ? "bg-emerald-500/15 text-emerald-400"
-                                  : ((tab === "short"
-                                        ? stock.shortTerm?.score
-                                        : stock.longTerm?.score) ?? 0 >= 40)
+                                  : ((tab === "short" ? stock.shortTerm?.score : stock.longTerm?.score) ?? 0 >= 40)
                                     ? "bg-blue-500/15 text-blue-400"
                                     : "bg-muted/50 text-muted-foreground",
                               )}
@@ -752,16 +818,13 @@ function BestSharesPage() {
                               </TableCell>
                               <TableCell className="num hidden px-3 py-3 text-right text-xs sm:table-cell">
                                 {stock.longTerm?.dividendYield != null ? (
-                                  <span className="text-amber-400">
-                                    {stock.longTerm.dividendYield}%
-                                  </span>
+                                  <span className="text-amber-400">{stock.longTerm.dividendYield}%</span>
                                 ) : (
                                   <span className="text-muted-foreground/50">-</span>
                                 )}
                               </TableCell>
                               <TableCell className="num hidden px-3 py-3 text-right text-xs md:table-cell">
-                                {stock.longTerm?.dividendStreak != null &&
-                                stock.longTerm.dividendStreak > 0 ? (
+                                {stock.longTerm?.dividendStreak != null && stock.longTerm.dividendStreak > 0 ? (
                                   <span
                                     className={cn(
                                       stock.longTerm.dividendStreak >= 5
@@ -804,21 +867,19 @@ function BestSharesPage() {
                               >
                                 {tab === "short" ? stock.shortTerm?.signal : stock.longTerm?.signal}
                               </span>
-                              {tab === "long" &&
-                                stock.longTerm?.redFlags &&
-                                stock.longTerm.redFlags.length > 0 && (
-                                  <div className="flex flex-wrap justify-center gap-0.5">
-                                    {stock.longTerm.redFlags.map((flag) => (
-                                      <span
-                                        key={flag}
-                                        className="inline-block rounded bg-red-500/15 px-1 py-px text-[0.55rem] font-medium text-red-400"
-                                        title={RED_FLAG_LABELS[flag]}
-                                      >
-                                        {RED_FLAG_SHORT[flag]}
-                                      </span>
-                                    ))}
-                                  </div>
-                                )}
+                              {tab === "long" && stock.longTerm?.redFlags && stock.longTerm.redFlags.length > 0 && (
+                                <div className="flex flex-wrap justify-center gap-0.5">
+                                  {stock.longTerm.redFlags.map((flag) => (
+                                    <span
+                                      key={flag}
+                                      className="inline-block rounded bg-red-500/15 px-1 py-px text-[0.55rem] font-medium text-red-400"
+                                      title={RED_FLAG_LABELS[flag]}
+                                    >
+                                      {RED_FLAG_SHORT[flag]}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
                             </>
                           )}
                         </div>
@@ -837,9 +898,7 @@ function BestSharesPage() {
           )}
 
           {sorted.length > 100 && (
-            <p className="text-center text-xs text-muted-foreground">
-              Showing top 100 of {sorted.length} stocks.
-            </p>
+            <p className="text-center text-xs text-muted-foreground">Showing top 100 of {sorted.length} stocks.</p>
           )}
         </>
       )}
@@ -879,5 +938,3 @@ function StatCard({
     </div>
   );
 }
-
-

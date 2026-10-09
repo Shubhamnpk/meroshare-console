@@ -1,27 +1,12 @@
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronUp, Search, Wallet } from "lucide-react";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { formatNpr, formatQty } from "@/lib/format";
 import type { MfHolding } from "@/lib/mutual-funds/types";
 import { cn } from "@/lib/utils";
 
-const DONUT_COLORS = [
-  "#10b981",
-  "#0ea5e9",
-  "#8b5cf6",
-  "#f59e0b",
-  "#ef4444",
-  "#14b8d4",
-  "#f43f5e",
-  "#6366f1",
-];
+const DONUT_COLORS = ["#10b981", "#0ea5e9", "#8b5cf6", "#f59e0b", "#ef4444", "#14b8d4", "#f43f5e", "#6366f1"];
 
 interface HoldingsDetailSheetProps {
   holdings: MfHolding[];
@@ -85,9 +70,7 @@ export function HoldingsDetailSheet({
               <Wallet className="size-4 text-primary" />
             </div>
             <div>
-              <SheetTitle className="font-display text-lg leading-tight">
-                {symbol?.toUpperCase()}
-              </SheetTitle>
+              <SheetTitle className="font-display text-lg leading-tight">{symbol?.toUpperCase()}</SheetTitle>
               <SheetDescription className="text-xs">{holdings.length} stocks</SheetDescription>
             </div>
           </div>
@@ -95,9 +78,7 @@ export function HoldingsDetailSheet({
 
         <div className="flex-1 overflow-y-auto px-4 pb-6">
           {holdings.length === 0 ? (
-            <p className="py-16 text-center text-sm text-muted-foreground">
-              No holdings data available for this fund.
-            </p>
+            <p className="py-16 text-center text-sm text-muted-foreground">No holdings data available for this fund.</p>
           ) : (
             <>
               {/* Donut + summary */}
@@ -105,14 +86,7 @@ export function HoldingsDetailSheet({
                 <div className="flex items-center gap-4">
                   <div className="relative size-24 shrink-0 sm:size-28">
                     <svg viewBox="0 0 42 42" className="size-full">
-                      <circle
-                        cx="21"
-                        cy="21"
-                        r="15.9155"
-                        fill="none"
-                        strokeWidth="5"
-                        className="stroke-border/40"
-                      />
+                      <circle cx="21" cy="21" r="15.9155" fill="none" strokeWidth="5" className="stroke-border/40" />
                       {donut.map((s, i) => {
                         const pct = total > 0 ? (s.value / total) * 100 : 0;
                         const el = (
@@ -134,9 +108,7 @@ export function HoldingsDetailSheet({
                       })}
                     </svg>
                     <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                      <span className="num text-sm font-bold">
-                        {formatNpr(total, { compact: true })}
-                      </span>
+                      <span className="num text-sm font-bold">{formatNpr(total, { compact: true })}</span>
                       <span className="text-[0.55rem] font-bold uppercase tracking-widest text-muted-foreground">
                         Total
                       </span>
@@ -212,20 +184,14 @@ export function HoldingsDetailSheet({
                             </span>
                           </div>
                           {name ? (
-                            <p className="mt-0.5 truncate pl-4 text-[0.68rem] text-muted-foreground">
-                              {name}
-                            </p>
+                            <p className="mt-0.5 truncate pl-4 text-[0.68rem] text-muted-foreground">{name}</p>
                           ) : null}
                         </div>
                         <div className="text-right shrink-0">
                           <p className="num text-sm font-bold">
-                            {h.marketValue != null
-                              ? formatNpr(h.marketValue, { compact: true })
-                              : "-"}
+                            {h.marketValue != null ? formatNpr(h.marketValue, { compact: true }) : "-"}
                           </p>
-                          <p className="num text-[0.68rem] text-muted-foreground">
-                            {weight.toFixed(1)}%
-                          </p>
+                          <p className="num text-[0.68rem] text-muted-foreground">{weight.toFixed(1)}%</p>
                         </div>
                       </div>
 
@@ -246,9 +212,7 @@ export function HoldingsDetailSheet({
                           {h.quantity != null && h.ltp != null ? " · " : ""}
                           {h.ltp != null ? `@ ${formatNpr(h.ltp)}` : ""}
                         </span>
-                        <span className="num font-medium text-foreground">
-                          {weight.toFixed(1)}% of portfolio
-                        </span>
+                        <span className="num font-medium text-foreground">{weight.toFixed(1)}% of portfolio</span>
                       </div>
                     </button>
                   );
@@ -256,9 +220,7 @@ export function HoldingsDetailSheet({
               </div>
 
               {filtered.length === 0 && search ? (
-                <p className="py-8 text-center text-xs text-muted-foreground">
-                  No stocks match "{search}"
-                </p>
+                <p className="py-8 text-center text-xs text-muted-foreground">No stocks match "{search}"</p>
               ) : null}
             </>
           )}

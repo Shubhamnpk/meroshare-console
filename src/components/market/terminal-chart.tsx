@@ -20,16 +20,7 @@ import {
   type UTCTimestamp,
 } from "lightweight-charts";
 import type { ChartBar, PricePoint } from "@/lib/nepse/types";
-import {
-  bollinger,
-  ema,
-  macd,
-  rsi,
-  sma,
-  vwap,
-  type Bar,
-  type LinePoint,
-} from "@/lib/nepse/indicators";
+import { bollinger, ema, macd, rsi, sma, vwap, type Bar, type LinePoint } from "@/lib/nepse/indicators";
 
 export type ChartStyle = "candles" | "line" | "area";
 
@@ -77,8 +68,7 @@ function palette(light: boolean) {
   };
 }
 
-const toLine = (points: LinePoint[]) =>
-  points.map((p) => ({ time: p.date as Time, value: p.value }));
+const toLine = (points: LinePoint[]) => points.map((p) => ({ time: p.date as Time, value: p.value }));
 
 export function TerminalChart({
   bars,
@@ -149,11 +139,7 @@ export function TerminalChart({
 
   const sanitizedBars = useMemo(() => {
     const filtered = bars.filter(
-      (b) =>
-        Number.isFinite(b.open) &&
-        Number.isFinite(b.high) &&
-        Number.isFinite(b.low) &&
-        Number.isFinite(b.close),
+      (b) => Number.isFinite(b.open) && Number.isFinite(b.high) && Number.isFinite(b.low) && Number.isFinite(b.close),
     );
     // lightweight-charts requires asc ordered unique time — dedup by date
     const byDate = new Map<string, (typeof filtered)[number]>();
@@ -161,9 +147,7 @@ export function TerminalChart({
     return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
   }, [bars]);
   const sanitizedIntraday = useMemo(() => {
-    const filtered = intraday.filter(
-      (p) => Number.isFinite(p.value) && Number.isFinite(Number(p.time)),
-    );
+    const filtered = intraday.filter((p) => Number.isFinite(p.value) && Number.isFinite(Number(p.time)));
     const byTime = new Map<number, (typeof filtered)[number]>();
     for (const p of filtered) {
       const t = Number(p.time);
@@ -173,10 +157,7 @@ export function TerminalChart({
   }, [intraday]);
   const isIntraday = sanitizedBars.length === 0 && sanitizedIntraday.length > 0;
 
-  const barByDate = useMemo(
-    () => new Map(sanitizedBars.map((b) => [b.date, b] as const)),
-    [sanitizedBars],
-  );
+  const barByDate = useMemo(() => new Map(sanitizedBars.map((b) => [b.date, b] as const)), [sanitizedBars]);
 
   const [chartError, setChartError] = useState<string | null>(null);
   useEffect(() => {
@@ -414,9 +395,7 @@ export function TerminalChart({
           };
           chart.addSeries(LineSeries, opts).setData(toLine(bands.upper));
           chart.addSeries(LineSeries, opts).setData(toLine(bands.lower));
-          chart
-            .addSeries(LineSeries, { ...opts, lineStyle: LineStyle.Dotted })
-            .setData(toLine(bands.middle));
+          chart.addSeries(LineSeries, { ...opts, lineStyle: LineStyle.Dotted }).setData(toLine(bands.middle));
         }
       }
 
@@ -501,11 +480,7 @@ export function TerminalChart({
       }
 
       if (!isIntraday && indicators.rsi) {
-        const series = chart.addSeries(
-          LineSeries,
-          { color: "#eab308", lineWidth: 1, priceLineVisible: false },
-          pane,
-        );
+        const series = chart.addSeries(LineSeries, { color: "#eab308", lineWidth: 1, priceLineVisible: false }, pane);
         series.setData(toLine(rsi(indicatorBars, 14)));
         series.createPriceLine({
           price: 70,
@@ -657,9 +632,7 @@ export function TerminalChart({
             const price = typeof raw === "number" ? Math.round(raw * 100) / 100 : 0;
             if (price > 0) {
               setOrderAt((prev) =>
-                prev && Math.abs(prev.y - point.y) < 3 && prev.price === price
-                  ? prev
-                  : { y: point.y, price },
+                prev && Math.abs(prev.y - point.y) < 3 && prev.price === price ? prev : { y: point.y, price },
               );
             } else {
               setOrderAt(null);
@@ -760,9 +733,7 @@ export function TerminalChart({
       const raw = seriesRef.current.coordinateToPrice(y);
       const price = typeof raw === "number" ? Math.round(raw * 100) / 100 : 0;
       if (price > 0) {
-        setOrderAt((prev) =>
-          prev && Math.abs(prev.y - y) < 3 && prev.price === price ? prev : { y, price },
-        );
+        setOrderAt((prev) => (prev && Math.abs(prev.y - y) < 3 && prev.price === price ? prev : { y, price }));
       } else {
         setOrderAt(null);
         setOrderMenu(false);
@@ -784,10 +755,7 @@ export function TerminalChart({
       const fromBar = barByDate.get(String(measure.from));
       const toBar = barByDate.get(String(measure.to));
       const gain = fromBar && toBar ? toBar.close >= fromBar.close : true;
-      const pct =
-        fromBar && toBar && fromBar.close
-          ? ((toBar.close - fromBar.close) / fromBar.close) * 100
-          : 0;
+      const pct = fromBar && toBar && fromBar.close ? ((toBar.close - fromBar.close) / fromBar.close) * 100 : 0;
       measureOverlay = (
         <>
           <div

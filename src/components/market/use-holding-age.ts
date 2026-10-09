@@ -27,9 +27,7 @@ export function useIsOpenEnd(symbol: string): boolean {
   const schemesQ = useQuery(mfSchemesQuery());
   return useMemo(
     () =>
-      schemesQ.data?.some(
-        (s) => s.symbol.toUpperCase() === symbol.toUpperCase() && s.fundType === "open_end",
-      ) ?? false,
+      schemesQ.data?.some((s) => s.symbol.toUpperCase() === symbol.toUpperCase() && s.fundType === "open_end") ?? false,
     [schemesQ.data, symbol],
   );
 }
@@ -42,9 +40,7 @@ export function useHoldingAge(symbol: string, txnItems?: TxnRow[]): HoldingAge {
   });
   const supplied = txnItems;
   return useMemo(() => {
-    const items =
-      supplied ??
-      ((txnQ.data as unknown as { items?: TxnRow[] } | undefined)?.items ?? []);
+    const items = supplied ?? (txnQ.data as unknown as { items?: TxnRow[] } | undefined)?.items ?? [];
     const fifoLots = (): { qty: number; date: string }[] => {
       const sorted = [...items].sort((a, b) =>
         String(a.transactionDate ?? "").localeCompare(String(b.transactionDate ?? "")),
@@ -52,14 +48,10 @@ export function useHoldingAge(symbol: string, txnItems?: TxnRow[]): HoldingAge {
       const lots: { qty: number; date: string }[] = [];
       for (const t of sorted) {
         const credit = Number(
-          (t as Record<string, unknown>)["creditQuantity"] ??
-            (t as Record<string, unknown>)["creditQty"] ??
-            0,
+          (t as Record<string, unknown>)["creditQuantity"] ?? (t as Record<string, unknown>)["creditQty"] ?? 0,
         );
         const debit = Number(
-          (t as Record<string, unknown>)["debitQuantity"] ??
-            (t as Record<string, unknown>)["debitQty"] ??
-            0,
+          (t as Record<string, unknown>)["debitQuantity"] ?? (t as Record<string, unknown>)["debitQty"] ?? 0,
         );
         const date = String(t.transactionDate ?? "");
         if (credit > 0 && date) lots.push({ qty: credit, date });
@@ -107,42 +99,41 @@ export function useHoldingAge(symbol: string, txnItems?: TxnRow[]): HoldingAge {
         };
       }
     }
-    const raw = purchaseQ.data as unknown as {
-      waccUpdateResponse?: { transactionDate?: string; postDate?: string }[];
-      waccSummaryResponse?: { transactionDate?: string; postDate?: string }[];
-    } | undefined;
+    const raw = purchaseQ.data as unknown as
+      | {
+          waccUpdateResponse?: { transactionDate?: string; postDate?: string }[];
+          waccSummaryResponse?: { transactionDate?: string; postDate?: string }[];
+        }
+      | undefined;
     const all = [...(raw?.waccUpdateResponse ?? []), ...(raw?.waccSummaryResponse ?? [])];
-    const dates = all
-      .map((r) => r.transactionDate || r.postDate)
-      .filter(Boolean) as string[];
-    if (dates.length === 0)
-      return { holdingDays: 400, avgHoldingDays: 400, lots: [], known: false };
+    const dates = all.map((r) => r.transactionDate || r.postDate).filter(Boolean) as string[];
+    if (dates.length === 0) return { holdingDays: 400, avgHoldingDays: 400, lots: [], known: false };
     const earliest = dates.sort()[0] as string;
     const d = daysBetween(earliest, new Date());
     const holdingDays = d >= 0 ? d : 400;
-    const rawLots = purchaseQ.data as unknown as {
-      waccUpdateResponse?: {
-        transactionDate?: string;
-        postDate?: string;
-        quantity?: number;
-        transactionQuantity?: number;
-      }[];
-      waccSummaryResponse?: {
-        transactionDate?: string;
-        postDate?: string;
-        quantity?: number;
-        transactionQuantity?: number;
-      }[];
-    } | undefined;
+    const rawLots = purchaseQ.data as unknown as
+      | {
+          waccUpdateResponse?: {
+            transactionDate?: string;
+            postDate?: string;
+            quantity?: number;
+            transactionQuantity?: number;
+          }[];
+          waccSummaryResponse?: {
+            transactionDate?: string;
+            postDate?: string;
+            quantity?: number;
+            transactionQuantity?: number;
+          }[];
+        }
+      | undefined;
     const waccAll = [...(rawLots?.waccUpdateResponse ?? []), ...(rawLots?.waccSummaryResponse ?? [])];
     const arr: { qty: number; date: string }[] = [];
     for (const r of waccAll) {
       const dateStr = (r.transactionDate || r.postDate) as string | undefined;
       if (!dateStr) continue;
       const qty = Number(
-        (r as Record<string, unknown>)["quantity"] ??
-          (r as Record<string, unknown>)["transactionQuantity"] ??
-          0,
+        (r as Record<string, unknown>)["quantity"] ?? (r as Record<string, unknown>)["transactionQuantity"] ?? 0,
       );
       if (!(qty > 0)) continue;
       arr.push({ qty, date: dateStr });

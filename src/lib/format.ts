@@ -172,8 +172,5 @@ export function errorMessage(error: unknown, fallback = "Something went wrong.")
 }
 
 export function isSessionError(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    (error.name === "SessionExpiredError" || /session has expired/i.test(error.message))
-  );
+  return error instanceof Error && (error.name === "SessionExpiredError" || /session has expired/i.test(error.message));
 }

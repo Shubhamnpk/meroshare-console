@@ -18,29 +18,11 @@ import {
   TrendingDown,
   TrendingUp,
 } from "lucide-react";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DeltaPill } from "@/components/stat-card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -93,8 +75,7 @@ function resolveFaceValue(
   sector: string | null | undefined,
   symbol?: string | null | undefined,
 ): number {
-  const isMF =
-    /mutual fund/i.test(sector ?? "") || (symbol ? sectorOf(symbol) === "Mutual Fund" : false);
+  const isMF = /mutual fund/i.test(sector ?? "") || (symbol ? sectorOf(symbol) === "Mutual Fund" : false);
   if (isMF) return 10;
   if (apiFaceValue != null && apiFaceValue > 0) return apiFaceValue;
   return 100;
@@ -203,7 +184,8 @@ function PositionCard({
               <span className="text-xs font-medium text-foreground">Day change</span>
               {live ? (
                 <span className={cn("num text-xs font-semibold", dayUp ? "text-gain" : "text-loss")}>
-                  {dayUp ? "+" : ""}{formatNpr(dayChange)} ({formatPercent(dayPercent)})
+                  {dayUp ? "+" : ""}
+                  {formatNpr(dayChange)} ({formatPercent(dayPercent)})
                 </span>
               ) : (
                 <span className="num text-xs font-semibold text-muted-foreground">—</span>
@@ -218,7 +200,10 @@ function PositionCard({
                   <button
                     type="button"
                     onClick={() => setOpen(true)}
-                    className={cn("num text-sm font-bold hover:underline decoration-primary/30 underline-offset-4 decoration-dotted", netUp ? "text-gain" : "text-loss")}
+                    className={cn(
+                      "num text-sm font-bold hover:underline decoration-primary/30 underline-offset-4 decoration-dotted",
+                      netUp ? "text-gain" : "text-loss",
+                    )}
                   >
                     {proceeds.profit >= 0 ? "+" : ""}
                     {formatNpr(proceeds.profit)} ({formatPercent(proceeds.profitPercent)})
@@ -252,7 +237,9 @@ function PositionCard({
         <DialogContent className="max-h-[85vh] overflow-y-auto rounded-2xl sm:max-w-[520px] p-0 gap-0">
           <DialogHeader className="px-5 pt-5 pb-3">
             <DialogTitle className="text-base font-bold leading-none">{scrip} · Sell breakdown</DialogTitle>
-            <p className="mt-1.5 text-xs text-muted-foreground">What you actually pocket if you sell all {units.toLocaleString("en-NP")} units at {formatNpr(ltp)}</p>
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              What you actually pocket if you sell all {units.toLocaleString("en-NP")} units at {formatNpr(ltp)}
+            </p>
           </DialogHeader>
           {proceeds ? (
             <div className="px-5 pb-5 space-y-4">
@@ -260,7 +247,8 @@ function PositionCard({
                 <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
                   <p className="font-semibold">WACC not yet calculated in CDSC</p>
                   <p className="mt-1 text-muted-foreground">
-                    Your purchase price / cost basis is not recorded in MeroShare yet. Gross sale proceeds and sell charges are calculated below, and capital gains tax will apply once WACC is submitted.
+                    Your purchase price / cost basis is not recorded in MeroShare yet. Gross sale proceeds and sell
+                    charges are calculated below, and capital gains tax will apply once WACC is submitted.
                   </p>
                   <Link
                     to="/wacc"
@@ -280,7 +268,11 @@ function PositionCard({
                 <div className="rounded-xl bg-muted/10 border border-border/40 px-4 py-3">
                   <p className="text-xs font-medium text-muted-foreground">Total cost</p>
                   <p className="num mt-1 text-base font-bold">
-                    {hasCost ? formatNpr(proceeds.costBasis) : <span className="text-muted-foreground text-xs italic">Pending WACC</span>}
+                    {hasCost ? (
+                      formatNpr(proceeds.costBasis)
+                    ) : (
+                      <span className="text-muted-foreground text-xs italic">Pending WACC</span>
+                    )}
                   </p>
                 </div>
               </div>
@@ -318,14 +310,21 @@ function PositionCard({
                     <div className="flex items-center justify-between px-4 py-3">
                       <div>
                         <p className="text-sm text-muted-foreground">Capital gains tax</p>
-                        <p className="text-xs text-muted-foreground">{(proceeds.cgtRate * 100).toFixed(1)}% · {ageKnown ? `${formatHoldingTime(holdingDays)} ${holdingDays >= 365 ? "long term" : "short term"}` : "purchase date unknown · assumed long-term"}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {(proceeds.cgtRate * 100).toFixed(1)}% ·{" "}
+                          {ageKnown
+                            ? `${formatHoldingTime(holdingDays)} ${holdingDays >= 365 ? "long term" : "short term"}`
+                            : "purchase date unknown · assumed long-term"}
+                        </p>
                       </div>
                       <span className="num text-sm font-medium">− {formatNpr(proceeds.cgt)}</span>
                     </div>
                   ) : null}
                   <div className="flex items-center justify-between bg-primary/5 px-4 py-3">
                     <span className="text-sm font-bold">Net receivable</span>
-                    <span className="num text-base font-bold">{formatNpr(hasCost ? proceeds.netReceivable : proceeds.netBeforeTax)}</span>
+                    <span className="num text-base font-bold">
+                      {formatNpr(hasCost ? proceeds.netReceivable : proceeds.netBeforeTax)}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -352,7 +351,12 @@ function PositionCard({
                   </div>
                 </div>
               ) : null}
-              <Link to="/wacc" search={{ scrip }} className="inline-flex text-xs font-medium text-primary hover:underline" onClick={() => setOpen(false)}>
+              <Link
+                to="/wacc"
+                search={{ scrip }}
+                className="inline-flex text-xs font-medium text-primary hover:underline"
+                onClick={() => setOpen(false)}
+              >
                 View full WACC detail →
               </Link>
             </div>
@@ -366,8 +370,7 @@ function PositionCard({
         <DialogContent className="max-h-[85vh] overflow-y-auto rounded-2xl sm:max-w-[520px] p-0 gap-0">
           <DialogHeader className="px-5 pt-5 pb-3">
             <DialogTitle className="text-base font-bold leading-none">{scrip} · Holding age</DialogTitle>
-            <p className="mt-1.5 text-xs text-muted-foreground">
-            </p>
+            <p className="mt-1.5 text-xs text-muted-foreground"></p>
           </DialogHeader>
           <div className="px-5 pb-5 space-y-3">
             <div className="grid grid-cols-2 gap-3">
@@ -379,20 +382,28 @@ function PositionCard({
               <div className="rounded-xl bg-muted/10 border border-border/40 px-4 py-3">
                 <p className="text-xs font-medium text-muted-foreground">Oldest lot (tax)</p>
                 <p className="num mt-1 text-base font-bold">{ageKnown ? formatHoldingTime(holdingDays) : "—"}</p>
-                <p className="text-[0.68rem] text-muted-foreground">{ageKnown ? (holdingDays >= 365 ? "long term" : "short term") : "no dates found · assumed long-term"}</p>
+                <p className="text-[0.68rem] text-muted-foreground">
+                  {ageKnown ? (holdingDays >= 365 ? "long term" : "short term") : "no dates found · assumed long-term"}
+                </p>
               </div>
             </div>
             {lots.length > 0 ? (
               <div className="rounded-xl border border-border/60 overflow-hidden">
-                <p className="bg-muted/20 px-4 py-2 text-xs font-semibold text-muted-foreground">Per-lot age from transaction history (FIFO)</p>
+                <p className="bg-muted/20 px-4 py-2 text-xs font-semibold text-muted-foreground">
+                  Per-lot age from transaction history (FIFO)
+                </p>
                 <div className="divide-y divide-border/30 max-h-64 overflow-y-auto">
                   {lots.map((lot, i) => (
                     <div key={`${lot.date}-${i}`} className="flex items-center justify-between px-4 py-2.5">
                       <div>
-                        <p className="num text-sm font-medium">{formatQty(lot.qty)} × {lot.date.slice(0, 10)}</p>
+                        <p className="num text-sm font-medium">
+                          {formatQty(lot.qty)} × {lot.date.slice(0, 10)}
+                        </p>
                         <p className="text-[0.68rem] text-muted-foreground">{lot.date}</p>
                       </div>
-                      <span className={`num rounded-full px-2 py-0.5 text-xs font-semibold ${lot.days >= 365 ? "bg-gain/15 text-gain" : "bg-loss/15 text-loss"}`}>
+                      <span
+                        className={`num rounded-full px-2 py-0.5 text-xs font-semibold ${lot.days >= 365 ? "bg-gain/15 text-gain" : "bg-loss/15 text-loss"}`}
+                      >
                         {formatHoldingTime(lot.days)}
                       </span>
                     </div>
@@ -534,10 +545,7 @@ function FinancialSummary({
             Net profit
             <TermInfo text="Net profit is the company's total earnings after all expenses, interest and taxes for the reporting period." />
           </dt>
-          <dd
-            className="num font-medium"
-            title={report.profit != null ? formatNpr(report.profit) : undefined}
-          >
+          <dd className="num font-medium" title={report.profit != null ? formatNpr(report.profit) : undefined}>
             {report.profit != null ? formatNpr(report.profit, { compact: true }) : "-"}
             {report.profit != null && previous?.profit != null ? (
               <Delta current={report.profit} previous={previous.profit} compact />
@@ -551,10 +559,7 @@ function FinancialSummary({
           </dt>
           <dd className="num font-medium">
             {report.netWorthPerShare != null ? formatNpr(report.netWorthPerShare) : "-"}
-            <Delta
-              current={report.netWorthPerShare}
-              previous={previous?.netWorthPerShare ?? null}
-            />
+            <Delta current={report.netWorthPerShare} previous={previous?.netWorthPerShare ?? null} />
           </dd>
         </div>
         <div>
@@ -566,16 +571,12 @@ function FinancialSummary({
             className="num font-medium"
             title={report.paidUpCapital != null ? formatNpr(report.paidUpCapital) : undefined}
           >
-            {report.paidUpCapital != null
-              ? formatNpr(report.paidUpCapital, { compact: true })
-              : "-"}
+            {report.paidUpCapital != null ? formatNpr(report.paidUpCapital, { compact: true }) : "-"}
           </dd>
         </div>
         <div>
           <dt className="text-xs text-muted-foreground">Submitted</dt>
-          <dd className="num font-medium">
-            {report.submittedDate ? formatDate(report.submittedDate) : "-"}
-          </dd>
+          <dd className="num font-medium">{report.submittedDate ? formatDate(report.submittedDate) : "-"}</dd>
         </div>
         {estProfit != null ? (
           <div className="col-span-2">
@@ -622,15 +623,11 @@ function ReportGroups({
         </div>
         <div>
           <dt className="text-xs text-muted-foreground">Latest EPS</dt>
-          <dd className="num font-medium">
-            {reports[0]?.eps != null ? formatNpr(reports[0].eps) : "-"}
-          </dd>
+          <dd className="num font-medium">{reports[0]?.eps != null ? formatNpr(reports[0].eps) : "-"}</dd>
         </div>
         <div>
           <dt className="text-xs text-muted-foreground">Latest P/E</dt>
-          <dd className="num font-medium">
-            {reports[0]?.pe != null ? formatNpr(reports[0].pe) : "-"}
-          </dd>
+          <dd className="num font-medium">{reports[0]?.pe != null ? formatNpr(reports[0].pe) : "-"}</dd>
         </div>
       </dl>
 
@@ -641,12 +638,9 @@ function ReportGroups({
           const diff = latest?.eps != null && prevEps != null ? latest.eps - prevEps : null;
           const diffPct = diff != null && prevEps != null ? (diff / Math.abs(prevEps)) * 100 : null;
           const prevProfit = groups[i + 1]?.[1]?.[0]?.profit ?? null;
-          const profitDiff =
-            latest?.profit != null && prevProfit != null ? latest.profit - prevProfit : null;
+          const profitDiff = latest?.profit != null && prevProfit != null ? latest.profit - prevProfit : null;
           const profitDiffPct =
-            profitDiff != null && prevProfit != null
-              ? (profitDiff / Math.abs(prevProfit)) * 100
-              : null;
+            profitDiff != null && prevProfit != null ? (profitDiff / Math.abs(prevProfit)) * 100 : null;
           return (
             <AccordionItem key={fy} value={fy} className="rounded-xl border-border/60">
               <AccordionTrigger className="rounded-xl px-3 py-2.5 text-xs hover:no-underline [&[data-state=open]]:rounded-b-none">
@@ -658,10 +652,7 @@ function ReportGroups({
                         EPS {formatNpr(latest.eps)}
                         {diff != null ? (
                           <span
-                            className={cn(
-                              "ml-1 font-semibold",
-                              diff > 0 ? "text-gain" : diff < 0 ? "text-loss" : "",
-                            )}
+                            className={cn("ml-1 font-semibold", diff > 0 ? "text-gain" : diff < 0 ? "text-loss" : "")}
                           >
                             ({diff > 0 ? "▲" : diff < 0 ? "▼" : "◆"}
                             {formatPercent(diffPct ?? 0)})
@@ -705,9 +696,7 @@ function ReportGroups({
                             <p className="font-semibold">
                               {r.type}
                               {r.quarter ? (
-                                <span className="num ml-1.5 font-normal text-muted-foreground">
-                                  {r.quarter}
-                                </span>
+                                <span className="num ml-1.5 font-normal text-muted-foreground">{r.quarter}</span>
                               ) : null}
                             </p>
                             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground">
@@ -720,16 +709,11 @@ function ReportGroups({
                                 <MetricDelta current={r.pe} previous={prev?.pe ?? null} />
                               </span>
                               <span className="num">
-                                NWPS{" "}
-                                {r.netWorthPerShare != null ? formatNpr(r.netWorthPerShare) : "-"}
-                                <MetricDelta
-                                  current={r.netWorthPerShare}
-                                  previous={prev?.netWorthPerShare ?? null}
-                                />
+                                NWPS {r.netWorthPerShare != null ? formatNpr(r.netWorthPerShare) : "-"}
+                                <MetricDelta current={r.netWorthPerShare} previous={prev?.netWorthPerShare ?? null} />
                               </span>
                               <span className="num">
-                                Profit{" "}
-                                {r.profit != null ? formatNpr(r.profit, { compact: true }) : "-"}
+                                Profit {r.profit != null ? formatNpr(r.profit, { compact: true }) : "-"}
                                 <MetricDelta current={r.profit} previous={prev?.profit ?? null} />
                               </span>
                             </div>
@@ -832,13 +816,8 @@ function ScripHistoryTable({ items }: { items: TransactionItem[] }) {
         <TableBody>
           {sorted.map((t, i) => (
             <TableRow key={`${String(t.transactionDate)}-${i}`}>
-              <TableCell className="num whitespace-nowrap pl-3 text-xs">
-                {formatDate(t.transactionDate)}
-              </TableCell>
-              <TableCell
-                className="max-w-44 truncate text-xs text-muted-foreground"
-                title={t.historyDescription}
-              >
+              <TableCell className="num whitespace-nowrap pl-3 text-xs">{formatDate(t.transactionDate)}</TableCell>
+              <TableCell className="max-w-44 truncate text-xs text-muted-foreground" title={t.historyDescription}>
                 {t.historyDescription ?? "-"}
               </TableCell>
               <TableCell className="num text-right text-xs text-gain">
@@ -847,9 +826,7 @@ function ScripHistoryTable({ items }: { items: TransactionItem[] }) {
               <TableCell className="num text-right text-xs text-loss">
                 {t.debitQuantity ? `-${formatQty(t.debitQuantity)}` : "-"}
               </TableCell>
-              <TableCell className="num pr-3 text-right text-xs">
-                {formatQty(t.balanceAfterTransaction)}
-              </TableCell>
+              <TableCell className="num pr-3 text-right text-xs">{formatQty(t.balanceAfterTransaction)}</TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -918,9 +895,7 @@ export function ScripSheet({
 
   const holding = useMemo(() => {
     if (!upper || !portfolio.data?.holdings) return null;
-    const direct = portfolio.data.holdings.find(
-      (h) => h.scrip.trim().toUpperCase() === upper,
-    );
+    const direct = portfolio.data.holdings.find((h) => h.scrip.trim().toUpperCase() === upper);
     if (direct) return direct;
     if (matchedScheme) {
       const schemeSym = matchedScheme.symbol.trim().toUpperCase();
@@ -935,7 +910,11 @@ export function ScripSheet({
     if (cleanAlpha) {
       return (
         portfolio.data.holdings.find(
-          (h) => h.scrip.trim().toUpperCase().replace(/[^A-Z0-9]/g, "") === cleanAlpha,
+          (h) =>
+            h.scrip
+              .trim()
+              .toUpperCase()
+              .replace(/[^A-Z0-9]/g, "") === cleanAlpha,
         ) ?? null
       );
     }
@@ -977,7 +956,16 @@ export function ScripSheet({
       if (ft.includes("open")) return true;
     }
     const fromSchemes = (schemesQ.data as unknown as { symbol: string; fundType?: string }[] | undefined)?.some(
-      (s) => s.symbol.trim().toUpperCase() === upper && String((s as Record<string, unknown>)["fundType"] ?? (s as Record<string, unknown>)["type"] ?? (s as Record<string, unknown>)["assetType"] ?? "").toLowerCase().includes("open"),
+      (s) =>
+        s.symbol.trim().toUpperCase() === upper &&
+        String(
+          (s as Record<string, unknown>)["fundType"] ??
+            (s as Record<string, unknown>)["type"] ??
+            (s as Record<string, unknown>)["assetType"] ??
+            "",
+        )
+          .toLowerCase()
+          .includes("open"),
     );
     if (fromSchemes) return true;
     const liveAsset = (price as unknown as { assetType?: string })?.assetType;
@@ -986,7 +974,9 @@ export function ScripSheet({
     if (instr.includes("open")) return true;
     const sector = (overview?.sector ?? (price as unknown as { sector?: string })?.sector ?? "").toLowerCase();
     if (sector.includes("mutual fund")) {
-      const liveSym = (schemesQ.data as unknown as { symbol: string }[] | undefined)?.some((s) => s.symbol.trim().toUpperCase() === upper);
+      const liveSym = (schemesQ.data as unknown as { symbol: string }[] | undefined)?.some(
+        (s) => s.symbol.trim().toUpperCase() === upper,
+      );
       if (liveSym) return true;
     }
     return false;
@@ -1022,7 +1012,13 @@ export function ScripSheet({
     const cleanAlpha = upper.replace(/[^A-Z0-9]/g, "");
     if (cleanAlpha) {
       return (
-        list.find((h) => (h.scrip ?? "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "") === cleanAlpha) ?? null
+        list.find(
+          (h) =>
+            (h.scrip ?? "")
+              .trim()
+              .toUpperCase()
+              .replace(/[^A-Z0-9]/g, "") === cleanAlpha,
+        ) ?? null
       );
     }
     return null;
@@ -1044,7 +1040,13 @@ export function ScripSheet({
     const cleanAlpha = upper.replace(/[^A-Z0-9]/g, "");
     if (cleanAlpha) {
       return (
-        list.find((s) => s.scrip.trim().toUpperCase().replace(/[^A-Z0-9]/g, "") === cleanAlpha) ?? null
+        list.find(
+          (s) =>
+            s.scrip
+              .trim()
+              .toUpperCase()
+              .replace(/[^A-Z0-9]/g, "") === cleanAlpha,
+        ) ?? null
       );
     }
     return null;
@@ -1087,8 +1089,7 @@ export function ScripSheet({
     if (price && price.ltp > 0) return false;
     if (holding && holding.ltp > 0) return false;
     if (navFromScheme != null && navFromScheme > 0) return false;
-    const lastTraded = (detail.data?.overview as { lastTradedPrice?: unknown } | undefined)
-      ?.lastTradedPrice;
+    const lastTraded = (detail.data?.overview as { lastTradedPrice?: unknown } | undefined)?.lastTradedPrice;
     if (typeof lastTraded === "number" && lastTraded > 0) return false;
     const hist = detail.data?.history;
     if (hist && hist.length > 0 && hist[hist.length - 1]!.close > 0) return false;
@@ -1122,7 +1123,7 @@ export function ScripSheet({
     (holding && holding.units > 0) ||
     (waccEntry && toNumber(waccEntry.totalQuantity) > 0) ||
     (invEntry && invEntry.units > 0) ||
-    (yoHolding && yoHolding.qty > 0)
+    (yoHolding && yoHolding.qty > 0),
   );
 
   const positionUnits =
@@ -1187,9 +1188,7 @@ export function ScripSheet({
   const newsItems = useMemo(
     () =>
       (news.data ?? [])
-        .filter(
-          (m) => (m.symbol ?? "").toUpperCase() === upper || m.title.toUpperCase().includes(upper),
-        )
+        .filter((m) => (m.symbol ?? "").toUpperCase() === upper || m.title.toUpperCase().includes(upper))
         .slice(0, 12),
     [news.data, upper],
   );
@@ -1221,21 +1220,14 @@ export function ScripSheet({
   // Use full archive for all daily ranges so 1M/3M/6M/1Y don't duplicate the truncated historyPoints
   const dailyPoints = fullPoints.length >= 2 ? fullPoints : historyPoints;
   const udf = useQuery({
-    ...udfHistoryQuery(
-      upper || null,
-      rangeKey === "All" ? null : (rangeKey as import("@/lib/charts/udf").ChartRange),
-    ),
+    ...udfHistoryQuery(upper || null, rangeKey === "All" ? null : (rangeKey as import("@/lib/charts/udf").ChartRange)),
     enabled: brokerOn && Boolean(symbol) && rangeKey === "1D",
   });
   const udfIntraday: PricePoint[] = useMemo(() => {
     const pts = udf.data?.points ?? [];
     return pts.map((p) => ({ time: p.time, value: p.value }));
   }, [udf.data?.points]);
-  const useUdf =
-    brokerOn &&
-    rangeKey === "1D" &&
-    udfIntraday.length > 0 &&
-    (detail.data?.intraday ?? []).length === 0;
+  const useUdf = brokerOn && rangeKey === "1D" && udfIntraday.length > 0 && (detail.data?.intraday ?? []).length === 0;
   const intradayPoints: PricePoint[] = useMemo(
     () => (useUdf ? udfIntraday : (detail.data?.intraday ?? [])),
     [useUdf, udfIntraday, detail.data],
@@ -1282,10 +1274,7 @@ export function ScripSheet({
       ? {
           low: price.fiftyTwoWeekLow ?? 0,
           high: price.fiftyTwoWeekHigh ?? 0,
-          value: Math.min(
-            Math.max(price.ltp, price.fiftyTwoWeekLow ?? 0),
-            price.fiftyTwoWeekHigh ?? 0,
-          ),
+          value: Math.min(Math.max(price.ltp, price.fiftyTwoWeekLow ?? 0), price.fiftyTwoWeekHigh ?? 0),
         }
       : null;
 
@@ -1303,29 +1292,20 @@ export function ScripSheet({
         },
         {
           label: "Paid-up capital",
-          value:
-            overview.paidUpCapital != null
-              ? formatNpr(overview.paidUpCapital, { compact: true })
-              : "-",
+          value: overview.paidUpCapital != null ? formatNpr(overview.paidUpCapital, { compact: true }) : "-",
         },
         {
           label: "Market cap",
           value:
-            overview.marketCapitalization != null
-              ? formatNpr(overview.marketCapitalization, { compact: true })
-              : "-",
+            overview.marketCapitalization != null ? formatNpr(overview.marketCapitalization, { compact: true }) : "-",
         },
         {
           label: "Public",
-          value:
-            overview.publicPercentage != null ? `${overview.publicPercentage.toFixed(2)}%` : "-",
+          value: overview.publicPercentage != null ? `${overview.publicPercentage.toFixed(2)}%` : "-",
         },
         {
           label: "Promoter",
-          value:
-            overview.promoterPercentage != null
-              ? `${overview.promoterPercentage.toFixed(2)}%`
-              : "-",
+          value: overview.promoterPercentage != null ? `${overview.promoterPercentage.toFixed(2)}%` : "-",
         },
         {
           label: "Listed shares",
@@ -1385,30 +1365,18 @@ export function ScripSheet({
                             : "border-border/70 text-muted-foreground hover:border-primary/40 hover:text-primary",
                         )}
                       >
-                        {hasAlert ? (
-                          <BellRing className="size-3.5" />
-                        ) : (
-                          <Bell className="size-3.5" />
-                        )}
+                        {hasAlert ? <BellRing className="size-3.5" /> : <Bell className="size-3.5" />}
                       </button>
                     </>
                   ) : null}
                 </span>
-                {companyName ? (
-                  <SheetDescription className="truncate text-left">
-                    {companyName}
-                  </SheetDescription>
-                ) : null}
+                {companyName ? <SheetDescription className="truncate text-left">{companyName}</SheetDescription> : null}
               </div>
             </div>
             {price ? (
               <div className="shrink-0 text-right">
-                <p className="num font-display text-2xl font-semibold leading-none">
-                  {formatNpr(price.ltp)}
-                </p>
-                <DeltaPill value={price.percentChange}>
-                  {formatPercent(price.percentChange)}
-                </DeltaPill>
+                <p className="num font-display text-2xl font-semibold leading-none">{formatNpr(price.ltp)}</p>
+                <DeltaPill value={price.percentChange}>{formatPercent(price.percentChange)}</DeltaPill>
               </div>
             ) : effectiveLtp > 0 ? (
               <div className="shrink-0 text-right">
@@ -1423,9 +1391,7 @@ export function ScripSheet({
                     est. · no live price
                   </span>
                 ) : (
-                  <DeltaPill value={effectivePercentChange}>
-                    {formatPercent(effectivePercentChange)}
-                  </DeltaPill>
+                  <DeltaPill value={effectivePercentChange}>{formatPercent(effectivePercentChange)}</DeltaPill>
                 )}
               </div>
             ) : null}
@@ -1449,21 +1415,15 @@ export function ScripSheet({
         </SheetHeader>
         <div className="space-y-5 px-4 pb-8">
           {!price && !isOpenEnd && !holding && !yoHolding ? (
-            <p className="mt-2 text-sm text-muted-foreground">
-              No live market data for this stock right now.
-            </p>
+            <p className="mt-2 text-sm text-muted-foreground">No live market data for this stock right now.</p>
           ) : null}
 
           <Tabs value={tab} onValueChange={setTab}>
             <TabsList className="w-full justify-start">
               <TabsTrigger value="overview">Overview</TabsTrigger>
-              {!isOpenEnd && (brokerOn || yoActive) ? (
-                <TabsTrigger value="trade">Trade</TabsTrigger>
-              ) : null}
+              {!isOpenEnd && (brokerOn || yoActive) ? <TabsTrigger value="trade">Trade</TabsTrigger> : null}
               {financials.data ? <TabsTrigger value="financials">Financials</TabsTrigger> : null}
-              {dividend || yearlyDividends.length > 0 ? (
-                <TabsTrigger value="dividend">Dividend</TabsTrigger>
-              ) : null}
+              {dividend || yearlyDividends.length > 0 ? <TabsTrigger value="dividend">Dividend</TabsTrigger> : null}
               {holding ? <TabsTrigger value="history">History</TabsTrigger> : null}
               {newsItems.length > 0 ? <TabsTrigger value="news">News</TabsTrigger> : null}
             </TabsList>
@@ -1552,17 +1512,15 @@ export function ScripSheet({
                           points={activeRange?.points ?? []}
                           height={200}
                           wacc={
-                            (waccEntry && toNumber(waccEntry.averageBuyRate) > 0
+                            waccEntry && toNumber(waccEntry.averageBuyRate) > 0
                               ? toNumber(waccEntry.averageBuyRate)
                               : hasInvBasis && invEntry && invEntry.waccRate > 0
                                 ? invEntry.waccRate
-                                : null)
+                                : null
                           }
                           includeWaccDomain={activeRange?.key === "All"}
                           formatValue={(v) => formatNpr(v)}
-                          formatLabel={(t) =>
-                            activeRange?.key === "1D" ? chartTimeLabel(t) : chartDayLabel(t)
-                          }
+                          formatLabel={(t) => (activeRange?.key === "1D" ? chartTimeLabel(t) : chartDayLabel(t))}
                         />
                       )}
                     </div>
@@ -1608,11 +1566,7 @@ export function ScripSheet({
                           high={dayRange.high}
                           value={dayRange.value}
                           format={(v) => formatNpr(v)}
-                          tone={
-                            price?.percentChange != null && price.percentChange < 0
-                              ? "loss"
-                              : "gain"
-                          }
+                          tone={price?.percentChange != null && price.percentChange < 0 ? "loss" : "gain"}
                           colorByPosition
                           valueToneByPosition
                         />
@@ -1628,11 +1582,7 @@ export function ScripSheet({
                           high={yearRange.high}
                           value={yearRange.value}
                           format={(v) => formatNpr(v, { compact: true })}
-                          tone={
-                            price?.percentChange != null && price.percentChange < 0
-                              ? "loss"
-                              : "gain"
-                          }
+                          tone={price?.percentChange != null && price.percentChange < 0 ? "loss" : "gain"}
                           colorByPosition
                           valueToneByPosition
                         />
@@ -1669,14 +1619,11 @@ export function ScripSheet({
                           </a>
                         </p>
                       ) : null}
-                      {overview.email ? (
-                        <p className="num text-muted-foreground">{overview.email}</p>
-                      ) : null}
+                      {overview.email ? <p className="num text-muted-foreground">{overview.email}</p> : null}
                     </div>
                   ) : null}
                 </Panel>
               ) : null}
-
             </TabsContent>
 
             <TabsContent value="financials" className="space-y-4">
@@ -1705,8 +1652,8 @@ export function ScripSheet({
                     onViewDocument={(url, title) => openPreview(title, url)}
                   />
                   <p className="mt-3 text-[0.68rem] text-muted-foreground">
-                    Figures are indicative from the YONEPSE community feed and follow NEPSE-reported
-                    annual / quarterly results.
+                    Figures are indicative from the YONEPSE community feed and follow NEPSE-reported annual / quarterly
+                    results.
                   </p>
                 </Panel>
               ) : null}
@@ -1732,9 +1679,7 @@ export function ScripSheet({
                 ) : (
                   <Panel padding="sm">
                     <div className="flex items-center justify-between gap-2">
-                      <h3 className="font-display text-sm font-semibold">
-                        All announced dividends
-                      </h3>
+                      <h3 className="font-display text-sm font-semibold">All announced dividends</h3>
                       <Button
                         type="button"
                         variant="outline"
@@ -1757,11 +1702,7 @@ export function ScripSheet({
                                   (s, d) =>
                                     s +
                                     (d.cashDividend / 100) *
-                                      resolveFaceValue(
-                                        overview?.faceValue,
-                                        overview?.sector,
-                                        upper,
-                                      ) *
+                                      resolveFaceValue(overview?.faceValue, overview?.sector, upper) *
                                       holding.units,
                                   0,
                                 ),
@@ -1776,10 +1717,7 @@ export function ScripSheet({
                                 ? formatQty(Math.floor(actualTotals.totalBonus))
                                 : formatQty(
                                     Math.floor(
-                                      yearlyDividends.reduce(
-                                        (s, d) => s + (d.bonusShare / 100) * holding.units,
-                                        0,
-                                      ),
+                                      yearlyDividends.reduce((s, d) => s + (d.bonusShare / 100) * holding.units, 0),
                                     ),
                                   )}
                             </span>{" "}
@@ -1803,9 +1741,7 @@ export function ScripSheet({
                       <div>
                         <dt className="text-xs text-muted-foreground">Latest</dt>
                         <dd className="num font-medium">
-                          {dividend && dividend.totalDividend > 0
-                            ? `${dividend.totalDividend}%`
-                            : "-"}
+                          {dividend && dividend.totalDividend > 0 ? `${dividend.totalDividend}%` : "-"}
                         </dd>
                       </div>
                       <div>
@@ -1855,9 +1791,7 @@ export function ScripSheet({
                               <p className="mb-1.5 font-semibold">Calendar 5-yr average</p>
                               <div className="flex justify-between py-0.5">
                                 <span className="text-muted-foreground">Cash yield</span>
-                                <span className="num font-medium">
-                                  {yieldPct(yield5.cash, faceForSim, price.ltp)}
-                                </span>
+                                <span className="num font-medium">{yieldPct(yield5.cash, faceForSim, price.ltp)}</span>
                               </div>
                               <div className="flex justify-between py-0.5">
                                 <span className="text-muted-foreground">Bonus yield</span>
@@ -1901,11 +1835,7 @@ export function ScripSheet({
                                   est.{" "}
                                   {formatNpr(
                                     (d.cashDividend / 100) *
-                                      resolveFaceValue(
-                                        overview?.faceValue,
-                                        overview?.sector,
-                                        upper,
-                                      ) *
+                                      resolveFaceValue(overview?.faceValue, overview?.sector, upper) *
                                       holding.units,
                                   )}
                                 </>
@@ -1969,14 +1899,10 @@ export function ScripSheet({
                       ) : null}
                     </div>
                     {item.body ? (
-                      <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                        {item.body}
-                      </p>
+                      <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{item.body}</p>
                     ) : null}
                     {item.publishedAt ? (
-                      <p className="num mt-2 text-[0.65rem] text-muted-foreground">
-                        {formatDate(item.publishedAt)}
-                      </p>
+                      <p className="num mt-2 text-[0.65rem] text-muted-foreground">{formatDate(item.publishedAt)}</p>
                     ) : null}
                   </li>
                 ))}
@@ -1988,8 +1914,8 @@ export function ScripSheet({
           </Tabs>
 
           <p className="text-[0.68rem] leading-relaxed text-muted-foreground">
-            Market prices and company data come from a public NEPSE mirror and a community feed and
-            are indicative only. MeroShare remains the source of truth for your holdings.
+            Market prices and company data come from a public NEPSE mirror and a community feed and are indicative only.
+            MeroShare remains the source of truth for your holdings.
           </p>
         </div>
       </SheetContent>
@@ -2008,11 +1934,7 @@ export function ScripSheet({
             : "Price history"
         }
         ranges={ranges}
-        bars={
-          rangeKey === "All" && (fullHistory.data ?? []).length > 0
-            ? fullHistory.data
-            : detail.data?.history
-        }
+        bars={rangeKey === "All" && (fullHistory.data ?? []).length > 0 ? fullHistory.data : detail.data?.history}
         formatValue={(v) => formatNpr(v)}
         formatIntradayLabel={chartTimeLabel}
         formatDailyLabel={chartDayLabel}

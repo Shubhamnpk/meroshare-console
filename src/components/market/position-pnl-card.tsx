@@ -3,18 +3,12 @@
 import { useMemo, useState } from "react";
 import { ChevronRight, TrendingDown, TrendingUp } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { formatHoldingTime, formatNpr, formatPercent, formatQty } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { breakEvenPrice, buyCost, cgtRate, sellProceeds, DP_CHARGE } from "@/lib/calc/fees";
 import { netPosition } from "@/lib/calc/position";
 import { useHoldingAge, useIsOpenEnd } from "./use-holding-age";
-
 
 export function PositionPnlCard({
   symbol,
@@ -65,26 +59,37 @@ export function PositionPnlCard({
         >
           <div className="space-y-1.5">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[0.64rem] font-semibold uppercase tracking-widest text-muted-foreground">Value</span>
+              <span className="text-[0.64rem] font-semibold uppercase tracking-widest text-muted-foreground">
+                Value
+              </span>
               <span className="num text-xs font-bold text-foreground">{formatNpr(marketValue)}</span>
             </div>
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[0.64rem] font-semibold uppercase tracking-widest text-muted-foreground">Return</span>
+              <span className="text-[0.64rem] font-semibold uppercase tracking-widest text-muted-foreground">
+                Return
+              </span>
               <span className={cn("num text-xs font-bold", isNetProfit ? "text-gain" : "text-loss")}>
-                {netProfit >= 0 ? "+" : ""}{formatNpr(netProfit)}{" "}
+                {netProfit >= 0 ? "+" : ""}
+                {formatNpr(netProfit)}{" "}
                 <span className="underline decoration-dotted underline-offset-2">({formatPercent(netPct)})</span>
               </span>
             </div>
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[0.64rem] font-semibold uppercase tracking-widest text-muted-foreground">Shares</span>
+              <span className="text-[0.64rem] font-semibold uppercase tracking-widest text-muted-foreground">
+                Shares
+              </span>
               <span className="num text-xs font-medium text-foreground">{formatQty(units)}</span>
             </div>
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[0.64rem] font-semibold uppercase tracking-widest text-muted-foreground">Average price</span>
+              <span className="text-[0.64rem] font-semibold uppercase tracking-widest text-muted-foreground">
+                Average price
+              </span>
               <span className="num text-xs font-medium text-foreground">{formatNpr(commissionWacc)}</span>
             </div>
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[0.64rem] font-semibold uppercase tracking-widest text-muted-foreground">Holding</span>
+              <span className="text-[0.64rem] font-semibold uppercase tracking-widest text-muted-foreground">
+                Holding
+              </span>
               <span
                 role="button"
                 tabIndex={0}
@@ -112,7 +117,9 @@ export function PositionPnlCard({
         <DialogContent className="max-h-[85vh] overflow-y-auto rounded-2xl sm:max-w-[520px] p-0 gap-0">
           <DialogHeader className="px-5 pt-5 pb-3">
             <DialogTitle className="text-base font-bold leading-none">{symbol} · Sell breakdown</DialogTitle>
-            <p className="mt-1.5 text-xs text-muted-foreground">What you actually pocket if you sell all {units.toLocaleString("en-NP")} units at {formatNpr(ltp)}</p>
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              What you actually pocket if you sell all {units.toLocaleString("en-NP")} units at {formatNpr(ltp)}
+            </p>
           </DialogHeader>
 
           <div className="px-5 pb-5 space-y-4">
@@ -120,7 +127,9 @@ export function PositionPnlCard({
               <div className="rounded-xl bg-muted/10 border border-border/40 px-4 py-3">
                 <p className="text-xs font-medium text-muted-foreground">Gross sale</p>
                 <p className="num mt-1 text-base font-bold">{formatNpr(proceeds.amount)}</p>
-                <p className="text-[0.68rem] text-muted-foreground">{units} × {formatNpr(ltp)}</p>
+                <p className="text-[0.68rem] text-muted-foreground">
+                  {units} × {formatNpr(ltp)}
+                </p>
               </div>
               <div className="rounded-xl bg-muted/10 border border-border/40 px-4 py-3">
                 <p className="text-xs font-medium text-muted-foreground">Net receivable</p>
@@ -179,7 +188,11 @@ export function PositionPnlCard({
                     <div className="flex items-center justify-between py-2.5">
                       <div>
                         <p className="text-sm text-muted-foreground">Capital gains tax</p>
-                        <p className="text-xs text-muted-foreground">{ageKnown ? `${formatHoldingTime(holdingDays)} ${holdingDays >= 365 ? "long term" : "short term"}` : "purchase date unknown · assumed long-term"}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {ageKnown
+                            ? `${formatHoldingTime(holdingDays)} ${holdingDays >= 365 ? "long term" : "short term"}`
+                            : "purchase date unknown · assumed long-term"}
+                        </p>
                       </div>
                       <span className="num text-sm font-medium">− {formatNpr(proceeds.cgt)}</span>
                     </div>
@@ -192,13 +205,15 @@ export function PositionPnlCard({
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Unrealized before charges</span>
                 <span className={cn("num text-sm font-semibold", rawProfit >= 0 ? "text-gain" : "text-loss")}>
-                  {rawProfit >= 0 ? "+" : ""}{formatNpr(rawProfit)} ({formatPercent((rawProfit / costBasis) * 100)})
+                  {rawProfit >= 0 ? "+" : ""}
+                  {formatNpr(rawProfit)} ({formatPercent((rawProfit / costBasis) * 100)})
                 </span>
               </div>
               <div className="flex items-center justify-between border-t border-border/40 pt-2">
                 <span className="text-sm font-bold">Net profit</span>
                 <span className={cn("num text-base font-bold", isNetProfit ? "text-gain" : "text-loss")}>
-                  {netProfit >= 0 ? "+" : ""}{formatNpr(netProfit)}{" "}
+                  {netProfit >= 0 ? "+" : ""}
+                  {formatNpr(netProfit)}{" "}
                   <span className="underline decoration-dotted underline-offset-2">({formatPercent(netPct)})</span>
                 </span>
               </div>
@@ -217,7 +232,10 @@ export function PositionPnlCard({
             <DialogTitle className="text-base font-bold leading-none">{symbol} · Holding age</DialogTitle>
             <p className="mt-1.5 text-xs text-muted-foreground">
               {ageKnown ? (
-                <>Avg {formatHoldingTime(avgHoldingDays)} (weighted) · Oldest {formatHoldingTime(holdingDays)} for tax · {lots.length} lot{lots.length === 1 ? "" : "s"} still held</>
+                <>
+                  Avg {formatHoldingTime(avgHoldingDays)} (weighted) · Oldest {formatHoldingTime(holdingDays)} for tax ·{" "}
+                  {lots.length} lot{lots.length === 1 ? "" : "s"} still held
+                </>
               ) : (
                 <>No purchase dates found — tax shown at the assumed long-term rate</>
               )}
@@ -233,20 +251,28 @@ export function PositionPnlCard({
               <div className="rounded-xl bg-muted/10 border border-border/40 px-4 py-3">
                 <p className="text-xs font-medium text-muted-foreground">Oldest lot (tax)</p>
                 <p className="num mt-1 text-base font-bold">{ageKnown ? formatHoldingTime(holdingDays) : "—"}</p>
-                <p className="text-[0.68rem] text-muted-foreground">{ageKnown ? (holdingDays >= 365 ? "long term" : "short term") : "no dates found · assumed long-term"}</p>
+                <p className="text-[0.68rem] text-muted-foreground">
+                  {ageKnown ? (holdingDays >= 365 ? "long term" : "short term") : "no dates found · assumed long-term"}
+                </p>
               </div>
             </div>
             {lots.length > 0 ? (
               <div className="rounded-xl border border-border/60 overflow-hidden">
-                <p className="bg-muted/20 px-4 py-2 text-xs font-semibold text-muted-foreground">Per-lot age — which lot needs how long</p>
+                <p className="bg-muted/20 px-4 py-2 text-xs font-semibold text-muted-foreground">
+                  Per-lot age — which lot needs how long
+                </p>
                 <div className="divide-y divide-border/30 max-h-64 overflow-y-auto">
                   {lots.map((lot, i) => (
                     <div key={`${lot.date}-${i}`} className="flex items-center justify-between px-4 py-2.5">
                       <div>
-                        <p className="num text-sm font-medium">{formatQty(lot.qty)} × {lot.date.slice(0, 10)}</p>
+                        <p className="num text-sm font-medium">
+                          {formatQty(lot.qty)} × {lot.date.slice(0, 10)}
+                        </p>
                         <p className="text-[0.68rem] text-muted-foreground">{lot.date}</p>
                       </div>
-                      <span className={`num rounded-full px-2 py-0.5 text-xs font-semibold ${lot.days >= 365 ? "bg-gain/15 text-gain" : "bg-loss/15 text-loss"}`}>
+                      <span
+                        className={`num rounded-full px-2 py-0.5 text-xs font-semibold ${lot.days >= 365 ? "bg-gain/15 text-gain" : "bg-loss/15 text-loss"}`}
+                      >
                         {formatHoldingTime(lot.days)}
                       </span>
                     </div>

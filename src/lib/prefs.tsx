@@ -1,15 +1,6 @@
 // Unified client-only preferences: theme, display, sidebar, terminal, watchlist.
 // All persisted in a single localStorage key (ms-prefs.v1).
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { fetchServerWatchlist, pushWatchlist } from "@/lib/meroshare/watchlist.functions";
 
 // ---------------------------------------------------------------------------
@@ -43,6 +34,8 @@ export interface Prefs {
   compactNumbers: boolean;
   autoRefresh: boolean;
   refreshMinutes: number;
+  /** Global toast kill-switch (Settings → display). Off = Toaster unmounts. */
+  toastsEnabled: boolean;
   // Sidebar
   sidebarCollapsed: boolean;
   // Terminal
@@ -62,6 +55,7 @@ export interface PrefsApi extends Prefs {
   setCompactNumbers: (value: boolean) => void;
   setAutoRefresh: (value: boolean) => void;
   setRefreshMinutes: (minutes: number) => void;
+  setToastsEnabled: (on: boolean) => void;
   // Sidebar
   setSidebarCollapsed: (collapsed: boolean) => void;
   // Terminal
@@ -108,6 +102,7 @@ export const DEFAULT_PREFS: Prefs = {
   compactNumbers: false,
   autoRefresh: true,
   refreshMinutes: 5,
+  toastsEnabled: true,
   sidebarCollapsed: false,
   terminal: DEFAULT_TERMINAL,
   watchlist: [],
@@ -203,10 +198,13 @@ function loadPrefs(): Prefs {
   try {
     const stored = readJson<Partial<Prefs>>(STORAGE_KEY);
     const base = stored ? { ...DEFAULT_PREFS, ...stored } : { ...DEFAULT_PREFS };
+    // New kill-switch inherits the old notification pop-up choice once, so
+    // users who muted urgent pop-ups stay muted after the merge.
+    if (stored?.toastsEnabled == null && window.localStorage.getItem("ms-notif-popups.v1") === "0") {
+      base.toastsEnabled = false;
+    }
     // Only migrate if legacy keys still exist
-    const hasLegacy = Object.values(LEGACY_KEYS).some(
-      (k) => window.localStorage.getItem(k) !== null,
-    );
+    const hasLegacy = Object.values(LEGACY_KEYS).some((k) => window.localStorage.getItem(k) !== null);
     if (hasLegacy) return migrateLegacy(base);
     return base;
   } catch {
@@ -220,9 +218,7 @@ function loadPrefs(): Prefs {
 
 export function applyTheme(theme: ThemePref) {
   if (typeof document === "undefined") return;
-  const light =
-    theme === "light" ||
-    (theme === "system" && window.matchMedia("(prefers-color-scheme: light)").matches);
+  const light = theme === "light" || (theme === "system" && window.matchMedia("(prefers-color-scheme: light)").matches);
   document.documentElement.classList.toggle("light", light);
 }
 
@@ -273,6 +269,7 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
       compactNumbers,
       autoRefresh,
       refreshMinutes,
+      toastsEnabled,
       sidebarCollapsed,
       terminal,
       watchlist,
@@ -283,6 +280,7 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
       compactNumbers,
       autoRefresh,
       refreshMinutes,
+      toastsEnabled,
       sidebarCollapsed,
       terminal,
       watchlist,
@@ -309,9 +307,7 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
     (symbol: string) => {
       const upper = symbol.toUpperCase();
       setPrefs((s) => {
-        const next = s.watchlist.includes(upper)
-          ? s.watchlist.filter((x) => x !== upper)
-          : [...s.watchlist, upper];
+        const next = s.watchlist.includes(upper) ? s.watchlist.filter((x) => x !== upper) : [...s.watchlist, upper];
         syncWatchlist(next);
         return { ...s, watchlist: next };
       });
@@ -364,6 +360,7 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
       setCompactNumbers: (compactNumbers) => setPrefs((s) => ({ ...s, compactNumbers })),
       setAutoRefresh: (autoRefresh) => setPrefs((s) => ({ ...s, autoRefresh })),
       setRefreshMinutes: (refreshMinutes) => setPrefs((s) => ({ ...s, refreshMinutes })),
+      setToastsEnabled: (toastsEnabled) => setPrefs((s) => ({ ...s, toastsEnabled })),
       setSidebarCollapsed: (sidebarCollapsed) => setPrefs((s) => ({ ...s, sidebarCollapsed })),
       setTerminal: (terminal) => setPrefs((s) => ({ ...s, terminal })),
       toggleWatchlist,
@@ -378,11 +375,7 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
     [prefs, toggleWatchlist, removeFromWatchlist, hasInWatchlist],
   );
 
-  return (
-    <PrefsContext.Provider value={{ ...api, passwordOpen, pinOpen }}>
-      {children}
-    </PrefsContext.Provider>
-  );
+  return <PrefsContext.Provider value={{ ...api, passwordOpen, pinOpen }}>{children}</PrefsContext.Provider>;
 }
 
 export function usePrefs(): PrefsApi {

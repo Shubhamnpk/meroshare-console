@@ -34,9 +34,7 @@ export function DocumentPreviewModal({
     if (!target) return;
     setDownloading(true);
     try {
-      const proxyUrl = target.startsWith("/api/pdf")
-        ? target
-        : `/api/pdf?url=${encodeURIComponent(target)}`;
+      const proxyUrl = target.startsWith("/api/pdf") ? target : `/api/pdf?url=${encodeURIComponent(target)}`;
       const res = await fetch(proxyUrl);
       if (!res.ok) throw new Error("Download failed");
       const blob = await res.blob();

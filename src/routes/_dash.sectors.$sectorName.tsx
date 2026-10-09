@@ -28,13 +28,7 @@ import { useSettings } from "@/lib/settings";
 import { canonicalLink, ogImage } from "@/lib/seo";
 import { ErrorBlock, LoadingBlock, EmptyBlock } from "@/components/states";
 import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
 import {
   DEFAULT_INDICATORS,
   TerminalChart,
@@ -77,7 +71,8 @@ const RANGES = [
   { key: "1W", label: "1W", days: 7 },
   { key: "1M", label: "1M", days: 30 },
   { key: "3M", label: "3M", days: 90 },
-  { key: "6M", label: "6M", days: 180 },  { key: "1Y", label: "1Y", days: 365 },
+  { key: "6M", label: "6M", days: 180 },
+  { key: "1Y", label: "1Y", days: 365 },
   { key: "3Y", label: "3Y", days: 1095 },
   { key: "5Y", label: "5Y", days: 1825 },
   { key: "ALL", label: "All", days: 0 },
@@ -147,17 +142,7 @@ function findQuote(name: string, sectorIndices: SectorIndex[]): SectorIndex | un
   );
 }
 
-type ConstituentKey =
-  | "symbol"
-  | "ltp"
-  | "change"
-  | "yield"
-  | "eps"
-  | "high"
-  | "low"
-  | "volume"
-  | "turnover"
-  | "trades";
+type ConstituentKey = "symbol" | "ltp" | "change" | "yield" | "eps" | "high" | "low" | "volume" | "turnover" | "trades";
 
 // 5-year average dividend yield % + latest reported EPS per symbol (shared
 // calendar rule, see lib/nepse/timeline). yield = avg total × face ÷ ltp.
@@ -174,10 +159,8 @@ function useFundamentals(
       const avgTotal = avgTotalLast5Y(rows);
       const avgCash = avgCashLast5Y(rows);
       const fv = faceValues[p.symbol] ?? 100;
-      const raw =
-        avgTotal !== null && avgTotal > 0 && fv > 0 && p.ltp > 0 ? (avgTotal * fv) / p.ltp : null;
-      const rawCash =
-        avgCash !== null && avgCash > 0 && fv > 0 && p.ltp > 0 ? (avgCash * fv) / p.ltp : null;
+      const raw = avgTotal !== null && avgTotal > 0 && fv > 0 && p.ltp > 0 ? (avgTotal * fv) / p.ltp : null;
+      const rawCash = avgCash !== null && avgCash > 0 && fv > 0 && p.ltp > 0 ? (avgCash * fv) / p.ltp : null;
       map.set(p.symbol, {
         yieldPct: raw != null ? Math.round(raw * 100) / 100 : null,
         yieldCashPct: rawCash != null ? Math.round(rawCash * 100) / 100 : null,
@@ -199,7 +182,12 @@ interface MoodStats {
   avgChange: number;
 }
 
-function breadthMood(adv: number, dec: number, total: number, avg: number): {
+function breadthMood(
+  adv: number,
+  dec: number,
+  total: number,
+  avg: number,
+): {
   label: string;
   color: string;
 } {
@@ -249,10 +237,7 @@ function MoodCard({ stats }: { stats: MoodStats }) {
                 className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60"
                 style={{ background: mood.color }}
               />
-              <span
-                className="relative inline-flex size-1.5 rounded-full"
-                style={{ background: mood.color }}
-              />
+              <span className="relative inline-flex size-1.5 rounded-full" style={{ background: mood.color }} />
             </span>
             {mood.label}
           </span>
@@ -266,10 +251,7 @@ function MoodCard({ stats }: { stats: MoodStats }) {
 
         {/* Meter: floating tag → needle → breadth bar */}
         <div className="relative mt-8">
-          <div
-            className="absolute -top-7 -translate-x-1/2 transition-all duration-500"
-            style={{ left: `${needle}%` }}
-          >
+          <div className="absolute -top-7 -translate-x-1/2 transition-all duration-500" style={{ left: `${needle}%` }}>
             <span
               className="num rounded-md px-1.5 py-0.5 text-[11px] font-bold whitespace-nowrap"
               style={{ background: `${mood.color}22`, color: mood.color }}
@@ -309,8 +291,7 @@ function MoodCard({ stats }: { stats: MoodStats }) {
 
         <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 border-t border-border/50 pt-3 text-xs text-muted-foreground">
           <span>
-            Turnover{" "}
-            <CompactNpr value={stats.turnover} className="num font-bold text-foreground" />
+            Turnover <CompactNpr value={stats.turnover} className="num font-bold text-foreground" />
           </span>
           <span>
             Volume <CompactQty value={stats.volume} className="num font-bold text-foreground" />
@@ -330,9 +311,7 @@ function SectorDetailPage() {
   const { theme } = useSettings();
   const light =
     theme === "light" ||
-    (theme === "system" &&
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-color-scheme: light)").matches);
+    (theme === "system" && typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: light)").matches);
 
   const screenerQuery = useQuery(screenerDataQuery());
   const sectorsQuery = useQuery(marketSectorsQuery());
@@ -360,17 +339,11 @@ function SectorDetailPage() {
     return map;
   }, [prices]);
 
-  const resolved = useMemo(
-    () => resolveSector(sectorName, groups, sectorIndices),
-    [sectorName, groups, sectorIndices],
-  );
+  const resolved = useMemo(() => resolveSector(sectorName, groups, sectorIndices), [sectorName, groups, sectorIndices]);
 
   const rangeDays = RANGES.find((r) => r.key === range)?.days ?? 365;
   const dailyQuery = useQuery(indexDailyQuery(resolved?.name ?? "", rangeDays, Boolean(resolved)));
-  const bars = useMemo(
-    () => (dailyQuery.data ?? []).filter((b) => b.close > 0),
-    [dailyQuery.data],
-  );
+  const bars = useMemo(() => (dailyQuery.data ?? []).filter((b) => b.close > 0), [dailyQuery.data]);
 
   // Intraday session line — default view. Falls back to 1W when unpublished.
   const intradayQuery = useQuery({
@@ -424,8 +397,7 @@ function SectorDetailPage() {
     const turnover = items.reduce((s, p) => s + p.turnover, 0);
     const volume = items.reduce((s, p) => s + p.volume, 0);
     const trades = items.reduce((s, p) => s + p.trades, 0);
-    const avgChange =
-      items.length > 0 ? items.reduce((s, p) => s + p.percentChange, 0) / items.length : 0;
+    const avgChange = items.length > 0 ? items.reduce((s, p) => s + p.percentChange, 0) / items.length : 0;
     const grand = marketPrices.reduce((s, p) => s + p.turnover, 0);
     const byChange = [...items].sort((a, b) => b.percentChange - a.percentChange);
     const gainers = byChange.filter((p) => p.percentChange > 0).slice(0, 10);
@@ -543,13 +515,10 @@ function SectorDetailPage() {
   const quote = resolved.quote;
   const points = quote?.close ?? null;
   const up = stats.chg >= 0;
-  const headerRangeLabel = usingIntraday
-    ? "Live intraday session"
-    : (RANGES.find((r) => r.key === range)?.label ?? "");
+  const headerRangeLabel = usingIntraday ? "Live intraday session" : (RANGES.find((r) => r.key === range)?.label ?? "");
   const maxLeader = stats.leaders[0]?.turnover ?? 1;
   const moverCols = stats.flats.length > 0 ? 3 : 2;
-  const extremeCols =
-    1 + (stats.nearHigh.length > 0 ? 1 : 0) + (stats.nearLow.length > 0 ? 1 : 0);
+  const extremeCols = 1 + (stats.nearHigh.length > 0 ? 1 : 0) + (stats.nearLow.length > 0 ? 1 : 0);
 
   return (
     <div className="space-y-5">
@@ -563,9 +532,7 @@ function SectorDetailPage() {
           </p>
         </div>
         <div className="text-right">
-          <p className="num text-2xl font-bold">
-            {points != null ? formatNumber(points) : "—"}
-          </p>
+          <p className="num text-2xl font-bold">{points != null ? formatNumber(points) : "—"}</p>
           <p className={cn("num text-xs font-bold", up ? "text-emerald-400" : "text-red-400")}>
             {formatPercent(stats.chg)}
           </p>
@@ -607,9 +574,7 @@ function SectorDetailPage() {
                   onClick={() => setRange(r.key)}
                   className={cn(
                     "rounded-lg px-2.5 py-1 text-xs font-medium transition-colors",
-                    disabled
-                      ? "cursor-not-allowed opacity-35"
-                      : "cursor-pointer",
+                    disabled ? "cursor-not-allowed opacity-35" : "cursor-pointer",
                     range === r.key && !disabled
                       ? "bg-primary text-primary-foreground font-semibold shadow-xs"
                       : "text-muted-foreground hover:text-foreground",
@@ -668,9 +633,7 @@ function SectorDetailPage() {
                     <button
                       key={t.key}
                       type="button"
-                      onClick={() =>
-                        setIndicators((prev) => ({ ...prev, [t.key]: !prev[t.key] }))
-                      }
+                      onClick={() => setIndicators((prev) => ({ ...prev, [t.key]: !prev[t.key] }))}
                       className={cn(
                         "rounded-md border px-2 py-0.5 text-[0.68rem] font-medium transition-colors cursor-pointer",
                         indicators[t.key]
@@ -719,21 +682,15 @@ function SectorDetailPage() {
             />
           ) : range === "1D" ? (
             <div className="flex h-[300px] flex-col items-center justify-center gap-1.5 p-6 text-center text-muted-foreground">
-              <p className="text-sm font-semibold text-foreground">
-                Intraday session graph not published
-              </p>
+              <p className="text-sm font-semibold text-foreground">Intraday session graph not published</p>
               <p className="text-xs">
-                Real-time ticks stream during active NEPSE trading hours (11:00 AM – 3:00 PM NPT).
-                Switch to 1W or a longer range instead.
+                Real-time ticks stream during active NEPSE trading hours (11:00 AM – 3:00 PM NPT). Switch to 1W or a
+                longer range instead.
               </p>
             </div>
           ) : (
             <div className="flex h-[300px] flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted-foreground">
-              <p>
-                {dailyQuery.isError
-                  ? "Couldn't load sector history."
-                  : "No sector history found for this range."}
-              </p>
+              <p>{dailyQuery.isError ? "Couldn't load sector history." : "No sector history found for this range."}</p>
               {dailyQuery.isError && (
                 <button
                   type="button"
@@ -814,9 +771,7 @@ function SectorDetailPage() {
                 </button>
               </li>
             ))}
-            {stats.leaders.length === 0 && (
-              <p className="text-xs text-muted-foreground">No turnover yet.</p>
-            )}
+            {stats.leaders.length === 0 && <p className="text-xs text-muted-foreground">No turnover yet.</p>}
           </ul>
         </div>
 
@@ -842,28 +797,96 @@ function SectorDetailPage() {
       </div>
 
       {/* All constituents */}
-        <div className="overflow-clip rounded-2xl border border-border/70 bg-card/80 shadow-xs">
+      <div className="overflow-clip rounded-2xl border border-border/70 bg-card/80 shadow-xs">
         <div className="flex items-center gap-2 border-b border-border/60 px-4 py-3">
           <ListOrdered className="size-4 text-primary" />
-          <h3 className="font-display text-sm font-semibold">
-            All Constituents ({stats.items.length})
-          </h3>
+          <h3 className="font-display text-sm font-semibold">All Constituents ({stats.items.length})</h3>
         </div>
         <div className="overflow-x-auto xl:overflow-x-clip">
           <Table className="text-left text-xs">
             <TableHeader>
               <TableRow className="bg-muted/40 hover:bg-muted/40">
-                <SortableTh label="Symbol" active={sort.key === "symbol"} dir={sort.dir} onClick={() => toggle("symbol")} kind="text" className="py-2.5 pl-4 pr-2" />
-                <SortableTh label="LTP" active={sort.key === "ltp"} dir={sort.dir} onClick={() => toggle("ltp")} align="right" className="py-2.5 px-3" />
-                <SortableTh label="Change" active={sort.key === "change"} dir={sort.dir} onClick={() => toggle("change")} align="right" className="py-2.5 px-3" />
-                <SortableTh label="Yield" active={sort.key === "yield"} dir={sort.dir} onClick={() => toggle("yield")} align="right" className="py-2.5 px-3" />
-                <SortableTh label="EPS" active={sort.key === "eps"} dir={sort.dir} onClick={() => toggle("eps")} align="right" className="py-2.5 px-3" />
-                <SortableTh label="High" active={sort.key === "high"} dir={sort.dir} onClick={() => toggle("high")} align="right" className="py-2.5 px-3" />
-                <SortableTh label="Low" active={sort.key === "low"} dir={sort.dir} onClick={() => toggle("low")} align="right" className="py-2.5 px-3" />
-                <SortableTh label="Volume" active={sort.key === "volume"} dir={sort.dir} onClick={() => toggle("volume")} align="right" className="py-2.5 px-3" />
-                <SortableTh label="Turnover" active={sort.key === "turnover"} dir={sort.dir} onClick={() => toggle("turnover")} align="right" className="py-2.5 px-3" />
-                <SortableTh label="Trades" active={sort.key === "trades"} dir={sort.dir} onClick={() => toggle("trades")} align="right" className="py-2.5 px-3 pr-4" />
-                </TableRow>
+                <SortableTh
+                  label="Symbol"
+                  active={sort.key === "symbol"}
+                  dir={sort.dir}
+                  onClick={() => toggle("symbol")}
+                  kind="text"
+                  className="py-2.5 pl-4 pr-2"
+                />
+                <SortableTh
+                  label="LTP"
+                  active={sort.key === "ltp"}
+                  dir={sort.dir}
+                  onClick={() => toggle("ltp")}
+                  align="right"
+                  className="py-2.5 px-3"
+                />
+                <SortableTh
+                  label="Change"
+                  active={sort.key === "change"}
+                  dir={sort.dir}
+                  onClick={() => toggle("change")}
+                  align="right"
+                  className="py-2.5 px-3"
+                />
+                <SortableTh
+                  label="Yield"
+                  active={sort.key === "yield"}
+                  dir={sort.dir}
+                  onClick={() => toggle("yield")}
+                  align="right"
+                  className="py-2.5 px-3"
+                />
+                <SortableTh
+                  label="EPS"
+                  active={sort.key === "eps"}
+                  dir={sort.dir}
+                  onClick={() => toggle("eps")}
+                  align="right"
+                  className="py-2.5 px-3"
+                />
+                <SortableTh
+                  label="High"
+                  active={sort.key === "high"}
+                  dir={sort.dir}
+                  onClick={() => toggle("high")}
+                  align="right"
+                  className="py-2.5 px-3"
+                />
+                <SortableTh
+                  label="Low"
+                  active={sort.key === "low"}
+                  dir={sort.dir}
+                  onClick={() => toggle("low")}
+                  align="right"
+                  className="py-2.5 px-3"
+                />
+                <SortableTh
+                  label="Volume"
+                  active={sort.key === "volume"}
+                  dir={sort.dir}
+                  onClick={() => toggle("volume")}
+                  align="right"
+                  className="py-2.5 px-3"
+                />
+                <SortableTh
+                  label="Turnover"
+                  active={sort.key === "turnover"}
+                  dir={sort.dir}
+                  onClick={() => toggle("turnover")}
+                  align="right"
+                  className="py-2.5 px-3"
+                />
+                <SortableTh
+                  label="Trades"
+                  active={sort.key === "trades"}
+                  dir={sort.dir}
+                  onClick={() => toggle("trades")}
+                  align="right"
+                  className="py-2.5 px-3 pr-4"
+                />
+              </TableRow>
             </TableHeader>
             <TableBody className="divide-y divide-border/40">
               {rows.map((p) => {
@@ -877,14 +900,14 @@ function SectorDetailPage() {
                   >
                     <TableCell className="py-2.5 pl-4 pr-2">
                       <p className="font-bold text-foreground">{p.symbol}</p>
-                      <p className="max-w-[220px] truncate text-[10px] text-muted-foreground">
-                        {p.name}
-                      </p>
+                      <p className="max-w-[220px] truncate text-[10px] text-muted-foreground">{p.name}</p>
                     </TableCell>
                     <TableCell className="num py-2.5 px-3 text-right font-semibold text-foreground">
                       {formatNpr(p.ltp)}
                     </TableCell>
-                    <TableCell className={cn("num py-2.5 px-3 text-right font-semibold", upRow ? "text-gain" : "text-loss")}>
+                    <TableCell
+                      className={cn("num py-2.5 px-3 text-right font-semibold", upRow ? "text-gain" : "text-loss")}
+                    >
                       {formatPercent(p.percentChange)}
                     </TableCell>
                     <TableCell className="num py-2.5 px-3 text-right font-semibold text-primary">
@@ -979,9 +1002,7 @@ function ChartHeader({
   return (
     <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2 border-b border-border/50 pb-3">
       <div className="min-w-0">
-        <p className="truncate font-display text-sm font-bold text-foreground">
-          {name} Index
-        </p>
+        <p className="truncate font-display text-sm font-bold text-foreground">{name} Index</p>
         <p className="text-[11px] text-muted-foreground">{rangeLabel}</p>
       </div>
       <div className="flex items-baseline gap-2">
@@ -999,29 +1020,14 @@ function ChartHeader({
 
 function BackButton({ onBack }: { onBack: () => void }) {
   return (
-    <Button
-      variant="ghost"
-      size="icon"
-      className="size-8 shrink-0"
-      onClick={onBack}
-      aria-label="Go back"
-    >
+    <Button variant="ghost" size="icon" className="size-8 shrink-0" onClick={onBack} aria-label="Go back">
       <ArrowLeft className="size-4" />
     </Button>
   );
 }
 
-function ExtremeList({
-  items,
-  onPick,
-  high,
-}: {
-  items: LivePrice[];
-  onPick: (symbol: string) => void;
-  high: boolean;
-}) {
-  if (items.length === 0)
-    return <p className="text-xs text-muted-foreground">None in range this session.</p>;
+function ExtremeList({ items, onPick, high }: { items: LivePrice[]; onPick: (symbol: string) => void; high: boolean }) {
+  if (items.length === 0) return <p className="text-xs text-muted-foreground">None in range this session.</p>;
   return (
     <ul className="space-y-1.5">
       {items.map((p) => {
@@ -1038,9 +1044,7 @@ function ExtremeList({
               <Icon className={cn("size-3.5 shrink-0", high ? "text-emerald-400" : "text-red-400")} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-xs font-bold text-foreground">{p.symbol}</span>
-                <span className="num block text-[10px] text-muted-foreground">
-                  {formatNpr(p.ltp)}
-                </span>
+                <span className="num block text-[10px] text-muted-foreground">{formatNpr(p.ltp)}</span>
               </span>
               <span className={cn("num text-[11px] font-bold", high ? "text-emerald-400" : "text-red-400")}>
                 {dist >= 0 ? "+" : ""}

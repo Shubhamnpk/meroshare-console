@@ -53,9 +53,7 @@ export function isAlertHit(alert: PriceAlert, ltp: number | null | undefined): b
 }
 
 export function usePriceAlerts() {
-  const [alerts, setAlerts] = useState<PriceAlert[]>(() =>
-    typeof window === "undefined" ? [] : load(),
-  );
+  const [alerts, setAlerts] = useState<PriceAlert[]>(() => (typeof window === "undefined" ? [] : load()));
 
   // Keep multiple tabs in sync.
   useEffect(() => {
@@ -103,11 +101,7 @@ export function usePriceAlerts() {
 
   const markHit = useCallback(
     (id: string) =>
-      update(
-        load().map((a) =>
-          a.id === id && !a.hitAt ? { ...a, hitAt: new Date().toISOString() } : a,
-        ),
-      ),
+      update(load().map((a) => (a.id === id && !a.hitAt ? { ...a, hitAt: new Date().toISOString() } : a))),
     [update],
   );
 

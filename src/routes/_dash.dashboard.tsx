@@ -60,8 +60,7 @@ export const Route = createFileRoute("/_dash/dashboard")({
       { title: "Dashboard | MeroShare Investor Console" },
       {
         name: "description",
-        content:
-          "Live snapshot of your portfolio value at NEPSE prices, day movers and open IPO issues.",
+        content: "Live snapshot of your portfolio value at NEPSE prices, day movers and open IPO issues.",
       },
       { property: "og:title", content: "Dashboard | MeroShare Investor Console" },
       {
@@ -94,9 +93,7 @@ function MoverCard({
       )}
     >
       <div className="flex items-center justify-between">
-        <p className="text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-          {label}
-        </p>
+        <p className="text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
         {tone === "gain" ? (
           <TrendingUp className="size-3.5 text-gain" aria-hidden />
         ) : (
@@ -112,9 +109,7 @@ function MoverCard({
           <p className="truncate text-sm font-semibold">{holding.scrip}</p>
           <div className="mt-0.5 flex items-center justify-between gap-2">
             <span className="num text-base font-semibold">{formatNpr(holding.ltp)}</span>
-            <DeltaPill value={holding.percentChange}>
-              {formatPercent(holding.percentChange)}
-            </DeltaPill>
+            <DeltaPill value={holding.percentChange}>{formatPercent(holding.percentChange)}</DeltaPill>
           </div>
           <p className="num mt-0.5 truncate text-xs text-muted-foreground">
             <CompactQty value={holding.units} /> units · <AdaptiveNpr value={holding.value} />
@@ -128,13 +123,7 @@ function MoverCard({
 }
 
 /** Crash isolation per widget: one widget throwing must not blank the page. */
-function WidgetFallback({
-  label,
-  resetErrorBoundary,
-}: {
-  label: string;
-  resetErrorBoundary: () => void;
-}) {
+function WidgetFallback({ label, resetErrorBoundary }: { label: string; resetErrorBoundary: () => void }) {
   return (
     <div
       role="alert"
@@ -269,9 +258,7 @@ function DashboardPage() {
       ...archUpcoming.map((row, n) => ({
         key: `arch-${row.company}-${n}`,
         title: row.company,
-        sub: [row.units ? `${row.units} units` : null, row.dateRange ?? null]
-          .filter(Boolean)
-          .join(" · "),
+        sub: [row.units ? `${row.units} units` : null, row.dateRange ?? null].filter(Boolean).join(" · "),
       })),
     ].slice(0, 3);
   })();
@@ -299,11 +286,7 @@ function DashboardPage() {
       sub={
         <span className="flex items-center gap-2">
           <DeltaPill value={change}>
-            {change > 0 ? (
-              <TrendingUp className="size-3" />
-            ) : change < 0 ? (
-              <TrendingDown className="size-3" />
-            ) : null}
+            {change > 0 ? <TrendingUp className="size-3" /> : change < 0 ? <TrendingDown className="size-3" /> : null}
             {formatPercent(changePct)}
           </DeltaPill>
           vs previous close
@@ -326,13 +309,7 @@ function DashboardPage() {
         </>
       }
       tone={change > 0 ? "gain" : change < 0 ? "loss" : "neutral"}
-      sub={
-        change > 0
-          ? "Unrealised gain today"
-          : change < 0
-            ? "Unrealised loss today"
-            : "No change today"
-      }
+      sub={change > 0 ? "Unrealised gain today" : change < 0 ? "Unrealised loss today" : "No change today"}
     />,
     <StatCard
       key="scrips"
@@ -378,9 +355,7 @@ function DashboardPage() {
         <div>
           <h1 className="font-display text-2xl font-semibold sm:text-3xl">Dashboard</h1>
           <p className="mt-1 hidden text-sm text-muted-foreground sm:block">
-            {data && data.marketStale
-              ? "Showing MeroShare prices (feed temporarily unreachable)"
-              : ""}
+            {data && data.marketStale ? "Showing MeroShare prices (feed temporarily unreachable)" : ""}
           </p>
         </div>
         <button
@@ -411,170 +386,157 @@ function DashboardPage() {
           </div>
 
           <Widget label="NEPSE index">
-          <Panel
-            as="button"
-            type="button"
-            onClick={() => setChartOpen(true)}
-            interactive
-            className="group relative hidden w-full overflow-hidden text-left transition-colors sm:block"
-          >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="flex items-center gap-1.5 text-xs uppercase tracking-wider text-muted-foreground">
-                  <ChartLine className="size-3.5 text-primary" /> NEPSE Index
-                  <span
-                    title={
-                      market.data?.status.isOpen
-                        ? "Live trading — NEPSE is open today"
-                        : (() => {
-                            const raw = nepse?.generatedTime;
-                            if (!raw) return "Market is closed — no session data";
-                            const d = new Date(String(raw).replace(" ", "T"));
-                            const dateStr = formatDate(raw);
-                            if (Number.isNaN(d.getTime())) return `Last session: ${dateStr} — market is closed`;
-                            const today0 = new Date();
-                            today0.setHours(0, 0, 0, 0);
-                            const gen0 = new Date(d);
-                            gen0.setHours(0, 0, 0, 0);
-                            const diff = Math.round((today0.getTime() - gen0.getTime()) / 86_400_000);
-                            const rel = diff <= 0 ? "today" : diff === 1 ? "1 day ago" : `${diff} days ago`;
-                            return `Last session: ${dateStr} · ${rel} — market is closed`;
-                          })()
-                    }
-                  >
-                    ·{" "}
-                    {!market.data
-                      ? "—"
-                      : sessionAgeLabel(nepse?.generatedTime, market.data.status.isOpen)}
-                  </span>
-                </p>
-                {nepse ? (
-                  <p className="num mt-2 flex flex-wrap items-center gap-2 text-3xl font-semibold">
-                    {nepse.close != null ? nepse.close.toLocaleString("en-NP") : "-"}
-                    <DeltaPill value={nepse.percentChange}>
-                      {formatPercent(nepse.percentChange)}
-                    </DeltaPill>
-                  </p>
-                ) : market.isError || nepseGraph.isError ? (
-                  <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-                    <span className="text-muted-foreground">Index data unavailable.</span>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={(e) => {
-                        // Don't open the chart modal underneath.
-                        e.stopPropagation();
-                        void market.refetch();
-                        void nepseGraph.refetch();
-                      }}
+            <Panel
+              as="button"
+              type="button"
+              onClick={() => setChartOpen(true)}
+              interactive
+              className="group relative hidden w-full overflow-hidden text-left transition-colors sm:block"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="flex items-center gap-1.5 text-xs uppercase tracking-wider text-muted-foreground">
+                    <ChartLine className="size-3.5 text-primary" /> NEPSE Index
+                    <span
+                      title={
+                        market.data?.status.isOpen
+                          ? "Live trading — NEPSE is open today"
+                          : (() => {
+                              const raw = nepse?.generatedTime;
+                              if (!raw) return "Market is closed — no session data";
+                              const d = new Date(String(raw).replace(" ", "T"));
+                              const dateStr = formatDate(raw);
+                              if (Number.isNaN(d.getTime())) return `Last session: ${dateStr} — market is closed`;
+                              const today0 = new Date();
+                              today0.setHours(0, 0, 0, 0);
+                              const gen0 = new Date(d);
+                              gen0.setHours(0, 0, 0, 0);
+                              const diff = Math.round((today0.getTime() - gen0.getTime()) / 86_400_000);
+                              const rel = diff <= 0 ? "today" : diff === 1 ? "1 day ago" : `${diff} days ago`;
+                              return `Last session: ${dateStr} · ${rel} — market is closed`;
+                            })()
+                      }
                     >
-                      Try again
-                    </Button>
-                  </div>
-                ) : (
-                  <p className="mt-2 text-sm text-muted-foreground">Loading…</p>
-                )}
-                {nepse &&
-                nepse.close != null &&
-                (nepse.fiftyTwoWeekLow ?? 0) > 0 &&
-                (nepse.fiftyTwoWeekHigh ?? 0) > (nepse.fiftyTwoWeekLow ?? 0) ? (
-                  <div className="mt-2 max-w-72">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-muted-foreground">
-                        52-week range
-                      </p>
-                      <p className="flex items-center gap-1 text-[0.68rem] font-medium text-primary opacity-100 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-focus-within:opacity-100 [@media(hover:hover)]:group-hover:opacity-100">
-                        Click for the full chart <ArrowUpRight className="size-3" />
-                      </p>
+                      · {!market.data ? "—" : sessionAgeLabel(nepse?.generatedTime, market.data.status.isOpen)}
+                    </span>
+                  </p>
+                  {nepse ? (
+                    <p className="num mt-2 flex flex-wrap items-center gap-2 text-3xl font-semibold">
+                      {nepse.close != null ? nepse.close.toLocaleString("en-NP") : "-"}
+                      <DeltaPill value={nepse.percentChange}>{formatPercent(nepse.percentChange)}</DeltaPill>
+                    </p>
+                  ) : market.isError || nepseGraph.isError ? (
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                      <span className="text-muted-foreground">Index data unavailable.</span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={(e) => {
+                          // Don't open the chart modal underneath.
+                          e.stopPropagation();
+                          void market.refetch();
+                          void nepseGraph.refetch();
+                        }}
+                      >
+                        Try again
+                      </Button>
                     </div>
-                    <RangeBar
-                      low={nepse.fiftyTwoWeekLow ?? 0}
-                      high={nepse.fiftyTwoWeekHigh ?? 0}
-                      value={Math.min(
-                        Math.max(nepse.close, nepse.fiftyTwoWeekLow ?? 0),
-                        nepse.fiftyTwoWeekHigh ?? 0,
-                      )}
-                      format={(v) => formatNpr(v)}
-                      tone={nepse.percentChange < 0 ? "loss" : "gain"}
-                      showValueLabel={false}
-                      colorByPosition
-                    />
+                  ) : (
+                    <p className="mt-2 text-sm text-muted-foreground">Loading…</p>
+                  )}
+                  {nepse &&
+                  nepse.close != null &&
+                  (nepse.fiftyTwoWeekLow ?? 0) > 0 &&
+                  (nepse.fiftyTwoWeekHigh ?? 0) > (nepse.fiftyTwoWeekLow ?? 0) ? (
+                    <div className="mt-2 max-w-72">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-muted-foreground">
+                          52-week range
+                        </p>
+                        <p className="flex items-center gap-1 text-[0.68rem] font-medium text-primary opacity-100 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-focus-within:opacity-100 [@media(hover:hover)]:group-hover:opacity-100">
+                          Click for the full chart <ArrowUpRight className="size-3" />
+                        </p>
+                      </div>
+                      <RangeBar
+                        low={nepse.fiftyTwoWeekLow ?? 0}
+                        high={nepse.fiftyTwoWeekHigh ?? 0}
+                        value={Math.min(Math.max(nepse.close, nepse.fiftyTwoWeekLow ?? 0), nepse.fiftyTwoWeekHigh ?? 0)}
+                        format={(v) => formatNpr(v)}
+                        tone={nepse.percentChange < 0 ? "loss" : "gain"}
+                        showValueLabel={false}
+                        colorByPosition
+                      />
+                    </div>
+                  ) : null}
+                </div>
+                {nepsePoints.length >= 2 ? (
+                  <div className="-mr-4 h-16 w-40 self-start sm:-mr-5 sm:w-64">
+                    <Sparkline points={nepsePoints} showLastDot />
                   </div>
                 ) : null}
               </div>
-              {nepsePoints.length >= 2 ? (
-                <div className="h-16 w-40 sm:w-64">
-                  <Sparkline points={nepsePoints} showLastDot />
-                </div>
-              ) : null}
-            </div>
-          </Panel>
+            </Panel>
           </Widget>
 
           <Widget label="Today's movers">
-          <Panel as="section">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <h2 className="font-display text-base font-semibold">Today's movers</h2>
-              <Link to="/portfolio" className="text-xs font-medium text-primary hover:underline">
-                View portfolio
-              </Link>
-            </div>
-            {holdings.length === 0 ? (
-              <EmptyBlock
-                title="No holdings yet"
-                description="Stocks in your demat account will appear here."
-              >
-                <Link to="/market" className="text-xs font-medium text-primary hover:underline">
-                  Browse market
+            <Panel as="section">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h2 className="font-display text-base font-semibold">Today's movers</h2>
+                <Link to="/portfolio" className="text-xs font-medium text-primary hover:underline">
+                  View portfolio
                 </Link>
-              </EmptyBlock>
-            ) : (
-              <div className="grid gap-2 sm:grid-cols-2">
-                <MoverCard
-                  label="Top gainer"
-                  holding={topGainer}
-                  tone="gain"
-                  onOpen={() => {
-                    setPicked(topGainer?.scrip ?? null);
-                    setPickedTab(null);
-                  }}
-                />
-                <MoverCard
-                  label="Top loser"
-                  holding={topLoser}
-                  tone="loss"
-                  onOpen={() => {
-                    setPicked(topLoser?.scrip ?? null);
-                    setPickedTab(null);
-                  }}
-                />
               </div>
-            )}
-          </Panel>
+              {holdings.length === 0 ? (
+                <EmptyBlock title="No holdings yet" description="Stocks in your demat account will appear here.">
+                  <Link to="/market" className="text-xs font-medium text-primary hover:underline">
+                    Browse market
+                  </Link>
+                </EmptyBlock>
+              ) : (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <MoverCard
+                    label="Top gainer"
+                    holding={topGainer}
+                    tone="gain"
+                    onOpen={() => {
+                      setPicked(topGainer?.scrip ?? null);
+                      setPickedTab(null);
+                    }}
+                  />
+                  <MoverCard
+                    label="Top loser"
+                    holding={topLoser}
+                    tone="loss"
+                    onOpen={() => {
+                      setPicked(topLoser?.scrip ?? null);
+                      setPickedTab(null);
+                    }}
+                  />
+                </div>
+              )}
+            </Panel>
           </Widget>
 
           {data && data.sectors.length > 0 ? (
             <Widget label="Sector allocation">
-            <Panel as="section">
-              <h2 className="mb-3 font-display text-base font-semibold">Sector allocation</h2>
-              <ul className="space-y-2">
-                {data.sectors.slice(0, 6).map((s) => (
-                  <li key={s.sector} className="flex items-center gap-3 text-sm">
-                    <span className="w-40 truncate font-medium">{s.sector}</span>
-                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted" aria-hidden>
-                      <div
-                        className="h-full rounded-full bg-primary/70"
-                        style={{ width: `${Math.min(100, s.weight)}%` }}
-                      />
-                    </div>
-                    <span className="num w-14 text-right text-muted-foreground">
-                      {s.weight.toFixed(1)}%
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </Panel>
+              <Panel as="section">
+                <h2 className="mb-3 font-display text-base font-semibold">Sector allocation</h2>
+                <ul className="space-y-2">
+                  {data.sectors.slice(0, 6).map((s) => (
+                    <li key={s.sector} className="flex items-center gap-3 text-sm">
+                      <span className="w-40 truncate font-medium">{s.sector}</span>
+                      <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted" aria-hidden>
+                        <div
+                          className="h-full rounded-full bg-primary/70"
+                          style={{ width: `${Math.min(100, s.weight)}%` }}
+                        />
+                      </div>
+                      <span className="num w-14 text-right text-muted-foreground">{s.weight.toFixed(1)}%</span>
+                    </li>
+                  ))}
+                </ul>
+              </Panel>
             </Widget>
           ) : null}
         </>
@@ -619,13 +581,9 @@ function DashboardPage() {
                     className="w-36 shrink-0 snap-start rounded-xl border border-border/60 bg-surface px-3 py-2.5 text-left transition-colors hover:border-primary/40"
                   >
                     <p className="truncate text-[13px] font-semibold">{symbol}</p>
-                    <p className="num mt-0.5 text-sm font-semibold">
-                      {price ? formatNpr(price.ltp) : "-"}
-                    </p>
+                    <p className="num mt-0.5 text-sm font-semibold">{price ? formatNpr(price.ltp) : "-"}</p>
                     {price ? (
-                      <DeltaPill value={price.percentChange}>
-                        {formatPercent(price.percentChange)}
-                      </DeltaPill>
+                      <DeltaPill value={price.percentChange}>{formatPercent(price.percentChange)}</DeltaPill>
                     ) : null}
                   </button>
                 );
@@ -636,264 +594,249 @@ function DashboardPage() {
       </Widget>
 
       <Widget label="Dividend calendar">
-      <Panel as="section">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <h2 className="flex items-center gap-2 font-display text-base font-semibold">
-            <CalendarDays className="size-4 text-primary" /> Dividend calendar
-          </h2>
-          <Link
-            to="/calendar"
-            className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-          >
-            Open calendar <ArrowUpRight className="size-3" />
-          </Link>
-        </div>
-        {dividends.isLoading ? (
-          <SkeletonCards count={1} />
-        ) : dividends.isError ? (
-          <ErrorBlock error={dividends.error} retry={() => void dividends.refetch()} />
-        ) : upcomingClosures.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No upcoming book closures for your holdings.
-          </p>
-        ) : (
-          <ul className="grid gap-2 md:grid-cols-3">
-            {upcomingClosures.map((c) => {
-              const dLeft = daysUntil(c.date);
-              const isAnnounce = c.kind === "announce";
-              const urgent = !isAnnounce && dLeft !== null && dLeft >= 0 && dLeft <= 3;
-              const chip = (() => {
-                if (dLeft === null) return isAnnounce ? "Announced" : null;
-                if (isAnnounce) {
-                  if (dLeft < 0) return `Announced ${Math.abs(dLeft)}d ago`;
-                  if (dLeft === 0) return "Announced today";
-                  if (dLeft === 1) return "Announces tomorrow";
-                  return `Announces in ${dLeft}d`;
-                }
-                if (dLeft < 0) return `${Math.abs(dLeft)}d ago`;
-                if (dLeft === 0) return "Closes today";
-                if (dLeft === 1) return "1 day left";
-                return `${dLeft} days left`;
-              })();
-              return (
-                <li key={`${c.symbol}-${c.kind}-${(c.date as Date).getTime()}`} className="min-w-0">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPicked(c.symbol);
-                      setPickedTab("dividend");
-                    }}
-                    title={`${c.symbol} dividends: tap to see estimate`}
-                    className="flex w-full flex-col gap-2 rounded-xl border border-border/60 bg-surface p-3 text-left transition-colors hover:border-primary/40"
-                  >
-                    <span className="flex items-center gap-2">
-                      <span className="num flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-                        {c.symbol.slice(0, 2)}
-                      </span>
-                      <span className="min-w-0 flex-1 truncate text-sm font-semibold">
-                        {c.symbol}
-                      </span>
-                      {chip ? (
-                        <span
-                          className={
-                            isAnnounce
-                              ? "num shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 text-[0.68rem] font-semibold text-amber-600 dark:text-amber-400"
-                              : urgent
-                                ? "num shrink-0 rounded-full bg-loss/15 px-2 py-0.5 text-[0.68rem] font-semibold text-loss"
-                                : dLeft !== null && dLeft < 0
-                                  ? "num shrink-0 rounded-full bg-muted px-2 py-0.5 text-[0.68rem] font-semibold text-muted-foreground"
-                                  : "num shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[0.68rem] font-semibold text-primary"
-                          }
-                        >
-                          {chip}
+        <Panel as="section">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h2 className="flex items-center gap-2 font-display text-base font-semibold">
+              <CalendarDays className="size-4 text-primary" /> Dividend calendar
+            </h2>
+            <Link
+              to="/calendar"
+              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+            >
+              Open calendar <ArrowUpRight className="size-3" />
+            </Link>
+          </div>
+          {dividends.isLoading ? (
+            <SkeletonCards count={1} />
+          ) : dividends.isError ? (
+            <ErrorBlock error={dividends.error} retry={() => void dividends.refetch()} />
+          ) : upcomingClosures.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No upcoming book closures for your holdings.</p>
+          ) : (
+            <ul className="grid gap-2 md:grid-cols-3">
+              {upcomingClosures.map((c) => {
+                const dLeft = daysUntil(c.date);
+                const isAnnounce = c.kind === "announce";
+                const urgent = !isAnnounce && dLeft !== null && dLeft >= 0 && dLeft <= 3;
+                const chip = (() => {
+                  if (dLeft === null) return isAnnounce ? "Announced" : null;
+                  if (isAnnounce) {
+                    if (dLeft < 0) return `Announced ${Math.abs(dLeft)}d ago`;
+                    if (dLeft === 0) return "Announced today";
+                    if (dLeft === 1) return "Announces tomorrow";
+                    return `Announces in ${dLeft}d`;
+                  }
+                  if (dLeft < 0) return `${Math.abs(dLeft)}d ago`;
+                  if (dLeft === 0) return "Closes today";
+                  if (dLeft === 1) return "1 day left";
+                  return `${dLeft} days left`;
+                })();
+                return (
+                  <li key={`${c.symbol}-${c.kind}-${(c.date as Date).getTime()}`} className="min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPicked(c.symbol);
+                        setPickedTab("dividend");
+                      }}
+                      title={`${c.symbol} dividends: tap to see estimate`}
+                      className="flex w-full flex-col gap-2 rounded-xl border border-border/60 bg-surface p-3 text-left transition-colors hover:border-primary/40"
+                    >
+                      <span className="flex items-center gap-2">
+                        <span className="num flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                          {c.symbol.slice(0, 2)}
                         </span>
-                      ) : null}
-                    </span>
-                    <span className="num truncate text-xs text-muted-foreground">
-                      {[
-                        c.bonus > 0 ? `${c.bonus}% bonus` : null,
-                        c.cash > 0 ? `${c.cash}% cash` : null,
-                      ]
-                        .filter(Boolean)
-                        .join(" + ") || "Dividend"}
-                      {c.fy ? ` · FY ${c.fy}` : ""} · {isAnnounce ? "announced" : "closes"}{" "}
-                      {formatDate(c.date)}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </Panel>
+                        <span className="min-w-0 flex-1 truncate text-sm font-semibold">{c.symbol}</span>
+                        {chip ? (
+                          <span
+                            className={
+                              isAnnounce
+                                ? "num shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 text-[0.68rem] font-semibold text-amber-600 dark:text-amber-400"
+                                : urgent
+                                  ? "num shrink-0 rounded-full bg-loss/15 px-2 py-0.5 text-[0.68rem] font-semibold text-loss"
+                                  : dLeft !== null && dLeft < 0
+                                    ? "num shrink-0 rounded-full bg-muted px-2 py-0.5 text-[0.68rem] font-semibold text-muted-foreground"
+                                    : "num shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[0.68rem] font-semibold text-primary"
+                            }
+                          >
+                            {chip}
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="num truncate text-xs text-muted-foreground">
+                        {[c.bonus > 0 ? `${c.bonus}% bonus` : null, c.cash > 0 ? `${c.cash}% cash` : null]
+                          .filter(Boolean)
+                          .join(" + ") || "Dividend"}
+                        {c.fy ? ` · FY ${c.fy}` : ""} · {isAnnounce ? "announced" : "closes"} {formatDate(c.date)}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Panel>
       </Widget>
 
       <Widget label="Issues">
-      <Panel as="section" className="min-w-0 overflow-hidden">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <h2 className="font-display text-base font-semibold">Issues</h2>
-          <Link
-            to="/ipo"
-            search={{ tab: "apply" }}
-            className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-          >
-            Apply <ArrowUpRight className="size-3" />
-          </Link>
-        </div>
-        {issues.isLoading ? (
-          <SkeletonCards count={2} />
-        ) : issues.isError ? (
-          <ErrorBlock error={issues.error} retry={() => void issues.refetch()} />
-        ) : openIssues.length === 0 && upcomingIssues.length === 0 ? (
-          <EmptyBlock
-            title="No open issues"
-            description="New IPO, FPO and right share offerings you can apply for will show up here."
-            icon={<Rocket className="size-6" />}
-          />
-        ) : (
-          <div className="space-y-4">
-            {openIssues.length > 0 ? (
-              <ul className="grid min-w-0 gap-2 overflow-hidden md:grid-cols-2">
-                {openIssues.map((issue) => {
-                  const applied = (reports.data ?? []).some(
-                    (r) => r.companyShareId === issue.companyShareId,
-                  );
-                  const dLeft = daysUntil(issue.issueCloseDate);
-                  const urgent = dLeft !== null && dLeft >= 0 && dLeft <= 3;
-                  const chip =
-                    dLeft === null
-                      ? (issue.statusName ?? "Open")
-                      : dLeft < 0
-                        ? `Closed ${formatDate(issue.issueCloseDate)}`
-                        : dLeft === 0
-                          ? "Closes today"
-                          : dLeft === 1
-                            ? "1 day left"
-                            : `${dLeft} days left`;
-                  const typeLabel = (() => {
-                    const hay = `${issue.shareTypeName ?? ""} ${issue.shareGroupName ?? ""}`;
-                    if (/right/i.test(hay)) return "Right";
-                    if (/fpo/i.test(hay)) return "FPO";
-                    if (/\bipo\b/i.test(hay)) return "IPO";
-                    if (/mutual|fund/i.test(hay)) return "Fund";
-                    if (/debenture|bond/i.test(hay)) return "Bond";
-                    if (/auction/i.test(hay)) return "Auction";
-                    return null;
-                  })();
-                  return (
-                    <li
-                      key={issue.companyShareId}
-                      className="flex min-w-0 w-full flex-col gap-3 overflow-hidden rounded-xl border border-border/60 bg-surface p-3 transition-colors hover:border-primary/30 sm:flex-row sm:items-center sm:gap-3 sm:px-3 sm:py-3"
-                    >
-                      <Link
-                        to="/ipo"
-                        search={{ tab: "apply" }}
-                        className="block min-w-0 flex-1 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                      <div className="flex min-w-0 w-full flex-1 items-center gap-3 overflow-hidden">
-                        <span className="num flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
-                          {String(issue.companyName ?? issue.scrip ?? "?")
-                            .trim()
-                            .charAt(0)
-                            .toUpperCase() || "?"}
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="flex flex-wrap items-center gap-1.5">
-                            <span
-                              className="min-w-0 flex-1 truncate text-sm font-semibold"
-                              title={issue.companyName ?? ""}
-                            >
-                              {issue.companyName}
-                            </span>
-                            {typeLabel ? (
-                              <span className="num shrink-0 rounded-full border border-border/70 px-2 py-0.5 text-[0.62rem] font-semibold text-muted-foreground">
-                                {typeLabel}
-                              </span>
-                            ) : null}
-                            <span
-                              className={
-                                dLeft !== null && dLeft < 0
-                                  ? "num shrink-0 rounded-full bg-muted px-2 py-0.5 text-[0.62rem] font-semibold text-muted-foreground"
-                                  : urgent
-                                    ? "num shrink-0 rounded-full bg-loss/15 px-2 py-0.5 text-[0.62rem] font-semibold text-loss"
-                                    : "num shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[0.62rem] font-semibold text-primary"
-                              }
-                            >
-                              {chip}
-                            </span>
-                            {applied ? (
-                              <span className="num inline-flex shrink-0 items-center gap-1 rounded-full bg-gain/15 px-2 py-0.5 text-[0.62rem] font-semibold text-gain">
-                                <CheckCircle2 className="size-3" /> Applied
-                              </span>
-                            ) : null}
-                          </span>
-                          <span className="num mt-1 block truncate text-[0.70rem] leading-none text-muted-foreground">
-                            {issue.scrip}
-                            {issue.shareTypeName || issue.shareGroupName
-                              ? ` · ${[issue.shareTypeName, issue.shareGroupName].filter(Boolean).join(" ")}`
-                              : ""}{" "}
-                            · {formatDate(issue.issueOpenDate)} → {formatDate(issue.issueCloseDate)}
-                          </span>
-                        </span>
-                      </div>
-                      </Link>
-                      <Button
-                        size="sm"
-                        variant={applied ? "outline" : "default"}
-                        className="h-7 w-full shrink-0 px-3 text-xs sm:ml-2 sm:w-auto"
-                        onClick={() => {
-                          navigate({ to: "/ipo", search: { tab: "apply" } });
-                        }}
-                      >
-                        {applied ? "Manage" : "Apply"}
-                      </Button>
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : null}
-            {upcomingIssues.length > 0 ? (
-              <div className="min-w-0 space-y-2 overflow-hidden">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Upcoming
-                </h3>
-                <ul className="grid min-w-0 gap-2 overflow-hidden md:grid-cols-2">
-                  {upcomingIssues.map((item) => (
-                    <li
-                      key={item.key}
-                      className="block rounded-xl border border-dashed border-border/60 bg-surface/60 transition-colors hover:border-primary/40"
-                    >
-                      <Link
-                        to="/ipo"
-                        search={{ tab: "calendar" }}
-                        title={`${item.title} - view in IPO calendar`}
-                        className="block rounded-xl p-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold" title={item.title}>
-                            {item.title}
-                          </p>
-                          <p
-                            className="num mt-0.5 truncate text-xs text-muted-foreground"
-                            title={item.sub}
-                          >
-                            {item.sub}
-                          </p>
-                        </div>
-                        <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[0.68rem] font-semibold text-muted-foreground">
-                          Upcoming
-                        </span>
-                      </div>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
+        <Panel as="section" className="min-w-0 overflow-hidden">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="font-display text-base font-semibold">Issues</h2>
+            <Link
+              to="/ipo"
+              search={{ tab: "apply" }}
+              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+            >
+              Apply <ArrowUpRight className="size-3" />
+            </Link>
           </div>
-        )}
-      </Panel>
+          {issues.isLoading ? (
+            <SkeletonCards count={2} />
+          ) : issues.isError ? (
+            <ErrorBlock error={issues.error} retry={() => void issues.refetch()} />
+          ) : openIssues.length === 0 && upcomingIssues.length === 0 ? (
+            <EmptyBlock
+              title="No open issues"
+              description="New IPO, FPO and right share offerings you can apply for will show up here."
+              icon={<Rocket className="size-6" />}
+            />
+          ) : (
+            <div className="space-y-4">
+              {openIssues.length > 0 ? (
+                <ul className="grid min-w-0 gap-2 overflow-hidden md:grid-cols-2">
+                  {openIssues.map((issue) => {
+                    const applied = (reports.data ?? []).some((r) => r.companyShareId === issue.companyShareId);
+                    const dLeft = daysUntil(issue.issueCloseDate);
+                    const urgent = dLeft !== null && dLeft >= 0 && dLeft <= 3;
+                    const chip =
+                      dLeft === null
+                        ? (issue.statusName ?? "Open")
+                        : dLeft < 0
+                          ? `Closed ${formatDate(issue.issueCloseDate)}`
+                          : dLeft === 0
+                            ? "Closes today"
+                            : dLeft === 1
+                              ? "1 day left"
+                              : `${dLeft} days left`;
+                    const typeLabel = (() => {
+                      const hay = `${issue.shareTypeName ?? ""} ${issue.shareGroupName ?? ""}`;
+                      if (/right/i.test(hay)) return "Right";
+                      if (/fpo/i.test(hay)) return "FPO";
+                      if (/\bipo\b/i.test(hay)) return "IPO";
+                      if (/mutual|fund/i.test(hay)) return "Fund";
+                      if (/debenture|bond/i.test(hay)) return "Bond";
+                      if (/auction/i.test(hay)) return "Auction";
+                      return null;
+                    })();
+                    return (
+                      <li
+                        key={issue.companyShareId}
+                        className="flex min-w-0 w-full flex-col gap-3 overflow-hidden rounded-xl border border-border/60 bg-surface p-3 transition-colors hover:border-primary/30 sm:flex-row sm:items-center sm:gap-3 sm:px-3 sm:py-3"
+                      >
+                        <Link
+                          to="/ipo"
+                          search={{ tab: "apply" }}
+                          className="block min-w-0 flex-1 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          <div className="flex min-w-0 w-full flex-1 items-center gap-3 overflow-hidden">
+                            <span className="num flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
+                              {String(issue.companyName ?? issue.scrip ?? "?")
+                                .trim()
+                                .charAt(0)
+                                .toUpperCase() || "?"}
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="flex flex-wrap items-center gap-1.5">
+                                <span
+                                  className="min-w-0 flex-1 truncate text-sm font-semibold"
+                                  title={issue.companyName ?? ""}
+                                >
+                                  {issue.companyName}
+                                </span>
+                                {typeLabel ? (
+                                  <span className="num shrink-0 rounded-full border border-border/70 px-2 py-0.5 text-[0.62rem] font-semibold text-muted-foreground">
+                                    {typeLabel}
+                                  </span>
+                                ) : null}
+                                <span
+                                  className={
+                                    dLeft !== null && dLeft < 0
+                                      ? "num shrink-0 rounded-full bg-muted px-2 py-0.5 text-[0.62rem] font-semibold text-muted-foreground"
+                                      : urgent
+                                        ? "num shrink-0 rounded-full bg-loss/15 px-2 py-0.5 text-[0.62rem] font-semibold text-loss"
+                                        : "num shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[0.62rem] font-semibold text-primary"
+                                  }
+                                >
+                                  {chip}
+                                </span>
+                                {applied ? (
+                                  <span className="num inline-flex shrink-0 items-center gap-1 rounded-full bg-gain/15 px-2 py-0.5 text-[0.62rem] font-semibold text-gain">
+                                    <CheckCircle2 className="size-3" /> Applied
+                                  </span>
+                                ) : null}
+                              </span>
+                              <span className="num mt-1 block truncate text-[0.70rem] leading-none text-muted-foreground">
+                                {issue.scrip}
+                                {issue.shareTypeName || issue.shareGroupName
+                                  ? ` · ${[issue.shareTypeName, issue.shareGroupName].filter(Boolean).join(" ")}`
+                                  : ""}{" "}
+                                · {formatDate(issue.issueOpenDate)} → {formatDate(issue.issueCloseDate)}
+                              </span>
+                            </span>
+                          </div>
+                        </Link>
+                        <Button
+                          size="sm"
+                          variant={applied ? "outline" : "default"}
+                          className="h-7 w-full shrink-0 px-3 text-xs sm:ml-2 sm:w-auto"
+                          onClick={() => {
+                            navigate({ to: "/ipo", search: { tab: "apply" } });
+                          }}
+                        >
+                          {applied ? "Manage" : "Apply"}
+                        </Button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : null}
+              {upcomingIssues.length > 0 ? (
+                <div className="min-w-0 space-y-2 overflow-hidden">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Upcoming</h3>
+                  <ul className="grid min-w-0 gap-2 overflow-hidden md:grid-cols-2">
+                    {upcomingIssues.map((item) => (
+                      <li
+                        key={item.key}
+                        className="block rounded-xl border border-dashed border-border/60 bg-surface/60 transition-colors hover:border-primary/40"
+                      >
+                        <Link
+                          to="/ipo"
+                          search={{ tab: "calendar" }}
+                          title={`${item.title} - view in IPO calendar`}
+                          className="block rounded-xl p-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold" title={item.title}>
+                                {item.title}
+                              </p>
+                              <p className="num mt-0.5 truncate text-xs text-muted-foreground" title={item.sub}>
+                                {item.sub}
+                              </p>
+                            </div>
+                            <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[0.68rem] font-semibold text-muted-foreground">
+                              Upcoming
+                            </span>
+                          </div>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+          )}
+        </Panel>
       </Widget>
 
       <ScripSheet

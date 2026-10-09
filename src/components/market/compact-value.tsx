@@ -6,15 +6,7 @@ import { cn } from "@/lib/utils";
  * Compact number with the full figure on hover. When the value is small
  * enough that compact === full, no tooltip is rendered.
  */
-function Hoverable({
-  short,
-  full,
-  className,
-}: {
-  short: string;
-  full: string;
-  className?: string | undefined;
-}) {
+function Hoverable({ short, full, className }: { short: string; full: string; className?: string | undefined }) {
   if (short === full) return <span className={className}>{short}</span>;
   return (
     <span className={className} title={full}>
@@ -32,13 +24,7 @@ export function CompactNpr({
   compact?: boolean | undefined;
   className?: string | undefined;
 }) {
-  return (
-    <Hoverable
-      short={formatNpr(value, { compact })}
-      full={formatNpr(value)}
-      className={className}
-    />
-  );
+  return <Hoverable short={formatNpr(value, { compact })} full={formatNpr(value)} className={className} />;
 }
 
 /**
@@ -47,13 +33,7 @@ export function CompactNpr({
  * overflow. Watches the parent row directly, so it flips back to full
  * automatically when space allows — no stuck states.
  */
-export function AdaptiveNpr({
-  value,
-  className,
-}: {
-  value: unknown;
-  className?: string | undefined;
-}) {
+export function AdaptiveNpr({ value, className }: { value: unknown; className?: string | undefined }) {
   const full = formatNpr(value);
   const short = formatNpr(value, { compact: true });
   const [useShort, setUseShort] = useState(false);
@@ -96,11 +76,5 @@ export function CompactQty({
   compact?: boolean | undefined;
   className?: string | undefined;
 }) {
-  return (
-    <Hoverable
-      short={formatQty(value, { compact })}
-      full={formatQty(value)}
-      className={className}
-    />
-  );
+  return <Hoverable short={formatQty(value, { compact })} full={formatQty(value)} className={className} />;
 }

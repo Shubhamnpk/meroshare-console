@@ -44,9 +44,7 @@ export function canActOnOrder(o: {
   remainingQty: number;
   quantity: number;
 }): boolean {
-  return Boolean(
-    orderCanonicalId(o) && (o.remainingQty || o.quantity) > 0 && isLiveStatus(o.status),
-  );
+  return Boolean(orderCanonicalId(o) && (o.remainingQty || o.quantity) > 0 && isLiveStatus(o.status));
 }
 
 /**
@@ -54,11 +52,7 @@ export function canActOnOrder(o: {
  * Deliberately ignores id presence — an OPEN row without ids is still live,
  * just not actionable from here.
  */
-export function isLiveOrder(o: {
-  status: string;
-  remainingQty: number;
-  quantity: number;
-}): boolean {
+export function isLiveOrder(o: { status: string; remainingQty: number; quantity: number }): boolean {
   return (o.remainingQty || o.quantity) > 0 && isLiveStatus(o.status);
 }
 
@@ -67,11 +61,7 @@ export function isLiveOrder(o: {
  * reconciles with the portfolio), then everything else diagnostic
  * (cancelled / rejected / expired). Time-descending applies inside a band.
  */
-export function orderBand(o: {
-  status: string;
-  remainingQty: number;
-  quantity: number;
-}): 0 | 1 | 2 {
+export function orderBand(o: { status: string; remainingQty: number; quantity: number }): 0 | 1 | 2 {
   if (isLiveOrder(o)) return 0;
   return /EXECUTED|COMPLETE|FILLED|DONE/.test(o.status.toUpperCase()) ? 1 : 2;
 }
@@ -99,10 +89,7 @@ export function orderOutcome(status: string, cancellable: boolean): OrderOutcome
 export function amoIsActiveRow(a: { side: string; status?: string | null }): boolean {
   return (
     (a.side === "BUY" || a.side === "SELL") &&
-    (!a.status ||
-      !/DISABLE|INACTIVE|EXPIRED|CANCEL|REJECT|EXECUTED|COMPLETE|FILLED|CLOSED|DONE|FALSE/i.test(
-        a.status,
-      ))
+    (!a.status || !/DISABLE|INACTIVE|EXPIRED|CANCEL|REJECT|EXECUTED|COMPLETE|FILLED|CLOSED|DONE|FALSE/i.test(a.status))
   );
 }
 

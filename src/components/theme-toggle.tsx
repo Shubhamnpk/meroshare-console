@@ -6,9 +6,7 @@ export function ThemeToggle({ className }: { className?: string }) {
   const { theme, setTheme } = useSettings();
   const light =
     theme === "light" ||
-    (theme === "system" &&
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-color-scheme: light)").matches);
+    (theme === "system" && typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: light)").matches);
 
   const toggle = () => setTheme(light ? "dark" : "light");
 
