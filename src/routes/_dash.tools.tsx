@@ -3,6 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   ArrowRight,
   ArrowUpRight,
+  Bitcoin,
   Blocks,
   Building2,
   Calculator,
@@ -95,6 +96,13 @@ const TOOLS = [
     title: "Time Machine",
     description: "What if you had bought then? Backtest SIP, bonus and cash dividends against every close.",
     tag: "Backtester",
+  },
+  {
+    to: "/global",
+    icon: Bitcoin,
+    title: "Global Stocks",
+    description: "US stocks, crypto and gold at live prices, with your imported lots and per-lot gains.",
+    tag: "World",
   },
 ] as const;
 

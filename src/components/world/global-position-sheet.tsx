@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
+import { ChartCandlestick } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DeltaPill } from "@/components/stat-card";
@@ -7,8 +9,15 @@ import { Panel } from "@/components/ui/panel";
 import { RangeBar } from "@/components/market/range-bar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AreaChart } from "@/components/market/area-chart";
-import { worldCompanyQuery, worldHistoryQuery, worldQuoteQuery, worldSearchQuery } from "@/lib/queries";
+import {
+  worldCompanyQuery,
+  worldHistoryQuery,
+  worldIntradayQuery,
+  worldQuoteQuery,
+  worldSearchQuery,
+} from "@/lib/queries";
 import { deriveHoldings, useGlobalTxns } from "@/lib/world/store";
+import { deriveGlobalRealized } from "@/lib/world/lots";
 import { deriveGlobalLots, sameNativeCurrency } from "@/lib/world/lots";
 import type { WorldRange } from "@/lib/world/feed.server";
 import { toNpr } from "@/lib/world/fx";
@@ -16,7 +25,7 @@ import { formatDate, formatHoldingTime, formatNpr, formatPreciseAge, formatTimeO
 import { formatDistanceToNow } from "date-fns";
 import { daysBetween } from "@/lib/calc/fees";
 
-function bigMoney(v: number | null, currency: string): string {
+export function bigMoney(v: number | null, currency: string): string {
   if (v == null || !(v > 0)) return "—";
   const abs = Math.abs(v);
   const scaled =
@@ -35,7 +44,7 @@ function bigMoney(v: number | null, currency: string): string {
   return currency ? `${scaled} ${currency}` : scaled;
 }
 
-function native(amount: number, currency: string): string {
+export function native(amount: number, currency: string): string {
   if (!Number.isFinite(amount)) return "-";
   if (currency === "GBX" || currency === "GBp") return `${amount.toFixed(2)}p`;
   if (currency === "USD") return `$${amount.toFixed(2)}`;
@@ -50,6 +59,259 @@ function native(amount: number, currency: string): string {
  * the stock sheet: live position, gross P/L and every lot behind it.
  * Foreign-only — never touches NEPSE data.
  */
+/**
+ * FIFO buy lots still held with age and per-lot gain, shared by the
+ * position sheet and the global terminal card — one lots model, not two.
+ */
+export function useGlobalLotRows(symbol: string | null, currency: string, ltp: number) {
+  const txns = useGlobalTxns();
+  // FIFO buy lots still held, each with its age and its own gain since that
+  // day: bought 2 months ago at X vs repurchased last month at Y read apart.
+  const fifoLots = useMemo(() => (symbol ? deriveGlobalLots(txns, symbol) : []), [txns, symbol]);
+  const lotRows = useMemo(
+    () =>
+      fifoLots.map((lot) => {
+        const days = daysBetween(lot.date, new Date());
+        const live = sameNativeCurrency(lot.currency, currency) && ltp > 0 && lot.price > 0;
+        const gain = live ? lot.qty * (ltp - lot.price) : 0;
+        const base = lot.qty * lot.price;
+        return {
+          lot,
+          days,
+          gain,
+          pct: base > 0 && live ? (gain / base) * 100 : 0,
+          live,
+          time: days === 0 ? formatTimeOfDay(lot.date) : null,
+        };
+      }),
+    [fifoLots, currency, ltp],
+  );
+  const lotsGain = lotRows.reduce((s, r) => s + r.gain, 0);
+  const lotsBase = lotRows.reduce((s, r) => s + (r.live ? r.lot.qty * r.lot.price : 0), 0);
+  const lotsGainPct = lotsBase > 0 ? (lotsGain / lotsBase) * 100 : 0;
+  const lotsUnits = lotRows.reduce((s, r) => s + r.lot.qty, 0);
+  const lotsAvgDays = lotsUnits > 0 ? Math.round(lotRows.reduce((s, r) => s + r.days * r.lot.qty, 0) / lotsUnits) : 0;
+  const oldestDays = lotRows.length > 0 ? Math.max(...lotRows.map((r) => r.days)) : 0;
+  const firstBuy = useMemo(
+    () =>
+      txns
+        .filter((t) => t.side === "BUY" && t.symbol === symbol)
+        .map((t) => t.date)
+        .sort()[0] ?? null,
+    [txns, symbol],
+  );
+  const heldDays = firstBuy ? daysBetween(firstBuy, new Date()) : 0;
+  // Card shows the unit-weighted average across still-held lots (same
+  // convention as the NEPSE cards); the dialog carries the oldest-lot figure.
+  const cardAgeDays = lotsUnits > 0 ? lotsAvgDays : heldDays;
+  const displayRows = useMemo(() => [...lotRows].reverse(), [lotRows]);
+  // Closed activity for the Total-return row: banked sell gains + dividends.
+  const closed = useMemo(() => deriveGlobalRealized(txns, symbol ?? "", currency), [txns, symbol, currency]);
+  return {
+    lotRows,
+    displayRows,
+    lotsGain,
+    lotsGainPct,
+    lotsUnits,
+    lotsAvgDays,
+    oldestDays,
+    cardAgeDays,
+    realized: closed.realized,
+    dividends: closed.dividends,
+    soldQty: closed.soldQty,
+    buyCost: closed.buyCost,
+  };
+}
+
+export function GlobalLotsDialog({
+  open,
+  onOpenChange,
+  symbol,
+  currency,
+  ltp,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  symbol: string | null;
+  currency: string;
+  ltp: number;
+}) {
+  const {
+    lotRows,
+    displayRows,
+    lotsGain,
+    lotsGainPct,
+    lotsAvgDays,
+    oldestDays,
+    realized,
+    dividends,
+    soldQty,
+    buyCost,
+  } = useGlobalLotRows(symbol, currency, ltp);
+  const [lotSort, setLotSort] = useState<"latest" | "oldest" | "gain" | "loss">("latest");
+  // FIFO rows are oldest-first already; displayRows is that reversed.
+  const sortedRows = useMemo(() => {
+    switch (lotSort) {
+      case "oldest":
+        return lotRows;
+      case "gain":
+        return [...displayRows].sort((a, b) => b.gain - a.gain);
+      case "loss":
+        return [...displayRows].sort((a, b) => a.gain - b.gain);
+      default:
+        return displayRows;
+    }
+  }, [lotSort, lotRows, displayRows]);
+  const sortLabel =
+    lotSort === "oldest"
+      ? "oldest first"
+      : lotSort === "gain"
+        ? "biggest gain first"
+        : lotSort === "loss"
+          ? "biggest loss first"
+          : "latest first";
+  const hasClosed = soldQty > 0 || dividends > 0;
+  // Whole story of the stock: still-held lots + banked sells + dividends.
+  const totalReturn = lotsGain + realized + dividends;
+  const totalPct = buyCost > 0 ? (totalReturn / buyCost) * 100 : 0;
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto rounded-2xl sm:max-w-[520px] p-0 gap-0">
+        <DialogHeader className="px-5 pt-5 pb-3">
+          <DialogTitle className="text-base font-bold leading-none">{symbol} · Lots</DialogTitle>
+        </DialogHeader>
+        <div className="px-5 pb-5 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-xl bg-muted/10 border border-border/40 px-4 py-3">
+              <p className="text-xs font-medium text-muted-foreground">Oldest lot</p>
+              <p className="num mt-1 text-base font-bold">
+                {displayRows.length > 0 ? formatHoldingTime(oldestDays) : "—"}
+              </p>
+              <p className="text-[0.68rem] text-muted-foreground">
+                {displayRows.length} lot{displayRows.length === 1 ? "" : "s"} still held
+              </p>
+            </div>
+            <div className="rounded-xl bg-muted/10 border border-border/40 px-4 py-3">
+              <p className="text-xs font-medium text-muted-foreground">Average holding</p>
+              <p className="num mt-1 text-base font-bold">
+                {displayRows.length > 0 ? formatHoldingTime(lotsAvgDays) : "—"}
+              </p>
+              <p className="text-[0.68rem] text-muted-foreground">unit-weighted</p>
+            </div>
+          </div>
+          {displayRows.length > 0 ? (
+            <div className="flex items-center justify-between rounded-xl border border-border/60 bg-surface px-4 py-2.5">
+              <span className="text-xs font-medium">Combined across lots</span>
+              <span className={`num text-sm font-bold ${lotsGain >= 0 ? "text-gain" : "text-loss"}`}>
+                {lotsGain >= 0 ? "+" : "−"}
+                {native(Math.abs(lotsGain), currency)} ({lotsGainPct.toFixed(2)}%)
+              </span>
+            </div>
+          ) : null}
+          {hasClosed ? (
+            <div className="rounded-xl border border-border/60 bg-surface px-4 py-2.5">
+              <p className="text-xs font-semibold text-muted-foreground">Total return — earned up till now</p>
+              <div className="mt-1.5 space-y-1">
+                {soldQty > 0 ? (
+                  <div className="flex items-center justify-between gap-2 text-xs">
+                    <span className="text-muted-foreground">Banked on {native(soldQty, "")} sold</span>
+                    <span className={`num font-bold ${realized >= 0 ? "text-gain" : "text-loss"}`}>
+                      {realized >= 0 ? "+" : "−"}
+                      {native(Math.abs(realized), currency)}
+                    </span>
+                  </div>
+                ) : null}
+                {dividends > 0 ? (
+                  <div className="flex items-center justify-between gap-2 text-xs">
+                    <span className="text-muted-foreground">Dividends received</span>
+                    <span className="num font-bold text-gain">+{native(dividends, currency)}</span>
+                  </div>
+                ) : null}
+                <div className="flex items-center justify-between gap-2 border-t border-border/40 pt-1.5">
+                  <span className="text-xs font-medium">Total (lots + banked + dividends)</span>
+                  <span className={`num text-sm font-bold ${totalReturn >= 0 ? "text-gain" : "text-loss"}`}>
+                    {totalReturn >= 0 ? "+" : "−"}
+                    {native(Math.abs(totalReturn), currency)} ({totalPct.toFixed(2)}%)
+                  </span>
+                </div>
+              </div>
+            </div>
+          ) : null}
+          {displayRows.length > 0 ? (
+            <div>
+              <div className="mb-1.5 flex flex-wrap items-center gap-1" role="group" aria-label="Sort lots">
+                {(
+                  [
+                    ["latest", "Latest"],
+                    ["oldest", "Oldest"],
+                    ["gain", "Top gain"],
+                    ["loss", "Top loss"],
+                  ] as const
+                ).map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    aria-pressed={lotSort === key}
+                    onClick={() => setLotSort(key)}
+                    className={`rounded-full border px-2.5 py-0.5 text-[0.68rem] font-medium transition-colors ${
+                      lotSort === key
+                        ? "border-primary/50 bg-primary/15 text-primary"
+                        : "border-border/60 bg-surface text-muted-foreground hover:border-primary/30"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="overflow-hidden rounded-xl border border-border/60">
+                <p className="sticky top-0 z-10 bg-muted/60 px-4 py-2 text-xs font-semibold text-muted-foreground backdrop-blur-sm">
+                  Per-lot age &amp; gain — {sortLabel}
+                </p>
+                <div className="max-h-72 divide-y divide-border/30 overflow-y-auto">
+                  {sortedRows.map((r, i) => (
+                    <div key={`${r.lot.date}-${i}`} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                      <div className="min-w-0">
+                        <p className="num text-sm font-medium">
+                          {native(r.lot.qty, "")} × {formatDate(r.lot.date)}
+                          {r.time ? ` · ${r.time}` : ""}
+                        </p>
+                        <p className="num text-[0.68rem] text-muted-foreground">
+                          in {native(r.lot.qty * r.lot.price, r.lot.currency)} @ {native(r.lot.price, r.lot.currency)} →{" "}
+                          {native(ltp, currency)}
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <span
+                          className="num rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground"
+                          title={`${r.days} day${r.days === 1 ? "" : "s"} held`}
+                        >
+                          {formatPreciseAge(r.days)}
+                        </span>
+                        {r.live ? (
+                          <p className={`num mt-1 text-xs font-bold ${r.gain >= 0 ? "text-gain" : "text-loss"}`}>
+                            {r.gain >= 0 ? "+" : "−"}
+                            {native(Math.abs(r.gain), currency)} ({r.pct.toFixed(2)}%)
+                          </p>
+                        ) : (
+                          <p className="num mt-1 text-xs font-semibold text-muted-foreground">—</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              No dated buy lots for this symbol — the average above still applies.
+            </p>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function GlobalPositionSheet({
   symbol,
   onOpenChange,
@@ -58,6 +320,7 @@ export function GlobalPositionSheet({
   onOpenChange: (open: boolean) => void;
 }) {
   const txns = useGlobalTxns();
+  const navigate = useNavigate();
   const holding = useMemo(() => deriveHoldings(txns).find((h) => h.symbol === symbol), [txns, symbol]);
   const holdingCcy = holding?.currency ?? "";
   const quote = useQuery({ ...worldQuoteQuery(symbol, holdingCcy), enabled: Boolean(symbol) });
@@ -67,21 +330,28 @@ export function GlobalPositionSheet({
   const sectorHit = searchQ.data?.hits.find((h) => h.symbol.toUpperCase() === (symbol ?? "").toUpperCase());
   const sector = sectorHit?.sector ?? quote.data?.sector ?? null;
   const industry = sectorHit?.industry ?? quote.data?.industry ?? null;
-  const [range, setRange] = useState<WorldRange>("1M");
+  const [range, setRange] = useState<WorldRange | "1D">("1D");
   const [tab, setTab] = useState("overview");
   useEffect(() => {
-    setRange("1M");
+    setRange("1D");
     setTab("overview");
   }, [symbol]);
-  const history = useQuery({ ...worldHistoryQuery(symbol, range, holdingCcy), enabled: Boolean(symbol) });
+  const history = useQuery({
+    ...worldHistoryQuery(symbol, range === "1D" ? "1M" : range, holdingCcy),
+    enabled: Boolean(symbol),
+  });
+  const intraday = useQuery({ ...worldIntradayQuery(symbol, holdingCcy), enabled: Boolean(symbol) });
   const chartPoints = useMemo(
     () =>
-      (history.data?.bars ?? []).map((b) => ({
-        time: Math.floor(new Date(`${b.date}T00:00:00Z`).getTime() / 1000),
-        value: b.close,
-      })),
-    [history.data],
+      range === "1D"
+        ? (intraday.data?.ticks ?? []).map((tk) => ({ time: tk.t, value: tk.close }))
+        : (history.data?.bars ?? []).map((b) => ({
+            time: Math.floor(new Date(`${b.date}T00:00:00Z`).getTime() / 1000),
+            value: b.close,
+          })),
+    [history.data, intraday.data, range],
   );
+  const chartQuery = range === "1D" ? intraday : history;
   const lots = useMemo(
     () => txns.filter((t) => t.symbol === symbol).sort((a, b) => b.date.localeCompare(a.date)),
     [txns, symbol],
@@ -126,47 +396,8 @@ export function GlobalPositionSheet({
   const prevNative = quote.data?.previousClose ?? 0;
   const dayNative = holding && ltp > 0 && prevNative > 0 ? holding.qty * (ltp - prevNative) : 0;
   const costNative = holding ? holding.qty * holding.avgPrice : 0;
-  const firstBuy = useMemo(
-    () =>
-      txns
-        .filter((t) => t.side === "BUY" && t.symbol === symbol)
-        .map((t) => t.date)
-        .sort()[0] ?? null,
-    [txns, symbol],
-  );
-  const heldDays = firstBuy ? daysBetween(firstBuy, new Date()) : 0;
   const [lotsOpen, setLotsOpen] = useState(false);
-  // FIFO buy lots still held, each with its age and its own gain since that
-  // day: bought 2 months ago at X vs repurchased last month at Y read apart.
-  const fifoLots = useMemo(() => (symbol ? deriveGlobalLots(txns, symbol) : []), [txns, symbol]);
-  const lotRows = useMemo(
-    () =>
-      fifoLots.map((lot) => {
-        const days = daysBetween(lot.date, new Date());
-        const live = sameNativeCurrency(lot.currency, currency) && ltp > 0 && lot.price > 0;
-        const gain = live ? lot.qty * (ltp - lot.price) : 0;
-        const base = lot.qty * lot.price;
-        return {
-          lot,
-          days,
-          gain,
-          pct: base > 0 && live ? (gain / base) * 100 : 0,
-          live,
-          time: days === 0 ? formatTimeOfDay(lot.date) : null,
-        };
-      }),
-    [fifoLots, currency, ltp],
-  );
-  const lotsGain = lotRows.reduce((s, r) => s + r.gain, 0);
-  const lotsBase = lotRows.reduce((s, r) => s + (r.live ? r.lot.qty * r.lot.price : 0), 0);
-  const lotsGainPct = lotsBase > 0 ? (lotsGain / lotsBase) * 100 : 0;
-  const lotsUnits = lotRows.reduce((s, r) => s + r.lot.qty, 0);
-  const lotsAvgDays = lotsUnits > 0 ? Math.round(lotRows.reduce((s, r) => s + r.days * r.lot.qty, 0) / lotsUnits) : 0;
-  const oldestDays = lotRows.length > 0 ? Math.max(...lotRows.map((r) => r.days)) : 0;
-  // Card shows the unit-weighted average across still-held lots (same
-  // convention as the NEPSE cards); the dialog carries the oldest-lot figure.
-  const cardAgeDays = lotsUnits > 0 ? lotsAvgDays : heldDays;
-  const displayRows = useMemo(() => [...lotRows].reverse(), [lotRows]);
+  const { cardAgeDays } = useGlobalLotRows(symbol, currency, ltp);
   const gross = holding && ltp > 0 ? holding.qty * (ltp - holding.avgPrice) : 0;
   const grossBase = holding ? holding.qty * holding.avgPrice : 0;
   const grossPct = grossBase > 0 ? (gross / grossBase) * 100 : 0;
@@ -312,13 +543,20 @@ export function GlobalPositionSheet({
                             <span className="num text-xs font-semibold text-muted-foreground">—</span>
                           )}
                         </div>
-                        <div className="flex items-center justify-between gap-2 border-t border-border/30 px-3 py-2.5">
+                        <button
+                          type="button"
+                          onClick={() => setLotsOpen(true)}
+                          title="Open lots"
+                          className="flex w-full items-center justify-between gap-2 border-t border-border/30 px-3 py-2.5 text-left transition-colors hover:bg-muted/20"
+                        >
                           <span className="text-xs font-medium text-foreground">Return</span>
-                          <span className={`num text-sm font-bold ${gross >= 0 ? "text-gain" : "text-loss"}`}>
-                            {gross >= 0 ? "+" : ""}
+                          <span
+                            className={`num text-sm font-bold underline decoration-primary/30 decoration-dotted underline-offset-2 ${gross >= 0 ? "text-gain" : "text-loss"}`}
+                          >
+                            {gross >= 0 ? "+" : "−"}
                             {native(Math.abs(gross), currency)} ({grossPct.toFixed(2)}%)
                           </span>
-                        </div>
+                        </button>
                         <button
                           type="button"
                           onClick={() => setLotsOpen(true)}
@@ -395,9 +633,23 @@ export function GlobalPositionSheet({
                   </Panel>
                   <div className="rounded-2xl border border-border/60 bg-card p-3 order-1">
                     <div className="mb-1 flex items-center justify-between gap-2">
-                      <h3 className="font-display text-sm font-semibold">Price history</h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-display text-sm font-semibold">Price history</h3>
+                        {symbol && chartPoints.length > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onOpenChange(false);
+                              void navigate({ to: "/terminal", search: { symbol } });
+                            }}
+                            className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                          >
+                            <ChartCandlestick className="size-3.5" /> Terminal
+                          </button>
+                        ) : null}
+                      </div>
                       <div className="flex flex-wrap gap-1">
-                        {(["1M", "3M", "6M", "1Y", "MAX"] as const).map((r) => (
+                        {(["1D", "1W", "1M", "6M", "1Y", "MAX"] as const).map((r) => (
                           <button
                             key={r}
                             type="button"
@@ -434,16 +686,16 @@ export function GlobalPositionSheet({
                         ) : null}
                       </div>
                     ) : null}
-                    {history.isPending ? (
+                    {chartQuery.isPending ? (
                       <p className="rounded-xl border border-border/60 bg-surface px-3 py-8 text-center text-sm text-muted-foreground">
                         Loading price history…
                       </p>
-                    ) : history.isError ? (
+                    ) : chartQuery.isError ? (
                       <p className="rounded-xl border border-border/60 bg-surface px-3 py-8 text-center text-sm text-muted-foreground">
                         Couldn&apos;t load price history.{" "}
                         <button
                           type="button"
-                          onClick={() => void history.refetch()}
+                          onClick={() => void chartQuery.refetch()}
                           className="font-medium text-primary hover:underline"
                         >
                           Try again
@@ -454,14 +706,33 @@ export function GlobalPositionSheet({
                         points={chartPoints}
                         height={200}
                         wacc={holding.avgPrice > 0 ? holding.avgPrice : null}
+                        anchor={range === "1D" && prevNative > 0 ? prevNative : null}
                         formatValue={(v) => native(v, currency)}
                         formatLabel={(t) =>
-                          new Date(t * 1000).toLocaleDateString("en-GB", {
-                            day: "2-digit",
-                            month: "short",
-                            year: "numeric",
-                          })
+                          range === "1D"
+                            ? new Date(t * 1000).toLocaleTimeString("en-US", {
+                                hour: "numeric",
+                                minute: "2-digit",
+                                hour12: true,
+                              })
+                            : new Date(t * 1000).toLocaleDateString("en-GB", {
+                                day: "2-digit",
+                                month: "short",
+                                year: "numeric",
+                              })
                         }
+                        tooltipExtra={(pt) => {
+                          if (range !== "1D") return null;
+                          const base = prevNative > 0 ? prevNative : (chartPoints[0]?.value ?? 0);
+                          if (!(base > 0)) return null;
+                          const pct = ((pt.value - base) / base) * 100;
+                          return (
+                            <p className={`num text-[0.65rem] font-semibold ${pct >= 0 ? "text-gain" : "text-loss"}`}>
+                              {pct >= 0 ? "+" : ""}
+                              {pct.toFixed(2)}% today
+                            </p>
+                          );
+                        }}
                       />
                     ) : (
                       <p className="rounded-xl border border-border/60 bg-surface px-3 py-8 text-center text-sm text-muted-foreground">
@@ -469,7 +740,9 @@ export function GlobalPositionSheet({
                       </p>
                     )}
                     <p className="mt-2 text-[0.68rem] text-muted-foreground">
-                      Daily closes · dashed line marks your average cost. Hover to inspect.
+                      {range === "1D"
+                        ? "Today's session · 15-min bars · dashed line marks your average cost. Hover to inspect."
+                        : "Daily closes · dashed line marks your average cost. Hover to inspect."}
                     </p>
                   </div>
                 </TabsContent>
@@ -615,85 +888,7 @@ export function GlobalPositionSheet({
             </>
           )}
         </div>
-        <Dialog open={lotsOpen} onOpenChange={setLotsOpen}>
-          <DialogContent className="max-h-[85vh] overflow-y-auto rounded-2xl sm:max-w-[520px] p-0 gap-0">
-            <DialogHeader className="px-5 pt-5 pb-3">
-              <DialogTitle className="text-base font-bold leading-none">{symbol} · Lots</DialogTitle>
-            </DialogHeader>
-            <div className="px-5 pb-5 space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-xl bg-muted/10 border border-border/40 px-4 py-3">
-                  <p className="text-xs font-medium text-muted-foreground">Oldest lot</p>
-                  <p className="num mt-1 text-base font-bold">
-                    {lotRows.length > 0 ? formatHoldingTime(oldestDays) : "—"}
-                  </p>
-                  <p className="text-[0.68rem] text-muted-foreground">
-                    {lotRows.length} lot{lotRows.length === 1 ? "" : "s"} still held
-                  </p>
-                </div>
-                <div className="rounded-xl bg-muted/10 border border-border/40 px-4 py-3">
-                  <p className="text-xs font-medium text-muted-foreground">Average holding</p>
-                  <p className="num mt-1 text-base font-bold">
-                    {lotRows.length > 0 ? formatHoldingTime(lotsAvgDays) : "—"}
-                  </p>
-                  <p className="text-[0.68rem] text-muted-foreground">unit-weighted</p>
-                </div>
-              </div>
-              {lotRows.length > 0 ? (
-                <div className="flex items-center justify-between rounded-xl border border-border/60 bg-surface px-4 py-2.5">
-                  <span className="text-xs font-medium">Combined across lots</span>
-                  <span className={`num text-sm font-bold ${lotsGain >= 0 ? "text-gain" : "text-loss"}`}>
-                    {lotsGain >= 0 ? "+" : ""}
-                    {native(Math.abs(lotsGain), currency)} ({lotsGainPct.toFixed(2)}%)
-                  </span>
-                </div>
-              ) : null}
-              {lotRows.length > 0 ? (
-                <div className="rounded-xl border border-border/60 overflow-hidden">
-                  <p className="bg-muted/20 px-4 py-2 text-xs font-semibold text-muted-foreground">
-                    Per-lot age &amp; gain — latest first
-                  </p>
-                  <div className="divide-y divide-border/30">
-                    {displayRows.map((r, i) => (
-                      <div key={`${r.lot.date}-${i}`} className="flex items-center justify-between gap-3 px-4 py-2.5">
-                        <div className="min-w-0">
-                          <p className="num text-sm font-medium">
-                            {native(r.lot.qty, "")} × {formatDate(r.lot.date)}
-                            {r.time ? ` · ${r.time}` : ""}
-                          </p>
-                          <p className="num text-[0.68rem] text-muted-foreground">
-                            in {native(r.lot.qty * r.lot.price, r.lot.currency)} @ {native(r.lot.price, r.lot.currency)}{" "}
-                            → {native(ltp, currency)}
-                          </p>
-                        </div>
-                        <div className="shrink-0 text-right">
-                          <span
-                            className="num rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground"
-                            title={`${r.days} day${r.days === 1 ? "" : "s"} held`}
-                          >
-                            {formatPreciseAge(r.days)}
-                          </span>
-                          {r.live ? (
-                            <p className={`num mt-1 text-xs font-bold ${r.gain >= 0 ? "text-gain" : "text-loss"}`}>
-                              {r.gain >= 0 ? "+" : ""}
-                              {native(Math.abs(r.gain), currency)} ({r.pct.toFixed(2)}%)
-                            </p>
-                          ) : (
-                            <p className="num mt-1 text-xs font-semibold text-muted-foreground">—</p>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  No dated buy lots for this symbol — the average above still applies.
-                </p>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
+        <GlobalLotsDialog open={lotsOpen} onOpenChange={setLotsOpen} symbol={symbol} currency={currency} ltp={ltp} />
       </SheetContent>
     </Sheet>
   );

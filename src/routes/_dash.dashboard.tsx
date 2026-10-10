@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { ErrorBoundary } from "react-error-boundary";
@@ -25,6 +25,7 @@ import { ErrorBlock, LoadingBlock, EmptyBlock, SkeletonCards } from "@/component
 import { ScripSheet } from "@/components/market/scrip-sheet";
 import { ChartModal, chartTimeLabel } from "@/components/market/chart-modal";
 import { Sparkline } from "@/components/market/sparkline";
+import { PortfolioDayCard } from "@/components/portfolio/portfolio-day-card";
 import { RangeBar } from "@/components/market/range-bar";
 import {
   applicableIssuesQuery,
@@ -32,12 +33,14 @@ import {
   currentIssuesQuery,
   dividendsQuery,
   enrichedPortfolioQuery,
+  globalValuationQuery,
   holdingSymbolsQuery,
   indexGraphQuery,
   investmentSummaryQuery,
   ipoArchiveQuery,
   marketSnapshotQuery,
 } from "@/lib/queries";
+import { deriveHoldings, useGlobalTxns } from "@/lib/world/store";
 import {
   daysUntil,
   formatDate,
@@ -169,8 +172,30 @@ function DashboardPage() {
 
   const data = portfolio.data;
   const holdings = data?.holdings ?? [];
-  const change = data?.dayChange ?? 0;
-  const changePct = data?.dayChangePercent ?? 0;
+
+  // Global book folds into the headline totals (value, prev close, day
+  // change, investment) so the top stats are the whole book, not NEPSE-only.
+  const globalTxns = useGlobalTxns();
+  const globalLots = useMemo(
+    () =>
+      deriveHoldings(globalTxns).map((h) => ({
+        symbol: h.symbol,
+        qty: h.qty,
+        avgPrice: h.avgPrice,
+        currency: h.currency,
+      })),
+    [globalTxns],
+  );
+  const globalValuation = useQuery({ ...globalValuationQuery(globalLots, true) });
+  const globalRows = useMemo(() => (globalValuation.data?.rows ?? []).filter((r) => r.ok), [globalValuation.data]);
+  const gNow = globalRows.reduce((s, r) => s + r.valueNpr, 0);
+  const gPrev = globalRows.reduce((s, r) => s + r.prevValueNpr, 0);
+  const gCost = globalRows.reduce((s, r) => s + r.qty * r.avgBuyNpr, 0);
+
+  const totValue = (data?.totalValue ?? 0) + gNow;
+  const totPrev = (data?.totalPreviousValue ?? 0) + gPrev;
+  const change = totValue - totPrev;
+  const changePct = totPrev > 0 ? (change / totPrev) * 100 : 0;
 
   const totalInvestment = investment.data?.totalInvestment ?? 0;
   const pendingCount = investment.data?.pendingCount ?? 0;
@@ -280,7 +305,7 @@ function DashboardPage() {
     <StatCard
       key="live"
       label="Portfolio value (live)"
-      value={<AdaptiveNpr value={data?.totalValue ?? 0} />}
+      value={<AdaptiveNpr value={totValue} />}
       tone="brand"
       icon={<Briefcase className="size-4" />}
       sub={
@@ -296,7 +321,7 @@ function DashboardPage() {
     <StatCard
       key="prev"
       label="Value at previous close"
-      value={<AdaptiveNpr value={data?.totalPreviousValue ?? 0} />}
+      value={<AdaptiveNpr value={totPrev} />}
       sub="Yesterday's closing valuation"
     />,
     <StatCard
@@ -324,7 +349,7 @@ function DashboardPage() {
     <StatCard
       key="investment"
       label="Total investment"
-      value={<AdaptiveNpr value={totalInvestment} />}
+      value={<AdaptiveNpr value={totalInvestment + gCost} />}
       icon={<Wallet className="size-4" />}
       sub={
         investment.isLoading
@@ -385,99 +410,105 @@ function DashboardPage() {
             </div>
           </div>
 
-          <Widget label="NEPSE index">
-            <Panel
-              as="button"
-              type="button"
-              onClick={() => setChartOpen(true)}
-              interactive
-              className="group relative hidden w-full overflow-hidden text-left transition-colors sm:block"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="flex items-center gap-1.5 text-xs uppercase tracking-wider text-muted-foreground">
-                    <ChartLine className="size-3.5 text-primary" /> NEPSE Index
-                    <span
-                      title={
-                        market.data?.status.isOpen
-                          ? "Live trading — NEPSE is open today"
-                          : (() => {
-                              const raw = nepse?.generatedTime;
-                              if (!raw) return "Market is closed — no session data";
-                              const d = new Date(String(raw).replace(" ", "T"));
-                              const dateStr = formatDate(raw);
-                              if (Number.isNaN(d.getTime())) return `Last session: ${dateStr} — market is closed`;
-                              const today0 = new Date();
-                              today0.setHours(0, 0, 0, 0);
-                              const gen0 = new Date(d);
-                              gen0.setHours(0, 0, 0, 0);
-                              const diff = Math.round((today0.getTime() - gen0.getTime()) / 86_400_000);
-                              const rel = diff <= 0 ? "today" : diff === 1 ? "1 day ago" : `${diff} days ago`;
-                              return `Last session: ${dateStr} · ${rel} — market is closed`;
-                            })()
-                      }
-                    >
-                      · {!market.data ? "—" : sessionAgeLabel(nepse?.generatedTime, market.data.status.isOpen)}
-                    </span>
-                  </p>
-                  {nepse ? (
-                    <p className="num mt-2 flex flex-wrap items-center gap-2 text-3xl font-semibold">
-                      {nepse.close != null ? nepse.close.toLocaleString("en-NP") : "-"}
-                      <DeltaPill value={nepse.percentChange}>{formatPercent(nepse.percentChange)}</DeltaPill>
-                    </p>
-                  ) : market.isError || nepseGraph.isError ? (
-                    <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-                      <span className="text-muted-foreground">Index data unavailable.</span>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={(e) => {
-                          // Don't open the chart modal underneath.
-                          e.stopPropagation();
-                          void market.refetch();
-                          void nepseGraph.refetch();
-                        }}
+          <div className="grid gap-4 xl:grid-cols-2">
+            <PortfolioDayCard holdings={holdings.map((h) => ({ scrip: h.scrip, units: h.units, price: h.ltp }))} />
+            <Widget label="NEPSE index">
+              <Panel
+                as="button"
+                type="button"
+                onClick={() => setChartOpen(true)}
+                interactive
+                className="group relative hidden w-full overflow-hidden text-left transition-colors sm:block"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="flex items-center gap-1.5 text-xs uppercase tracking-wider text-muted-foreground">
+                      <ChartLine className="size-3.5 text-primary" /> NEPSE Index
+                      <span
+                        title={
+                          market.data?.status.isOpen
+                            ? "Live trading — NEPSE is open today"
+                            : (() => {
+                                const raw = nepse?.generatedTime;
+                                if (!raw) return "Market is closed — no session data";
+                                const d = new Date(String(raw).replace(" ", "T"));
+                                const dateStr = formatDate(raw);
+                                if (Number.isNaN(d.getTime())) return `Last session: ${dateStr} — market is closed`;
+                                const today0 = new Date();
+                                today0.setHours(0, 0, 0, 0);
+                                const gen0 = new Date(d);
+                                gen0.setHours(0, 0, 0, 0);
+                                const diff = Math.round((today0.getTime() - gen0.getTime()) / 86_400_000);
+                                const rel = diff <= 0 ? "today" : diff === 1 ? "1 day ago" : `${diff} days ago`;
+                                return `Last session: ${dateStr} · ${rel} — market is closed`;
+                              })()
+                        }
                       >
-                        Try again
-                      </Button>
-                    </div>
-                  ) : (
-                    <p className="mt-2 text-sm text-muted-foreground">Loading…</p>
-                  )}
-                  {nepse &&
-                  nepse.close != null &&
-                  (nepse.fiftyTwoWeekLow ?? 0) > 0 &&
-                  (nepse.fiftyTwoWeekHigh ?? 0) > (nepse.fiftyTwoWeekLow ?? 0) ? (
-                    <div className="mt-2 max-w-72">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-muted-foreground">
-                          52-week range
-                        </p>
-                        <p className="flex items-center gap-1 text-[0.68rem] font-medium text-primary opacity-100 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-focus-within:opacity-100 [@media(hover:hover)]:group-hover:opacity-100">
-                          Click for the full chart <ArrowUpRight className="size-3" />
-                        </p>
+                        · {!market.data ? "—" : sessionAgeLabel(nepse?.generatedTime, market.data.status.isOpen)}
+                      </span>
+                    </p>
+                    {nepse ? (
+                      <p className="num mt-1.5 flex flex-wrap items-center gap-2 text-2xl font-semibold">
+                        {nepse.close != null ? nepse.close.toLocaleString("en-NP") : "-"}
+                        <DeltaPill value={nepse.percentChange}>{formatPercent(nepse.percentChange)}</DeltaPill>
+                      </p>
+                    ) : market.isError || nepseGraph.isError ? (
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                        <span className="text-muted-foreground">Index data unavailable.</span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={(e) => {
+                            // Don't open the chart modal underneath.
+                            e.stopPropagation();
+                            void market.refetch();
+                            void nepseGraph.refetch();
+                          }}
+                        >
+                          Try again
+                        </Button>
                       </div>
-                      <RangeBar
-                        low={nepse.fiftyTwoWeekLow ?? 0}
-                        high={nepse.fiftyTwoWeekHigh ?? 0}
-                        value={Math.min(Math.max(nepse.close, nepse.fiftyTwoWeekLow ?? 0), nepse.fiftyTwoWeekHigh ?? 0)}
-                        format={(v) => formatNpr(v)}
-                        tone={nepse.percentChange < 0 ? "loss" : "gain"}
-                        showValueLabel={false}
-                        colorByPosition
-                      />
+                    ) : (
+                      <p className="mt-2 text-sm text-muted-foreground">Loading…</p>
+                    )}
+                    {nepse &&
+                    nepse.close != null &&
+                    (nepse.fiftyTwoWeekLow ?? 0) > 0 &&
+                    (nepse.fiftyTwoWeekHigh ?? 0) > (nepse.fiftyTwoWeekLow ?? 0) ? (
+                      <div className="mt-2 max-w-72">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-muted-foreground">
+                            52-week range
+                          </p>
+                          <p className="flex items-center gap-1 text-[0.68rem] font-medium text-primary opacity-100 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-focus-within:opacity-100 [@media(hover:hover)]:group-hover:opacity-100">
+                            Click for the full chart <ArrowUpRight className="size-3" />
+                          </p>
+                        </div>
+                        <RangeBar
+                          low={nepse.fiftyTwoWeekLow ?? 0}
+                          high={nepse.fiftyTwoWeekHigh ?? 0}
+                          value={Math.min(
+                            Math.max(nepse.close, nepse.fiftyTwoWeekLow ?? 0),
+                            nepse.fiftyTwoWeekHigh ?? 0,
+                          )}
+                          format={(v) => formatNpr(v)}
+                          tone={nepse.percentChange < 0 ? "loss" : "gain"}
+                          showValueLabel={false}
+                          colorByPosition
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                  {nepsePoints.length >= 2 ? (
+                    <div className="-mr-4 h-12 w-32 self-start sm:-mr-5 sm:w-48">
+                      <Sparkline points={nepsePoints} showLastDot />
                     </div>
                   ) : null}
                 </div>
-                {nepsePoints.length >= 2 ? (
-                  <div className="-mr-4 h-16 w-40 self-start sm:-mr-5 sm:w-64">
-                    <Sparkline points={nepsePoints} showLastDot />
-                  </div>
-                ) : null}
-              </div>
-            </Panel>
-          </Widget>
+              </Panel>
+            </Widget>
+          </div>
 
           <Widget label="Today's movers">
             <Panel as="section">

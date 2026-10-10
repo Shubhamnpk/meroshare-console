@@ -1,12 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AreaChart } from "@/components/market/area-chart";
-import {
-  DEFAULT_INDICATORS,
-  TerminalChart,
-  type HoverInfo,
-  type IndicatorConfig,
-} from "@/components/market/terminal-chart";
+import { TerminalChart, type HoverInfo, type IndicatorConfig } from "@/components/market/terminal-chart";
 import { DeltaPill } from "@/components/stat-card";
 import { formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -18,11 +13,12 @@ const TZ = "Asia/Kathmandu";
 /** Stable empty intraday (a fresh `[]` literal would rebuild TerminalChart each render). */
 const NO_POINTS: PricePoint[] = [];
 
-/** "14:32" in NPT, for intraday series. */
+/** "2:32 PM" in NPT, for intraday series. */
 export function chartTimeLabel(time: number): string {
-  return new Date(time * 1000).toLocaleTimeString("en-GB", {
-    hour: "2-digit",
+  return new Date(time * 1000).toLocaleTimeString("en-US", {
+    hour: "numeric",
     minute: "2-digit",
+    hour12: true,
     timeZone: TZ,
   });
 }
@@ -164,11 +160,9 @@ export function ChartModal({
   formatDailyLabel: (time: number) => string;
 }) {
   const [activeKey, setActiveKey] = useState<string | null>(null);
-  const [indicators, setIndicators] = useState<IndicatorConfig>({
-    ...DEFAULT_INDICATORS,
-    sma20: true,
-    volume: true,
-  });
+  const { chart, setChart } = useSettings();
+  const indicators = chart.indicators;
+  const setIndicators = (v: IndicatorConfig) => setChart({ indicators: v });
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const light = useResolvedLight();
 
@@ -225,7 +219,7 @@ export function ChartModal({
                     <button
                       key={t.key}
                       type="button"
-                      onClick={() => setIndicators((prev) => ({ ...prev, [t.key]: !prev[t.key] }))}
+                      onClick={() => setIndicators({ ...indicators, [t.key]: !indicators[t.key] })}
                       className={cn(
                         "rounded-full border px-2 py-0.5 text-[0.68rem] font-medium transition-colors",
                         indicators[t.key]

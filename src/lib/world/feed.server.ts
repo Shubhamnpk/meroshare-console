@@ -44,6 +44,8 @@ const BROWSER_UA =
 
 const TTL_QUOTE = 60_000;
 const TTL_HISTORY = 6 * 60 * 60_000;
+/** Intraday moves fast — 5 minutes, not hours. */
+const TTL_INTRADAY = 5 * 60_000;
 const FETCH_TIMEOUT = 8000;
 
 interface CacheEntry {
@@ -94,6 +96,9 @@ type YahooChart = {
     result?: {
       meta?: Record<string, unknown>;
       timestamp?: number[];
+      events?: {
+        splits?: Record<string, { date?: number; numerator?: number; denominator?: number }>;
+      };
       indicators?: {
         quote?: {
           open?: (number | null)[];
@@ -108,31 +113,61 @@ type YahooChart = {
   };
 };
 
-/** Parse a Yahoo v8 chart document into daily/intraday bars. Exported for tests. */
+/**
+ * Parse a Yahoo v8 chart document into daily/intraday bars. Exported for tests.
+ *
+ * One convention everywhere: RAW prices, split-adjusted only. Yahoo's
+ * adjclose also strips dividends, which silently re-prices history — the
+ * same day then reads differently per range, and nothing agrees with the
+ * live quote or intraday (both raw). Splits alone move every leg together,
+ * so those still compound backward; dividend ex-dates print the real dip.
+ */
 export function parseYahooChart(doc: unknown): { bars: WorldBar[]; meta: Record<string, unknown> } {
   const chart = (doc as YahooChart)?.chart;
   const result = chart?.result?.[0];
   const meta = (result?.meta ?? {}) as Record<string, unknown>;
   const ts = result?.timestamp ?? [];
   const quote = result?.indicators?.quote?.[0] ?? {};
-  // Adjusted closes keep long-range charts honest across splits/dividends.
-  const adj = result?.indicators?.adjclose?.[0]?.adjclose ?? [];
+  const splits = Object.values(result?.events?.splits ?? {})
+    .map((s) => ({
+      date: num(s.date),
+      ratio: num(s.numerator) > 0 && num(s.denominator) > 0 ? num(s.denominator) / num(s.numerator) : 1,
+    }))
+    .filter((s) => s.date > 0 && s.ratio > 0 && s.ratio !== 1)
+    .sort((a, b) => a.date - b.date);
+  const splitFactor = (t: number) => {
+    let f = 1;
+    for (const s of splits) {
+      if (t < s.date) f *= s.ratio;
+      else break;
+    }
+    return f;
+  };
+  const now = Math.floor(Date.now() / 1000);
+  const livePrice = num(meta["regularMarketPrice"]);
   const bars: WorldBar[] = [];
   for (let i = 0; i < ts.length; i += 1) {
-    const rawClose = num(quote.close?.[i]);
-    const close = num(adj[i]) || rawClose;
-    if (!(close > 0)) continue;
     const t = num(ts[i]);
     if (!(t > 0)) continue;
+    const f = splitFactor(t);
+    let close = num(quote.close?.[i]) * f;
+    const isLast = i === ts.length - 1;
+    // Today's bar prints O/H/L while its close is still null — fill it with
+    // the live quote so the day isn't silently dropped (stale-meta guard:
+    // only when the bar is from the last 3 days).
+    if (!(close > 0) && isLast && livePrice > 0 && t > now - 3 * 86400) {
+      close = livePrice * f;
+    }
+    if (!(close > 0)) continue;
     const d = new Date(t * 1000);
     const date = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
     bars.push({
       date,
-      open: num(quote.open?.[i]) || close,
-      high: num(quote.high?.[i]) || close,
-      low: num(quote.low?.[i]) || close,
+      open: num(quote.open?.[i]) * f || close,
+      high: num(quote.high?.[i]) * f || close,
+      low: num(quote.low?.[i]) * f || close,
       close,
-      volume: num(quote.volume?.[i]),
+      volume: Math.round(num(quote.volume?.[i]) / f),
     });
   }
   return { bars, meta };
@@ -380,6 +415,55 @@ export async function worldHistory(
 /** Clear the world-feed cache (tests / manual refresh). */
 export function clearWorldCache(): void {
   cache.clear();
+}
+
+/** One intraday print, epoch seconds. Same-day moves don't need splits math. */
+export interface WorldTick {
+  t: number;
+  close: number;
+  /** Session volume at this tick (0 when the feed omits it, e.g. FX). */
+  volume: number;
+  open: number;
+  high: number;
+  low: number;
+}
+
+/**
+ * Today's session as time-aware ticks (Yahoo 1D at 5m or 15m — 5m only
+ * answers US listings, everything else needs 15m). Unlike worldHistory,
+ * the clock survives — callers stitch these into 24h book lines. 5-min cache.
+ */
+export async function worldIntraday(
+  symbol: string,
+  interval: "5m" | "15m" = "15m",
+): Promise<{ ticks: WorldTick[]; source: WorldSource | null }> {
+  const upper = symbol.toUpperCase();
+  const key = `world:yahoo-intraday:${interval}:${upper}`;
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(upper)}?range=1D&interval=${interval}&events=div%2Csplits`;
+  const { data } = await cachedJson<unknown>(key, url, TTL_INTRADAY);
+  if (data == null) return { ticks: [], source: null };
+  const chart = (data as YahooChart)?.chart;
+  const result = chart?.result?.[0];
+  const ts = result?.timestamp ?? [];
+  const quote = result?.indicators?.quote?.[0] ?? {};
+  const ticks: WorldTick[] = [];
+  const seen = new Set<number>();
+  for (let i = 0; i < ts.length; i += 1) {
+    const close = num(quote.close?.[i]);
+    const t = num(ts[i]);
+    if (!(close > 0) || !(t > 0) || seen.has(t)) continue;
+    seen.add(t);
+    ticks.push({
+      t,
+      close,
+      volume: Math.max(0, num(quote.volume?.[i])),
+      open: num(quote.open?.[i]) || close,
+      high: num(quote.high?.[i]) || close,
+      low: num(quote.low?.[i]) || close,
+    });
+  }
+  ticks.sort((a, b) => a.t - b.t);
+  return { ticks, source: ticks.length > 0 ? "yahoo" : null };
 }
 
 export interface GlobalHistoryPoint {

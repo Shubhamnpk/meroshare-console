@@ -10,6 +10,7 @@ import { ModeSwitch } from "@/components/market/heatmap-controls";
 import { ErrorBlock, LoadingBlock, EmptyBlock } from "@/components/states";
 import { StatCard } from "@/components/stat-card";
 import { HistoryPanel } from "@/components/portfolio/history-panel";
+import { PortfolioDayCard } from "@/components/portfolio/portfolio-day-card";
 import { ScripSheet } from "@/components/market/scrip-sheet";
 import { enrichedPortfolioQuery } from "@/lib/queries";
 import { formatNpr, formatPercent, formatQty } from "@/lib/format";
@@ -267,6 +268,8 @@ function AnalyticsPage() {
               />
             </SwipeItem>
           </SwipeStrip>
+
+          <PortfolioDayCard holdings={rows.map((r) => ({ scrip: r.scrip, units: r.units, price: r.ltp }))} />
 
           <Panel as="section">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">

@@ -4,35 +4,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { forwardRef, useEffect, useState } from "react";
 import type { ComponentPropsWithoutRef } from "react";
+import { useSettings, type NumberFormatPref } from "@/lib/settings";
 
-type NumberFormat = "us" | "eu" | "np";
+export type { NumberFormatPref as NumberFormat };
 
-const STORAGE_KEY = "ms-number-format";
-const LEGACY_KEY = "wallet_number_format";
-
-function readStoredFormat(): NumberFormat {
-  if (typeof window === "undefined") return "np";
-  const raw = window.localStorage.getItem(STORAGE_KEY) ?? window.localStorage.getItem(LEGACY_KEY);
-  if (raw === "us" || raw === "eu" || raw === "np") return raw;
-  if (raw === "in") return "np";
-  return "np";
-}
-
-function localeFor(format: NumberFormat): string {
+function localeFor(format: NumberFormatPref): string {
   return format === "us" ? "en-US" : format === "eu" ? "de-DE" : "en-NP";
-}
-
-export function setNumberFormat(format: NumberFormat) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(STORAGE_KEY, format);
-  window.dispatchEvent(new Event("numberFormatChange"));
-  window.dispatchEvent(
-    new StorageEvent("storage", { key: STORAGE_KEY, newValue: format } as unknown as StorageEventInit),
-  );
-}
-
-export function getNumberFormat(): NumberFormat {
-  return readStoredFormat();
 }
 
 interface AmountInputProps extends Omit<ComponentPropsWithoutRef<typeof Input>, "value" | "onChange" | "type"> {
@@ -47,25 +24,16 @@ const CURRENCY_SYMBOL = "रु";
 export const AmountInput = forwardRef<HTMLInputElement, AmountInputProps>(
   ({ value, onChange, label, required = false, className, ...props }, ref) => {
     const [displayAmount, setDisplayAmount] = useState("");
-    const [locale, setLocale] = useState<NumberFormat>(() => readStoredFormat());
+    // Shared store now — one switch in Settings regroups every amount input.
+    const { numberFormat } = useSettings();
+    const locale = numberFormat;
 
     const getLocaleString = () => localeFor(locale);
 
     useEffect(() => {
-      const updateFormat = () => {
-        const next = readStoredFormat();
-        setLocale(next);
-        const stringValue = typeof value === "number" ? value.toString() : value;
-        setDisplayAmount(formatDisplayAmount(stringValue, localeFor(next)));
-      };
-      window.addEventListener("storage", updateFormat);
-      window.addEventListener("numberFormatChange", updateFormat);
-      updateFormat();
-      return () => {
-        window.removeEventListener("storage", updateFormat);
-        window.removeEventListener("numberFormatChange", updateFormat);
-      };
-    }, [value]);
+      const stringValue = typeof value === "number" ? value.toString() : value;
+      setDisplayAmount(formatDisplayAmount(stringValue, localeFor(locale)));
+    }, [value, locale]);
 
     const formatDisplayAmount = (rawValue: string, loc = getLocaleString()) => {
       if (!rawValue) return "";

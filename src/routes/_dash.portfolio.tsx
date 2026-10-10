@@ -316,7 +316,7 @@ function PortfolioPage() {
         case "unrealized":
           return plOf(h);
         case "percentChange":
-          return h.dayChange;
+          return h.percentChange;
         case "weight":
           return weightOf(h);
       }
@@ -389,7 +389,7 @@ function PortfolioPage() {
         case "unrealized":
           return h.value - h.units * h.avgBuy;
         case "percentChange":
-          return h.dayChange;
+          return h.percentChange;
         case "weight":
           return weightOf(h);
         default:
@@ -463,7 +463,7 @@ function PortfolioPage() {
         case "unrealized":
           return h.avgBuy > 0 ? h.value - h.units * h.avgBuy : h.value;
         case "percentChange":
-          return h.dayChange;
+          return h.percentChange;
         case "weight":
           return weightOf(h);
         default:
@@ -585,7 +585,7 @@ function PortfolioPage() {
         case "unrealized":
           return h.avgBuy > 0 ? h.value - h.units * h.avgBuy : h.value;
         case "percentChange":
-          return h.units * (h.ltpNative - h.prevNative);
+          return h.percentChange;
         case "weight":
           return weightOf(h);
         default:

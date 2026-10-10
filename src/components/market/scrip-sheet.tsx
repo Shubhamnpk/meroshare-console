@@ -65,6 +65,7 @@ import { formatDate, formatHoldingTime, formatNpr, formatPercent, formatQty, toN
 import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
 import { useWatchlist } from "@/lib/watchlist";
 import { sectorOf } from "@/lib/nepse/sectors";
+import { SellBreakdownDialog, HoldingAgeDialog } from "@/components/market/position-pnl-card";
 import { avgCashLast5Y, avgTotalLast5Y } from "@/lib/nepse/timeline";
 import { cn } from "@/lib/utils";
 import type { FinancialReport, PricePoint } from "@/lib/nepse/types";
@@ -110,16 +111,12 @@ function PositionCard({
   const hasCost = avgCost > 0;
   const costBasis = totalCost > 0 ? totalCost : units * avgCost;
   const currentValue = units * ltp;
-  const rawPl = hasCost ? currentValue - costBasis : 0;
-  const rawPct = hasCost && costBasis > 0 ? (rawPl / costBasis) * 100 : 0;
-  const rawUp = rawPl >= 0;
 
   // Shared FIFO holding-age logic (same as the terminal position card).
   const txnQ = useQuery(transactionsQuery(scrip));
   const txnItems = (txnQ.data as unknown as { items?: TxnRow[] } | undefined)?.items;
   const { holdingDays, avgHoldingDays, lots, known: ageKnown } = useHoldingAge(scrip, txnItems);
   const isOpenEnd = useIsOpenEnd(scrip);
-  const fundDetailQ = useQuery(mfSchemeQuery(isOpenEnd ? scrip : null));
   const [holdingOpen, setHoldingOpen] = useState(false);
   const pos = useMemo(
     () =>
@@ -132,9 +129,8 @@ function PositionCard({
   const buy = pos.buy;
   const commissionWacc = hasCost ? buy.perUnit : 0;
   const proceeds = pos.net;
-  const be = pos.breakeven;
 
-  const netUp = (proceeds?.profit ?? rawPl) >= 0;
+  const netUp = (proceeds?.profit ?? 0) >= 0;
   const dayChange = previousClose != null && previousClose > 0 ? (ltp - previousClose) * units : 0;
   const dayPercent = previousClose != null && previousClose > 0 ? ((ltp - previousClose) / previousClose) * 100 : 0;
   const dayUp = dayChange >= 0;
@@ -233,189 +229,29 @@ function PositionCard({
         </Panel>
       </div>
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto rounded-2xl sm:max-w-[520px] p-0 gap-0">
-          <DialogHeader className="px-5 pt-5 pb-3">
-            <DialogTitle className="text-base font-bold leading-none">{scrip} · Sell breakdown</DialogTitle>
-            <p className="mt-1.5 text-xs text-muted-foreground">
-              What you actually pocket if you sell all {units.toLocaleString("en-NP")} units at {formatNpr(ltp)}
-            </p>
-          </DialogHeader>
-          {proceeds ? (
-            <div className="px-5 pb-5 space-y-4">
-              {!hasCost ? (
-                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
-                  <p className="font-semibold">WACC not yet calculated in CDSC</p>
-                  <p className="mt-1 text-muted-foreground">
-                    Your purchase price / cost basis is not recorded in MeroShare yet. Gross sale proceeds and sell
-                    charges are calculated below, and capital gains tax will apply once WACC is submitted.
-                  </p>
-                  <Link
-                    to="/wacc"
-                    search={{ scrip }}
-                    onClick={() => setOpen(false)}
-                    className="mt-2 inline-flex items-center gap-1 font-semibold text-primary hover:underline"
-                  >
-                    Open WACC Calculator →
-                  </Link>
-                </div>
-              ) : null}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-xl bg-muted/10 border border-border/40 px-4 py-3">
-                  <p className="text-xs font-medium text-muted-foreground">Gross sale</p>
-                  <p className="num mt-1 text-base font-bold">{formatNpr(proceeds.amount)}</p>
-                </div>
-                <div className="rounded-xl bg-muted/10 border border-border/40 px-4 py-3">
-                  <p className="text-xs font-medium text-muted-foreground">Total cost</p>
-                  <p className="num mt-1 text-base font-bold">
-                    {hasCost ? (
-                      formatNpr(proceeds.costBasis)
-                    ) : (
-                      <span className="text-muted-foreground text-xs italic">Pending WACC</span>
-                    )}
-                  </p>
-                </div>
-              </div>
+      <SellBreakdownDialog
+        open={open}
+        onOpenChange={setOpen}
+        symbol={scrip}
+        units={units}
+        ltp={ltp}
+        avgCost={avgCost}
+        totalCost={totalCost}
+        holdingDays={holdingDays}
+        ageKnown={ageKnown}
+        isOpenEnd={isOpenEnd}
+        waccScrip={scrip}
+      />
 
-              <div className="rounded-xl border border-border/60 overflow-hidden">
-                <p className="bg-muted/20 px-4 py-2 text-xs font-semibold text-muted-foreground">Sell charges</p>
-                <div className="divide-y divide-border/30">
-                  <div className="flex items-center justify-between px-4 py-3">
-                    <span className="text-sm text-muted-foreground">Broker commission</span>
-                    <span className="num text-sm font-medium">− {formatNpr(proceeds.commission)}</span>
-                  </div>
-                  <div className="flex items-center justify-between px-4 py-3">
-                    <span className="text-sm text-muted-foreground">SEBON 0.015%</span>
-                    <span className="num text-sm font-medium">− {formatNpr(proceeds.sebon)}</span>
-                  </div>
-                  <div className="flex items-center justify-between px-4 py-3">
-                    <span className="text-sm text-muted-foreground">DP charge</span>
-                    <span className="num text-sm font-medium">− {formatNpr(proceeds.dp)}</span>
-                  </div>
-                  <div className="flex items-center justify-between bg-muted/10 px-4 py-3">
-                    <span className="text-sm font-semibold">Total charges</span>
-                    <span className="num text-sm font-bold">− {formatNpr(proceeds.charges)}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-border/60 overflow-hidden">
-                <p className="bg-muted/20 px-4 py-2 text-xs font-semibold text-muted-foreground">After charges & tax</p>
-                <div className="divide-y divide-border/30">
-                  <div className="flex items-center justify-between px-4 py-3">
-                    <span className="text-sm text-muted-foreground">Net before tax</span>
-                    <span className="num text-sm font-semibold">{formatNpr(proceeds.netBeforeTax)}</span>
-                  </div>
-                  {hasCost ? (
-                    <div className="flex items-center justify-between px-4 py-3">
-                      <div>
-                        <p className="text-sm text-muted-foreground">Capital gains tax</p>
-                        <p className="text-xs text-muted-foreground">
-                          {(proceeds.cgtRate * 100).toFixed(1)}% ·{" "}
-                          {ageKnown
-                            ? `${formatHoldingTime(holdingDays)} ${holdingDays >= 365 ? "long term" : "short term"}`
-                            : "purchase date unknown · assumed long-term"}
-                        </p>
-                      </div>
-                      <span className="num text-sm font-medium">− {formatNpr(proceeds.cgt)}</span>
-                    </div>
-                  ) : null}
-                  <div className="flex items-center justify-between bg-primary/5 px-4 py-3">
-                    <span className="text-sm font-bold">Net receivable</span>
-                    <span className="num text-base font-bold">
-                      {formatNpr(hasCost ? proceeds.netReceivable : proceeds.netBeforeTax)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {hasCost ? (
-                <div className="rounded-xl bg-card border border-gain/20 px-4 py-3 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Unrealized before charges</span>
-                    <span className={cn("num text-sm font-semibold", rawUp ? "text-gain" : "text-loss")}>
-                      {rawUp ? "+" : ""}
-                      {formatNpr(rawPl)} ({formatPercent(rawPct)})
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between border-t border-border/40 pt-2">
-                    <span className="text-sm font-bold">Net profit</span>
-                    <span className={cn("num text-base font-bold", netUp ? "text-gain" : "text-loss")}>
-                      {proceeds.profit >= 0 ? "+" : ""}
-                      {formatNpr(proceeds.profit)} ({formatPercent(proceeds.profitPercent)})
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Breakeven price</span>
-                    <span className="num font-semibold">{formatNpr(be)}</span>
-                  </div>
-                </div>
-              ) : null}
-              <Link
-                to="/wacc"
-                search={{ scrip }}
-                className="inline-flex text-xs font-medium text-primary hover:underline"
-                onClick={() => setOpen(false)}
-              >
-                View full WACC detail →
-              </Link>
-            </div>
-          ) : (
-            <div className="px-4 pb-4 text-xs text-muted-foreground">No sell breakdown — missing avg cost or LTP.</div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={holdingOpen} onOpenChange={setHoldingOpen}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto rounded-2xl sm:max-w-[520px] p-0 gap-0">
-          <DialogHeader className="px-5 pt-5 pb-3">
-            <DialogTitle className="text-base font-bold leading-none">{scrip} · Holding age</DialogTitle>
-            <p className="mt-1.5 text-xs text-muted-foreground"></p>
-          </DialogHeader>
-          <div className="px-5 pb-5 space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-xl bg-muted/10 border border-border/40 px-4 py-3">
-                <p className="text-xs font-medium text-muted-foreground">Average holding</p>
-                <p className="num mt-1 text-base font-bold">{ageKnown ? formatHoldingTime(avgHoldingDays) : "—"}</p>
-                <p className="text-[0.68rem] text-muted-foreground">display only</p>
-              </div>
-              <div className="rounded-xl bg-muted/10 border border-border/40 px-4 py-3">
-                <p className="text-xs font-medium text-muted-foreground">Oldest lot (tax)</p>
-                <p className="num mt-1 text-base font-bold">{ageKnown ? formatHoldingTime(holdingDays) : "—"}</p>
-                <p className="text-[0.68rem] text-muted-foreground">
-                  {ageKnown ? (holdingDays >= 365 ? "long term" : "short term") : "no dates found · assumed long-term"}
-                </p>
-              </div>
-            </div>
-            {lots.length > 0 ? (
-              <div className="rounded-xl border border-border/60 overflow-hidden">
-                <p className="bg-muted/20 px-4 py-2 text-xs font-semibold text-muted-foreground">
-                  Per-lot age from transaction history (FIFO)
-                </p>
-                <div className="divide-y divide-border/30 max-h-64 overflow-y-auto">
-                  {lots.map((lot, i) => (
-                    <div key={`${lot.date}-${i}`} className="flex items-center justify-between px-4 py-2.5">
-                      <div>
-                        <p className="num text-sm font-medium">
-                          {formatQty(lot.qty)} × {lot.date.slice(0, 10)}
-                        </p>
-                        <p className="text-[0.68rem] text-muted-foreground">{lot.date}</p>
-                      </div>
-                      <span
-                        className={`num rounded-full px-2 py-0.5 text-xs font-semibold ${lot.days >= 365 ? "bg-gain/15 text-gain" : "bg-loss/15 text-loss"}`}
-                      >
-                        {formatHoldingTime(lot.days)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">No per-lot dates available — using WACC purchase source.</p>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      <HoldingAgeDialog
+        open={holdingOpen}
+        onOpenChange={setHoldingOpen}
+        symbol={scrip}
+        lots={lots}
+        holdingDays={holdingDays}
+        avgHoldingDays={avgHoldingDays}
+        ageKnown={ageKnown}
+      />
     </>
   );
 }
@@ -1225,7 +1061,7 @@ export function ScripSheet({
   });
   const udfIntraday: PricePoint[] = useMemo(() => {
     const pts = udf.data?.points ?? [];
-    return pts.map((p) => ({ time: p.time, value: p.value }));
+    return pts.map((p) => ({ time: p.time, value: p.value, volume: p.volume ?? 0 }));
   }, [udf.data?.points]);
   const useUdf = brokerOn && rangeKey === "1D" && udfIntraday.length > 0 && (detail.data?.intraday ?? []).length === 0;
   const intradayPoints: PricePoint[] = useMemo(

@@ -31,6 +31,7 @@ import type {
   TopStocks,
 } from "./types";
 import { monthKeyFromEpoch, monthStartEpoch, unitsHeldAt, type UnitSnapshot } from "./timeline";
+import { fetchUdfHistory, udfToBars } from "../charts/udf";
 import { vendoredSectorMap } from "./sectors";
 import { canonicalSymbol, matchSymbols } from "./aliases";
 
@@ -738,6 +739,12 @@ export async function getIndexDailyBars(indexName: string, days = 0): Promise<Ch
   const tailMonth = days > 0 ? monthKeyFromEpoch(now - days * 86400) : "0000-00";
   let months = availableMonths.filter((m) => m >= tailMonth);
   if (days > 0 && months.length > 64) months = months.slice(-64);
+  if (months.length === 0 && days > 0) {
+    // Stale archive: the trailing window sits entirely past the manifest tip
+    // (no file published for the current month yet). Serve the latest
+    // available month instead of an empty chart.
+    months = availableMonths.slice(-1);
+  }
   if (months.length === 0) return [];
 
   const files = await Promise.all(
@@ -1329,17 +1336,44 @@ export async function getChartSeries(symbol: string, range: ChartRange): Promise
     return [{ time, value, volume }];
   });
 
+  // The mirror prints ticks without volume (contractQuantity is always
+  // null), so a volumeless session borrows per-minute quantities from the
+  // UDF feed: each minute's volume lands on its last tick, never counted
+  // twice. UDF down → ticks stay volumeless, exactly like today.
+  let dayTicks = intraday;
+  if (range === "1D" && intraday.length > 1 && !intraday.some((p) => (p.volume ?? 0) > 0)) {
+    try {
+      const nowSec = Math.floor(Date.now() / 1000);
+      const volByMinute = new Map<number, number>();
+      for (const b of udfToBars(
+        await fetchUdfHistory({ symbol: upper, resolution: "1", from: nowSec - 86400, to: nowSec }),
+      )) {
+        if (b.volume > 0) volByMinute.set(Math.floor(b.time / 60), b.volume);
+      }
+      if (volByMinute.size > 0) {
+        const lastIdxByMinute = new Map<number, number>();
+        intraday.forEach((p, i) => lastIdxByMinute.set(Math.floor(p.time / 60), i));
+        dayTicks = intraday.map((p, i) => {
+          const m = Math.floor(p.time / 60);
+          return lastIdxByMinute.get(m) === i ? { ...p, volume: volByMinute.get(m) ?? 0 } : { ...p, volume: 0 };
+        });
+      }
+    } catch {
+      // ignore — volumeless fallback stands
+    }
+  }
+
   const quote = live.prices.find((p) => p.symbol === upper);
 
   // A 1D view is a tick chart; daily candles would collapse to a single bar.
-  const useIntraday = range === "1D" && intraday.length > 1;
+  const useIntraday = range === "1D" && dayTicks.length > 1;
 
   return {
     symbol: upper,
     name: quote?.name ?? null,
     range,
     bars: useIntraday ? [] : sliced,
-    intraday,
+    intraday: dayTicks,
     hasSynthetic: !useIntraday && sliced.some((b) => b.synthetic),
     source: FEED_ATTRIBUTION,
     fetchedAt: new Date().toISOString(),

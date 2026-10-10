@@ -4,11 +4,12 @@ import { Panel } from "@/components/ui/panel";
 import { DeltaPill } from "@/components/stat-card";
 import { AreaChart } from "@/components/market/area-chart";
 import { ErrorBlock, LoadingBlock } from "@/components/states";
-import { globalHistoryQuery, type GlobalHistoryLot } from "@/lib/queries";
+import { globalDaySeriesQuery, globalHistoryQuery, type GlobalHistoryLot } from "@/lib/queries";
 import type { GlobalTxn } from "@/lib/world/import";
+import { deriveHoldings } from "@/lib/world/store";
 import { formatNpr } from "@/lib/format";
 
-const RANGES = ["1M", "3M", "6M", "1Y", "MAX"] as const;
+const RANGES = ["1D", "1M", "3M", "6M", "1Y", "MAX"] as const;
 type RangeKey = (typeof RANGES)[number];
 
 /**
@@ -17,7 +18,7 @@ type RangeKey = (typeof RANGES)[number];
  * renders value before any holding existed.
  */
 export function GlobalHistoryPanel({ txns }: { txns: GlobalTxn[] }) {
-  const [range, setRange] = useState<RangeKey>("1M");
+  const [range, setRange] = useState<RangeKey>("1D");
   const [mode, setMode] = useState<"profit" | "total">("profit");
   const holdings = useMemo<GlobalHistoryLot[]>(() => {
     const lots = new Map<string, { date: string; side: string; qty: number; price: number }[]>();
@@ -35,15 +36,38 @@ export function GlobalHistoryPanel({ txns }: { txns: GlobalTxn[] }) {
       lots: symbolLots,
     }));
   }, [txns]);
-  const history = useQuery({ ...globalHistoryQuery(holdings, range) });
-  const serverPoints = history.data?.points;
-  const failed = history.data?.failed ?? [];
+  const history = useQuery({
+    ...globalHistoryQuery(holdings, range === "1D" ? "1M" : range),
+    enabled: range !== "1D",
+  });
+  const dayLots = useMemo(
+    () =>
+      deriveHoldings(txns).map((h) => ({
+        symbol: h.symbol,
+        qty: h.qty,
+        avgPrice: h.avgPrice,
+        currency: h.currency,
+      })),
+    [txns],
+  );
+  const daySeries = useQuery({ ...globalDaySeriesQuery(dayLots, range === "1D") });
+  const serverPoints = range === "1D" ? undefined : history.data?.points;
+  const dayPoints = useMemo(() => {
+    const list = daySeries.data?.points ?? [];
+    const cost = daySeries.data?.cost ?? 0;
+    return mode === "profit"
+      ? list.map((p) => ({ time: p.time, value: p.value - cost }))
+      : list.map((p) => ({ time: p.time, value: p.value }));
+  }, [daySeries.data, mode]);
+  const failed = range === "1D" ? (daySeries.data?.failed ?? []) : (history.data?.failed ?? []);
   const points = useMemo(() => {
+    if (range === "1D") return dayPoints;
     const list = serverPoints ?? [];
     return mode === "profit"
       ? list.map((p) => ({ time: p.time, value: p.value - p.cost }))
       : list.map((p) => ({ time: p.time, value: p.value }));
-  }, [serverPoints, mode]);
+  }, [serverPoints, dayPoints, mode, range]);
+  const activeQuery = range === "1D" ? daySeries : history;
   const start = points.length > 0 ? points[0]!.value : 0;
   const end = points.length > 0 ? points[points.length - 1]!.value : 0;
   const change = end - start;
@@ -59,7 +83,7 @@ export function GlobalHistoryPanel({ txns }: { txns: GlobalTxn[] }) {
               {`${change >= 0 ? "+" : ""}${formatNpr(change, { compact: true })} (${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%)`}
             </DeltaPill>
           ) : null}
-          {history.isFetching && !history.isPending ? (
+          {activeQuery.isFetching && !activeQuery.isPending ? (
             <span className="animate-pulse text-[0.68rem] text-muted-foreground">Updating…</span>
           ) : null}
         </div>
@@ -100,10 +124,10 @@ export function GlobalHistoryPanel({ txns }: { txns: GlobalTxn[] }) {
           ))}
         </div>
       </div>
-      {history.isPending ? (
+      {activeQuery.isPending ? (
         <LoadingBlock label="Building global history" rows={1} />
-      ) : history.isError ? (
-        <ErrorBlock error={history.error} retry={() => void history.refetch()} />
+      ) : activeQuery.isError ? (
+        <ErrorBlock error={activeQuery.error} retry={() => void activeQuery.refetch()} />
       ) : points.length < 2 ? (
         <p className="rounded-xl border border-border/60 bg-surface px-3 py-8 text-center text-sm text-muted-foreground">
           Not enough price history for these holdings yet.
@@ -115,19 +139,27 @@ export function GlobalHistoryPanel({ txns }: { txns: GlobalTxn[] }) {
             height={240}
             formatValue={(v) => formatNpr(v, { compact: true })}
             formatLabel={(t) =>
-              new Date(t * 1000).toLocaleDateString("en-GB", {
-                day: "2-digit",
-                month: "short",
-                year: "numeric",
-              })
+              range === "1D"
+                ? new Date(t * 1000).toLocaleTimeString("en-US", {
+                    hour: "numeric",
+                    minute: "2-digit",
+                    hour12: true,
+                  })
+                : new Date(t * 1000).toLocaleDateString("en-GB", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                  })
             }
           />
           <p className="mt-2 text-[0.68rem] text-muted-foreground">
             {mode === "profit"
               ? "Profit = value minus what you paid (average cost); Total = value plus cost. "
               : "Total = what you paid plus profit. "}
-            Follows your actual buys and sells — starts at your first buy, not a backcast. Converted at current FX
-            rates.
+            {range === "1D"
+              ? "Today's sessions · 15-min bars. "
+              : "Follows your actual buys and sells — starts at your first buy, not a backcast. "}
+            Converted at current FX rates.
             {failed.length > 0 ? ` Excludes ${failed.join(", ")} (no history).` : ""}
           </p>
         </>

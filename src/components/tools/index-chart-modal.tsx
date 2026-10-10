@@ -5,7 +5,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { getIndexDailyHistory } from "@/lib/nepse/market.functions";
 import { indexGraphQuery } from "@/lib/queries";
 import {
-  DEFAULT_INDICATORS,
   TerminalChart,
   type ChartStyle,
   type HoverInfo,
@@ -72,12 +71,11 @@ export function IndexChartModal({
   sectorName?: string | undefined;
 }) {
   const [range, setRange] = useState<IndexRangeKey>("1D");
-  const [chartStyle, setChartStyle] = useState<ChartStyle>("area");
-  const [indicators, setIndicators] = useState<IndicatorConfig>({
-    ...DEFAULT_INDICATORS,
-    sma20: true,
-    volume: true,
-  });
+  const { chart, setChart } = useSettings();
+  const chartStyle = chart.style;
+  const setChartStyle = (s: ChartStyle) => setChart({ style: s });
+  const indicators = chart.indicators;
+  const setIndicators = (v: IndicatorConfig) => setChart({ indicators: v });
   const [showIndicatorMenu, setShowIndicatorMenu] = useState(false);
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const [pinnedBar, setPinnedBar] = useState<ChartBar | null>(null);
@@ -307,7 +305,7 @@ export function IndexChartModal({
                         <button
                           key={t.key}
                           type="button"
-                          onClick={() => setIndicators((prev) => ({ ...prev, [t.key]: !prev[t.key] }))}
+                          onClick={() => setIndicators({ ...indicators, [t.key]: !indicators[t.key] })}
                           className={cn(
                             "rounded-md border px-2 py-0.5 text-[0.68rem] font-medium transition-colors cursor-pointer",
                             indicators[t.key]

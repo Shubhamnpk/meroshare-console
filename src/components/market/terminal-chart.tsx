@@ -24,6 +24,9 @@ import { bollinger, ema, macd, rsi, sma, vwap, type Bar, type LinePoint } from "
 
 export type ChartStyle = "candles" | "line" | "area";
 
+/** Every terminal/chart opens on this style unless the user picked otherwise. */
+export const DEFAULT_CHART_STYLE: ChartStyle = "area";
+
 export interface IndicatorConfig {
   sma20: boolean;
   sma50: boolean;
@@ -36,7 +39,7 @@ export interface IndicatorConfig {
 }
 
 export const DEFAULT_INDICATORS: IndicatorConfig = {
-  sma20: true,
+  sma20: false,
   sma50: false,
   ema20: false,
   bollinger: false,
@@ -89,6 +92,7 @@ export function TerminalChart({
   onCreateAlert,
   tradeMarkers,
   orderLines,
+  dayBase,
 }: {
   bars: ChartBar[];
   intraday: PricePoint[];
@@ -110,6 +114,8 @@ export function TerminalChart({
   onCreateOrder?: ((order: { price: number; side: "BUY" | "SELL" }) => void) | undefined;
   /** Fired from the hover "+" menu ("Remind" row) to set a price alert. */
   onCreateAlert?: ((price: number) => void) | undefined;
+  /** Day-change base for intraday hover % (e.g. previous close); defaults to first tick. */
+  dayBase?: number | null | undefined;
   /** Executed buy/sell points drawn as arrows on the candles, like the cost line. */
   tradeMarkers?: { time: string; side: "BUY" | "SELL"; qty: number }[] | undefined;
   /** Open-order bid/sale marks pinned at their limit prices (day orders + AMO). */
@@ -249,23 +255,59 @@ export function TerminalChart({
       let mainSeries: ISeriesApi<"Candlestick" | "Line" | "Area"> | null = null;
 
       if (isIntraday) {
-        const points = sanitizedIntraday.map((p) => ({
-          time: p.time as UTCTimestamp,
-          value: p.value,
-        }));
-        const first = points[0]?.value ?? 0;
-        const last = points[points.length - 1]?.value ?? 0;
+        const ohlc = sanitizedIntraday.filter(
+          (p) =>
+            Number.isFinite(p.open) && Number.isFinite(p.high) && Number.isFinite(p.low) && Number.isFinite(p.value),
+        );
+        const first = sanitizedIntraday[0]?.value ?? 0;
+        const last = sanitizedIntraday[sanitizedIntraday.length - 1]?.value ?? 0;
         const colour = last >= first ? UP : DOWN;
-        const series = chart.addSeries(AreaSeries, {
-          lineColor: colour,
-          topColor: `${colour}55`,
-          bottomColor: `${colour}05`,
-          lineWidth: 2,
-          priceLineVisible: false,
-        });
-        series.setData(points);
-        mainSeries = series;
-        seriesRef.current = series;
+        if (style === "candles" && ohlc.length >= 2) {
+          const series = chart.addSeries(CandlestickSeries, {
+            upColor: UP,
+            downColor: DOWN,
+            borderUpColor: UP,
+            borderDownColor: DOWN,
+            wickUpColor: UP,
+            wickDownColor: DOWN,
+          });
+          series.setData(
+            ohlc.map((p) => ({
+              time: p.time as UTCTimestamp,
+              open: p.open!,
+              high: p.high!,
+              low: p.low!,
+              close: p.value,
+            })),
+          );
+          mainSeries = series;
+          seriesRef.current = series;
+        } else if (style === "line") {
+          const series = chart.addSeries(LineSeries, { color: "#2563eb", lineWidth: 2 });
+          series.setData(
+            sanitizedIntraday.map((p) => ({
+              time: p.time as UTCTimestamp,
+              value: p.value,
+            })),
+          );
+          mainSeries = series;
+          seriesRef.current = series;
+        } else {
+          const points = sanitizedIntraday.map((p) => ({
+            time: p.time as UTCTimestamp,
+            value: p.value,
+          }));
+          const series = chart.addSeries(AreaSeries, {
+            lineColor: colour,
+            topColor: `${colour}55`,
+            bottomColor: `${colour}05`,
+            lineWidth: 2,
+            priceLineVisible: false,
+          });
+          series.setData(points);
+          mainSeries = series;
+          seriesRef.current = series;
+        }
       } else if (style === "candles") {
         const series = chart.addSeries(CandlestickSeries, {
           upColor: UP,
@@ -646,6 +688,7 @@ export function TerminalChart({
           const value = mainSeries ? param.seriesData.get(mainSeries) : undefined;
           const price = value && "value" in value ? Number(value.value) : 0;
           const first = intraday[0]?.value ?? price;
+          const base = dayBase != null && dayBase > 0 ? dayBase : first;
           // Convert UTC timestamp to Nepal time (UTC+5:45)
           const nepalMs = Number(param.time) * 1000 + 345 * 60 * 1000;
           const nepalDate = new Date(nepalMs);
@@ -662,7 +705,7 @@ export function TerminalChart({
             low: price,
             close: price,
             volume: 0,
-            changePercent: first ? ((price - first) / first) * 100 : 0,
+            changePercent: base ? ((price - base) / base) * 100 : 0,
           });
           return;
         }
@@ -713,6 +756,7 @@ export function TerminalChart({
     includeWaccDomain,
     tradeMarkers,
     orderLines,
+    dayBase,
   ]);
 
   // "+" quick-order follows the mouse anywhere over the chart body (the

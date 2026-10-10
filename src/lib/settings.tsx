@@ -11,4 +11,5 @@ export {
   type SettingsApi,
   type ThemePref,
   type ColorTheme,
+  type NumberFormatPref,
 } from "./prefs";

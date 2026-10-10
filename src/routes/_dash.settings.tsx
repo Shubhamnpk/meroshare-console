@@ -42,7 +42,6 @@ import { Label } from "@/components/ui/label";
 import { Panel } from "@/components/ui/panel";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useSettings, COLOR_OPTIONS, type ThemePref } from "@/lib/settings";
-import { getNumberFormat, setNumberFormat } from "@/components/ui/amount-input";
 import { clearRemembered, loadRemembered } from "@/lib/remember-me";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { GlobalImportDialog } from "@/components/world/global-import-dialog";
@@ -1237,10 +1236,11 @@ function SettingsPage() {
     setRefreshMinutes,
     toastsEnabled,
     setToastsEnabled,
+    numberFormat,
+    setNumberFormat,
     openPassword,
     openPin,
   } = useSettings();
-  const [numberFormat, setNumberFormatState] = useState<"np" | "us">(() => getNumberFormat() as "np" | "us");
 
   const intervalOptions = [1, 5, 10, 30];
 
@@ -1506,7 +1506,6 @@ function SettingsPage() {
                           type="button"
                           onClick={() => {
                             setNumberFormat(fmt);
-                            setNumberFormatState(fmt);
                           }}
                           className={cn(
                             "rounded-md px-3 py-1 text-xs font-semibold transition-all",

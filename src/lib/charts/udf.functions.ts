@@ -26,6 +26,6 @@ export const getUdfHistory = createServerFn({ method: "GET" })
     const from = now - days * 86400;
     const h = await fetchUdfHistory({ symbol: sym, resolution: res, from, to: now });
     const bars = udfToBars(h);
-    const points = bars.map((b) => ({ time: b.time, value: b.close }));
+    const points = bars.map((b) => ({ time: b.time, value: b.close, volume: b.volume }));
     return { bars, points, raw: h, resolution: res };
   });

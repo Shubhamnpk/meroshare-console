@@ -13,6 +13,7 @@ import {
   type WorldRange,
   type WorldSearchHit,
   type WorldSource,
+  type WorldTick,
 } from "./feed.server";
 import { normalizeWorldSymbol, worldCandidates } from "./symbols";
 import { toNpr } from "./fx";
@@ -267,4 +268,171 @@ export const getGlobalHistory = createServerFn({ method: "POST" })
       }),
     );
     return mergeGlobalHistory(series);
+  });
+
+/**
+ * One stock's today as time-aware ticks in native currency: Yahoo 15m
+ * session bars with the live quote pinned on the tail. Feeds the 24H pill
+ * in the position sheet — same ticks the 24H book line is built from.
+ */
+export const getWorldIntraday = createServerFn({ method: "POST" })
+  .validator((input: unknown) =>
+    z
+      .object({
+        symbol: z.string().trim().min(1).max(24),
+        currency: z.string().trim().max(8).optional(),
+        interval: z.enum(["5m", "15m"]).default("15m"),
+      })
+      .parse(input),
+  )
+  .handler(
+    async ({
+      data,
+    }): Promise<{
+      ticks: WorldTick[];
+      live: number | null;
+      interval: "5m" | "15m";
+    }> => {
+      await requireAuth();
+      const { worldIntraday } = await import("./feed.server");
+      const base = normalizeWorldSymbol(data.symbol);
+      if (!base) throw new Error("Invalid stock symbol.");
+      const first = data.currency ? yahooSymbolFor(base, data.currency) : base;
+      const candidates = [first, ...worldCandidates(base)].filter((c, i, arr) => arr.indexOf(c) === i);
+      // 5m only answers US listings — empty there falls back to 15m per
+      // candidate, and the serving interval is reported back for the label.
+      const wanted: ("5m" | "15m")[] = data.interval === "5m" ? ["5m", "15m"] : ["15m"];
+      let ticks: WorldTick[] = [];
+      let used: "5m" | "15m" = "15m";
+      for (const candidate of candidates) {
+        for (const res of wanted) {
+          const r = await worldIntraday(candidate, res);
+          if (r.ticks.length > 0) {
+            ticks = r.ticks;
+            used = res;
+            break;
+          }
+        }
+        if (ticks.length > 0) break;
+      }
+      let live: number | null = null;
+      try {
+        const quote = await worldQuote(candidates[0]!);
+        if (quote && quote.ltp > 0) {
+          live = quote.ltp;
+          const now = Math.floor(Date.now() / 1000);
+          if (ticks.length === 0 || ticks[ticks.length - 1]!.t < now - 60) {
+            ticks = [
+              ...ticks,
+              { t: now, close: quote.ltp, volume: 0, open: quote.ltp, high: quote.ltp, low: quote.ltp },
+            ];
+          }
+        }
+      } catch {
+        // quote failure just skips the live tail
+      }
+      return { ticks, live, interval: used };
+    },
+  );
+
+/**
+ * Global book's last 24 hours as one NPR line: each holding's Yahoo 15m
+ * session ticks (live quote pinned on the tail), converted at current FX and
+ * forward-filled across the union of timestamps. Units are today's — day
+ * trades in foreign books are rare enough to document, not model.
+ */
+export const getGlobalDaySeries = createServerFn({ method: "POST" })
+  .validator((input: unknown) =>
+    z
+      .object({
+        holdings: z
+          .array(
+            z.object({
+              symbol: z.string().trim().min(1).max(24),
+              qty: z.number().min(0),
+              avgPrice: z.number().min(0),
+              currency: z.string().trim().max(8),
+            }),
+          )
+          .max(200),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data }): Promise<{ points: { time: number; value: number }[]; failed: string[]; cost: number }> => {
+    await requireAuth();
+    const { toNpr } = await import("./fx");
+    const { worldIntraday } = await import("./feed.server");
+    const now = Math.floor(Date.now() / 1000);
+    const cutoff = now - 24 * 3600;
+    const failed: string[] = [];
+    let cost = 0;
+    const legs: { times: number[]; closes: number[]; qty: number }[] = [];
+    await Promise.all(
+      data.holdings.map(async (h) => {
+        if (!(h.qty > 0)) return;
+        const base = normalizeWorldSymbol(h.symbol);
+        const rate = h.currency ? await toNpr(1, h.currency).catch(() => null) : null;
+        if (!base || !(rate != null && rate > 0)) {
+          failed.push(h.symbol);
+          return;
+        }
+        // Today's cost basis in NPR — the Profit/Total toggle's anchor.
+        const avgBuyNpr = await toNpr(h.avgPrice, h.currency).catch(() => null);
+        if (avgBuyNpr != null) cost += h.qty * avgBuyNpr;
+        const first = yahooSymbolFor(base, h.currency);
+        const candidates = [first, ...worldCandidates(base)].filter((c, i, arr) => arr.indexOf(c) === i);
+        let ticks: WorldTick[] = [];
+        for (const candidate of candidates) {
+          const r = await worldIntraday(candidate);
+          if (r.ticks.length > 0) {
+            ticks = r.ticks;
+            break;
+          }
+        }
+        // Pin the live quote on the tail — 15m bars lag the screen by design.
+        try {
+          const quote = await worldQuote(candidates[0]!);
+          if (quote && quote.ltp > 0 && (ticks.length === 0 || ticks[ticks.length - 1]!.t < now - 60)) {
+            ticks = [
+              ...ticks,
+              { t: now, close: quote.ltp, volume: 0, open: quote.ltp, high: quote.ltp, low: quote.ltp },
+            ];
+          }
+        } catch {
+          // quote failure just skips the live tail
+        }
+        const inWindow = ticks.filter((tk) => tk.t >= cutoff);
+        if (inWindow.length === 0) {
+          failed.push(base);
+          return;
+        }
+        legs.push({
+          times: inWindow.map((tk) => tk.t),
+          closes: inWindow.map((tk) => tk.close * (rate as number)),
+          qty: h.qty,
+        });
+      }),
+    );
+    const stamps = [...new Set(legs.flatMap((l) => l.times))].sort((a, b) => a - b);
+    const points = stamps.map((t) => {
+      let value = 0;
+      for (const leg of legs) {
+        let last = 0;
+        for (let i = 0; i < leg.times.length; i += 1) {
+          if (leg.times[i]! <= t) last = leg.closes[i]!;
+          else break;
+        }
+        // Before a leg's first print, hold it flat at that first print.
+        if (last === 0 && leg.closes.length > 0) last = leg.closes[0]!;
+        value += leg.qty * last;
+      }
+      return { time: t, value };
+    });
+    // Thin to ~300 points for the wire; shape survives, payload doesn't bloat.
+    const thin = points.length > 300 ? points.filter((_, i) => i % Math.ceil(points.length / 300) === 0) : points;
+    // The live edge always survives thinning.
+    if (thin.length > 0 && thin[thin.length - 1]!.time !== points[points.length - 1]!.time) {
+      thin.push(points[points.length - 1]!);
+    }
+    return { points: thin, failed, cost };
   });

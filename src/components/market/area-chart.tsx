@@ -23,6 +23,7 @@ export function AreaChart({
   showAxes = false,
   wacc,
   includeWaccDomain = false,
+  anchor,
   className,
 }: {
   points: PricePoint[];
@@ -41,6 +42,8 @@ export function AreaChart({
   wacc?: number | null;
   /** When true, Y domain expands to include wacc (used for All/Max). Otherwise wacc clamps to edge. */
   includeWaccDomain?: boolean;
+  /** Direction anchor (e.g. previous close): up = last >= anchor, else first point. Day charts. */
+  anchor?: number | null;
   className?: string;
 }) {
   const W = 320;
@@ -82,7 +85,7 @@ export function AreaChart({
     }));
 
     return {
-      up: values[values.length - 1]! >= values[0]!,
+      up: values[values.length - 1]! >= (anchor ?? values[0]!),
       min,
       max,
       yTicks,
@@ -90,7 +93,7 @@ export function AreaChart({
       line: points.map((p, i) => `${x(i).toFixed(2)},${y(p.value).toFixed(2)}`),
       pts: points.map((p, i) => ({ x: x(i), y: y(p.value), time: p.time, value: p.value })),
     };
-  }, [points, showAxes, wacc, includeWaccDomain]);
+  }, [points, showAxes, wacc, includeWaccDomain, anchor]);
 
   const waccY = useMemo(() => {
     if (!geom || wacc == null || !Number.isFinite(wacc)) return null;

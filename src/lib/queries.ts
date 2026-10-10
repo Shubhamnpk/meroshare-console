@@ -58,9 +58,11 @@ import {
   getWorldSearch,
   getWorldCompany,
   getGlobalHistory,
+  getGlobalDaySeries,
+  getWorldIntraday,
 } from "./world/market.functions";
 import type { GlobalValuationRow } from "./world/market.functions";
-import type { WorldRange } from "./world/feed.server";
+import type { WorldRange, WorldTick } from "./world/feed.server";
 import type { ChartRange, PortfolioGranularity } from "./nepse/types";
 import { brokerVaultStatus, listBrokerConnections } from "./brokers/brokers.functions";
 import {
@@ -1054,13 +1056,22 @@ export interface GlobalLotInput {
   avgPrice: number;
   currency: string;
 }
-
 export const globalValuationQuery = (holdings: GlobalLotInput[], enabled = true) =>
   queryOptions({
     queryKey: ["global-valuation", JSON.stringify(holdings.map((h) => [h.symbol, h.qty]))],
     queryFn: async (): Promise<{ rows: GlobalValuationRow[] }> => getGlobalValuation({ data: { holdings } }),
     enabled: enabled && holdings.length > 0,
     staleTime: 60_000,
+    retry: false,
+  });
+
+export const globalDaySeriesQuery = (holdings: GlobalLotInput[], enabled = true) =>
+  queryOptions({
+    queryKey: ["global-day-series", JSON.stringify(holdings.map((h) => [h.symbol, h.qty]))],
+    queryFn: async (): Promise<{ points: { time: number; value: number }[]; failed: string[]; cost: number }> =>
+      getGlobalDaySeries({ data: { holdings } }),
+    enabled: enabled && holdings.length > 0,
+    staleTime: 5 * 60_000,
     retry: false,
   });
 
@@ -1079,6 +1090,19 @@ export const worldCompanyQuery = (symbol: string | null) =>
     queryFn: async () => getWorldCompany({ data: { symbol: symbol ?? "" } }),
     enabled: Boolean(symbol),
     staleTime: 24 * 60 * 60_000,
+    retry: false,
+  });
+
+export const worldIntradayQuery = (symbol: string | null, currency?: string, interval: "5m" | "15m" = "15m") =>
+  queryOptions({
+    queryKey: ["world-intraday", symbol, currency ?? "", interval],
+    queryFn: async (): Promise<{
+      ticks: WorldTick[];
+      live: number | null;
+      interval: "5m" | "15m";
+    }> => getWorldIntraday({ data: { symbol: symbol ?? "", currency, interval } }),
+    enabled: Boolean(symbol),
+    staleTime: 5 * 60_000,
     retry: false,
   });
 

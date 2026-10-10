@@ -30,7 +30,6 @@ import { ErrorBlock, LoadingBlock, EmptyBlock } from "@/components/states";
 import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
 import {
-  DEFAULT_INDICATORS,
   TerminalChart,
   type ChartStyle,
   type HoverInfo,
@@ -308,7 +307,7 @@ function MoodCard({ stats }: { stats: MoodStats }) {
 function SectorDetailPage() {
   const navigate = useNavigate();
   const { sectorName } = Route.useParams();
-  const { theme } = useSettings();
+  const { theme, chart, setChart } = useSettings();
   const light =
     theme === "light" ||
     (theme === "system" && typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: light)").matches);
@@ -318,8 +317,10 @@ function SectorDetailPage() {
   const snapshotQuery = useQuery(marketSnapshotQuery());
 
   const [range, setRange] = useState<RangeKey>("1D");
-  const [chartStyle, setChartStyle] = useState<ChartStyle>("area");
-  const [indicators, setIndicators] = useState<IndicatorConfig>({ ...DEFAULT_INDICATORS });
+  const chartStyle = chart.style;
+  const setChartStyle = (s: ChartStyle) => setChart({ style: s });
+  const indicators = chart.indicators;
+  const setIndicators = (v: IndicatorConfig) => setChart({ indicators: v });
   const [showIndicatorMenu, setShowIndicatorMenu] = useState(false);
   const [picked, setPicked] = useState<string | null>(null);
   const [hover, setHover] = useState<HoverInfo | null>(null);
@@ -633,7 +634,7 @@ function SectorDetailPage() {
                     <button
                       key={t.key}
                       type="button"
-                      onClick={() => setIndicators((prev) => ({ ...prev, [t.key]: !prev[t.key] }))}
+                      onClick={() => setIndicators({ ...indicators, [t.key]: !indicators[t.key] })}
                       className={cn(
                         "rounded-md border px-2 py-0.5 text-[0.68rem] font-medium transition-colors cursor-pointer",
                         indicators[t.key]

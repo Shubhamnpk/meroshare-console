@@ -72,6 +72,10 @@ export interface PricePoint {
   time: number;
   value: number;
   volume?: number | undefined;
+  /** Intraday OHLC when the feed carries it — unlocks intraday candles. */
+  open?: number | undefined;
+  high?: number | undefined;
+  low?: number | undefined;
 }
 
 export interface ScripOverview {
