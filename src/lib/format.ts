@@ -30,6 +30,24 @@ export function formatNumber(value: unknown): string {
   return NUM.format(toNumber(value));
 }
 
+/**
+ * Currency symbol, not the code: £ not GBP, $ not USD. Unknown codes fall
+ * back to the code itself so nothing ever renders blank.
+ */
+export function currencySymbol(ccy: string | null | undefined): string {
+  // Pence first and case-sensitive: uppercasing "GBp" would collapse it into
+  // pounds (a 100x error).
+  const raw = (ccy ?? "").trim();
+  if (raw === "GBX" || raw === "GBp") return "p";
+  const c = raw.toUpperCase();
+  if (c === "GBP") return "£";
+  if (c === "USD") return "$";
+  if (c === "EUR") return "€";
+  if (c === "INR") return "₹";
+  if (c === "NPR") return "रू";
+  return c;
+}
+
 export function formatQty(value: unknown, opts?: { compact?: boolean }): string {
   const n = toNumber(value);
   if (opts?.compact) {

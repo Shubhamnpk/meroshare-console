@@ -5,12 +5,11 @@ import { DeltaPill } from "@/components/stat-card";
 import { AreaChart } from "@/components/market/area-chart";
 import { ErrorBlock, LoadingBlock } from "@/components/states";
 import { globalDaySeriesQuery, globalHistoryQuery, type GlobalHistoryLot } from "@/lib/queries";
+import { formatDisplay, useDisplayCurrency, useDisplayRates } from "@/lib/world/display";
 import type { GlobalTxn } from "@/lib/world/import";
 import { deriveHoldings } from "@/lib/world/store";
 import { formatNpr } from "@/lib/format";
-
-const RANGES = ["1D", "1M", "3M", "6M", "1Y", "MAX"] as const;
-type RangeKey = (typeof RANGES)[number];
+import { CHART_RANGES, type ChartRangeKey } from "@/lib/charts/ranges";
 
 /**
  * What the Global book was actually worth over time: positions walk forward
@@ -18,7 +17,7 @@ type RangeKey = (typeof RANGES)[number];
  * renders value before any holding existed.
  */
 export function GlobalHistoryPanel({ txns }: { txns: GlobalTxn[] }) {
-  const [range, setRange] = useState<RangeKey>("1D");
+  const [range, setRange] = useState<ChartRangeKey>("1D");
   const [mode, setMode] = useState<"profit" | "total">("profit");
   const holdings = useMemo<GlobalHistoryLot[]>(() => {
     const lots = new Map<string, { date: string; side: string; qty: number; price: number }[]>();
@@ -68,6 +67,14 @@ export function GlobalHistoryPanel({ txns }: { txns: GlobalTxn[] }) {
       : list.map((p) => ({ time: p.time, value: p.value }));
   }, [serverPoints, dayPoints, mode, range]);
   const activeQuery = range === "1D" ? daySeries : history;
+  // NPR points convert into the Settings display currency; pcts are unitless.
+  const displayCurrency = useDisplayCurrency();
+  const toDisplay = useDisplayRates(["NPR"])?.["NPR"] ?? null;
+  const drawn = toDisplay == null ? points : points.map((p) => ({ time: p.time, value: p.value * toDisplay }));
+  const fmt = (npr: number) =>
+    toDisplay == null
+      ? formatNpr(npr, { compact: true })
+      : formatDisplay(npr * toDisplay, displayCurrency, { compact: true });
   const start = points.length > 0 ? points[0]!.value : 0;
   const end = points.length > 0 ? points[points.length - 1]!.value : 0;
   const change = end - start;
@@ -80,7 +87,7 @@ export function GlobalHistoryPanel({ txns }: { txns: GlobalTxn[] }) {
           <h2 className="font-display text-base font-semibold">Global history</h2>
           {points.length >= 2 ? (
             <DeltaPill value={change}>
-              {`${change >= 0 ? "+" : ""}${formatNpr(change, { compact: true })} (${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%)`}
+              {`${change >= 0 ? "+" : "−"}${fmt(Math.abs(change))} (${pct >= 0 ? "+" : "−"}${pct.toFixed(2)}%)`}
             </DeltaPill>
           ) : null}
           {activeQuery.isFetching && !activeQuery.isPending ? (
@@ -107,7 +114,7 @@ export function GlobalHistoryPanel({ txns }: { txns: GlobalTxn[] }) {
               </button>
             ))}
           </div>
-          {RANGES.map((r) => (
+          {CHART_RANGES.map((r) => (
             <button
               key={r}
               type="button"
@@ -135,9 +142,11 @@ export function GlobalHistoryPanel({ txns }: { txns: GlobalTxn[] }) {
       ) : (
         <>
           <AreaChart
-            points={points}
+            points={drawn}
             height={240}
-            formatValue={(v) => formatNpr(v, { compact: true })}
+            formatValue={(v) =>
+              toDisplay == null ? formatNpr(v, { compact: true }) : formatDisplay(v, displayCurrency, { compact: true })
+            }
             formatLabel={(t) =>
               range === "1D"
                 ? new Date(t * 1000).toLocaleTimeString("en-US", {

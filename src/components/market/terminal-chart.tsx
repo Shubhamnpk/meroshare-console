@@ -73,13 +73,21 @@ function palette(light: boolean) {
 
 const toLine = (points: LinePoint[]) => points.map((p) => ({ time: p.date as Time, value: p.value }));
 
+/** One indexed-% overlay line (e.g. a compared symbol). Max two are drawn. */
+export interface CompareLine {
+  label: string;
+  points: LinePoint[];
+}
+
+/** Overlay line colors, in slot order — reused by the terminal legend. */
+export const COMPARE_COLORS = ["#94a3b8", "#2dd4bf"];
+
 export function TerminalChart({
   bars,
   intraday,
   style,
   indicators,
-  compare,
-  compareLabel,
+  compares,
   logScale,
   light,
   height,
@@ -98,8 +106,8 @@ export function TerminalChart({
   intraday: PricePoint[];
   style: ChartStyle;
   indicators: IndicatorConfig;
-  compare?: LinePoint[] | undefined;
-  compareLabel?: string | undefined;
+  /** Indexed % overlays, each with its own legend label. */
+  compares?: CompareLine[] | undefined;
   logScale: boolean;
   light: boolean;
   height: number;
@@ -441,15 +449,22 @@ export function TerminalChart({
         }
       }
 
-      if (compare && compare.length > 1) {
+      const liveCompares = (compares ?? []).filter((c) => c.points.length > 1).slice(0, 2);
+      liveCompares.forEach((c, i) => {
         const series = chart.addSeries(LineSeries, {
-          color: "#94a3b8",
+          color: COMPARE_COLORS[i % COMPARE_COLORS.length]!,
           lineWidth: 1,
           priceScaleId: "compare",
-          priceLineVisible: false,
-          title: compareLabel ?? "Compare",
+          // Same indication as the main series: a price line in the line's
+          // own color. The scale itself stays hidden so % values never pose
+          // as prices on an axis.
+          priceLineVisible: true,
+          lastValueVisible: true,
+          title: c.label,
         });
-        series.setData(toLine(compare));
+        series.setData(toLine(c.points));
+      });
+      if (liveCompares.length > 0) {
         chart.priceScale("compare").applyOptions({
           scaleMargins: { top: 0.1, bottom: 0.3 },
           visible: false,
@@ -746,8 +761,7 @@ export function TerminalChart({
     sanitizedIntraday,
     style,
     indicators,
-    compare,
-    compareLabel,
+    compares,
     logScale,
     light,
     height,

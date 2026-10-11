@@ -63,6 +63,8 @@ export interface Prefs {
   refreshMinutes: number;
   /** Nepali / international / European digit grouping for amount inputs. */
   numberFormat: NumberFormatPref;
+  /** One currency for cross-currency totals (earned chips, etc.). Default NPR. */
+  displayCurrency: string;
   /** Global toast kill-switch (Settings → display). Off = Toaster unmounts. */
   toastsEnabled: boolean;
   // Shared chart preferences: every terminal reads these, so volume on here
@@ -78,6 +80,8 @@ export interface Prefs {
   watchlist: string[];
   // Beta features (opt-in via Settings → Advanced)
   edisBeta: boolean;
+  /** Demo-mode IPO playground (Settings → Advanced, demo users only). */
+  demoIpoEnabled: boolean;
 }
 
 export interface PrefsApi extends Prefs {
@@ -90,6 +94,7 @@ export interface PrefsApi extends Prefs {
   setAutoRefresh: (value: boolean) => void;
   setRefreshMinutes: (minutes: number) => void;
   setNumberFormat: (format: NumberFormatPref) => void;
+  setDisplayCurrency: (currency: string) => void;
   setToastsEnabled: (on: boolean) => void;
   setChart: (patch: Partial<ChartPrefs>) => void;
   // Sidebar
@@ -102,6 +107,7 @@ export interface PrefsApi extends Prefs {
   hasInWatchlist: (symbol: string) => boolean;
   // Beta features
   setEdisBeta: (on: boolean) => void;
+  setDemoIpoEnabled: (on: boolean) => void;
   // Modal helpers
   openPassword: () => void;
   closePassword: () => void;
@@ -139,6 +145,7 @@ export const DEFAULT_PREFS: Prefs = {
   autoRefresh: true,
   refreshMinutes: 5,
   numberFormat: "np",
+  displayCurrency: "NPR",
   toastsEnabled: true,
   chart: {
     ...DEFAULT_CHART,
@@ -148,6 +155,7 @@ export const DEFAULT_PREFS: Prefs = {
   terminal: DEFAULT_TERMINAL,
   watchlist: [],
   edisBeta: false,
+  demoIpoEnabled: true,
 };
 
 function readJson<T>(key: string): T | null {
@@ -360,11 +368,14 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
       autoRefresh,
       refreshMinutes,
       numberFormat,
+      displayCurrency,
       toastsEnabled,
       chart,
       sidebarCollapsed,
       terminal,
       watchlist,
+      edisBeta,
+      demoIpoEnabled,
     } = prefs;
     writeJson(STORAGE_KEY, {
       theme,
@@ -373,11 +384,14 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
       autoRefresh,
       refreshMinutes,
       numberFormat,
+      displayCurrency,
       toastsEnabled,
       chart,
       sidebarCollapsed,
       terminal,
       watchlist,
+      edisBeta,
+      demoIpoEnabled,
     });
   }, [prefs]);
 
@@ -455,6 +469,7 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
       setAutoRefresh: (autoRefresh) => setPrefs((s) => ({ ...s, autoRefresh })),
       setRefreshMinutes: (refreshMinutes) => setPrefs((s) => ({ ...s, refreshMinutes })),
       setNumberFormat: (numberFormat) => setPrefs((s) => ({ ...s, numberFormat })),
+      setDisplayCurrency: (displayCurrency) => setPrefs((s) => ({ ...s, displayCurrency })),
       setToastsEnabled: (toastsEnabled) => setPrefs((s) => ({ ...s, toastsEnabled })),
       setChart: (patch) =>
         setPrefs((s) => ({
@@ -467,6 +482,7 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
       removeFromWatchlist,
       hasInWatchlist,
       setEdisBeta: (edisBeta) => setPrefs((s) => ({ ...s, edisBeta })),
+      setDemoIpoEnabled: (demoIpoEnabled) => setPrefs((s) => ({ ...s, demoIpoEnabled })),
       openPassword: () => setPasswordOpen(true),
       closePassword: () => setPasswordOpen(false),
       openPin: () => setPinOpen(true),

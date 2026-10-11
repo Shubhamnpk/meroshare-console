@@ -6,20 +6,41 @@ export function StatChip({
   label,
   value,
   valueClass,
+  onClick,
+  title,
 }: {
   icon?: ReactNode;
   label: string;
   value: ReactNode;
   valueClass?: string;
+  onClick?: (() => void) | undefined;
+  title?: string | undefined;
 }) {
-  return (
-    <div className="flex shrink-0 items-center gap-2 rounded-xl border border-border/70 bg-card px-3.5 py-2">
+  const body = (
+    <>
       {icon ? <span className="text-muted-foreground">{icon}</span> : null}
       <div className="leading-tight">
         <p className="whitespace-nowrap text-[0.68rem] uppercase tracking-wide text-muted-foreground">{label}</p>
         <p className={cn("num whitespace-nowrap font-semibold", valueClass)}>{value}</p>
       </div>
-    </div>
+    </>
+  );
+  if (!onClick) {
+    return (
+      <div className="flex shrink-0 items-center gap-2 rounded-xl border border-border/70 bg-card px-3.5 py-2">
+        {body}
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title ?? label}
+      className="flex shrink-0 cursor-pointer items-center gap-2 rounded-xl border border-border/70 bg-card px-3.5 py-2 text-left transition-colors hover:border-primary/40"
+    >
+      {body}
+    </button>
   );
 }
 

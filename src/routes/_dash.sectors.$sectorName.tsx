@@ -39,6 +39,7 @@ import { MoverRows, SentimentGauge } from "@/components/tools/market-overview";
 import { SectorBadge } from "@/components/market/sector-icon";
 import { CompactNpr, CompactQty } from "@/components/market/compact-value";
 import { normalizeSectorKey, subindexKeyFor } from "@/lib/nepse/sectors";
+import { CHART_RANGES, type ChartRangeKey } from "@/lib/charts/ranges";
 import { avgCashLast5Y, avgTotalLast5Y } from "@/lib/nepse/timeline";
 import { ScripSheet } from "@/components/market/scrip-sheet";
 import type { ChartBar, LivePrice, PricePoint, SectorIndex } from "@/lib/nepse/types";
@@ -65,19 +66,21 @@ export const Route = createFileRoute("/_dash/sectors/$sectorName")({
 const NO_BARS: ChartBar[] = [];
 const NO_POINTS: PricePoint[] = [];
 
-const RANGES = [
-  { key: "1D", label: "1D", days: 2 },
-  { key: "1W", label: "1W", days: 7 },
-  { key: "1M", label: "1M", days: 30 },
-  { key: "3M", label: "3M", days: 90 },
-  { key: "6M", label: "6M", days: 180 },
-  { key: "1Y", label: "1Y", days: 365 },
-  { key: "3Y", label: "3Y", days: 1095 },
-  { key: "5Y", label: "5Y", days: 1825 },
-  { key: "ALL", label: "All", days: 0 },
-] as const;
+/** Archive days per range key; MAX (0) means the whole archive, uncapped. */
+const SECTOR_RANGE_DAYS: Record<ChartRangeKey, number> = {
+  "1D": 2,
+  "1W": 7,
+  "1M": 30,
+  "3M": 90,
+  "6M": 180,
+  "1Y": 365,
+  "5Y": 1825,
+  MAX: 0,
+};
 
-type RangeKey = (typeof RANGES)[number]["key"];
+const RANGES = CHART_RANGES.map((key) => ({ key, label: key, days: SECTOR_RANGE_DAYS[key] }));
+
+type RangeKey = ChartRangeKey;
 
 const INDICATOR_TOGGLES: { key: keyof IndicatorConfig; label: string }[] = [
   { key: "volume", label: "Vol" },

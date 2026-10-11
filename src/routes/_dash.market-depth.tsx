@@ -91,10 +91,7 @@ function MarketDepthPage() {
           <Globe className="size-5" />
         </span>
         <div className="min-w-0 flex-1">
-          <h1 className="font-display text-xl font-semibold sm:text-3xl">Market Depth &amp; Heatmap</h1>
-          <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground sm:line-clamp-none">
-            Live ticker tape, benchmarks with all-time history, market breadth, and sector depth matrix.
-          </p>
+          <h1 className="font-display text-xl font-semibold sm:text-3xl">Market Depth</h1>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <span

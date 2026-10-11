@@ -25,6 +25,7 @@ import { sameNativeCurrency } from "@/lib/world/lots";
 import { formatHoldingTime } from "@/lib/format";
 import { deriveHoldings, useGlobalTxns } from "@/lib/world/store";
 import { aggregateBars, type BarAgg } from "@/lib/charts/aggregate";
+import { CHART_RANGES, type ChartRangeKey } from "@/lib/charts/ranges";
 import { useWatchlist } from "@/lib/watchlist";
 import { useSettings } from "@/lib/settings";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -38,11 +39,9 @@ const NO_POINTS: PricePoint[] = [];
 
 const clampInto = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
 
-const RANGES = ["1D", "1M", "3M", "6M", "1Y", "5Y", "MAX"] as const;
-type RangeKey = (typeof RANGES)[number];
-
-const WORLD_RANGE: Record<RangeKey, WorldRange> = {
+const WORLD_RANGE: Record<ChartRangeKey, WorldRange> = {
   "1D": "1D",
+  "1W": "1W",
   "1M": "1M",
   "3M": "3M",
   "6M": "6M",
@@ -69,7 +68,7 @@ export function GlobalTerminalCard({
   light: boolean;
   onOpenWatchlist: () => void;
 }) {
-  const [range, setRange] = useState<RangeKey>("1D");
+  const [range, setRange] = useState<ChartRangeKey>("1D");
   const [intraRes, setIntraRes] = useState<"5m" | "15m">("5m");
   // Shared chart look — same store as the NEPSE terminal.
   const { chart, setChart } = useSettings();
@@ -81,6 +80,16 @@ export function GlobalTerminalCard({
   const setLogScale = (v: boolean) => setChart({ logScale: v });
   const barAgg = chart.barAgg;
   const setBarAgg = (v: BarAgg) => setChart({ barAgg: v });
+  // Auto per-point default on long ranges until the user picks manually: 5Y
+  // and MAX both open on weekly candles (calm at a glance; Day is one tap
+  // away now that 5Y has real dailies). Local override only — the shared
+  // barAgg pref is never rewritten, so the NEPSE terminal keeps whatever the
+  // user chose there.
+  const [aggTouched, setAggTouched] = useState(false);
+  useEffect(() => {
+    setAggTouched(false);
+  }, [symbol]);
+  const effectiveAgg: BarAgg = !aggTouched && (range === "5Y" || range === "MAX") ? "week" : barAgg;
   const [expanded, setExpanded] = useState(false);
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const [pinned, setPinned] = useState<string | null>(null);
@@ -117,8 +126,8 @@ export function GlobalTerminalCard({
     [history.data],
   );
   const drawnBars = useMemo(
-    () => (range === "1D" ? dailyBars : aggregateBars(dailyBars, barAgg)),
-    [dailyBars, barAgg, range],
+    () => (range === "1D" ? dailyBars : aggregateBars(dailyBars, effectiveAgg)),
+    [dailyBars, effectiveAgg, range],
   );
   const sessionPoints: PricePoint[] = useMemo(
     () =>
@@ -275,7 +284,7 @@ export function GlobalTerminalCard({
 
         <div className="flex flex-wrap items-center gap-2 border-b border-border/60 px-3 py-2">
           <div className="flex flex-wrap gap-1">
-            {RANGES.map((r) => (
+            {CHART_RANGES.map((r) => (
               <button
                 key={r}
                 type="button"
@@ -292,7 +301,13 @@ export function GlobalTerminalCard({
           {range !== "1D" ? (
             <>
               <span className="hidden h-4 w-px bg-border sm:block" />
-              <BarAggSelect value={barAgg} onChange={setBarAgg} />
+              <BarAggSelect
+                value={effectiveAgg}
+                onChange={(v) => {
+                  setAggTouched(true);
+                  setBarAgg(v);
+                }}
+              />
             </>
           ) : (
             <span className="flex items-center gap-1 text-[0.68rem] text-muted-foreground">

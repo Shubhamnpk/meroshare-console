@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, LogOut, Search, Settings, UserRound } from "lucide-react";
 import { marketSnapshotQuery } from "@/lib/queries";
@@ -21,6 +21,28 @@ import { CommandPalette } from "@/components/command-palette";
 import { NotificationBell } from "@/components/notification-bell";
 import { ScripSheet } from "@/components/market/scrip-sheet";
 import { AppSidebar, MobileNav } from "@/components/app-sidebar";
+import { WatchlistFloatHost } from "@/components/market/watchlist-float";
+
+/**
+ * Pages (besides terminal/market, which wire their own float) where the
+ * floating watchlist tab appears. One scoped mount instead of per-page wiring.
+ */
+const FLOAT_PATHS = [
+  "/portfolio",
+  "/transactions",
+  "/analytics",
+  "/tools",
+  "/time-machine",
+  "/stock-compare",
+  "/dividend-vs-fd",
+  "/best-shares",
+  "/market-depth",
+  "/mutual-funds",
+  "/brokers",
+  "/ipo-pipeline",
+  "/debentures",
+  "/global",
+];
 import { usePrefs } from "@/lib/prefs";
 
 function initials(name: string) {
@@ -43,6 +65,8 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
   const [pickedScrip, setPickedScrip] = useState<string | null>(null);
 
   const toggleCollapsed = () => setSidebarCollapsed(!sidebarCollapsed);
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const showFloat = FLOAT_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
   const snapshot = useQuery(marketSnapshotQuery());
   const marketOpen = snapshot.data?.status.isOpen ?? null;
 
@@ -216,7 +240,7 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
                 className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-secondary/70 px-2.5 py-0.5 text-[0.725rem] font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:bg-accent hover:text-foreground"
               >
                 <span className="size-1.5 rounded-full bg-emerald-500" />
-                <span>{APP_VERSION} Release Notes</span>
+                <span>{APP_VERSION}</span>
               </Link>
             </div>
             <p className="text-[0.68rem] text-muted-foreground/60">
@@ -227,6 +251,8 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
       </div>
 
       <MobileNav />
+
+      {showFloat ? <WatchlistFloatHost /> : null}
 
       <CommandPalette open={paletteOpen} setOpen={setPaletteOpen} onPick={(symbol) => setPickedScrip(symbol)} />
       <ScripSheet

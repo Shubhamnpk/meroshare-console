@@ -3,7 +3,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, FileText, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { clearRememberedCrn, loadRememberedCrn, saveRememberedCrn } from "@/lib/remember-crn";
+import { recordDemoApplication, updateDemoApplication } from "@/lib/demo-ipo";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -261,10 +264,15 @@ export function IpoDetailSheet({
   issue,
   edit,
   onOpenChange,
+  demo,
+  onDemoChange,
 }: {
   issue: IpoSheetIssue | null;
   edit?: IpoSheetEdit | null | undefined;
   onOpenChange: (open: boolean) => void;
+  /** Demo playground: simulate apply/edit locally, never call CDSC. */
+  demo?: boolean | undefined;
+  onDemoChange?: (() => void) | undefined;
 }) {
   const queryClient = useQueryClient();
   const banks = useQuery(banksQuery());
@@ -272,6 +280,7 @@ export function IpoDetailSheet({
   const [bankId, setBankId] = useState("");
   const [kitta, setKitta] = useState("10");
   const [crn, setCrn] = useState("");
+  const [rememberCrn, setRememberCrn] = useState(false);
   const [accountNumber, setAccountNumber] = useState("");
   const [accountBranchId, setAccountBranchId] = useState<number | null>(null);
   const [accountTypeId, setAccountTypeId] = useState<number | null>(null);
@@ -287,7 +296,9 @@ export function IpoDetailSheet({
     setKitta(String(edit?.appliedKitta ?? issue.minUnit ?? 10));
     setBankId(edit?.bankId ? String(edit.bankId) : "");
     setAccountNumber(edit?.accountNumber ?? "");
-    setCrn(edit?.crnNumber ?? "");
+    const memory = loadRememberedCrn();
+    setCrn(edit?.crnNumber ?? (memory?.autoRemember && memory.crn ? memory.crn : ""));
+    setRememberCrn(memory?.autoRemember ?? false);
     setAccountBranchId(null);
     setAccountTypeId(null);
     setCustomerId(null);
@@ -410,6 +421,38 @@ export function IpoDetailSheet({
       toast.error(`Maximum ${formatNumber(maxUnits)} units allowed.`);
       return;
     }
+    if (rememberCrn && crn.trim()) saveRememberedCrn(crn.trim(), true);
+    else if (!rememberCrn) clearRememberedCrn();
+    if (demo && issue) {
+      const unitPrice = Number(pricePerUnit) || 100;
+      if (editFormId && editFormId < 0) {
+        updateDemoApplication(editFormId, {
+          appliedKitta: Number(kitta),
+          bankId: Number(bankId),
+          accountNumber: accountNumber.trim(),
+          crnNumber: crn.trim(),
+          amount: Number(kitta) * unitPrice,
+        });
+        toast.success("Demo application updated — nothing was sent to CDSC.");
+      } else {
+        recordDemoApplication({
+          companyShareId: issue.companyShareId,
+          scrip: issue.scrip,
+          companyName: issue.companyName,
+          shareTypeName: issue.shareTypeName,
+          shareGroupName: issue.shareGroupName,
+          appliedKitta: Number(kitta),
+          bankId: Number(bankId),
+          accountNumber: accountNumber.trim(),
+          crnNumber: crn.trim(),
+          amount: Number(kitta) * unitPrice,
+        });
+        toast.success("Demo application recorded — nothing was sent to CDSC.");
+      }
+      onDemoChange?.();
+      close();
+      return;
+    }
     const payload: Record<string, unknown> = {
       companyShareId: issue.companyShareId,
       appliedKitta: Number(kitta),
@@ -431,7 +474,7 @@ export function IpoDetailSheet({
   const issueDetail = useQuery({
     queryKey: ["issue-detail", shareId],
     queryFn: () => getIssueDetail({ data: { companyShareId: shareId } }),
-    enabled: shareId > 0,
+    enabled: shareId > 0 && !demo,
   });
   const detailRec = (issueDetail.data ?? null) as Record<string, unknown> | null;
 
@@ -637,6 +680,22 @@ export function IpoDetailSheet({
                 <p className="text-[11px] text-muted-foreground">
                   Your 15-digit CRN from your bank cheque or ASBA form.
                 </p>
+                <label
+                  htmlFor="ipo-sheet-remember-crn"
+                  className="flex cursor-pointer items-center gap-2 pt-0.5 text-xs text-muted-foreground"
+                >
+                  <Checkbox
+                    id="ipo-sheet-remember-crn"
+                    checked={rememberCrn}
+                    onCheckedChange={(v) => setRememberCrn(v === true)}
+                    className="mt-0"
+                  />
+                  <span>
+                    <span className="block text-[11px] opacity-80">
+                    Auto-remember CRN on this device
+                    </span>
+                  </span>
+                </label>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
@@ -671,6 +730,11 @@ export function IpoDetailSheet({
                 <p className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-muted-foreground">
                   You are editing your existing application. You can change units, bank, account and CRN while the issue
                   is still open.
+                </p>
+              ) : null}
+              {demo ? (
+                <p className="rounded-lg border border-primary/25 bg-primary/10 px-3 py-2 text-xs text-muted-foreground">
+                  Demo mode — this application is simulated on your device and never reaches CDSC.
                 </p>
               ) : null}
               <div className="flex justify-end gap-2 pt-1">

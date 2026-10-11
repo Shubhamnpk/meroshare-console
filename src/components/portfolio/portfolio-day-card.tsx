@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
+import { ArrowUpRight } from "lucide-react";
 import { Panel } from "@/components/ui/panel";
 import { AreaChart } from "@/components/market/area-chart";
-import { LoadingBlock } from "@/components/states";
+import { ErrorBlock, LoadingBlock } from "@/components/states";
 import { chartTimeLabel } from "@/components/market/chart-modal";
 import {
   globalDaySeriesQuery,
@@ -16,9 +18,10 @@ import {
 import { deriveHoldings, useGlobalTxns } from "@/lib/world/store";
 import { formatNpr } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { CHART_RANGES, type ChartRangeKey } from "@/lib/charts/ranges";
 
-const RANGES = ["1D", "1W", "1M", "3M", "6M", "1Y", "All"] as const;
-type RangeKey = (typeof RANGES)[number];
+const RANGES = CHART_RANGES;
+type RangeKey = ChartRangeKey;
 
 /** NEPSE history window per range; 1W reuses the 1-month daily fetch, sliced. */
 const NEPSE_MONTHS: Record<Exclude<RangeKey, "1D">, number> = {
@@ -27,16 +30,18 @@ const NEPSE_MONTHS: Record<Exclude<RangeKey, "1D">, number> = {
   "3M": 3,
   "6M": 6,
   "1Y": 12,
-  All: 60,
+  "5Y": 60,
+  MAX: 120,
 };
 
-const GLOBAL_RANGE: Record<Exclude<RangeKey, "1D">, "1M" | "3M" | "6M" | "1Y" | "MAX"> = {
+const GLOBAL_RANGE: Record<Exclude<RangeKey, "1D">, "1M" | "3M" | "6M" | "1Y" | "5Y" | "MAX"> = {
   "1W": "1M",
   "1M": "1M",
   "3M": "3M",
   "6M": "6M",
   "1Y": "1Y",
-  All: "MAX",
+  "5Y": "5Y",
+  MAX: "MAX",
 };
 
 function dayLabel(time: number): string {
@@ -111,29 +116,39 @@ export function PortfolioDayCard({ holdings }: { holdings: { scrip: string; unit
   const invested = (investment.data?.totalInvestment ?? 0) + globalCost;
   const nepseLive = useMemo(() => holdings.reduce((s, h) => s + h.units * h.price, 0), [holdings]);
 
-  // 1D merge: union of NEPSE + global timestamps, each leg flat outside its
-  // own prints (pre-open holds the first print, nights hold the last).
+  // 1D is a true time grid: one point per minute for the last 24 hours, each
+  // leg holding its last print (pre-open holds the first print, nights hold
+  // the last). Index spacing equals time spacing, so session bumps read as
+  // bumps and closed stretches read as flat — a normal value-over-time line
+  // that never blanks, even with zero prints (then it is flat at the live
+  // total, which holdings alone price).
   const dayPoints = useMemo(() => {
     const nepsePts = intraday.data?.points ?? [];
     const globalPts = daySeries.data?.points ?? [];
-    const cutoff = Date.now() / 1000 - 24 * 3600;
-    const stamps = [...new Set([...nepsePts.map((p) => p.time), ...globalPts.map((p) => p.time)])]
-      .filter((t) => t >= cutoff)
-      .sort((a, b) => a - b);
-    if (stamps.length === 0) return [];
-    const at = (pts: { time: number; value: number }[], t: number, flat: number) => {
-      if (pts.length === 0) return flat;
-      let v = pts[0]!.value;
-      for (const p of pts) {
-        if (p.time <= t) v = p.value;
-        else break;
+    const now = Date.now() / 1000;
+    const cutoff = now - 24 * 3600;
+    const liveTotal = nepseLive + globalNow;
+    if (!(liveTotal > 0)) return [];
+    // Per-leg cursors walk forward once across the grid (both inputs ascend).
+    const inNepse = nepsePts.filter((p) => p.time >= cutoff - 3600);
+    const inGlobal = globalPts.filter((p) => p.time >= cutoff - 3600);
+    let ni = 0;
+    let gi = 0;
+    let nv = inNepse.length > 0 ? inNepse[0]!.value : nepseLive;
+    let gv = inGlobal.length > 0 ? inGlobal[0]!.value : globalNow;
+    const pts: { time: number; value: number }[] = [];
+    for (let t = Math.ceil(cutoff / 60) * 60; t <= now; t += 60) {
+      while (ni < inNepse.length && inNepse[ni]!.time <= t) {
+        nv = inNepse[ni]!.value;
+        ni += 1;
       }
-      return v;
-    };
-    return stamps.map((t) => ({
-      time: t,
-      value: at(nepsePts, t, nepseLive) + at(globalPts, t, globalNow),
-    }));
+      while (gi < inGlobal.length && inGlobal[gi]!.time <= t) {
+        gv = inGlobal[gi]!.value;
+        gi += 1;
+      }
+      pts.push({ time: t, value: nv + gv });
+    }
+    return pts;
   }, [intraday.data, daySeries.data, nepseLive, globalNow]);
 
   // Longer-range merge: each leg holds its last print, 0 before its first —
@@ -183,10 +198,19 @@ export function PortfolioDayCard({ holdings }: { holdings: { scrip: string; unit
     }
     return smoothed;
   }, [dayPoints, historyPoints, isDay]);
+  // Continuous flow: when nothing moved lately, run the line flat to right
+  // now instead of ending it hours ago. No change prints as a flat tail.
+  const nowSec = Math.floor(Date.now() / 1000);
+  const tailed = useMemo(() => {
+    if (line.length === 0) return line;
+    const last = line[line.length - 1]!;
+    if (last.time >= nowSec - 60) return line;
+    return [...line, { time: nowSec, value: last.value }];
+  }, [line, nowSec]);
   // Cost baseline only earns its pixels when it lands inside the range —
   // a far-away line would squash the whole chart flat.
-  const lo = line.length > 0 ? Math.min(...line.map((p) => p.value)) : 0;
-  const hi = line.length > 0 ? Math.max(...line.map((p) => p.value)) : 0;
+  const lo = tailed.length > 0 ? Math.min(...tailed.map((p) => p.value)) : 0;
+  const hi = tailed.length > 0 ? Math.max(...tailed.map((p) => p.value)) : 0;
   const showCost = invested > 0 && invested >= lo && invested <= hi;
 
   if (holdings.length === 0 && globalLots.length === 0) return null;
@@ -197,12 +221,32 @@ export function PortfolioDayCard({ holdings }: { holdings: { scrip: string; unit
   const fetching = isDay
     ? intraday.isFetching || daySeries.isFetching
     : nepseHistory.isFetching || globalHistory.isFetching;
-  const pending = fetching && line.length < 2;
+  const pending = fetching && tailed.length < 2;
+  // A dead feed and a closed market both yield zero points — say which.
+  const loadError = isDay ? (intraday.error ?? daySeries.error) : (nepseHistory.error ?? globalHistory.error);
+  const retry = () => {
+    if (isDay) {
+      void intraday.refetch();
+      void daySeries.refetch();
+    } else {
+      void nepseHistory.refetch();
+      void globalHistory.refetch();
+    }
+  };
 
   return (
-    <Panel as="section">
+    <Panel as="section" className="group">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-display text-base font-semibold">Portfolio</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="font-display text-base font-semibold">Portfolio</h2>
+          <Link
+            to="/terminal"
+            search={{ mode: "portfolio" }}
+            className="inline-flex items-center gap-0.5 text-[0.68rem] font-medium text-primary opacity-100 transition-opacity hover:underline [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-focus-within:opacity-100 [@media(hover:hover)]:group-hover:opacity-100"
+          >
+            Net worth <ArrowUpRight className="size-3" />
+          </Link>
+        </div>
         <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Portfolio range">
           {RANGES.map((r) => (
             <button
@@ -224,16 +268,23 @@ export function PortfolioDayCard({ holdings }: { holdings: { scrip: string; unit
       </div>
       {pending ? (
         <LoadingBlock label={isDay ? "Building the last 24 hours" : `Building ${range}`} rows={1} />
-      ) : line.length < 2 ? (
+      ) : tailed.length < 2 && loadError ? (
+        <ErrorBlock error={loadError} retry={retry} />
+      ) : tailed.length < 2 ? (
         <p className="rounded-xl border border-border/60 bg-surface px-3 py-8 text-center text-sm text-muted-foreground">
           {isDay
-            ? "No prints in the last 24 hours yet — the line appears once a market you hold moves."
-            : "No history in this range yet — try a longer one."}
+            ? "No prints in the last 24 hours yet. The line appears once a market you hold moves."
+            : "No history in this range yet. Try a longer one."}
         </p>
       ) : (
-        <>
+        <Link
+          to="/terminal"
+          search={{ mode: "portfolio" }}
+          className="block cursor-pointer"
+          aria-label="Open net worth in terminal"
+        >
           <AreaChart
-            points={line}
+            points={tailed}
             height={144}
             wacc={showCost ? invested : null}
             formatValue={(v) => formatNpr(v)}
@@ -245,7 +296,7 @@ export function PortfolioDayCard({ holdings }: { holdings: { scrip: string; unit
               : "Closes across every market you hold — starts at your first position, global at current FX."}
             {showCost ? " Dotted line = what you paid in." : ""}
           </p>
-        </>
+        </Link>
       )}
     </Panel>
   );

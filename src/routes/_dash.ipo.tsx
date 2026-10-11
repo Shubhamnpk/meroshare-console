@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Archive, ArrowUpRight, CalendarRange, CheckCircle2, ClipboardList, Rocket } from "lucide-react";
@@ -13,10 +13,19 @@ import {
   currentIssuesQuery,
   ipoArchiveQuery,
   mfPipelineByTypeQuery,
+  sessionQuery,
 } from "@/lib/queries";
+import { useSettings } from "@/lib/settings";
+import {
+  isDemoIssueId,
+  loadDemoApplications,
+  removeDemoApplication,
+  toDetailRecord,
+  toReportItem,
+} from "@/lib/demo-ipo";
 import { deleteIpoApply } from "@/lib/meroshare/ipo.functions";
 import { daysUntil, errorMessage, formatDate, formatNpr, formatNumber, formatQty, toNumber } from "@/lib/format";
-import type { ApplicableIssue } from "@/lib/meroshare/types";
+import type { ApplicableIssue, JsonRecord } from "@/lib/meroshare/types";
 import type { IpoArchiveRow } from "@/lib/nepse/types";
 import type { MfPipelineType } from "@/lib/mutual-funds/types";
 import { sameCompany } from "@/lib/notifications";
@@ -154,10 +163,11 @@ function UpcomingSection({
   );
 }
 
-function CalendarView() {
+function CalendarView({ showDemo = true }: { showDemo?: boolean }) {
   const issues = useQuery(currentIssuesQuery());
   const archive = useQuery(ipoArchiveQuery());
-  const list = issues.data ?? [];
+  const rawList = issues.data ?? [];
+  const list = showDemo ? rawList : rawList.filter((i) => !isDemoIssueId(i.companyShareId));
 
   const groups = {
     open: list.filter((i) => statusGroup(i) === "open"),
@@ -411,6 +421,13 @@ function ArchiveView() {
 
 function IpoPage() {
   const queryClient = useQueryClient();
+  const session = useQuery(sessionQuery());
+  const { demoIpoEnabled } = useSettings();
+  const isDemo = session.data?.username === "demo";
+  const demoIpoOn = Boolean(isDemo && demoIpoEnabled);
+  const [demoTick, setDemoTick] = useState(0);
+  const bumpDemo = () => setDemoTick((t) => t + 1);
+
   const issues = useQuery(applicableIssuesQuery());
   const reports = useQuery(applicationReportsQuery());
   const { tab: tabParam } = Route.useSearch();
@@ -418,26 +435,53 @@ function IpoPage() {
   const [sheetIssue, setSheetIssue] = useState<IpoSheetIssue | null>(null);
   const [sheetEdit, setSheetEdit] = useState<IpoSheetEdit | null>(null);
 
+  // Demo playground applications (this device only), merged ahead of server rows.
+  const demoApps = useMemo(() => (demoIpoOn ? loadDemoApplications() : []), [demoIpoOn, demoTick]);
+  const demoItems = useMemo(() => demoApps.map(toReportItem), [demoApps]);
+  const demoDetailByForm = useMemo(() => {
+    const m = new Map<number, JsonRecord>();
+    for (const a of demoApps) m.set(a.formId, toDetailRecord(a));
+    return m;
+  }, [demoApps]);
+
+  const serverReports = reports.data ?? [];
+  const mergedReports = useMemo(() => [...demoItems, ...serverReports], [demoItems, serverReports]);
+  const serverDetailArgs = useMemo(
+    () =>
+      serverReports
+        .filter((r) => (r.applicantFormId ?? 0) > 0)
+        .map((r) => ({ formId: r.applicantFormId ?? 0, old: false })),
+    [serverReports],
+  );
+  const appliedDetails = useQuery({
+    ...applicationDetailsQuery(serverDetailArgs),
+    enabled: serverDetailArgs.length > 0,
+  });
+  const serverDetailByForm = new Map<number, Record<string, unknown>>();
+  {
+    let di = 0;
+    for (const r of serverReports) {
+      if ((r.applicantFormId ?? 0) <= 0) continue;
+      const d = appliedDetails.data?.[di] as Record<string, unknown> | null | undefined;
+      di += 1;
+      if (d && r.applicantFormId != null) serverDetailByForm.set(r.applicantFormId, d);
+    }
+  }
+
   // Applied-state map: applicableIssue endpoint keeps returning issues even
   // after applying, so the Apply tab must itself know what is already applied.
   const appliedByShare = new Map(
-    (reports.data ?? [])
+    mergedReports
       .filter((r) => r.companyShareId != null && r.applicantFormId != null)
       .map((r) => [r.companyShareId, r]),
   );
-  const appliedDetails = useQuery({
-    ...applicationDetailsQuery(
-      (reports.data ?? [])
-        .filter((r) => r.applicantFormId != null)
-        .map((r) => ({ formId: r.applicantFormId ?? 0, old: false })),
-    ),
-    enabled: (reports.data ?? []).length > 0,
-  });
   const appliedDetailByShare = new Map<number, Record<string, unknown>>();
-  (reports.data ?? []).forEach((r, idx) => {
-    const d = appliedDetails.data?.[idx] as Record<string, unknown> | null | undefined;
+  for (const r of mergedReports) {
+    const fid = r.applicantFormId;
+    if (fid == null) continue;
+    const d = fid < 0 ? demoDetailByForm.get(fid) : serverDetailByForm.get(fid);
     if (d) appliedDetailByShare.set(r.companyShareId, d);
-  });
+  }
 
   const openSheet = (issue: ApplicableIssue, edit: IpoSheetEdit | null) => {
     setSheetIssue({
@@ -491,10 +535,19 @@ function IpoPage() {
     onError: (error) => toast.error(errorMessage(error, "Could not withdraw the application.")),
   });
 
-  const list = issues.data ?? [];
+  // Demo IPO playground can be switched off from Settings (demo users only).
+  const rawList = issues.data ?? [];
+  const list = !isDemo || demoIpoEnabled ? rawList : rawList.filter((i) => !isDemoIssueId(i.companyShareId));
   const calendar = useQuery(currentIssuesQuery());
   const archive = useQuery(ipoArchiveQuery());
-  const { cdscUpcoming, archUpcoming } = upcomingMerged(list, calendar.data ?? [], archive.data?.upcoming ?? []);
+  const calendarList = useMemo(
+    () =>
+      !isDemo || demoIpoEnabled
+        ? (calendar.data ?? [])
+        : (calendar.data ?? []).filter((i) => !isDemoIssueId(i.companyShareId)),
+    [isDemo, demoIpoEnabled, calendar.data],
+  );
+  const { cdscUpcoming, archUpcoming } = upcomingMerged(list, calendarList, archive.data?.upcoming ?? []);
 
   return (
     <div className="space-y-5">
@@ -522,6 +575,12 @@ function IpoPage() {
         </TabsList>
 
         <TabsContent value="apply" className="mt-4">
+          {demoIpoOn ? (
+            <p className="mb-3 rounded-xl border border-primary/25 bg-primary/10 px-3 py-2 text-xs text-muted-foreground">
+              Demo IPO playground — these issues are fake. Apply, edit and withdraw to test the
+              forms; nothing is sent to CDSC. Turn it off in Settings → Advanced.
+            </p>
+          ) : null}
           {issues.isLoading ? (
             <SkeletonCards count={4} />
           ) : issues.isError ? (
@@ -686,20 +745,31 @@ function IpoPage() {
                 crnNumber: detail ? String(detail["crnNumber"] ?? "") || undefined : undefined,
               })
             }
-            onWithdraw={(item, pinValue) =>
+            onWithdraw={(item, pinValue) => {
+              if ((item.applicantFormId ?? 0) < 0) {
+                if (removeDemoApplication(item.applicantFormId ?? 0)) {
+                  toast.success("Demo application withdrawn.");
+                  bumpDemo();
+                } else {
+                  toast.error("Could not withdraw the demo application.");
+                }
+                return;
+              }
               withdraw.mutate({
                 data: {
                   applicantFormId: item.applicantFormId ?? 0,
                   companyShareId: item.companyShareId,
                   transactionPIN: pinValue,
                 },
-              })
-            }
+              });
+            }}
+            extraItems={demoItems}
+            extraDetails={demoItems.map((i) => demoDetailByForm.get(i.applicantFormId ?? 0) ?? null)}
           />
         </TabsContent>
 
         <TabsContent value="calendar" className="mt-4">
-          <CalendarView />
+          <CalendarView showDemo={demoIpoOn} />
         </TabsContent>
 
         <TabsContent value="archive" className="mt-4">
@@ -710,6 +780,8 @@ function IpoPage() {
       <IpoDetailSheet
         issue={sheetIssue}
         edit={sheetEdit}
+        demo={demoIpoOn}
+        onDemoChange={bumpDemo}
         onOpenChange={(open) => {
           if (!open) {
             setSheetIssue(null);

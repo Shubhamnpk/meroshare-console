@@ -10,6 +10,7 @@ import type {
   PortfolioResponse,
   TransactionItem,
   MyShareItem,
+  ApplicableIssue,
   ApplicationReportItem,
   ActivityLogItem,
   BankListItem,
@@ -103,6 +104,45 @@ function daysAgo(n: number): string {
   d.setDate(d.getDate() - n);
   return d.toISOString().slice(0, 10);
 }
+
+function daysFromNow(n: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Open demo issues for the IPO playground (demo mode only). Clearly fake
+ * companies so nobody mistakes them for real issues.
+ */
+export const DEMO_APPLICABLE_ISSUES: ApplicableIssue[] = [
+  {
+    companyShareId: 9101,
+    scrip: "DMHL",
+    companyName: "Demo Mountain Hydropower Ltd.",
+    shareTypeName: "IPO",
+    shareGroupName: "Ordinary Share",
+    statusName: "Open",
+    issueOpenDate: daysAgo(2),
+    issueCloseDate: daysFromNow(5),
+    sharePerUnit: 100,
+    minUnit: 10,
+    maxUnit: 100000,
+  },
+  {
+    companyShareId: 9102,
+    scrip: "DSBL",
+    companyName: "Demo Sunrise Bank Ltd.",
+    shareTypeName: "FPO",
+    shareGroupName: "Ordinary Share",
+    statusName: "Open",
+    issueOpenDate: daysAgo(1),
+    issueCloseDate: daysFromNow(9),
+    sharePerUnit: 100,
+    minUnit: 10,
+    maxUnit: 50000,
+  },
+];
 
 export const DEMO_TRANSACTIONS: TransactionItem[] = [
   {

@@ -300,7 +300,7 @@ function PriceHistoryTab({
           if (!point) return null;
           const count = point.breakdown.length;
           return (
-            <p className="text-[0.65rem] text-muted-foreground">
+            <p className="text-center text-[0.65rem] text-muted-foreground">
               {count} {count === 1 ? "stock" : "stocks"}
             </p>
           );
@@ -331,19 +331,26 @@ export function PointBreakdown({
   formatLabel,
   onPickScrip,
   costOf,
+  prevValue,
+  prevCloses,
 }: {
   point: PortfolioHistoryPoint;
   formatLabel: (time: number) => string;
   onPickScrip: (scrip: string) => void;
   /** Optional est. cost basis per scrip; when given, Cost/Profit columns appear. */
   costOf?: ((symbol: string) => { rate: number; pending: boolean } | undefined) | undefined;
+  /** Previous point's total; when given without costOf, the header shows day % vs prev close. */
+  prevValue?: number | null | undefined;
+  /** Previous point's close per symbol (uppercase); when given, a per-row Chg % column appears. */
+  prevCloses?: Record<string, number> | undefined;
 }) {
-  type Key = "symbol" | "close" | "units" | "value" | "cost" | "profit";
+  type Key = "symbol" | "close" | "change" | "units" | "value" | "cost" | "profit";
   const { sort, toggle } = useSort<Key>(
     { key: "value", dir: "desc" },
     {
       symbol: "text",
       close: "number",
+      change: "number",
       units: "number",
       value: "number",
       cost: "number",
@@ -355,9 +362,18 @@ export function PointBreakdown({
       point.breakdown.map((b) => {
         const entry = costOf?.(b.symbol.toUpperCase());
         const cost = entry ? b.units * entry.rate : null;
-        return { ...b, cost, profit: cost === null ? null : b.value - cost, pending: entry?.pending ?? false };
+        const prevClose = prevCloses?.[b.symbol.toUpperCase()] ?? null;
+        const hasPrev = prevClose !== null && prevClose > 0;
+        return {
+          ...b,
+          cost,
+          profit: cost === null ? null : b.value - cost,
+          pending: entry?.pending ?? false,
+          change: hasPrev ? ((b.close - prevClose) / prevClose) * 100 : null,
+          changeValue: hasPrev ? (b.close - prevClose) * b.units : null,
+        };
       }),
-    [point, costOf],
+    [point, costOf, prevCloses],
   );
   const rows = useMemo(() => {
     const getter = (b: (typeof enriched)[number]): string | number => {
@@ -366,6 +382,8 @@ export function PointBreakdown({
           return b.symbol;
         case "close":
           return b.close;
+        case "change":
+          return b.change ?? Number.NEGATIVE_INFINITY;
         case "units":
           return b.units;
         case "cost":
@@ -379,8 +397,15 @@ export function PointBreakdown({
     return sortBy([...enriched], getter, sort.dir);
   }, [enriched, sort]);
   const showCost = costOf !== undefined;
+  const showChange = prevCloses !== undefined && Object.keys(prevCloses).length > 0;
+  // Zero move is neutral gray, never gain-green: applies to every money/%
+  // figure in this table.
+  const tone = (v: number) => (v > 0 ? "text-gain" : v < 0 ? "text-loss" : "text-muted-foreground");
+  const sign = (v: number) => (v > 0 ? "+" : v < 0 ? "-" : "");
   const totalCost = rows.reduce((sum, b) => sum + (b.cost ?? 0), 0);
   const totalProfit = rows.reduce((sum, b) => sum + (b.profit ?? 0), 0);
+  const changeTotal = rows.reduce((sum, b) => sum + (b.changeValue ?? 0), 0);
+  const dayPct = !showCost && prevValue != null && prevValue > 0 ? ((point.value - prevValue) / prevValue) * 100 : null;
   return (
     <div className="overflow-clip rounded-xl border border-border/60 bg-surface">
       <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 px-3 py-2">
@@ -388,14 +413,23 @@ export function PointBreakdown({
         <span className="num text-xs text-muted-foreground">
           {showCost ? (
             <>
-              <span className={cn("font-semibold", totalProfit >= 0 ? "text-gain" : "text-loss")}>
-                {totalProfit >= 0 ? "+" : "-"}
+              <span className={cn("font-semibold", tone(totalProfit))}>
+                {sign(totalProfit)}
                 {formatNpr(Math.abs(totalProfit))}
               </span>{" "}
               profit ·{" "}
             </>
           ) : null}
           {formatNpr(point.value)} across {rows.length} stock{rows.length === 1 ? "" : "s"}
+          {dayPct !== null ? (
+            <>
+              {" · "}
+              <span className={cn("font-semibold", tone(dayPct))}>
+                {sign(dayPct)}
+                {dayPct.toFixed(2)}% vs prev close
+              </span>
+            </>
+          ) : null}
         </span>
       </header>
       <Table>
@@ -416,6 +450,15 @@ export function PointBreakdown({
               onClick={() => toggle("close")}
               align="right"
             />
+            {showChange ? (
+              <SortableTh
+                label="Chg"
+                active={sort.key === "change"}
+                dir={sort.dir}
+                onClick={() => toggle("change")}
+                align="right"
+              />
+            ) : null}
             <SortableTh
               label="Units"
               active={sort.key === "units"}
@@ -463,6 +506,24 @@ export function PointBreakdown({
                 </button>
               </TableCell>
               <TableCell className="num text-right">{formatNpr(b.close)}</TableCell>
+              {showChange ? (
+                <TableCell className={cn("num text-right", b.change !== null && tone(b.change))}>
+                  {b.change === null || b.changeValue === null ? (
+                    <span className="text-muted-foreground">-</span>
+                  ) : (
+                    <>
+                      <div>
+                        {sign(b.change)}
+                        {b.change.toFixed(2)}%
+                      </div>
+                      <div className="text-[0.68rem] text-muted-foreground">
+                        {sign(b.changeValue)}
+                        {formatNpr(Math.abs(Math.round(b.changeValue)))}
+                      </div>
+                    </>
+                  )}
+                </TableCell>
+              ) : null}
               <TableCell className="num text-right">{formatQty(b.units)}</TableCell>
               <TableCell className="num text-right">{formatNpr(b.value)}</TableCell>
               {showCost ? (
@@ -478,12 +539,7 @@ export function PointBreakdown({
                 </TableCell>
               ) : null}
               {showCost ? (
-                <TableCell
-                  className={cn(
-                    "num pr-3 text-right",
-                    b.profit !== null && (b.profit >= 0 ? "text-gain" : "text-loss"),
-                  )}
-                >
+                <TableCell className={cn("num pr-3 text-right", b.profit !== null && tone(b.profit))}>
                   {b.profit === null ? "-" : formatNpr(b.profit)}
                 </TableCell>
               ) : null}
@@ -494,6 +550,12 @@ export function PointBreakdown({
           <TableRow>
             <TableCell className="pl-3 font-semibold">Total</TableCell>
             <TableCell />
+            {showChange ? (
+              <TableCell className={cn("num text-right font-semibold", tone(changeTotal))}>
+                {sign(changeTotal)}
+                {formatNpr(Math.abs(Math.round(changeTotal)))}
+              </TableCell>
+            ) : null}
             <TableCell className="num text-right font-semibold">
               {formatQty(rows.reduce((sum, b) => sum + b.units, 0))}
             </TableCell>
@@ -502,9 +564,7 @@ export function PointBreakdown({
             </TableCell>
             {showCost ? <TableCell className="num text-right font-semibold">{formatNpr(totalCost)}</TableCell> : null}
             {showCost ? (
-              <TableCell
-                className={cn("num pr-3 text-right font-semibold", totalProfit >= 0 ? "text-gain" : "text-loss")}
-              >
+              <TableCell className={cn("num pr-3 text-right font-semibold", tone(totalProfit))}>
                 {formatNpr(totalProfit)}
               </TableCell>
             ) : null}
@@ -557,7 +617,10 @@ function emptyDivEntry(): DivEntry {
 
 type DivRow = DivEntry["divRows"][number];
 
+const DIVIDEND_ROWS_INITIAL = 5;
+
 function DividendTable({ rows, scrip }: { rows: DivRow[]; scrip: string }) {
+  const [expanded, setExpanded] = useState(false);
   const { sort, toggle } = useSort<"year" | "cash" | "bonus" | "total" | "announced" | "estCash" | "estBonus">(
     {
       key: "year",
@@ -610,51 +673,64 @@ function DividendTable({ rows, scrip }: { rows: DivRow[]; scrip: string }) {
       kind={key === "year" ? "text" : "number"}
     />
   );
+  const shown = expanded ? sorted : sorted.slice(0, DIVIDEND_ROWS_INITIAL);
   return (
-    <div className="overflow-x-auto rounded-lg border border-border/60 xl:overflow-x-clip">
-      <Table>
-        <TableHeader>
-          <TableRow className="bg-muted/40 hover:bg-muted/40">
-            {th("Dividend", "year", "left", "pl-3")}
-            {th("Cash", "cash")}
-            {th("Bonus", "bonus")}
-            {th("Total", "total")}
-            {th("Announced", "announced", "left", "hidden sm:table-cell")}
-            {th("Est. cash (your units)", "estCash")}
-            {th("Est. bonus (your units)", "estBonus", "right", "pr-3")}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {sorted.map((r, i) => (
-            <TableRow key={`${scrip}-div-${r.fiscalYear ?? i}`}>
-              <TableCell className="num pl-3 font-medium">{r.fiscalYear ?? "-"}</TableCell>
-              <TableCell className="num text-right text-muted-foreground">
-                {r.cashDividend > 0 ? `${r.cashDividend}%` : "-"}
-              </TableCell>
-              <TableCell className="num text-right text-muted-foreground">
-                {r.bonusShare > 0 ? `${r.bonusShare}%` : "-"}
-              </TableCell>
-              <TableCell className="num text-right font-semibold">
-                {r.totalDividend > 0 ? `${r.totalDividend}%` : "-"}
-              </TableCell>
-              <TableCell className="num hidden text-left text-muted-foreground sm:table-cell">
-                {r.announcementDate ? formatDate(r.announcementDate) : "-"}
-              </TableCell>
-              <TableCell className="num text-right font-medium">
-                {r.cashValue > 0 ? formatNpr(r.cashValue) : "-"}
-              </TableCell>
-              <TableCell className="num pr-3 text-right font-medium text-primary">
-                {r.bonusUnits > 0 ? `+${formatQty(r.bonusUnits)}` : "-"}
-              </TableCell>
+    <div className="space-y-1.5">
+      <div className="overflow-x-auto rounded-lg border border-border/60 xl:overflow-x-clip">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/40 hover:bg-muted/40">
+              {th("Dividend", "year", "left", "pl-3")}
+              {th("Cash", "cash")}
+              {th("Bonus", "bonus")}
+              {th("Total", "total")}
+              {th("Announced", "announced", "left", "hidden sm:table-cell")}
+              {th("Est. cash (your units)", "estCash")}
+              {th("Est. bonus (your units)", "estBonus", "right", "pr-3")}
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {shown.map((r, i) => (
+              <TableRow key={`${scrip}-div-${r.fiscalYear ?? i}`}>
+                <TableCell className="num pl-3 font-medium">{r.fiscalYear ?? "-"}</TableCell>
+                <TableCell className="num text-right text-muted-foreground">
+                  {r.cashDividend > 0 ? `${r.cashDividend}%` : "-"}
+                </TableCell>
+                <TableCell className="num text-right text-muted-foreground">
+                  {r.bonusShare > 0 ? `${r.bonusShare}%` : "-"}
+                </TableCell>
+                <TableCell className="num text-right font-semibold">
+                  {r.totalDividend > 0 ? `${r.totalDividend}%` : "-"}
+                </TableCell>
+                <TableCell className="num hidden text-left text-muted-foreground sm:table-cell">
+                  {r.announcementDate ? formatDate(r.announcementDate) : "-"}
+                </TableCell>
+                <TableCell className="num text-right font-medium">
+                  {r.cashValue > 0 ? formatNpr(r.cashValue) : "-"}
+                </TableCell>
+                <TableCell className="num pr-3 text-right font-medium text-primary">
+                  {r.bonusUnits > 0 ? `+${formatQty(r.bonusUnits)}` : "-"}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+      {sorted.length > DIVIDEND_ROWS_INITIAL ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((e) => !e)}
+          className="w-full rounded-lg border border-border/60 bg-surface px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground"
+        >
+          {expanded ? "Show less" : `Show ${sorted.length - DIVIDEND_ROWS_INITIAL} more`}
+        </button>
+      ) : null}
     </div>
   );
 }
 
 function CreditTable({ rows, scrip }: { rows: TransactionItem[]; scrip: string }) {
+  const [expanded, setExpanded] = useState(false);
   const { sort, toggle } = useSort<"date" | "description" | "units">(
     {
       key: "date",
@@ -675,51 +751,63 @@ function CreditTable({ rows, scrip }: { rows: TransactionItem[]; scrip: string }
     };
     return sortBy(rows, getter, sort.dir);
   }, [rows, sort]);
+  const shown = expanded ? sorted : sorted.slice(0, DIVIDEND_ROWS_INITIAL);
   return (
-    <div className="overflow-x-auto rounded-lg border border-border/60 xl:overflow-x-clip">
-      <Table>
-        <TableHeader>
-          <TableRow className="bg-muted/40 hover:bg-muted/40">
-            <SortableTh
-              label="Credited"
-              active={sort.key === "date"}
-              dir={sort.dir}
-              onClick={() => toggle("date")}
-              align="left"
-              className="pl-3"
-            />
-            <SortableTh
-              label="Description"
-              active={sort.key === "description"}
-              dir={sort.dir}
-              onClick={() => toggle("description")}
-              align="left"
-              kind="text"
-            />
-            <SortableTh
-              label="Units"
-              active={sort.key === "units"}
-              dir={sort.dir}
-              onClick={() => toggle("units")}
-              align="right"
-              className="pr-3"
-            />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {sorted.map((r, i) => (
-            <TableRow key={`${scrip}-credit-${String(r.transactionDate)}-${i}`}>
-              <TableCell className="num whitespace-nowrap pl-3 text-xs">{formatDate(r.transactionDate)}</TableCell>
-              <TableCell className="max-w-64 truncate text-xs text-muted-foreground" title={r.historyDescription}>
-                {r.historyDescription ?? "-"}
-              </TableCell>
-              <TableCell className="num pr-3 text-right font-semibold text-gain">
-                +{formatQty(r.creditQuantity)}
-              </TableCell>
+    <div className="space-y-1.5">
+      <div className="overflow-x-auto rounded-lg border border-border/60 xl:overflow-x-clip">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/40 hover:bg-muted/40">
+              <SortableTh
+                label="Credited"
+                active={sort.key === "date"}
+                dir={sort.dir}
+                onClick={() => toggle("date")}
+                align="left"
+                className="pl-3"
+              />
+              <SortableTh
+                label="Description"
+                active={sort.key === "description"}
+                dir={sort.dir}
+                onClick={() => toggle("description")}
+                align="left"
+                kind="text"
+              />
+              <SortableTh
+                label="Units"
+                active={sort.key === "units"}
+                dir={sort.dir}
+                onClick={() => toggle("units")}
+                align="right"
+                className="pr-3"
+              />
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {shown.map((r, i) => (
+              <TableRow key={`${scrip}-credit-${String(r.transactionDate)}-${i}`}>
+                <TableCell className="num whitespace-nowrap pl-3 text-xs">{formatDate(r.transactionDate)}</TableCell>
+                <TableCell className="max-w-64 truncate text-xs text-muted-foreground" title={r.historyDescription}>
+                  {r.historyDescription ?? "-"}
+                </TableCell>
+                <TableCell className="num pr-3 text-right font-semibold text-gain">
+                  +{formatQty(r.creditQuantity)}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+      {sorted.length > DIVIDEND_ROWS_INITIAL ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((e) => !e)}
+          className="w-full rounded-lg border border-border/60 bg-surface px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground"
+        >
+          {expanded ? "Show less" : `Show ${sorted.length - DIVIDEND_ROWS_INITIAL} more`}
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -805,10 +893,14 @@ function DividendHistoryTab({ onPickScrip }: { onPickScrip: (scrip: string) => v
       const y = yearOf(d.announcementDate);
       if (year !== "all" && y !== year) continue;
       const key = String(d.symbol ?? "").toUpperCase();
-      if (!key || (map.has(key) === false && year !== "all")) continue;
-      const entry = map.get(key) ?? emptyDivEntry();
+      if (!key) continue;
       const epoch = parseNptEpoch(d.announcementDate) ?? parseNptEpoch(d.bookCloseDate);
       const held = epoch == null ? 0 : unitsHeldAt(snapshotsBySymbol.get(key) ?? [], epoch);
+      // Announcements count when you actually held the scrip then — not only
+      // when you also received credited units that year. Zero rows are still
+      // hidden by the render guard below.
+      if (held <= 0 && !map.has(key)) continue;
+      const entry = map.get(key) ?? emptyDivEntry();
       const cashValue = (d.cashDividend / 100) * (faceValues.data?.[key] ?? 100) * held;
       const bonusUnits = (d.bonusShare / 100) * held;
       entry.estCash += cashValue;
@@ -1057,17 +1149,15 @@ export function HistoryPanel({
           description="Cash, bonus, merger & right credits"
         />
       </div>
-      <div className="px-4 pb-4">
-        {tab === null ? (
-          <p className="rounded-xl border border-dashed border-border/70 px-4 py-8 text-center text-sm text-muted-foreground">
-            Choose an insight above to load it on demand the past prices and your dividend record.
-          </p>
-        ) : tab === "price" ? (
-          <PriceHistoryTab holdings={holdings} onPickScrip={onPickScrip} waccOf={waccOf} />
-        ) : (
-          <DividendHistoryTab onPickScrip={onPickScrip} />
-        )}
-      </div>
+      {tab !== null ? (
+        <div className="px-4 pb-4">
+          {tab === "price" ? (
+            <PriceHistoryTab holdings={holdings} onPickScrip={onPickScrip} waccOf={waccOf} />
+          ) : (
+            <DividendHistoryTab onPickScrip={onPickScrip} />
+          )}
+        </div>
+      ) : null}
     </section>
   );
 }

@@ -7,6 +7,7 @@ import {
   ChartCandlestick,
   ChevronDown,
   Copy,
+  GitCompareArrows,
   Loader2,
   Maximize2,
   Minimize2,
@@ -25,6 +26,7 @@ import { DeltaPill } from "@/components/stat-card";
 import { ChipRow, StatChip } from "@/components/stat-chip";
 import { PositionPnlCard } from "@/components/market/position-pnl-card";
 import {
+  COMPARE_COLORS,
   TerminalChart,
   type ChartStyle,
   type HoverInfo,
@@ -34,6 +36,9 @@ import { normalise, type LinePoint } from "@/lib/nepse/indicators";
 import { chartDayLabel, chartTimeLabel } from "@/components/market/chart-modal";
 import { PointBreakdown } from "@/components/portfolio/history-panel";
 import { WatchlistPanel } from "@/components/market/watchlist-panel";
+import { WatchlistFloat } from "@/components/market/watchlist-float";
+import { CompareModal } from "@/components/market/compare-modal";
+import { CompareFundamentalsTable } from "@/components/market/compare-fundamentals";
 import { OrderTicket } from "@/components/brokers/order-ticket";
 import {
   BarAggSelect,
@@ -119,6 +124,8 @@ export const Route = createFileRoute("/_dash/terminal")({
 });
 
 const RANGES: ChartRange[] = ["1D", "1W", "1M", "3M", "6M", "1Y", "3Y", "5Y", "MAX"];
+/** Max overlay lines in the compare picker. Two fixed query slots below. */
+const MAX_COMPARE = 2;
 const INDEX_SYMBOLS = ["NEPSE", "SENSITIVE", "FLOAT", "SENFLOAT"] as const;
 
 const STORE_KEY = "meroshare.terminal.v1";
@@ -364,7 +371,12 @@ function TerminalPage() {
   /** Pinned session point in intraday mode (click): shows price + time below. */
   const [pinnedPoint, setPinnedPoint] = useState<PricePoint | null>(null);
   const [expanded, setExpanded] = useState(false);
-  const [compareSymbol, setCompareSymbol] = useState("");
+  const [compareSymbols, setCompareSymbols] = useState<string[]>([]);
+  const [compareOpen, setCompareOpen] = useState(false);
+  const toggleCompareSymbol = (s: string) =>
+    setCompareSymbols((prev) =>
+      prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s].slice(0, MAX_COMPARE),
+    );
   /** Pinned net-worth date (portfolio mode): shows that day's per-scrip prices below. */
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   useEffect(() => {
@@ -679,9 +691,17 @@ function TerminalPage() {
     refetchIntervalInBackground: true,
     staleTime: 3000,
   } as never);
-  const compare = useQuery({
-    ...chartSeriesQuery(compareSymbol, state.range),
-    enabled: mode === "scrip" && compareSymbol.length > 0 && !isGlobal,
+  // Two fixed query slots (never an inline array): references stay stable
+  // across renders so the chart only rebuilds when compare data changes.
+  const compareASymbol = compareSymbols[0] ?? "";
+  const compareBSymbol = compareSymbols[1] ?? "";
+  const compareA = useQuery({
+    ...chartSeriesQuery(compareASymbol, state.range),
+    enabled: mode === "scrip" && compareASymbol.length > 0 && !isGlobal,
+  });
+  const compareB = useQuery({
+    ...chartSeriesQuery(compareBSymbol, state.range),
+    enabled: mode === "scrip" && compareBSymbol.length > 0 && !isGlobal,
   });
 
   const historyMonths =
@@ -942,20 +962,113 @@ function TerminalPage() {
     return { time: t, value: breakdown.reduce((sum, b) => sum + b.value, 0), breakdown };
   }, [mode, pinnedPoint, worthIntraday.data, holdings]);
 
-  const compareLine: LinePoint[] | undefined = useMemo(() => {
-    const bars = compare.data?.bars ?? [];
-    const compareIntraday = compare.data?.intraday ?? [];
-    // Use intraday for 1D range, daily bars for longer ranges
-    if (bars.length > 0) {
-      const source = bars.map((b) => ({ date: b.date, value: b.close }));
-      return source.length >= 2 ? normalise(source) : undefined;
+  // Indexed % overlay lines for the picked symbols (skips the main symbol).
+  // Each line anchors to its own first point, like the original single
+  // compare did. Memoized on query data only: a stable reference, so
+  // hovering the chart never rebuilds it.
+  const compareLines = useMemo(() => {
+    const toLine = (
+      data: { bars?: { date: string; close: number }[]; intraday?: { time: number; value: number }[] } | undefined,
+    ): LinePoint[] | undefined => {
+      const bars = data?.bars ?? [];
+      const compareIntraday = data?.intraday ?? [];
+      // Same resolution as the main series: intraday ticks on 1D, daily bars
+      // otherwise (each with the other as fallback when dry).
+      const norm = (pts: LinePoint[]) => (pts.length >= 2 ? normalise(pts) : undefined);
+      if (state.range === "1D") {
+        return (
+          norm(compareIntraday.map((p) => ({ date: p.time, value: p.value }))) ??
+          norm(bars.map((b) => ({ date: b.date, value: b.close })))
+        );
+      }
+      return (
+        norm(bars.map((b) => ({ date: b.date, value: b.close }))) ??
+        norm(compareIntraday.map((p) => ({ date: p.time, value: p.value })))
+      );
+    };
+    const out: { label: string; points: LinePoint[] }[] = [];
+    for (const [label, data] of [
+      [compareASymbol, compareA.data],
+      [compareBSymbol, compareB.data],
+    ] as const) {
+      if (!label || label === state.symbol) continue;
+      const points = toLine(data);
+      if (points) out.push({ label, points });
     }
-    if (compareIntraday.length > 1) {
-      const source = compareIntraday.map((p) => ({ date: p.time, value: p.value }));
-      return normalise(source);
+    return out;
+  }, [compareA.data, compareB.data, compareASymbol, compareBSymbol, state.symbol]);
+
+  // Main symbol first, then overlays — stable reference for the table below.
+  const compareFundSymbols = useMemo(
+    () => [state.symbol, ...compareSymbols],
+    [state.symbol, compareSymbols],
+  );
+
+  // Raw overlay closes for the header readout: hovered point when hovering,
+  // else the last close. Bars match by date; intraday ticks by nearest time.
+  const compareRawByLabel = useMemo(() => {
+    const m = new Map<string, { bars: Map<string, number> | null; lastBar: number; ticks: { t: number; v: number }[] }>();
+    const slots: [string, typeof compareA.data][] = [
+      [compareASymbol, compareA.data],
+      [compareBSymbol, compareB.data],
+    ];
+    for (const [label, data] of slots) {
+      if (!label || label === state.symbol || m.has(label)) continue;
+      const bars = data?.bars ?? [];
+      if (bars.length > 0) {
+        const closes = bars.map((b) => b.close).filter((c) => c > 0);
+        m.set(label, {
+          bars: new Map(bars.map((b) => [b.date, b.close])),
+          lastBar: closes[closes.length - 1] ?? 0,
+          ticks: [],
+        });
+        continue;
+      }
+      const ticks = (data?.intraday ?? [])
+        .map((p) => ({ t: Number(p.time), v: Number(p.value) }))
+        .filter((p) => Number.isFinite(p.t) && p.v > 0)
+        .sort((a, b) => a.t - b.t);
+      m.set(label, { bars: null, lastBar: 0, ticks });
     }
-    return undefined;
-  }, [compare.data?.bars, compare.data?.intraday]);
+    return m;
+  }, [compareA.data, compareB.data, compareASymbol, compareBSymbol, state.symbol]);
+
+  // Overlay readout rows: raw price + indexed % at the hovered point, else
+  // the last close / full-window return. Mirrors the main readout above it.
+  const overlayPrices = useMemo(() => {
+    const nearestIntraday = (ticks: { t: number; v: number }[], target: number) => {
+      let best = ticks[0]!;
+      for (const t of ticks) {
+        if (Math.abs(t.t - target) < Math.abs(best.t - target)) best = t;
+      }
+      return best;
+    };
+    return compareLines.map((c, i) => {
+      const raw = compareRawByLabel.get(c.label);
+      let price = 0;
+      let pct = c.points[c.points.length - 1]?.value ?? 0;
+      if (raw?.bars) {
+        const d = hover && !hover.date.includes("T") ? hover.date.slice(0, 10) : "";
+        price = (d ? (raw.bars.get(d) ?? 0) : 0) || raw.lastBar;
+        if (d) {
+          const hit = c.points.find((p) => String(p.date).slice(0, 10) === d);
+          if (hit) pct = hit.value;
+        }
+      } else if (raw && raw.ticks.length > 0) {
+        if (hover && hover.date.includes("T")) {
+          const target = Date.parse(`${hover.date}+05:45`) / 1000;
+          price = nearestIntraday(raw.ticks, target).v;
+          const normTicks = c.points
+            .map((p) => ({ t: Number(p.date), v: p.value }))
+            .filter((p) => Number.isFinite(p.t));
+          if (normTicks.length > 0) pct = nearestIntraday(normTicks, target).v;
+        } else {
+          price = raw.ticks[raw.ticks.length - 1]!.v;
+        }
+      }
+      return { label: c.label, price, pct, color: COMPARE_COLORS[i % COMPARE_COLORS.length]! };
+    });
+  }, [compareLines, compareRawByLabel, hover]);
 
   // Hover readout: pinned candle first, then pinned session point, then live hover.
   // Resolved below (after intradayFirst) so a pinned point can show session change.
@@ -1448,6 +1561,11 @@ function TerminalPage() {
                 ) : (
                   <span className="inline-flex items-center gap-2">
                     {state.symbol}
+                    {mode === "scrip" && compareSymbols.length > 0 ? (
+                      <span className="text-sm font-medium text-muted-foreground">
+                        vs {compareSymbols.join(" vs ")}
+                      </span>
+                    ) : null}
                     {!isIndex ? (
                       <button
                         type="button"
@@ -1598,7 +1716,7 @@ function TerminalPage() {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 gap-1.5 text-xs"
+                className="h-8 gap-1.5 text-xs lg:hidden"
                 onClick={() => setWatchlistOpen(true)}
                 aria-label="Open watchlist"
               >
@@ -1606,6 +1724,23 @@ function TerminalPage() {
                 {watchlist.symbols.length > 0 ? <span className="num">{watchlist.symbols.length}</span> : null}
                 <span className="hidden sm:inline">Watchlist</span>
               </Button>
+              {mode === "scrip" && !isGlobal ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1.5 text-xs"
+                  onClick={() => setCompareOpen(true)}
+                  aria-label="Compare with other companies"
+                >
+                  <GitCompareArrows className="size-3.5" />
+                  <span className="hidden sm:inline">Compare</span>
+                  {compareSymbols.length > 0 ? (
+                    <span className="num rounded-full bg-primary/15 px-1.5 py-0.5 text-[0.68rem] font-semibold text-primary">
+                      {compareSymbols.length}
+                    </span>
+                  ) : null}
+                </Button>
+              ) : null}
               <ChartIndicatorsPopover
                 value={chart.indicators}
                 onToggle={setIndicator}
@@ -1652,33 +1787,40 @@ function TerminalPage() {
             </p>
           ) : null}
 
-          {mode === "scrip" && quickSymbols.length > 0 && (
+          {mode === "scrip" && udfBadge ? (
             <div className="flex flex-wrap items-center gap-2 border-b border-border/60 px-3 py-2 text-xs">
-              <span className="text-muted-foreground">Compare</span>
-              <select
-                value={compareSymbol}
-                onChange={(e) => setCompareSymbol(e.target.value)}
-                className="h-7 rounded-lg border border-border/60 bg-background px-2 text-xs"
-              >
-                <option value="">None</option>
-                {quickSymbols
-                  .filter((s) => s !== state.symbol)
-                  .map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-              </select>
-              {compareSymbol && (
-                <span className="text-muted-foreground">shown as an indexed % line against {state.symbol}</span>
-              )}
-              {udfBadge ? (
-                <span className="ml-auto rounded-full bg-primary/10 px-2 py-0.5 text-[0.68rem] font-semibold text-primary">
-                  Source: UDF · NEPSE
-                </span>
-              ) : null}
+              <span className="ml-auto rounded-full bg-primary/10 px-2 py-0.5 text-[0.68rem] font-semibold text-primary">
+                Source: UDF · NEPSE
+              </span>
             </div>
-          )}
+          ) : null}
+
+          {mode === "scrip" && !isGlobal && compareSymbols.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 pt-2 text-xs">
+              <span className="flex items-center gap-1.5">
+                <span className="size-2 rounded-full" style={{ background: "#2563eb" }} aria-hidden />
+                <span className="font-semibold">{state.symbol}</span>
+                <span className="num text-muted-foreground">
+                  {formatNpr(hover?.close ?? (quote?.ltp ?? (isIntraday ? intradayLast : last)))}
+                </span>
+                <span className={cn("num font-medium", (hover?.changePercent ?? rangeReturn) >= 0 ? "text-gain" : "text-loss")}>
+                  {formatPercent(hover?.changePercent ?? rangeReturn)}
+                </span>
+              </span>
+              {overlayPrices.map((o) => (
+                <span key={o.label} className="flex items-center gap-1.5">
+                  <span className="size-2 rounded-full" style={{ background: o.color }} aria-hidden />
+                  <span className="font-semibold">{o.label}</span>
+                  <span className="num text-muted-foreground">
+                    {o.price > 0 ? formatNpr(o.price) : "—"}
+                  </span>
+                  <span className={cn("num font-medium", o.pct >= 0 ? "text-gain" : "text-loss")}>
+                    {formatPercent(o.pct)}
+                  </span>
+                </span>
+              ))}
+            </div>
+          ) : null}
 
           <div id="terminal-chart" className="relative px-1 py-2">
             {loading ? (
@@ -1745,8 +1887,7 @@ function TerminalPage() {
                 intraday={intraday}
                 style={chart.style}
                 indicators={indicators}
-                compare={compareLine}
-                compareLabel={compareSymbol}
+                compares={compareLines}
                 logScale={chart.logScale}
                 light={light}
                 height={chartHeight}
@@ -1868,6 +2009,10 @@ function TerminalPage() {
           costOf={(symbol) => costByScrip.get(symbol.toUpperCase())}
         />
       )}
+
+      {mode === "scrip" && !isGlobal && compareSymbols.length > 0 ? (
+        <CompareFundamentalsTable symbols={compareFundSymbols} />
+      ) : null}
 
       {mode === "scrip" && position && (
         <div className="grid grid-cols-2 gap-3 rounded-2xl border border-border/60 bg-surface p-3 sm:grid-cols-4">
@@ -2426,6 +2571,17 @@ function TerminalPage() {
           setMode("scrip");
           setState((prev) => ({ ...prev, symbol }));
         }}
+      />
+      <WatchlistFloat count={watchlist.symbols.length} onOpen={() => setWatchlistOpen(true)} />
+
+      <CompareModal
+        open={compareOpen}
+        onOpenChange={setCompareOpen}
+        options={prices.map((p) => ({ symbol: p.symbol, name: p.name, pct: p.percentChange }))}
+        selected={compareSymbols}
+        onToggle={toggleCompareSymbol}
+        max={MAX_COMPARE}
+        current={state.symbol}
       />
 
       <TmsReauthModal open={reauthOpen} onOpenChange={setReauthOpen} />

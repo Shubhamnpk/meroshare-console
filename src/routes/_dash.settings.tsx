@@ -25,6 +25,7 @@ import {
   Palette,
   Plug,
   RefreshCw,
+  Rocket,
   Shield,
   Sparkles,
   Sun,
@@ -580,6 +581,30 @@ function EdisBetaCard() {
           </p>
         </div>
         <Switch checked={edisBeta} onCheckedChange={setEdisBeta} aria-label="edis-beta" />
+      </div>
+    </Panel>
+  );
+}
+
+function DemoIpoCard() {
+  const { demoIpoEnabled, setDemoIpoEnabled } = useSettings();
+  return (
+    <Panel padding="lg" shadow className="space-y-4">
+      <SectionHeader
+        icon={Rocket}
+        title="Demo IPO playground"
+        subtitle="Fake issues to test the apply, edit and withdraw forms. Demo users only."
+        badge={demoIpoEnabled ? "Enabled" : undefined}
+      />
+      <div className="flex items-center justify-between gap-4 rounded-xl border border-border/60 bg-background p-4">
+        <div className="space-y-0.5">
+          <p className="text-sm font-semibold">Show demo IPO issues</p>
+          <p className="text-xs text-muted-foreground">
+            Adds fake open issues to the IPO page. Applications are simulated on this device and
+            never reach CDSC. Off hides them again.
+          </p>
+        </div>
+        <Switch checked={demoIpoEnabled} onCheckedChange={setDemoIpoEnabled} aria-label="demo-ipo" />
       </div>
     </Panel>
   );
@@ -1238,6 +1263,8 @@ function SettingsPage() {
     setToastsEnabled,
     numberFormat,
     setNumberFormat,
+    displayCurrency,
+    setDisplayCurrency,
     openPassword,
     openPin,
   } = useSettings();
@@ -1252,6 +1279,8 @@ function SettingsPage() {
   }, [linkedTab]);
   const current: TabId = activeTab ?? "appearance";
   const activeMeta = TABS.find((t) => t.id === current) ?? TABS[0]!;
+  const session = useQuery(sessionQuery());
+  const isDemo = session.data?.username === "demo";
 
   return (
     <div className="space-y-8 pb-8">
@@ -1519,6 +1548,38 @@ function SettingsPage() {
                       ))}
                     </div>
                   </div>
+
+                  {/* Display currency — one currency for cross-currency totals */}
+                  <div className="flex items-center justify-between gap-4 rounded-xl border border-border/60 bg-background p-4">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <Hash className="size-4 text-primary" />
+                        <p className="text-sm font-semibold">Display Currency</p>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Earned totals and other mixed-currency figures convert here — affects transaction summaries.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-end gap-1 rounded-lg border border-border/60 bg-secondary/60 p-1">
+                      {(["NPR", "USD", "GBP", "EUR", "INR"] as const).map((ccy) => (
+                        <button
+                          key={ccy}
+                          type="button"
+                          onClick={() => {
+                            setDisplayCurrency(ccy);
+                          }}
+                          className={cn(
+                            "rounded-md px-2.5 py-1 text-xs font-semibold transition-all",
+                            displayCurrency === ccy
+                              ? "bg-card text-foreground shadow-sm"
+                              : "text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          {ccy}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </Panel>
             </div>
@@ -1571,6 +1632,8 @@ function SettingsPage() {
               <BrokerConnectionsCard />
               {/* Global (non-NEPSE) data import */}
               <GlobalDataCard />
+              {/* Demo IPO playground (demo users only) */}
+              {isDemo ? <DemoIpoCard /> : null}
               {/* EDIS beta (opt-in) */}
               <EdisBetaCard />
               {/* Manual cache clear */}

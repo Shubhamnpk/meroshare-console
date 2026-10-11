@@ -181,7 +181,9 @@ const YAHOO_RANGE: Record<WorldRange, { range: string; interval: string }> = {
   "6M": { range: "6mo", interval: "1d" },
   "1Y": { range: "1y", interval: "1d" },
   "2Y": { range: "2y", interval: "1d" },
-  "5Y": { range: "5y", interval: "1wk" },
+  // 5y of dailies (~1.3k bars) is fine for the chart and makes the Day
+  // per-point option real; MAX stays weekly (40y of dailies ≈ 10k+ bars).
+  "5Y": { range: "5y", interval: "1d" },
   MAX: { range: "max", interval: "1wk" },
 };
 

@@ -87,6 +87,24 @@ export async function toNpr(amount: number, currency: string | null): Promise<nu
   return null;
 }
 
+/**
+ * Convert any supported amount into another currency, pivoting through NPR
+ * (rates are cached hourly). Same currency is a pass-through. Null when a
+ * leg has no rate — callers fall back to native figures, never zeros.
+ */
+export async function convertCurrency(amount: number, from: string | null, to: string | null): Promise<number | null> {
+  const src = (from ?? "").trim();
+  const dst = (to ?? "").trim() || "NPR";
+  if (!src || src.toUpperCase() === dst.toUpperCase()) return amount;
+  const sign = amount < 0 ? -1 : 1;
+  const inNpr = await toNpr(Math.abs(amount), src);
+  if (inNpr == null) return null;
+  if (dst.toUpperCase() === "NPR") return sign * inNpr;
+  const perUnit = await toNpr(1, dst);
+  if (perUnit == null || perUnit <= 0) return null;
+  return (sign * inNpr) / perUnit;
+}
+
 /** Clear cached FX (tests). */
 export function clearFxCache(): void {
   fxCaches.clear();

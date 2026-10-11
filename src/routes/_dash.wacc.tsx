@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Panel } from "@/components/ui/panel";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ErrorBlock, EmptyBlock, SkeletonCards } from "@/components/states";
 import { ExportButton, buildCsv } from "@/components/export-dialog";
@@ -495,9 +496,9 @@ function WaccReportPanel({
 }) {
   const report = useQuery(waccReportQuery());
   const holdings = report.data?.waccReportResponse ?? [];
-  const { sort, toggle } = useSort<"scrip" | "qty" | "rate" | "cost">(
+  const { sort, toggle } = useSort<"scrip" | "qty" | "rate" | "cost" | "updated">(
     { key: "scrip", dir: "asc" },
-    { scrip: "text", qty: "number", rate: "number", cost: "number" },
+    { scrip: "text", qty: "number", rate: "number", cost: "number", updated: "text" },
   );
   const sorted = useMemo(() => {
     switch (sort.key) {
@@ -507,6 +508,8 @@ function WaccReportPanel({
         return sortBy(holdings, (h) => toNumber(h.averageBuyRate), sort.dir);
       case "cost":
         return sortBy(holdings, (h) => toNumber(h.totalCost), sort.dir);
+      case "updated":
+        return sortBy(holdings, (h) => String(h.lastModifiedDate ?? ""), sort.dir);
       default:
         return sortBy(holdings, (h) => String(h.scrip ?? ""), sort.dir);
     }
@@ -555,10 +558,13 @@ function WaccReportPanel({
           ]}
         />
       </div>
-      <div className="overflow-x-auto rounded-2xl border border-border/70 bg-card xl:overflow-x-clip">
-        <Table>
+      <Panel padding="none" className="overflow-clip">
+        <Table className="min-w-[560px]">
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">
+              <TableHead className="w-10 pl-4" scope="col">
+                SN
+              </TableHead>
               <SortableTh
                 label="Stock"
                 active={sort.key === "scrip"}
@@ -587,13 +593,18 @@ function WaccReportPanel({
                 dir={sort.dir}
                 onClick={() => toggle("cost")}
               />
-              <TableHead className="hidden px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground md:table-cell">
-                Updated
-              </TableHead>
+              <SortableTh
+                label="Updated"
+                active={sort.key === "updated"}
+                dir={sort.dir}
+                onClick={() => toggle("updated")}
+                kind="text"
+                className="hidden pr-4 md:table-cell"
+              />
             </TableRow>
           </TableHeader>
           <TableBody className="divide-y divide-border/60">
-            {sorted.map((h) => {
+            {sorted.map((h, idx) => {
               const key = String(h.scrip ?? "").toUpperCase();
               const isHi = highlight !== "" && key === highlight;
               return (
@@ -607,6 +618,7 @@ function WaccReportPanel({
                   title={`View WACC detail for ${String(h.scrip ?? "")}`}
                   className={cn("cursor-pointer hover:bg-accent/30", isHi && "bg-primary/10")}
                 >
+                  <TableCell className="pl-4 text-xs text-muted-foreground">{idx + 1}</TableCell>
                   <TableCell className="px-4 py-2.5 font-semibold">{h.scrip}</TableCell>
                   <TableCell className="num px-4 py-2.5 text-right">{formatQty(toNumber(h.totalQuantity))}</TableCell>
                   <TableCell className="num px-4 py-2.5 text-right">{formatNpr(toNumber(h.averageBuyRate))}</TableCell>
@@ -620,7 +632,7 @@ function WaccReportPanel({
           </TableBody>
           <TableFooter>
             <TableRow className="border-t border-border/70 bg-muted/40 font-semibold">
-              <TableCell className="px-4 py-2.5">
+              <TableCell className="px-4 py-2.5" colSpan={2}>
                 Total · {holdings.length} stock{holdings.length > 1 ? "s" : ""}
               </TableCell>
               <TableCell className="num px-4 py-2.5 text-right">{formatQty(totalUnits)}</TableCell>
@@ -635,7 +647,7 @@ function WaccReportPanel({
             </TableRow>
           </TableFooter>
         </Table>
-      </div>
+      </Panel>
       <p className="text-[0.68rem] text-muted-foreground">
         This cost basis is what determines your capital gains tax when you sell.
       </p>
@@ -726,14 +738,6 @@ function WaccPage() {
       .map((s) => s.scrip)
       .sort();
   }, [pendingList, investment.data, doneScrips]);
-  const doneTotals = useMemo(
-    () => ({
-      units: doneScrips.reduce((s, r) => s + r.units, 0),
-      cost: doneScrips.reduce((s, r) => s + r.cost, 0),
-    }),
-    [doneScrips],
-  );
-
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-3">
@@ -859,69 +863,8 @@ function WaccPage() {
           <SkeletonCards count={2} />
         ) : doneScrips.length > 0 || todoScrips.length > 0 ? (
           <div className="space-y-8">
-            {doneScrips.length > 0 ? (
-              <section className="space-y-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="font-display text-base font-semibold">Calculated WACC</h2>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-600">
-                    <ShieldCheck className="size-3" /> {doneScrips.length} done
-                  </span>
-                  <span className="num ml-auto rounded-full border border-border/70 bg-card px-3 py-1.5 text-xs text-muted-foreground">
-                    {formatQty(doneTotals.units)} units · {formatNpr(doneTotals.cost)} invested
-                  </span>
-                </div>
-                <div className="overflow-x-auto rounded-2xl border border-border/70 bg-card xl:overflow-x-clip">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-muted/40 hover:bg-muted/40">
-                        <TableHead className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider">
-                          Stock
-                        </TableHead>
-                        <TableHead className="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wider">
-                          Quantity
-                        </TableHead>
-                        <TableHead className="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wider">
-                          WACC rate
-                        </TableHead>
-                        <TableHead className="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wider">
-                          Total cost
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody className="divide-y divide-border/60">
-                      {doneScrips.map((s) => (
-                        <TableRow
-                          key={s.scrip}
-                          onClick={() => setScrip(s.scrip)}
-                          title={`View WACC detail for ${s.scrip}`}
-                          className="cursor-pointer hover:bg-accent/30"
-                        >
-                          <TableCell className="px-4 py-2.5 font-semibold">{s.scrip}</TableCell>
-                          <TableCell className="num px-4 py-2.5 text-right">{formatQty(s.units)}</TableCell>
-                          <TableCell className="num px-4 py-2.5 text-right">{formatNpr(s.waccRate)}</TableCell>
-                          <TableCell className="num px-4 py-2.5 text-right">{formatNpr(s.cost)}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                    <TableFooter>
-                      <TableRow className="border-t border-border/70 bg-muted/40 font-semibold">
-                        <TableCell className="px-4 py-2.5">
-                          Total · {doneScrips.length} stock{doneScrips.length > 1 ? "s" : ""}
-                        </TableCell>
-                        <TableCell className="num px-4 py-2.5 text-right">{formatQty(doneTotals.units)}</TableCell>
-                        <TableCell
-                          className="num px-4 py-2.5 text-right"
-                          title="Average WACC across calculated stocks (total cost / total units)"
-                        >
-                          {formatNpr(Math.round((doneTotals.cost / Math.max(1, doneTotals.units)) * 100) / 100)}
-                        </TableCell>
-                        <TableCell className="num px-4 py-2.5 text-right">{formatNpr(doneTotals.cost)}</TableCell>
-                      </TableRow>
-                    </TableFooter>
-                  </Table>
-                </div>
-              </section>
-            ) : null}
+            {/* Calculated rows live only in the sortable report table below —
+                a second copy here duplicated every scrip once all WACC was done. */}
             {todoScrips.length > 0 ? (
               <section className="space-y-3 rounded-2xl border border-border/70 bg-card p-4">
                 <div className="flex flex-wrap items-center gap-2">

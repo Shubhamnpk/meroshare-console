@@ -536,9 +536,15 @@ function ReportList({
 export function ApplicationReports({
   onEdit,
   onWithdraw,
+  extraItems,
+  extraDetails,
 }: {
   onEdit?: ((item: ApplicationReportItem, detail: JsonRecord | null) => void) | undefined;
   onWithdraw?: ((item: ApplicationReportItem, pin: string) => void) | undefined;
+  /** Extra rows merged ahead of server rows (e.g. demo playground applications). */
+  extraItems?: ApplicationReportItem[] | undefined;
+  /** Details aligned 1:1 with extraItems. */
+  extraDetails?: (JsonRecord | null)[] | undefined;
 } = {}) {
   const current = useQuery(applicationReportsQuery());
   const old = useQuery(oldApplicationReportsQuery());
@@ -549,12 +555,14 @@ export function ApplicationReports({
   const [oldTo, setOldTo] = useState("");
   const [showOld, setShowOld] = useState(false);
   const cycleSort = () => setSortCycle((c) => (c === "asc" ? "desc" : c === "desc" ? "default" : "asc"));
-  const currentItems = current.data ?? [];
+  const serverItems = current.data ?? [];
+  const currentItems = [...(extraItems ?? []), ...serverItems];
   const oldItems = old.data ?? [];
   const currentDetails = useQuery({
-    ...applicationDetailsQuery(currentItems.map((i) => ({ formId: i.applicantFormId ?? 0, old: false }))),
-    enabled: currentItems.length > 0,
+    ...applicationDetailsQuery(serverItems.map((i) => ({ formId: i.applicantFormId ?? 0, old: false }))),
+    enabled: serverItems.length > 0,
   });
+  const mergedDetails = [...(extraDetails ?? []), ...(currentDetails.data ?? [])];
   const oldDetails = useQuery({
     ...applicationDetailsQuery(oldItems.map((i) => ({ formId: i.applicantFormId ?? 0, old: true }))),
     enabled: oldItems.length > 0,
@@ -581,7 +589,7 @@ export function ApplicationReports({
                 description: "Applied, allotted, amount and status per application",
                 filename: "application-report",
                 extension: "csv",
-                build: () => reportCsv(currentItems, currentDetails.data ?? []),
+                build: () => reportCsv(currentItems, mergedDetails),
               },
               {
                 title: "JSON",
@@ -592,7 +600,7 @@ export function ApplicationReports({
                   JSON.stringify(
                     (currentItems ?? []).map((item, idx) => ({
                       application: item,
-                      detail: currentDetails.data?.[idx] ?? null,
+                      detail: mergedDetails[idx] ?? null,
                     })),
                     null,
                     2,
@@ -607,8 +615,8 @@ export function ApplicationReports({
                 pdf: () => ({
                   title: "IPO application history",
                   head: ["SN", "Company", "Stock", "Applied", "Allotted", "Amount", "Status"],
-                  body: currentItems.map((item, idx) => {
-                    const d = currentDetails.data?.[idx] ?? null;
+                    body: currentItems.map((item, idx) => {
+                      const d = mergedDetails[idx] ?? null;
                     return [
                       idx + 1,
                       String(item.companyName ?? ""),
@@ -633,7 +641,7 @@ export function ApplicationReports({
         ) : (
           <ReportList
             items={currentItems}
-            details={currentDetails.data ?? []}
+            details={mergedDetails}
             loadingDetails={currentDetails.isFetching}
             search={search}
             onSearch={setSearch}

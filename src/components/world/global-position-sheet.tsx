@@ -17,8 +17,9 @@ import {
   worldSearchQuery,
 } from "@/lib/queries";
 import { deriveHoldings, useGlobalTxns } from "@/lib/world/store";
-import { deriveGlobalRealized } from "@/lib/world/lots";
-import { deriveGlobalLots, sameNativeCurrency } from "@/lib/world/lots";
+import { CHART_RANGES } from "@/lib/charts/ranges";
+import { deriveGlobalLots, deriveSymbolEarned, sameNativeCurrency } from "@/lib/world/lots";
+import { formatDisplay, useDisplayCurrency, useDisplayRates } from "@/lib/world/display";
 import type { WorldRange } from "@/lib/world/feed.server";
 import { toNpr } from "@/lib/world/fx";
 import { formatDate, formatHoldingTime, formatNpr, formatPreciseAge, formatTimeOfDay } from "@/lib/format";
@@ -47,6 +48,7 @@ export function bigMoney(v: number | null, currency: string): string {
 export function native(amount: number, currency: string): string {
   if (!Number.isFinite(amount)) return "-";
   if (currency === "GBX" || currency === "GBp") return `${amount.toFixed(2)}p`;
+  if (currency === "GBP") return `£${amount.toFixed(2)}`;
   if (currency === "USD") return `$${amount.toFixed(2)}`;
   if (currency === "INR") return `₹${amount.toFixed(2)}`;
   if (currency === "EUR") return `€${amount.toFixed(2)}`;
@@ -105,8 +107,9 @@ export function useGlobalLotRows(symbol: string | null, currency: string, ltp: n
   // convention as the NEPSE cards); the dialog carries the oldest-lot figure.
   const cardAgeDays = lotsUnits > 0 ? lotsAvgDays : heldDays;
   const displayRows = useMemo(() => [...lotRows].reverse(), [lotRows]);
-  // Closed activity for the Total-return row: banked sell gains + dividends.
-  const closed = useMemo(() => deriveGlobalRealized(txns, symbol ?? "", currency), [txns, symbol, currency]);
+  // Closed activity: banked sell gains + dividends, broker file totals when
+  // the import states them, pool math otherwise. See deriveSymbolEarned.
+  const earned = useMemo(() => deriveSymbolEarned(txns, symbol ?? ""), [txns, symbol]);
   return {
     lotRows,
     displayRows,
@@ -116,10 +119,7 @@ export function useGlobalLotRows(symbol: string | null, currency: string, ltp: n
     lotsAvgDays,
     oldestDays,
     cardAgeDays,
-    realized: closed.realized,
-    dividends: closed.dividends,
-    soldQty: closed.soldQty,
-    buyCost: closed.buyCost,
+    earned,
   };
 }
 
@@ -136,18 +136,11 @@ export function GlobalLotsDialog({
   currency: string;
   ltp: number;
 }) {
-  const {
-    lotRows,
-    displayRows,
-    lotsGain,
-    lotsGainPct,
-    lotsAvgDays,
-    oldestDays,
-    realized,
-    dividends,
-    soldQty,
-    buyCost,
-  } = useGlobalLotRows(symbol, currency, ltp);
+  const { lotRows, displayRows, lotsGain, lotsGainPct, lotsAvgDays, oldestDays, earned } = useGlobalLotRows(
+    symbol,
+    currency,
+    ltp,
+  );
   const [lotSort, setLotSort] = useState<"latest" | "oldest" | "gain" | "loss">("latest");
   // FIFO rows are oldest-first already; displayRows is that reversed.
   const sortedRows = useMemo(() => {
@@ -170,10 +163,22 @@ export function GlobalLotsDialog({
         : lotSort === "loss"
           ? "biggest loss first"
           : "latest first";
-  const hasClosed = soldQty > 0 || dividends > 0;
-  // Whole story of the stock: still-held lots + banked sells + dividends.
-  const totalReturn = lotsGain + realized + dividends;
-  const totalPct = buyCost > 0 ? (totalReturn / buyCost) * 100 : 0;
+  // Whole story of the stock: still-held lots plus banked sells plus
+  // dividends. Banked legs arrive in the earned currency (usually file-stated
+  // GBP), so the total converts each leg into the display currency.
+  const displayCurrency = useDisplayCurrency();
+  const convRates = useDisplayRates([currency, earned.currency]);
+  const toD = (v: number, from: string) => {
+    const r = convRates?.[from];
+    return r == null ? null : v * r;
+  };
+  const lotsD = toD(lotsGain, currency);
+  const bankedD = toD(earned.banked, earned.currency);
+  const divsD = toD(earned.dividends, earned.currency);
+  const buyD = toD(earned.buyCost, earned.currency);
+  const totalReturn = lotsD == null || bankedD == null || divsD == null ? null : lotsD + bankedD + divsD;
+  const totalPct = totalReturn == null || buyD == null || buyD <= 0 ? 0 : (totalReturn / buyD) * 100;
+  const hasClosed = earned.soldQty > 0 || earned.dividends > 0;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] overflow-y-auto rounded-2xl sm:max-w-[520px] p-0 gap-0">
@@ -210,29 +215,38 @@ export function GlobalLotsDialog({
           ) : null}
           {hasClosed ? (
             <div className="rounded-xl border border-border/60 bg-surface px-4 py-2.5">
-              <p className="text-xs font-semibold text-muted-foreground">Total return — earned up till now</p>
+              <p className="text-xs font-semibold text-muted-foreground">
+                Total return — earned up till now
+                <span className="ml-1.5 font-normal opacity-70">
+                  {earned.brokerStated ? "· broker file totals" : "· computed from prices"}
+                </span>
+              </p>
               <div className="mt-1.5 space-y-1">
-                {soldQty > 0 ? (
+                {earned.soldQty > 0 ? (
                   <div className="flex items-center justify-between gap-2 text-xs">
-                    <span className="text-muted-foreground">Banked on {native(soldQty, "")} sold</span>
-                    <span className={`num font-bold ${realized >= 0 ? "text-gain" : "text-loss"}`}>
-                      {realized >= 0 ? "+" : "−"}
-                      {native(Math.abs(realized), currency)}
+                    <span className="text-muted-foreground">Return on {native(earned.soldQty, "")} sold</span>
+                    <span className={`num font-bold ${earned.banked >= 0 ? "text-gain" : "text-loss"}`}>
+                      {earned.banked >= 0 ? "+" : "−"}
+                      {native(Math.abs(earned.banked), earned.currency)}
                     </span>
                   </div>
                 ) : null}
-                {dividends > 0 ? (
+                {earned.dividends > 0 ? (
                   <div className="flex items-center justify-between gap-2 text-xs">
                     <span className="text-muted-foreground">Dividends received</span>
-                    <span className="num font-bold text-gain">+{native(dividends, currency)}</span>
+                    <span className="num font-bold text-gain">+{native(earned.dividends, earned.currency)}</span>
                   </div>
                 ) : null}
                 <div className="flex items-center justify-between gap-2 border-t border-border/40 pt-1.5">
                   <span className="text-xs font-medium">Total (lots + banked + dividends)</span>
-                  <span className={`num text-sm font-bold ${totalReturn >= 0 ? "text-gain" : "text-loss"}`}>
-                    {totalReturn >= 0 ? "+" : "−"}
-                    {native(Math.abs(totalReturn), currency)} ({totalPct.toFixed(2)}%)
-                  </span>
+                  {totalReturn == null ? (
+                    <span className="num text-sm font-bold text-muted-foreground">…</span>
+                  ) : (
+                    <span className={`num text-sm font-bold ${totalReturn >= 0 ? "text-gain" : "text-loss"}`}>
+                      {totalReturn >= 0 ? "+" : "−"}
+                      {formatDisplay(Math.abs(totalReturn), displayCurrency)} ({totalPct.toFixed(2)}%)
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -332,9 +346,11 @@ export function GlobalPositionSheet({
   const industry = sectorHit?.industry ?? quote.data?.industry ?? null;
   const [range, setRange] = useState<WorldRange | "1D">("1D");
   const [tab, setTab] = useState("overview");
+  const [divsExpanded, setDivsExpanded] = useState(false);
   useEffect(() => {
     setRange("1D");
     setTab("overview");
+    setDivsExpanded(false);
   }, [symbol]);
   const history = useQuery({
     ...worldHistoryQuery(symbol, range === "1D" ? "1M" : range, holdingCcy),
@@ -634,7 +650,7 @@ export function GlobalPositionSheet({
                   <div className="rounded-2xl border border-border/60 bg-card p-3 order-1">
                     <div className="mb-1 flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
-                        <h3 className="font-display text-sm font-semibold">Price history</h3>
+                        <h3 className="font-display text-sm font-semibold">Chart</h3>
                         {symbol && chartPoints.length > 0 ? (
                           <button
                             type="button"
@@ -649,7 +665,8 @@ export function GlobalPositionSheet({
                         ) : null}
                       </div>
                       <div className="flex flex-wrap gap-1">
-                        {(["1D", "1W", "1M", "6M", "1Y", "MAX"] as const).map((r) => (
+                        {/* Sheet trims the ladder (3M/6M out); canonical list stays for terminal/modal. */}
+                        {CHART_RANGES.filter((r) => r !== "3M" && r !== "6M").map((r) => (
                           <button
                             key={r}
                             type="button"
@@ -727,7 +744,9 @@ export function GlobalPositionSheet({
                           if (!(base > 0)) return null;
                           const pct = ((pt.value - base) / base) * 100;
                           return (
-                            <p className={`num text-[0.65rem] font-semibold ${pct >= 0 ? "text-gain" : "text-loss"}`}>
+                            <p
+                              className={`num text-center text-[0.65rem] font-semibold ${pct >= 0 ? "text-gain" : "text-loss"}`}
+                            >
                               {pct >= 0 ? "+" : ""}
                               {pct.toFixed(2)}% today
                             </p>
@@ -764,7 +783,7 @@ export function GlobalPositionSheet({
                         </div>
                       </div>
                       <ul className="space-y-1.5">
-                        {divTxns.map((t) => (
+                        {divTxns.slice(0, divsExpanded ? divTxns.length : 5).map((t) => (
                           <li
                             key={t.id}
                             className="flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-surface px-3 py-2 text-xs"
@@ -778,6 +797,15 @@ export function GlobalPositionSheet({
                           </li>
                         ))}
                       </ul>
+                      {divTxns.length > 5 ? (
+                        <button
+                          type="button"
+                          onClick={() => setDivsExpanded((v) => !v)}
+                          className="w-full rounded-lg border border-border/60 bg-surface px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground"
+                        >
+                          {divsExpanded ? "Show less" : `Show all ${divTxns.length} dividends`}
+                        </button>
+                      ) : null}
                     </>
                   )}
                 </TabsContent>

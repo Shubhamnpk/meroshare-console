@@ -52,9 +52,6 @@ function MarketOverviewPage() {
         </span>
         <div>
           <h1 className="font-display text-2xl font-semibold sm:text-3xl">Market Depth &amp; Heatmap</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            Live ticker tape, benchmarks with all-time history, market breadth, and sector depth matrix.
-          </p>
         </div>
       </div>
 

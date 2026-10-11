@@ -18,6 +18,7 @@ import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
 import { DeltaPill } from "@/components/stat-card";
 import { ScripSheet } from "@/components/market/scrip-sheet";
 import { WatchlistPanel } from "@/components/market/watchlist-panel";
+import { WatchlistFloat } from "@/components/market/watchlist-float";
 import { IndexChartModal } from "@/components/tools/index-chart-modal";
 import {
   marketMoversQuery,
@@ -61,35 +62,50 @@ export const Route = createFileRoute("/_dash/market")({
   component: MarketPage,
 });
 
+const MOVER_INITIAL = 5;
+
 function MoverList({ rows, kind, onPick }: { rows: MoverRow[]; kind: MoverRow["label"]; onPick: (s: string) => void }) {
+  const [expanded, setExpanded] = useState(false);
   if (rows.length === 0)
     return <EmptyBlock title="No data" description="The market feed has nothing for this bucket yet." />;
+  const shown = expanded ? rows : rows.slice(0, MOVER_INITIAL);
   return (
-    <ul className="grid grid-cols-1 gap-1.5 min-[420px]:grid-cols-2 sm:gap-2">
-      {rows.map((row) => (
-        <li key={row.symbol} className="min-w-0">
-          <button
-            type="button"
-            onClick={() => onPick(row.symbol)}
-            className="flex w-full items-center justify-between gap-2 rounded-xl border border-border/60 bg-surface px-2.5 py-2 text-left transition-colors hover:border-primary/40 sm:px-3 sm:py-2.5"
-          >
-            <div className="min-w-0">
-              <p className="text-[0.8125rem] font-semibold leading-tight sm:text-sm">{row.symbol}</p>
-              <p className="truncate text-xs text-muted-foreground">{row.name}</p>
-            </div>
-            {kind === "%" ? (
-              <DeltaPill value={row.value}>{formatPercent(row.value)}</DeltaPill>
-            ) : kind === "npr" ? (
-              <span className="num shrink-0 text-[0.8125rem] font-medium sm:text-sm">
-                {formatNpr(row.value, { compact: true })}
-              </span>
-            ) : (
-              <span className="num shrink-0 text-[0.8125rem] font-medium sm:text-sm">{formatQty(row.value)}</span>
-            )}
-          </button>
-        </li>
-      ))}
-    </ul>
+    <div className="space-y-2">
+      <ul className="grid grid-cols-1 gap-1.5 min-[420px]:grid-cols-2 sm:gap-2">
+        {shown.map((row) => (
+          <li key={row.symbol} className="min-w-0">
+            <button
+              type="button"
+              onClick={() => onPick(row.symbol)}
+              className="flex w-full items-center justify-between gap-2 rounded-xl border border-border/60 bg-surface px-2.5 py-2 text-left transition-colors hover:border-primary/40 sm:px-3 sm:py-2.5"
+            >
+              <div className="min-w-0">
+                <p className="text-[0.8125rem] font-semibold leading-tight sm:text-sm">{row.symbol}</p>
+                <p className="truncate text-xs text-muted-foreground">{row.name}</p>
+              </div>
+              {kind === "%" ? (
+                <DeltaPill value={row.value}>{formatPercent(row.value)}</DeltaPill>
+              ) : kind === "npr" ? (
+                <span className="num shrink-0 text-[0.8125rem] font-medium sm:text-sm">
+                  {formatNpr(row.value, { compact: true })}
+                </span>
+              ) : (
+                <span className="num shrink-0 text-[0.8125rem] font-medium sm:text-sm">{formatQty(row.value)}</span>
+              )}
+            </button>
+          </li>
+        ))}
+      </ul>
+      {rows.length > MOVER_INITIAL ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((e) => !e)}
+          className="w-full rounded-xl border border-border/60 bg-surface px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground"
+        >
+          {expanded ? "Show less" : `Show ${rows.length - MOVER_INITIAL} more`}
+        </button>
+      ) : null}
+    </div>
   );
 }
 
@@ -368,7 +384,7 @@ function MarketPage() {
                 Updated {formatDateTime(snapshot.data.fetchedAt)}
               </span>
             ) : null}
-            <Button variant="outline" size="sm" onClick={() => setWatchlistOpen(true)} aria-label="Watchlist">
+            <Button variant="outline" size="sm" onClick={() => setWatchlistOpen(true)} aria-label="Watchlist" className="lg:hidden">
               <Star className={watchlist.symbols.length > 0 ? "fill-warning text-warning" : ""} />
               <span className="hidden sm:inline">Watchlist</span>
               {watchlist.symbols.length > 0 ? (
@@ -761,6 +777,7 @@ function MarketPage() {
           setPicked(symbol);
         }}
       />
+      <WatchlistFloat count={watchlist.symbols.length} onOpen={() => setWatchlistOpen(true)} />
 
       <IndexChartModal
         open={chartModal.open}

@@ -225,6 +225,12 @@
   font-feature-settings: "tnum";
 }
 
+/* Numbers inside tables never wrap mid-figure: the amount sticks to its
+   currency symbol on every screen. Wide tables scroll instead of wrapping. */
+table .num {
+  white-space: nowrap;
+}
+
 @utility brand-gradient-text {
   background: var(--gradient-brand);
   -webkit-background-clip: text;

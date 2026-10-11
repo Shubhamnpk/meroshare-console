@@ -10,10 +10,15 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ExportButton, buildCsv } from "@/components/export-dialog";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Money } from "@/components/ui/money";
 import { GlobalImportDialog } from "@/components/world/global-import-dialog";
 import { GlobalPositionSheet } from "@/components/world/global-position-sheet";
 import { GlobalTxnEditDialog } from "@/components/world/global-txn-edit-dialog";
 import { deleteGlobalTxn, deriveHoldings, useGlobalTxns } from "@/lib/world/store";
+import { deriveAccountFlow, deriveGlobalBookStats } from "@/lib/world/lots";
+import { formatDisplay, useDisplayCurrency, useDisplayRates } from "@/lib/world/display";
+import { EarnedBreakdownDialog } from "@/components/world/earned-breakdown-dialog";
 import type { GlobalTxn } from "@/lib/world/import";
 import { StatChip, ChipRow } from "@/components/stat-chip";
 import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
@@ -102,6 +107,17 @@ function TransactionsPage() {
   const [selected, setSelected] = useState<string[]>([]);
   const [confirmBulk, setConfirmBulk] = useState(false);
   const globalTxns = useGlobalTxns();
+  const { sort: gSort, toggle: gToggle } = useSort<"date" | "type" | "symbol" | "qty" | "price" | "total">(
+    { key: "date", dir: "desc" },
+    {
+      date: "text",
+      type: "text",
+      symbol: "text",
+      qty: "number",
+      price: "number",
+      total: "number",
+    },
+  );
   const { sort, toggle } = useSort<"date" | "script" | "description" | "credit" | "debit" | "balance">(
     { key: "date", dir: "desc" },
     {
@@ -149,13 +165,85 @@ function TransactionsPage() {
   const totalDebit = filtered.reduce((sum, t) => sum + Math.max(0, toNumber(t.debitQuantity)), 0);
 
   const globalHoldings = useMemo(() => deriveHoldings(globalTxns), [globalTxns]);
+  // Earned from transactions only (never live value): banked sells plus
+  // dividends, always one set of chips in the Settings display currency.
+  const displayCurrency = useDisplayCurrency();
+  const bookStats = useMemo(() => deriveGlobalBookStats(globalTxns), [globalTxns]);
+  const flowStats = useMemo(() => deriveAccountFlow(globalTxns), [globalTxns]);
+  const rates = useDisplayRates([...new Set([...bookStats.currencies, ...flowStats.currencies])]);
+  const [earnedOpen, setEarnedOpen] = useState(false);
+  const earnedChips = ((): { label: string; value: string; up: boolean; flat?: boolean }[] | null => {
+    if (globalTxns.length === 0) return null;
+    const needed = [...new Set([...bookStats.currencies, ...flowStats.currencies])];
+    const ready = rates != null && needed.every((c) => rates[c] != null);
+    if (!ready || rates == null) {
+      return [
+        { label: "Deposits", value: "…", up: true, flat: true },
+        { label: "Invested", value: "…", up: true, flat: true },
+        { label: "Cash", value: "…", up: true },
+        { label: "Return", value: "…", up: true },
+        { label: "Income", value: "…", up: true },
+        { label: "Reinvested", value: "…", up: true, flat: true },
+        { label: "Total earned", value: "…", up: true },
+      ];
+    }
+    // Return is broker/computed sell gains; income is dividends plus cash
+    // interest — both straight from the account flow, one conversion each.
+    let banked = 0;
+    let income = 0;
+    for (const [ccy, b] of Object.entries(bookStats.byCurrency)) banked += b.banked * (rates[ccy] ?? 0);
+    for (const [ccy, f] of Object.entries(flowStats.byCurrency)) {
+      const r = rates[ccy] ?? 0;
+      income += (f.dividends + f.interest) * r;
+    }
+    let reinvested = 0;
+    let invested = 0;
+    let deposits = 0;
+    let cash = 0;
+    for (const [ccy, f] of Object.entries(flowStats.byCurrency)) {
+      const r = rates[ccy] ?? 0;
+      reinvested += f.reinvestedNow * r;
+      invested += f.investedNow * r;
+      deposits += (f.deposits - f.withdrawals) * r;
+      cash += (f.deposits - f.withdrawals + (f.sells + f.dividends + f.interest) - f.buys) * r;
+    }
+    const fmt = (v: number) => `${v >= 0 ? "+" : "−"}${formatDisplay(Math.abs(v), displayCurrency)}`;
+    const plain = (v: number) => formatDisplay(v, displayCurrency);
+    const total = banked + income;
+    const out = [
+      { label: "Deposits", value: plain(deposits), up: true, flat: true },
+      { label: "Invested", value: plain(invested), up: true, flat: true },
+      { label: "Cash", value: fmt(cash), up: cash >= 0 },
+      { label: "Return", value: fmt(banked), up: banked >= 0 },
+      { label: "Reinvested", value: fmt(reinvested), up: true, flat: true },
+      { label: "Total earned", value: fmt(total), up: total >= 0 },
+    ];
+    if (income > 0) out.splice(1, 0, { label: "Income", value: fmt(income), up: true });
+    return out;
+  })();
   const gFiltered = useMemo(() => {
     const term = gSearch.trim().toLowerCase();
     const rows = term
       ? globalTxns.filter((t) => [t.symbol, t.name, t.notes, t.side].some((s) => s.toLowerCase().includes(term)))
       : globalTxns;
-    return [...rows].sort((a, b) => b.date.localeCompare(a.date));
-  }, [globalTxns, gSearch]);
+    const getter = (t: (typeof rows)[number]): string | number => {
+      switch (gSort.key) {
+        case "type":
+          return t.side;
+        case "symbol":
+          return t.symbol;
+        case "qty":
+          return t.qty;
+        case "price":
+          return t.price;
+        case "total":
+          return t.costGbp ?? 0;
+        default:
+          return t.date;
+      }
+    };
+    return sortBy([...rows], getter, gSort.dir);
+  }, [globalTxns, gSearch, gSort]);
 
   const visibleIds = useMemo(() => gFiltered.map((t) => t.id), [gFiltered]);
   const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selected.includes(id));
@@ -260,11 +348,9 @@ function TransactionsPage() {
       </div>
 
       <Tabs value={txTab} onValueChange={(v) => setTxTab(v as "meroshare" | "global")} className="self-start">
-        <TabsList>
+        <TabsList className="gap-1">
           <TabsTrigger value="meroshare">MeroShare</TabsTrigger>
-          <TabsTrigger value="global">
-            Global{globalHoldings.length > 0 ? ` (${globalHoldings.length})` : ""}
-          </TabsTrigger>
+          <TabsTrigger value="global">Global</TabsTrigger>
         </TabsList>
       </Tabs>
 
@@ -412,6 +498,16 @@ function TransactionsPage() {
           <ChipRow wrap>
             <StatChip label="Records" value={String(globalTxns.length)} />
             <StatChip label="Symbols held" value={String(globalHoldings.length)} />
+            {earnedChips?.map((chip) => (
+              <StatChip
+                key={chip.label}
+                label={chip.label}
+                value={chip.value}
+                {...(chip.flat ? {} : { valueClass: chip.up ? "text-gain" : "text-loss" })}
+                onClick={() => setEarnedOpen(true)}
+                title={`${chip.label} — tap for original amounts`}
+              />
+            ))}
           </ChipRow>
 
           {selected.length > 0 ? (
@@ -470,7 +566,7 @@ function TransactionsPage() {
           {globalTxns.length === 0 ? (
             <EmptyBlock
               title="No global transactions"
-              description="Foreign holdings live here, never mixed with NEPSE demat. Import a Trading 212 statement or standard CSV — or try the demo data."
+              description="Foreign holdings live here. Import a Trading 212 statement or standard CSV."
             >
               <Button size="sm" onClick={() => setImportOpen(true)}>
                 Import CSV
@@ -492,25 +588,59 @@ function TransactionsPage() {
                 <TableHeader>
                   <TableRow className="bg-muted/40 hover:bg-muted/40">
                     <TableHead className="w-10 pl-4">
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         aria-label={allVisibleSelected ? "Deselect all rows" : "Select all rows"}
-                        checked={allVisibleSelected}
-                        ref={(el) => {
-                          if (el) el.indeterminate = someVisibleSelected && !allVisibleSelected;
-                        }}
-                        onChange={() => toggleAllVisible()}
+                        checked={someVisibleSelected && !allVisibleSelected ? "indeterminate" : allVisibleSelected}
+                        onCheckedChange={() => toggleAllVisible()}
                         onClick={(e) => e.stopPropagation()}
-                        className="size-4 accent-primary"
                       />
                     </TableHead>
                     <TableHead className="w-10">SN</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Symbol</TableHead>
-                    <TableHead className="text-right">Qty</TableHead>
-                    <TableHead className="text-right">Price</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
+                    <SortableTh
+                      label="Date"
+                      active={gSort.key === "date"}
+                      dir={gSort.dir}
+                      onClick={() => gToggle("date")}
+                      align="left"
+                      kind="text"
+                    />
+                    <SortableTh
+                      label="Type"
+                      active={gSort.key === "type"}
+                      dir={gSort.dir}
+                      onClick={() => gToggle("type")}
+                      align="left"
+                      kind="text"
+                    />
+                    <SortableTh
+                      label="Symbol"
+                      active={gSort.key === "symbol"}
+                      dir={gSort.dir}
+                      onClick={() => gToggle("symbol")}
+                      align="left"
+                      kind="text"
+                    />
+                    <SortableTh
+                      label="Qty"
+                      active={gSort.key === "qty"}
+                      dir={gSort.dir}
+                      onClick={() => gToggle("qty")}
+                      align="right"
+                    />
+                    <SortableTh
+                      label="Price"
+                      active={gSort.key === "price"}
+                      dir={gSort.dir}
+                      onClick={() => gToggle("price")}
+                      align="right"
+                    />
+                    <SortableTh
+                      label="Total"
+                      active={gSort.key === "total"}
+                      dir={gSort.dir}
+                      onClick={() => gToggle("total")}
+                      align="right"
+                    />
                     <TableHead className="w-20 pr-4">
                       <span className="sr-only">Row actions</span>
                     </TableHead>
@@ -526,12 +656,10 @@ function TransactionsPage() {
                       }}
                     >
                       <TableCell className="pl-4" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
+                        <Checkbox
                           aria-label={`Select ${t.symbol || "cash"} transaction`}
                           checked={selected.includes(t.id)}
-                          onChange={() => toggleOne(t.id)}
-                          className="size-4 accent-primary"
+                          onCheckedChange={() => toggleOne(t.id)}
                         />
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">{idx + 1}</TableCell>
@@ -547,11 +675,18 @@ function TransactionsPage() {
                         <p className="font-semibold">{t.symbol || "—"}</p>
                         {t.name ? <p className="max-w-52 truncate text-xs text-muted-foreground">{t.name}</p> : null}
                       </TableCell>
-                      <TableCell className="num text-right">{t.qty > 0 ? formatShares(t.qty) : "-"}</TableCell>
-                      <TableCell className="num text-right text-muted-foreground">
-                        {t.price > 0 ? `${t.price} ${t.currency}` : "-"}
+                      <TableCell className="num whitespace-nowrap text-right">
+                        {t.qty > 0 ? formatShares(t.qty) : "-"}
                       </TableCell>
-                      <TableCell className="num text-right font-medium">{formatGbp(t.costGbp)}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">
+                        <Money
+                          amount={t.price > 0 ? String(t.price) : "-"}
+                          currency={t.price > 0 ? t.currency : null}
+                        />
+                      </TableCell>
+                      <TableCell className="text-right font-medium">
+                        <Money amount={formatGbp(t.costGbp)} />
+                      </TableCell>
                       <TableCell className="pr-4">
                         <div className="flex items-center justify-end gap-1">
                           <button
@@ -603,6 +738,7 @@ function TransactionsPage() {
           )}
           <GlobalImportDialog open={importOpen} onOpenChange={setImportOpen} />
           <GlobalTxnEditDialog txn={editingTxn} onOpenChange={() => setEditingTxn(null)} />
+          <EarnedBreakdownDialog open={earnedOpen} onOpenChange={setEarnedOpen} txns={globalTxns} />
           <GlobalPositionSheet
             symbol={positionSymbol}
             onOpenChange={(open) => {

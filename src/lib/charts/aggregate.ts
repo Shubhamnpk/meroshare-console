@@ -11,6 +11,22 @@ function sundayKey(date: string): string {
 }
 
 /**
+ * Last-close-per-bucket over ascending points: session-tick smoothing with
+ * real prints (the bucket's last tick wins, so hover values and the live end
+ * stay exact). Powers the 1m/5m/15m… interval options on intraday lines.
+ */
+export function bucketPoints<T extends { time: number | string }>(points: T[], bucketSecs: number): T[] {
+  const out: T[] = [];
+  for (const p of points) {
+    const prev = out[out.length - 1];
+    if (prev !== undefined && Math.floor(Number(prev.time) / bucketSecs) === Math.floor(Number(p.time) / bucketSecs)) {
+      out[out.length - 1] = p;
+    } else out.push(p);
+  }
+  return out;
+}
+
+/**
  * Bucket daily candles into weekly/monthly/yearly candles: open = first open,
  * high/low = extremes, close = last close, volume = summed. Buckets keep
  * chronological order; weekly buckets are keyed by their Sunday.

@@ -23,7 +23,7 @@ import { WatchlistPanel } from "@/components/market/watchlist-panel";
 import { useWatchlist } from "@/lib/watchlist";
 import { ErrorBlock, LoadingBlock, EmptyBlock, SkeletonCards } from "@/components/states";
 import { ScripSheet } from "@/components/market/scrip-sheet";
-import { ChartModal, chartTimeLabel } from "@/components/market/chart-modal";
+import { ChartModal, chartDayLabel, chartTimeLabel, isTodayNpt } from "@/components/market/chart-modal";
 import { Sparkline } from "@/components/market/sparkline";
 import { PortfolioDayCard } from "@/components/portfolio/portfolio-day-card";
 import { RangeBar } from "@/components/market/range-bar";
@@ -35,6 +35,7 @@ import {
   enrichedPortfolioQuery,
   globalValuationQuery,
   holdingSymbolsQuery,
+  indexDailyQuery,
   indexGraphQuery,
   investmentSummaryQuery,
   ipoArchiveQuery,
@@ -290,7 +291,33 @@ function DashboardPage() {
 
   const nepse = market.data?.indices.find((i) => /nepse/i.test(i.name)) ?? market.data?.indices[0];
   const nepsePoints = nepseGraph.data ?? [];
-
+  // The mirror serves the last session's ticks on closed days — only measure
+  // against prev close when the points are actually today's.
+  const sessionToday = nepsePoints.length >= 2 && isTodayNpt(nepsePoints[nepsePoints.length - 1]!.time);
+  // Stale sessions still get official numbers: match the session date in the
+  // daily archive and read that day's row plus the previous close.
+  const indexDaily = useQuery({ ...indexDailyQuery("NEPSE", 10), enabled: chartOpen });
+  const sessionKey =
+    nepsePoints.length >= 2
+      ? new Intl.DateTimeFormat("en-CA", {
+          timeZone: "Asia/Kathmandu",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).format(nepsePoints[nepsePoints.length - 1]!.time * 1000)
+      : null;
+  const sessionIdx = sessionKey
+    ? (indexDaily.data ?? []).findIndex((b) => String(b.date).slice(0, 10) === sessionKey)
+    : -1;
+  const sessionBar = sessionIdx >= 0 ? indexDaily.data![sessionIdx]! : null;
+  const sessionPrev = sessionIdx > 0 ? indexDaily.data![sessionIdx - 1]! : null;
+  // No change math anywhere: the provider states the move (change/perChange)
+  // ready-made. The archive is only a lookup for the previous close and the
+  // session extremes on stale days.
+  const sessionOfficial =
+    sessionBar && sessionPrev && sessionPrev.close > 0
+      ? { prevClose: sessionPrev.close, high: sessionBar.high, low: sessionBar.low }
+      : null;
   const isRefreshing =
     portfolio.isFetching ||
     holdingSymbols.isFetching ||
@@ -897,15 +924,36 @@ function DashboardPage() {
         title="NEPSE Index"
         subtitle={
           nepsePoints.length >= 2
-            ? `Today's session, ${chartTimeLabel(nepsePoints[0]!.time)}-${chartTimeLabel(
-                nepsePoints[nepsePoints.length - 1]!.time,
-              )} NPT`
+            ? sessionToday
+              ? `Today's session, ${chartTimeLabel(nepsePoints[0]!.time)}-${chartTimeLabel(
+                  nepsePoints[nepsePoints.length - 1]!.time,
+                )} NPT`
+              : `Last session · ${chartDayLabel(nepsePoints[nepsePoints.length - 1]!.time)}, ${chartTimeLabel(nepsePoints[0]!.time)}-${chartTimeLabel(nepsePoints[nepsePoints.length - 1]!.time)} NPT`
             : "Today's session (intraday)"
         }
         ranges={[{ key: "today", label: "Today", points: nepsePoints }]}
-        formatValue={(v) => formatNpr(v, { compact: true })}
+        formatValue={(v) => formatNpr(v)}
         formatIntradayLabel={chartTimeLabel}
         formatDailyLabel={chartTimeLabel}
+        changeBase={
+          sessionToday && nepse && nepse.previousClose > 0
+            ? { value: nepse.previousClose, label: "Prev close" }
+            : sessionOfficial
+              ? { value: sessionOfficial.prevClose, label: "Prev close" }
+              : undefined
+        }
+        officialChange={
+          nepse && nepse.change != null && nepse.percentChange != null
+            ? { change: nepse.change, pct: nepse.percentChange }
+            : undefined
+        }
+        sessionRange={
+          sessionToday && nepse && (nepse.high ?? 0) > 0 && (nepse.low ?? 0) > 0
+            ? { high: nepse.high, low: nepse.low }
+            : sessionOfficial && sessionOfficial.high > 0 && sessionOfficial.low > 0
+              ? { high: sessionOfficial.high, low: sessionOfficial.low }
+              : undefined
+        }
       />
     </div>
   );

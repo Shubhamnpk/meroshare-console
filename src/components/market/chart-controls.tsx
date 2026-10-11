@@ -2,7 +2,7 @@ import { Maximize2, Minimize2, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import type { BarAgg } from "@/lib/charts/aggregate";
 import { cn } from "@/lib/utils";
@@ -118,19 +118,28 @@ export function ChartExpandButton({ expanded, onToggle }: { expanded: boolean; o
   );
 }
 
+/** Per-point candle aggregation: compact range-style code on the trigger, full helper words in the dropdown. */
+const BAR_AGG_OPTIONS = [
+  { value: "day", code: "1D", label: "Daily" },
+  { value: "week", code: "1W", label: "Weekly" },
+  { value: "month", code: "1M", label: "Monthly" },
+  { value: "year", code: "1Y", label: "Yearly" },
+] as const;
+
 export function BarAggSelect({ value, onChange }: { value: BarAgg; onChange: (v: BarAgg) => void }) {
   return (
     <div className="flex items-center gap-1.5">
-      <span className="text-xs text-muted-foreground">Per point</span>
+      <span className="text-[11px] text-muted-foreground">Per point</span>
       <Select value={value} onValueChange={(v) => onChange(v as BarAgg)}>
-        <SelectTrigger className="h-7 w-28 text-xs">
-          <SelectValue />
+        <SelectTrigger className="h-6 w-[3.25rem] gap-1 px-2 text-[11px]">
+          {BAR_AGG_OPTIONS.find((o) => o.value === value)?.code ?? value}
         </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="day">Daily</SelectItem>
-          <SelectItem value="week">Weekly</SelectItem>
-          <SelectItem value="month">Monthly</SelectItem>
-          <SelectItem value="year">Yearly</SelectItem>
+        <SelectContent className="min-w-[5rem]">
+          {BAR_AGG_OPTIONS.map((o) => (
+            <SelectItem key={o.value} value={o.value} className="py-1 pl-2 pr-6 text-[11px]">
+              {o.label}
+            </SelectItem>
+          ))}
         </SelectContent>
       </Select>
     </div>

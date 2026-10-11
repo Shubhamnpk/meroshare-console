@@ -714,14 +714,15 @@ function BenchmarksSection({
         )}
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="flex snap-x gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {active.map((o) => (
-          <BenchmarkCard
-            key={o.key}
-            option={o}
-            preloaded={indexGraphQueries?.[o.graphKey]?.data ?? indexGraphQueries?.[o.graphKey.toUpperCase()]?.data}
-            onOpen={() => onOpen(o)}
-          />
+          <div key={o.key} className="w-64 shrink-0 snap-start sm:w-72">
+            <BenchmarkCard
+              option={o}
+              preloaded={indexGraphQueries?.[o.graphKey]?.data ?? indexGraphQueries?.[o.graphKey.toUpperCase()]?.data}
+              onOpen={() => onOpen(o)}
+            />
+          </div>
         ))}
       </div>
       {active.length === 0 && (

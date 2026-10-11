@@ -1,27 +1,10 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { GitCompareArrows, Plus, X } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import { screenerDataQuery } from "@/lib/queries";
-import { computeLongTermScore, type LongTermScore } from "@/lib/nepse/screener";
-import { formatNpr, formatPercent } from "@/lib/format";
 import { ScripSheet } from "@/components/market/scrip-sheet";
 import { cn } from "@/lib/utils";
 import { Panel } from "@/components/ui/panel";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-
-interface CompareRow {
-  symbol: string;
-  name: string;
-  ltp: number;
-  change: number;
-  pe: number | null;
-  pb: number | null;
-  roe: number | null;
-  eps: number | null;
-  dividendYield: number | null;
-  dividendStreak: number;
-  score: LongTermScore | null;
-}
+import { COMPARE_METRICS, useCompareRows, type CompareRow } from "@/lib/compare";
 
 function CompareBar({ value, max, color }: { value: number; max: number; color: string }) {
   const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
@@ -37,59 +20,7 @@ export function StockCompare() {
   const [input, setInput] = useState("");
   const [picked, setPicked] = useState<string | null>(null);
 
-  const screenerQuery = useQuery(screenerDataQuery());
-  const prices = screenerQuery.data?.prices ?? [];
-  const dividends = screenerQuery.data?.dividends ?? {};
-  const faceValues = screenerQuery.data?.faceValues ?? {};
-  const financials = screenerQuery.data?.financials ?? {};
-
-  const rows = useMemo<CompareRow[]>(() => {
-    return symbols
-      .map((sym) => {
-        const price = prices.find((p) => p.symbol === sym);
-        if (!price) return null;
-        const symDividends = dividends[sym] ?? [];
-        const symFinancials = financials[sym] ?? null;
-        const fv = faceValues[sym] ?? 100;
-        const report = symFinancials?.[0] ?? null;
-        const pe = report?.pe ?? null;
-        const eps = report?.eps ?? null;
-        const netWorth = report?.netWorthPerShare ?? null;
-        const roe = eps != null && netWorth != null && netWorth > 0 ? Math.round((eps / netWorth) * 1000) / 10 : null;
-        const pb = netWorth != null && netWorth > 0 ? price.ltp / netWorth : null;
-        const latestDiv = symDividends[0] ?? null;
-        const dividendYield = latestDiv && fv > 0 && price.ltp > 0 ? (latestDiv.totalDividend * fv) / price.ltp : null;
-        const fiscalYears = [...new Set(symDividends.map((d) => d.fiscalYear).filter(Boolean))].sort().reverse();
-        let streak = 0;
-        if (fiscalYears.length > 0) {
-          let exp = parseInt(fiscalYears[0]!);
-          for (const fy of fiscalYears) {
-            const yr = parseInt(fy!);
-            if (yr === exp) {
-              streak++;
-              exp--;
-            } else if (yr < exp) break;
-          }
-        }
-
-        const score = computeLongTermScore(price, symFinancials, symDividends, fv);
-
-        return {
-          symbol: sym,
-          name: price.name,
-          ltp: price.ltp,
-          change: price.percentChange,
-          pe,
-          pb,
-          roe,
-          eps,
-          dividendYield: dividendYield != null ? Math.round(dividendYield * 100) / 100 : null,
-          dividendStreak: streak,
-          score,
-        };
-      })
-      .filter(Boolean) as CompareRow[];
-  }, [symbols, prices, dividends, faceValues, financials]);
+  const { rows } = useCompareRows(symbols);
 
   const addSymbol = () => {
     const s = input.toUpperCase().trim();
@@ -103,25 +34,7 @@ export function StockCompare() {
     setSymbols(symbols.filter((s) => s !== sym));
   };
 
-  const metrics = [
-    { key: "ltp" as const, label: "LTP", format: (r: CompareRow) => formatNpr(r.ltp) },
-    { key: "change" as const, label: "Change", format: (r: CompareRow) => formatPercent(r.change) },
-    { key: "pe" as const, label: "P/E", format: (r: CompareRow) => (r.pe != null ? String(r.pe) : "-") },
-    { key: "pb" as const, label: "P/B", format: (r: CompareRow) => (r.pb != null ? String(r.pb) : "-") },
-    { key: "roe" as const, label: "ROE", format: (r: CompareRow) => (r.roe != null ? `${r.roe}%` : "-") },
-    { key: "eps" as const, label: "EPS", format: (r: CompareRow) => (r.eps != null ? formatNpr(r.eps) : "-") },
-    {
-      key: "dividendYield" as const,
-      label: "Div Yield",
-      format: (r: CompareRow) => (r.dividendYield != null ? `${r.dividendYield}%` : "-"),
-    },
-    { key: "dividendStreak" as const, label: "Streak", format: (r: CompareRow) => `${r.dividendStreak}y` },
-    {
-      key: "score" as const,
-      label: "Score",
-      format: (r: CompareRow) => (r.score?.score != null ? String(r.score.score) : "-"),
-    },
-  ];
+  const metrics = COMPARE_METRICS;
 
   return (
     <div className="space-y-4">

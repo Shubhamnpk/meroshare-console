@@ -33,6 +33,7 @@ import {
 } from "@/lib/queries";
 import { sectorOf } from "@/lib/nepse/sectors";
 import { deriveHoldings, useGlobalTxns } from "@/lib/world/store";
+import { formatDisplay, useDisplayCurrency, useDisplayRates } from "@/lib/world/display";
 import type { BrokerId } from "@/lib/brokers/types";
 import { useSettings } from "@/lib/settings";
 import { formatNpr, formatPercent, formatQty } from "@/lib/format";
@@ -515,6 +516,14 @@ function PortfolioPage() {
   const globalValuation = useQuery({
     ...globalValuationQuery(globalLots, view === "global"),
   });
+  // Display currency for the global book (NPR figures convert here).
+  const displayCurrency = useDisplayCurrency();
+  const nprRate = useDisplayRates(["NPR"]);
+  const toDisplay = nprRate?.["NPR"] ?? null;
+  const gMoney = (npr: number) =>
+    toDisplay == null
+      ? formatNpr(npr, { compact: compactNumbers })
+      : formatDisplay(npr * toDisplay, displayCurrency, { compact: compactNumbers });
   const globalEnriched = useMemo(() => {
     const lotBySymbol = new Map(globalLots.map((l) => [l.symbol, l] as const));
     const rows = (globalValuation.data?.rows ?? [])
@@ -1237,7 +1246,7 @@ function PortfolioPage() {
                   )
                 }
                 label="Value"
-                value={formatNpr(globalEnriched.totalValue, { compact: compactNumbers })}
+                value={gMoney(globalEnriched.totalValue)}
                 valueClass={
                   globalEnriched.dayChange > 0 ? "text-gain" : globalEnriched.dayChange < 0 ? "text-loss" : ""
                 }
@@ -1245,7 +1254,7 @@ function PortfolioPage() {
               <StatChip
                 icon={<TrendingUp className="size-4" />}
                 label="Value (prev close)"
-                value={formatNpr(globalEnriched.totalPrev, { compact: compactNumbers })}
+                value={gMoney(globalEnriched.totalPrev)}
               />
               <StatChip
                 icon={
@@ -1261,8 +1270,12 @@ function PortfolioPage() {
                 value={
                   <>
                     {globalEnriched.dayChange > 0 ? "+" : globalEnriched.dayChange < 0 ? "-" : ""}
-                    <CompactNpr value={Math.abs(globalEnriched.dayChange)} compact={compactNumbers} /> (
-                    {globalEnriched.dayPct.toFixed(2)}%)
+                    {toDisplay == null ? (
+                      <CompactNpr value={Math.abs(globalEnriched.dayChange)} compact={compactNumbers} />
+                    ) : (
+                      formatDisplay(Math.abs(globalEnriched.dayChange) * toDisplay, displayCurrency)
+                    )}{" "}
+                    ({globalEnriched.dayPct.toFixed(2)}%)
                   </>
                 }
                 valueClass={
@@ -1272,7 +1285,7 @@ function PortfolioPage() {
               <StatChip
                 icon={<PiggyBank className="size-4" />}
                 label="Total investment"
-                value={formatNpr(globalEnriched.totalCost, { compact: compactNumbers })}
+                value={gMoney(globalEnriched.totalCost)}
               />
               {globalEnriched.totalCost > 0 ? (
                 <StatChip
@@ -1284,7 +1297,7 @@ function PortfolioPage() {
                     )
                   }
                   label="Return"
-                  value={`${globalEnriched.unrealized >= 0 ? "+" : ""}${formatNpr(globalEnriched.unrealized, { compact: compactNumbers })} (${((globalEnriched.unrealized / globalEnriched.totalCost) * 100).toFixed(2)}%)`}
+                  value={`${globalEnriched.unrealized >= 0 ? "+" : "−"}${gMoney(Math.abs(globalEnriched.unrealized))} (${((globalEnriched.unrealized / globalEnriched.totalCost) * 100).toFixed(2)}%)`}
                   valueClass={globalEnriched.unrealized >= 0 ? "text-gain" : "text-loss"}
                 />
               ) : null}
@@ -1346,16 +1359,16 @@ function PortfolioPage() {
                       </TableCell>
                       <TableCell colSpan={2} />
                       <TableCell className="num text-right font-semibold">
-                        {formatNpr(globalEnriched.totalValue, { compact: compactNumbers })}
+                        {gMoney(globalEnriched.totalValue)}
                       </TableCell>
                       <TableCell className="num text-right font-semibold text-muted-foreground">-</TableCell>
                       <TableCell className="text-right">
                         {globalEnriched.totalCost > 0 ? (
                           <DeltaPill
                             value={globalEnriched.unrealized}
-                            title={`${globalEnriched.unrealized >= 0 ? "+" : "-"}${formatNpr(Math.abs(globalEnriched.unrealized))} total`}
+                            title={`${globalEnriched.unrealized >= 0 ? "+" : "−"}${gMoney(Math.abs(globalEnriched.unrealized))} total`}
                           >
-                            {`${globalEnriched.unrealized >= 0 ? "+" : ""}${((globalEnriched.unrealized / globalEnriched.totalCost) * 100).toFixed(2)}%`}
+                            {`${globalEnriched.unrealized >= 0 ? "+" : "−"}${((globalEnriched.unrealized / globalEnriched.totalCost) * 100).toFixed(2)}%`}
                           </DeltaPill>
                         ) : (
                           <span className="text-xs text-muted-foreground">-</span>
@@ -1363,7 +1376,7 @@ function PortfolioPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <DeltaPill value={globalEnriched.dayChange}>
-                          {`${globalEnriched.dayChange >= 0 ? "+" : "-"}${formatNpr(Math.abs(globalEnriched.dayChange))} (${globalEnriched.dayPct.toFixed(2)}%)`}
+                          {`${globalEnriched.dayChange >= 0 ? "+" : "−"}${gMoney(Math.abs(globalEnriched.dayChange))} (${globalEnriched.dayPct.toFixed(2)}%)`}
                         </DeltaPill>
                       </TableCell>
                       <TableCell className="num pr-4 text-right font-semibold">100%</TableCell>
@@ -1377,7 +1390,7 @@ function PortfolioPage() {
                     {globalItems.length !== globalEnriched.holdings.length ? (
                       <>
                         Showing {globalItems.length} of {globalEnriched.holdings.length} stocks · filtered value{" "}
-                        {formatNpr(globalItems.reduce((s, h) => s + h.value, 0))}
+                        {gMoney(globalItems.reduce((s, h) => s + h.value, 0))}
                         {globalEnriched.skipped > 0 ? ". " : ""}
                       </>
                     ) : null}

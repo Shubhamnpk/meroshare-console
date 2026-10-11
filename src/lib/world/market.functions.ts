@@ -16,7 +16,7 @@ import {
   type WorldTick,
 } from "./feed.server";
 import { normalizeWorldSymbol, worldCandidates } from "./symbols";
-import { toNpr } from "./fx";
+import { convertCurrency, toNpr } from "./fx";
 import { yahooSymbolFor } from "./import";
 const WORLD_RANGES = ["1D", "1W", "1M", "3M", "6M", "1Y", "2Y", "5Y", "MAX"] as const;
 
@@ -32,6 +32,37 @@ async function resolveSymbol(raw: string, currency?: string): Promise<{ symbol: 
   }
   return null;
 }
+
+/**
+ * Per-unit rates from each source currency into one display currency, using
+ * the same server-side FX the valuation already trusts. Browsers can block
+ * direct Yahoo calls, so client math (earned chips, converted totals) reads
+ * rates from here instead of fetching them itself.
+ */
+export const getFxRates = createServerFn({ method: "POST" })
+  .validator((input: unknown) =>
+    z
+      .object({
+        sources: z.array(z.string().trim().max(8)).max(20),
+        to: z.string().trim().max(8).default("NPR"),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data }): Promise<{ rates: Record<string, number> }> => {
+    await requireAuth();
+    const rates: Record<string, number> = {};
+    await Promise.all(
+      data.sources.map(async (s) => {
+        try {
+          const r = await convertCurrency(1, s === "" ? "NPR" : s, data.to);
+          if (r != null && r > 0) rates[s] = r;
+        } catch {
+          // skip — the caller shows placeholders, never mixed sums.
+        }
+      }),
+    );
+    return { rates };
+  });
 
 export const getWorldQuote = createServerFn({ method: "POST" })
   .validator((input: unknown) =>
@@ -246,7 +277,7 @@ export const getGlobalHistory = createServerFn({ method: "POST" })
             }),
           )
           .max(200),
-        range: z.enum(["1M", "3M", "6M", "1Y", "MAX"] as const),
+        range: z.enum(WORLD_RANGES),
       })
       .parse(input),
   )

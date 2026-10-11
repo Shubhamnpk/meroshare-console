@@ -11,6 +11,7 @@ import {
   type IndicatorConfig,
 } from "@/components/market/terminal-chart";
 import { formatNumber } from "@/lib/format";
+import { CHART_RANGES, type ChartRangeKey } from "@/lib/charts/ranges";
 import { cn } from "@/lib/utils";
 import { useSettings } from "@/lib/settings";
 import type { ChartBar, PricePoint } from "@/lib/nepse/types";
@@ -20,19 +21,21 @@ const NO_POINTS: PricePoint[] = [];
 // hover render (see the spinning 1D chart).
 const NO_BARS: ChartBar[] = [];
 
-const INDEX_RANGES = [
-  { key: "1D", label: "1D", days: 1 },
-  { key: "1W", label: "1W", days: 7 },
-  { key: "1M", label: "1M", days: 30 },
-  { key: "3M", label: "3M", days: 90 },
-  { key: "6M", label: "6M", days: 180 },
-  { key: "1Y", label: "1Y", days: 365 },
-  { key: "3Y", label: "3Y", days: 1095 },
-  { key: "5Y", label: "5Y", days: 1825 },
-  { key: "ALL", label: "All", days: 0 },
-] as const;
+/** Archive days per range key; MAX (0) means the whole archive, uncapped. */
+const INDEX_RANGE_DAYS: Record<ChartRangeKey, number> = {
+  "1D": 1,
+  "1W": 7,
+  "1M": 30,
+  "3M": 90,
+  "6M": 180,
+  "1Y": 365,
+  "5Y": 1825,
+  MAX: 0,
+};
 
-type IndexRangeKey = (typeof INDEX_RANGES)[number]["key"];
+const INDEX_RANGES = CHART_RANGES.map((key) => ({ key, label: key, days: INDEX_RANGE_DAYS[key] }));
+
+type IndexRangeKey = ChartRangeKey;
 
 const INDICATOR_TOGGLES: { key: keyof IndicatorConfig; label: string }[] = [
   { key: "volume", label: "Vol" },
@@ -100,7 +103,9 @@ export function IndexChartModal({
   });
 
   // Multi-day daily OHLC bars query
-  const selectedRangeConfig = INDEX_RANGES.find((r) => r.key === range) ?? INDEX_RANGES[5];
+  const selectedRangeConfig =
+    INDEX_RANGES.find((r) => r.key === range) ??
+    ({ key: "1Y", label: "1Y", days: 365 } as (typeof INDEX_RANGES)[number]);
   const queryDays = range === "1D" ? 2 : selectedRangeConfig.days;
 
   const dailyQuery = useQuery({

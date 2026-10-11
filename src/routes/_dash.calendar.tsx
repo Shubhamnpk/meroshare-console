@@ -534,11 +534,7 @@ function CalendarPage() {
                   <span className="flex items-start gap-2.5 text-xs leading-snug">
                     <span className="mt-1 size-2.5 shrink-0 rounded-full bg-gain" aria-hidden />
                     <span>
-                      <span className="font-semibold">Book close</span>: record date; your holdings get a{" "}
-                      <span className="rounded bg-primary/10 px-1 py-0.5 text-[0.60rem] font-semibold text-primary">
-                        Holding
-                      </span>{" "}
-                      badge
+                      <span className="font-semibold">Book close</span>: record date for dividend eligibility
                     </span>
                   </span>
                   <span className="flex items-start gap-2.5 text-xs leading-snug">

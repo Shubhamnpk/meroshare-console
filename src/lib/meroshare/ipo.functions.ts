@@ -14,7 +14,7 @@ import {
   submitIpoApplication,
 } from "./api.server";
 import { CDSC_BASE } from "./cdsc.server";
-import { DEMO_APPLICATIONS } from "./demo-data";
+import { DEMO_APPLICABLE_ISSUES, DEMO_APPLICATIONS } from "./demo-data";
 import type { ApplicableIssue, ApplicationReportItem, JsonRecord } from "./types";
 
 function resolveDocUrls(obj: unknown): unknown {
@@ -36,14 +36,14 @@ function resolveDocUrls(obj: unknown): unknown {
 
 export const getApplicableIssues = createServerFn({ method: "GET" }).handler(async (): Promise<ApplicableIssue[]> => {
   const auth = await requireAuth();
-  if (auth.demo) return [];
+  if (auth.demo) return DEMO_APPLICABLE_ISSUES;
   const res = await fetchApplicableIssues(auth);
   return res.object ?? [];
 });
 
 export const getCurrentIssues = createServerFn({ method: "GET" }).handler(async (): Promise<ApplicableIssue[]> => {
   const auth = await requireAuth();
-  if (auth.demo) return [];
+  if (auth.demo) return DEMO_APPLICABLE_ISSUES;
   try {
     const res = await fetchCurrentIssues(auth);
     if (res.object?.length) return res.object;

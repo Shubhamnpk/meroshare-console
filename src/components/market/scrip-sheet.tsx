@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { formatDistanceToNow } from "date-fns";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -703,11 +704,13 @@ export function ScripSheet({
   const [rangeKey, setRangeKey] = useState<string>("1D");
   const [chartOpen, setChartOpen] = useState(false);
   const [dividendSimOpen, setDividendSimOpen] = useState(false);
+  const [divsExpanded, setDivsExpanded] = useState(false);
   const { openPreview, modal: docModal } = useDocViewer();
 
   useEffect(() => {
     setRangeKey("1D");
     setDividendSimOpen(false);
+    setDivsExpanded(false);
     setTab(initialTab ?? "overview");
   }, [symbol, initialTab]);
 
@@ -1056,7 +1059,7 @@ export function ScripSheet({
   // Use full archive for all daily ranges so 1M/3M/6M/1Y don't duplicate the truncated historyPoints
   const dailyPoints = fullPoints.length >= 2 ? fullPoints : historyPoints;
   const udf = useQuery({
-    ...udfHistoryQuery(upper || null, rangeKey === "All" ? null : (rangeKey as import("@/lib/charts/udf").ChartRange)),
+    ...udfHistoryQuery(upper || null, rangeKey === "MAX" ? null : (rangeKey as import("@/lib/charts/udf").ChartRange)),
     enabled: brokerOn && Boolean(symbol) && rangeKey === "1D",
   });
   const udfIntraday: PricePoint[] = useMemo(() => {
@@ -1073,7 +1076,9 @@ export function ScripSheet({
     const built = buildScripRanges(intradayPoints, dailyPoints);
     // Keep every range button visible while loading so user doesn't see only "All"
     const byKey = new Map(built.map((r) => [r.key, r]));
-    return SCRIP_RANGES.map((r) => byKey.get(r.key) ?? { key: r.key, label: r.label, points: [] as never[] });
+    return SCRIP_RANGES.filter((r) => r.key !== "3M" && r.key !== "6M").map(
+      (r) => byKey.get(r.key) ?? { key: r.key, label: r.label, points: [] as never[] },
+    );
   }, [intradayPoints, dailyPoints]);
   const activeRange = ranges.find((r) => r.key === rangeKey) ?? ranges[0];
 
@@ -1274,65 +1279,75 @@ export function ScripSheet({
             ) : null}
 
             <TabsContent value="overview" className="space-y-4">
-              {isHeld && positionUnits > 0 ? (
-                <PositionCard
-                  scrip={upper}
-                  units={positionUnits}
-                  waccRate={positionWaccRate}
-                  totalCost={positionTotalCost}
-                  ltp={effectiveLtp}
-                  previousClose={effectivePreviousClose}
-                  basisLabel={positionBasisLabel}
-                  priceEstimate={ltpIsEstimate}
-                />
-              ) : null}
               <Panel padding="sm">
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="font-display text-sm font-semibold">Price history</h3>
-                  {ranges.length > 0 ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onOpenChange(false);
-                        void navigate({ to: "/terminal", search: { symbol: upper } });
-                      }}
-                      className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-                    >
-                      <ChartCandlestick className="size-3.5" /> Terminal
-                    </button>
-                  ) : null}
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <h3 className="font-display text-sm font-semibold">Chart</h3>
+                  <div className="flex flex-wrap items-center justify-end gap-1">
+                    {ranges.length > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onOpenChange(false);
+                          void navigate({ to: "/terminal", search: { symbol: upper } });
+                        }}
+                        className="mr-1 flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                      >
+                        <ChartCandlestick className="size-3.5" /> Terminal
+                      </button>
+                    ) : null}
+                    {ranges.map((range) => {
+                      const empty = range.points.length < 2 && range.key !== "MAX";
+                      return (
+                        <button
+                          key={range.key}
+                          type="button"
+                          disabled={empty}
+                          aria-pressed={activeRange?.key === range.key}
+                          onClick={() => setRangeKey(range.key)}
+                          className={cn(
+                            "rounded-full border px-2.5 py-0.5 text-[0.68rem] font-medium transition-colors",
+                            activeRange?.key === range.key
+                              ? "border-primary/50 bg-primary/15 text-primary"
+                              : "border-border/60 bg-surface text-muted-foreground hover:border-primary/30",
+                            empty && "cursor-not-allowed opacity-50",
+                          )}
+                        >
+                          {range.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
+                {activeRange?.key === "1D" && (snapshot.data != null || snapshot.isPending) ? (
+                  <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                    {snapshot.data?.status.isOpen != null ? (
+                      <span className="inline-flex items-center gap-1.5 font-medium">
+                        <span
+                          aria-hidden
+                          className={`size-1.5 rounded-full ${snapshot.data.status.isOpen ? "bg-gain" : "bg-muted-foreground"}`}
+                        />
+                        <span className={snapshot.data.status.isOpen ? "text-gain" : "text-muted-foreground"}>
+                          {snapshot.data.status.isOpen ? "Market open" : "Market closed"}
+                        </span>
+                      </span>
+                    ) : null}
+                    {snapshot.data?.status.lastChecked ? (
+                      <span className="text-muted-foreground">
+                        {snapshot.data?.status.isOpen != null ? "· " : ""}data{" "}
+                        {formatDistanceToNow(new Date(snapshot.data.status.lastChecked), { addSuffix: true })}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 {ranges.length > 0 ? (
                   <>
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      {ranges.map((range) => {
-                        const empty = range.points.length < 2 && range.key !== "All";
-                        return (
-                          <button
-                            key={range.key}
-                            type="button"
-                            disabled={empty}
-                            onClick={() => setRangeKey(range.key)}
-                            className={cn(
-                              "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-                              activeRange?.key === range.key
-                                ? "border-primary/50 bg-primary/15 text-primary"
-                                : "border-border/60 bg-surface text-muted-foreground hover:border-primary/30",
-                              empty && "opacity-50 cursor-not-allowed",
-                            )}
-                          >
-                            {range.label}
-                          </button>
-                        );
-                      })}
-                    </div>
                     <div className="mt-3">
-                      {rangeKey === "All" && fullHistory.isLoading ? (
+                      {rangeKey === "MAX" && fullHistory.isLoading ? (
                         <p className="rounded-xl border border-border/60 bg-surface px-3 py-8 text-center text-sm text-muted-foreground">
                           Loading the whole archive back to 2012…
                         </p>
-                      ) : rangeKey === "All" && fullHistory.isError ? (
+                      ) : rangeKey === "MAX" && fullHistory.isError ? (
                         <p className="rounded-xl border border-border/60 bg-surface px-3 py-8 text-center text-sm text-muted-foreground">
                           Couldn&apos;t load the full archive.{" "}
                           <button
@@ -1354,16 +1369,40 @@ export function ScripSheet({
                                 ? invEntry.waccRate
                                 : null
                           }
-                          includeWaccDomain={activeRange?.key === "All"}
+                          includeWaccDomain={activeRange?.key === "MAX"}
+                          anchor={
+                            activeRange?.key === "1D" && Number(effectivePreviousClose) > 0
+                              ? Number(effectivePreviousClose)
+                              : null
+                          }
                           formatValue={(v) => formatNpr(v)}
                           formatLabel={(t) => (activeRange?.key === "1D" ? chartTimeLabel(t) : chartDayLabel(t))}
+                          tooltipExtra={(pt) => {
+                            const isDay = activeRange?.key === "1D";
+                            const base = Number(effectivePreviousClose);
+                            if (!isDay || !(base > 0)) return null;
+                            {
+                              const pct = ((pt.value - base) / base) * 100;
+                              return (
+                                <p
+                                  className={cn(
+                                    "num text-center text-[0.65rem] font-semibold",
+                                    pct >= 0 ? "text-gain" : "text-loss",
+                                  )}
+                                >
+                                  {pct >= 0 ? "+" : ""}
+                                  {pct.toFixed(2)}% today
+                                </p>
+                              );
+                            }
+                          }}
                         />
                       )}
                     </div>
                     <p className="mt-2 text-[0.68rem] text-muted-foreground">
                       {activeRange?.key === "1D"
                         ? `Today's intraday session (${intradayPoints.length} ticks)${useUdf ? " · Source: UDF · NEPSE" : ""}. `
-                        : activeRange?.key === "All"
+                        : activeRange?.key === "MAX"
                           ? `Whole LTP history from the YONEPSE archive${fullSince ? ` since ${fullSince.toLocaleDateString("en-GB", { month: "short", year: "numeric" })}` : ""} (${formatQty(fullPoints.length)} closes). `
                           : `Daily closes from the YONEPSE LTP archive, ${activeRange?.label ?? ""}. `}
                       Hover over the chart to inspect each point.
@@ -1426,6 +1465,19 @@ export function ScripSheet({
                     ) : null}
                   </div>
                 </Panel>
+              ) : null}
+
+              {isHeld && positionUnits > 0 ? (
+                <PositionCard
+                  scrip={upper}
+                  units={positionUnits}
+                  waccRate={positionWaccRate}
+                  totalCost={positionTotalCost}
+                  ltp={effectiveLtp}
+                  previousClose={effectivePreviousClose}
+                  basisLabel={positionBasisLabel}
+                  priceEstimate={ltpIsEstimate}
+                />
               ) : null}
 
               {companyRows.length > 0 ? (
@@ -1644,7 +1696,7 @@ export function ScripSheet({
                       ) : null}
                     </dl>
                     <ul className="mt-3 space-y-1.5">
-                      {yearlyDividends.slice(0, 12).map((d, i) => (
+                      {yearlyDividends.slice(0, divsExpanded ? yearlyDividends.length : 5).map((d, i) => (
                         <li
                           key={`${d.fiscalYear ?? "fy"}-${d.announcementDate ?? i}`}
                           className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-surface px-3 py-2 text-xs"
@@ -1692,6 +1744,15 @@ export function ScripSheet({
                         </li>
                       ))}
                     </ul>
+                    {yearlyDividends.length > 5 ? (
+                      <button
+                        type="button"
+                        onClick={() => setDivsExpanded((v) => !v)}
+                        className="mt-2 w-full rounded-lg border border-border/60 bg-surface px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground"
+                      >
+                        {divsExpanded ? "Show less" : `Show all ${yearlyDividends.length} announcements`}
+                      </button>
+                    ) : null}
                   </Panel>
                 )
               ) : (
@@ -1764,13 +1825,13 @@ export function ScripSheet({
           activeRange
             ? activeRange.key === "1D"
               ? "Today's intraday session"
-              : activeRange.key === "All"
+              : activeRange.key === "MAX"
                 ? "Daily candles, full archive"
                 : `Daily candles, last ${activeRange.label}`
             : "Price history"
         }
         ranges={ranges}
-        bars={rangeKey === "All" && (fullHistory.data ?? []).length > 0 ? fullHistory.data : detail.data?.history}
+        bars={rangeKey === "MAX" && (fullHistory.data ?? []).length > 0 ? fullHistory.data : detail.data?.history}
         formatValue={(v) => formatNpr(v)}
         formatIntradayLabel={chartTimeLabel}
         formatDailyLabel={chartDayLabel}

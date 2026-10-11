@@ -60,6 +60,7 @@ import {
   getGlobalHistory,
   getGlobalDaySeries,
   getWorldIntraday,
+  getFxRates,
 } from "./world/market.functions";
 import type { GlobalValuationRow } from "./world/market.functions";
 import type { WorldRange, WorldTick } from "./world/feed.server";
@@ -1065,6 +1066,15 @@ export const globalValuationQuery = (holdings: GlobalLotInput[], enabled = true)
     retry: false,
   });
 
+export const fxRatesQuery = (sources: string[], to: string) =>
+  queryOptions({
+    queryKey: ["fx-rates", [...new Set(sources)].sort(), to],
+    queryFn: async (): Promise<{ rates: Record<string, number> }> => getFxRates({ data: { sources, to } }),
+    enabled: sources.length > 0,
+    staleTime: 60 * 60_000,
+    retry: false,
+  });
+
 export const globalDaySeriesQuery = (holdings: GlobalLotInput[], enabled = true) =>
   queryOptions({
     queryKey: ["global-day-series", JSON.stringify(holdings.map((h) => [h.symbol, h.qty]))],
@@ -1112,7 +1122,7 @@ export interface GlobalHistoryLot {
   lots: { date: string; side: string; qty: number; price: number }[];
 }
 
-export const globalHistoryQuery = (holdings: GlobalHistoryLot[], range: "1M" | "3M" | "6M" | "1Y" | "MAX") =>
+export const globalHistoryQuery = (holdings: GlobalHistoryLot[], range: WorldRange) =>
   queryOptions({
     queryKey: [
       "global-history",
