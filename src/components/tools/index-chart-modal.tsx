@@ -1,39 +1,41 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  ChartCandlestick,
-  SlidersHorizontal,
-} from "lucide-react";
+import { ChartCandlestick, SlidersHorizontal } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getIndexDailyHistory } from "@/lib/nepse/market.functions";
 import { indexGraphQuery } from "@/lib/queries";
 import {
-  DEFAULT_INDICATORS,
   TerminalChart,
   type ChartStyle,
   type HoverInfo,
   type IndicatorConfig,
 } from "@/components/market/terminal-chart";
 import { formatNumber } from "@/lib/format";
+import { CHART_RANGES, type ChartRangeKey } from "@/lib/charts/ranges";
 import { cn } from "@/lib/utils";
 import { useSettings } from "@/lib/settings";
 import type { ChartBar, PricePoint } from "@/lib/nepse/types";
 
 const NO_POINTS: PricePoint[] = [];
+// Stable empty bars: an inline [] would rebuild the whole chart on every
+// hover render (see the spinning 1D chart).
+const NO_BARS: ChartBar[] = [];
 
-const INDEX_RANGES = [
-  { key: "1D", label: "1D", days: 1 },
-  { key: "1W", label: "1W", days: 7 },
-  { key: "1M", label: "1M", days: 30 },
-  { key: "3M", label: "3M", days: 90 },
-  { key: "6M", label: "6M", days: 180 },
-  { key: "1Y", label: "1Y", days: 365 },
-  { key: "3Y", label: "3Y", days: 1095 },
-  { key: "5Y", label: "5Y", days: 1825 },
-  { key: "ALL", label: "All", days: 0 },
-] as const;
+/** Archive days per range key; MAX (0) means the whole archive, uncapped. */
+const INDEX_RANGE_DAYS: Record<ChartRangeKey, number> = {
+  "1D": 1,
+  "1W": 7,
+  "1M": 30,
+  "3M": 90,
+  "6M": 180,
+  "1Y": 365,
+  "5Y": 1825,
+  MAX: 0,
+};
 
-type IndexRangeKey = (typeof INDEX_RANGES)[number]["key"];
+const INDEX_RANGES = CHART_RANGES.map((key) => ({ key, label: key, days: INDEX_RANGE_DAYS[key] }));
+
+type IndexRangeKey = ChartRangeKey;
 
 const INDICATOR_TOGGLES: { key: keyof IndicatorConfig; label: string }[] = [
   { key: "volume", label: "Vol" },
@@ -49,10 +51,7 @@ function useResolvedLight(): boolean {
   const [light, setLight] = useState(false);
   useEffect(() => {
     const resolve = () =>
-      setLight(
-        theme === "light" ||
-          (theme === "system" && window.matchMedia("(prefers-color-scheme: light)").matches),
-      );
+      setLight(theme === "light" || (theme === "system" && window.matchMedia("(prefers-color-scheme: light)").matches));
     resolve();
     const mq = window.matchMedia("(prefers-color-scheme: light)");
     mq.addEventListener("change", resolve);
@@ -75,12 +74,11 @@ export function IndexChartModal({
   sectorName?: string | undefined;
 }) {
   const [range, setRange] = useState<IndexRangeKey>("1D");
-  const [chartStyle, setChartStyle] = useState<ChartStyle>("area");
-  const [indicators, setIndicators] = useState<IndicatorConfig>({
-    ...DEFAULT_INDICATORS,
-    sma20: true,
-    volume: true,
-  });
+  const { chart, setChart } = useSettings();
+  const chartStyle = chart.style;
+  const setChartStyle = (s: ChartStyle) => setChart({ style: s });
+  const indicators = chart.indicators;
+  const setIndicators = (v: IndicatorConfig) => setChart({ indicators: v });
   const [showIndicatorMenu, setShowIndicatorMenu] = useState(false);
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const [pinnedBar, setPinnedBar] = useState<ChartBar | null>(null);
@@ -105,7 +103,9 @@ export function IndexChartModal({
   });
 
   // Multi-day daily OHLC bars query
-  const selectedRangeConfig = INDEX_RANGES.find((r) => r.key === range) ?? INDEX_RANGES[5];
+  const selectedRangeConfig =
+    INDEX_RANGES.find((r) => r.key === range) ??
+    ({ key: "1Y", label: "1Y", days: 365 } as (typeof INDEX_RANGES)[number]);
   const queryDays = range === "1D" ? 2 : selectedRangeConfig.days;
 
   const dailyQuery = useQuery({
@@ -134,32 +134,65 @@ export function IndexChartModal({
   // 1D uses the session line for area; candles (and empty-session fallback) use daily bars.
   const usingIntraday = range === "1D" && chartStyle !== "candles" && intradayPoints.length >= 2;
 
-  // Summary stats calculated from bars or intraday
-  const stats = useMemo(() => {
-    if (usingIntraday) {
-      if (intradayPoints.length < 2) return null;
-      const first = intradayPoints[0]!.value;
-      const last = intradayPoints[intradayPoints.length - 1]!.value;
-      const values = intradayPoints.map((p) => p.value);
-      const high = Math.max(...values);
-      const low = Math.min(...values);
-      const change = last - first;
-      const pct = first > 0 ? (change / first) * 100 : 0;
-      return { start: first, end: last, high, low, change, pct, count: intradayPoints.length };
-    }
-
-    if (bars.length < 1) return null;
-    const first = bars[0]!.open || bars[0]!.close;
-    const last = bars[bars.length - 1]!.close;
-    const highs = bars.map((b) => b.high);
-    const lows = bars.map((b) => b.low);
-    const high = Math.max(...highs);
-    const low = Math.min(...lows);
-    const change = last - first;
-    const pct = first > 0 ? (change / first) * 100 : 0;
-    const totalVolume = bars.reduce((s, b) => s + (b.volume || 0), 0);
-    return { start: first, end: last, high, low, change, pct, count: bars.length, totalVolume };
-  }, [usingIntraday, intradayPoints, bars]);
+  // Hover details (terminal-style): hovering or pinning a bar/point feeds
+  // the readout below the chart. Day % for candles, session % for ticks.
+  const hoveredBar: ChartBar | null = !usingIntraday
+    ? (pinnedBar ??
+      (hover
+        ? ({
+            date: hover.date.slice(0, 10),
+            open: hover.open,
+            high: hover.high,
+            low: hover.low,
+            close: hover.close,
+            volume: hover.volume,
+          } as ChartBar)
+        : null))
+    : null;
+  const hoveredPt: PricePoint | null = usingIntraday
+    ? (pinnedPoint ??
+      (hover
+        ? ({
+            time: String(Math.floor(new Date(hover.date).getTime() / 1000)),
+            value: hover.close,
+          } as unknown as PricePoint)
+        : null))
+    : null;
+  const sessionBase = intradayPoints[0]?.value ?? 0;
+  // Headline value next to the title: last tick on 1D, last close otherwise.
+  const headValue =
+    range === "1D" && intradayPoints.length > 0
+      ? intradayPoints[intradayPoints.length - 1]!.value
+      : bars.length > 0
+        ? bars[bars.length - 1]!.close
+        : null;
+  // Hovered/pinned point takes over the headline, with its % change beside
+  // it (day % for candles, session % for ticks). At rest the % below the
+  // number covers the visible range (session move on 1D, bar range above).
+  const restPct =
+    range === "1D" && intradayPoints.length >= 2
+      ? (() => {
+          const first = intradayPoints[0]!.value;
+          const last = intradayPoints[intradayPoints.length - 1]!.value;
+          return first ? ((last - first) / first) * 100 : 0;
+        })()
+      : bars.length > 0
+        ? (() => {
+            const first = bars[0]!.open || bars[0]!.close;
+            const last = bars[bars.length - 1]!.close;
+            return first ? ((last - first) / first) * 100 : 0;
+          })()
+        : null;
+  const shownValue = hoveredBar ? hoveredBar.close : hoveredPt ? hoveredPt.value : headValue;
+  const shownPct = hoveredBar
+    ? hoveredBar.open
+      ? ((hoveredBar.close - hoveredBar.open) / hoveredBar.open) * 100
+      : 0
+    : hoveredPt
+      ? sessionBase
+        ? ((hoveredPt.value - sessionBase) / sessionBase) * 100
+        : 0
+      : restPct;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -168,18 +201,22 @@ export function IndexChartModal({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
-                <DialogTitle className="font-display text-lg font-bold sm:text-xl">
-                  {title}
-                </DialogTitle>
+                <DialogTitle className="font-display text-lg font-bold sm:text-xl">{title}</DialogTitle>
               </div>
               <p className="mt-0.5 text-xs text-muted-foreground">
                 Historical trading data &amp; technical performance across all ranges.
               </p>
             </div>
 
-            {stats && (
-              <div className="flex items-baseline gap-3 text-right">
-                <span className="num text-2xl font-bold">{formatNumber(stats.end)}</span>
+            {shownValue != null && (
+              <div className="flex flex-col items-end text-right">
+                <span className="num text-2xl font-bold">{formatNumber(shownValue)}</span>
+                {shownPct != null && (
+                  <span className={`num text-sm font-semibold ${shownPct >= 0 ? "text-gain" : "text-loss"}`}>
+                    {shownPct >= 0 ? "+" : ""}
+                    {shownPct.toFixed(2)}%
+                  </span>
+                )}
               </div>
             )}
           </div>
@@ -194,6 +231,7 @@ export function IndexChartModal({
                 <button
                   key={r.key}
                   type="button"
+                  aria-pressed={range === r.key}
                   onClick={() => setRange(r.key)}
                   className={cn(
                     "rounded-lg px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer",
@@ -212,6 +250,7 @@ export function IndexChartModal({
               <div className="flex items-center rounded-lg bg-surface border border-border/60 p-0.5 text-xs">
                 <button
                   type="button"
+                  aria-pressed={chartStyle === "area"}
                   onClick={() => setChartStyle("area")}
                   className={cn(
                     "rounded px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer",
@@ -224,6 +263,7 @@ export function IndexChartModal({
                 </button>
                 <button
                   type="button"
+                  aria-pressed={chartStyle === "candles"}
                   onClick={() => setChartStyle("candles")}
                   className={cn(
                     "flex items-center gap-1 rounded px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer",
@@ -237,9 +277,15 @@ export function IndexChartModal({
                 </button>
               </div>
 
-              <div className="relative">
+              <div
+                className="relative"
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") setShowIndicatorMenu(false);
+                }}
+              >
                 <button
                   type="button"
+                  aria-expanded={showIndicatorMenu}
                   onClick={() => setShowIndicatorMenu((s) => !s)}
                   className={cn(
                     "flex items-center gap-1 rounded-lg border border-border/60 bg-surface px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground cursor-pointer",
@@ -251,66 +297,37 @@ export function IndexChartModal({
                 </button>
 
                 {showIndicatorMenu && (
-                  <div className="absolute right-0 top-full z-30 mt-1 flex flex-wrap gap-1 rounded-xl border border-border bg-card p-2 shadow-xl">
-                    {INDICATOR_TOGGLES.map((t) => (
-                      <button
-                        key={t.key}
-                        type="button"
-                        onClick={() =>
-                          setIndicators((prev) => ({ ...prev, [t.key]: !prev[t.key] }))
-                        }
-                        className={cn(
-                          "rounded-md border px-2 py-0.5 text-[0.68rem] font-medium transition-colors cursor-pointer",
-                          indicators[t.key]
-                            ? "border-primary/50 bg-primary/15 text-primary"
-                            : "border-border/60 bg-surface text-muted-foreground hover:border-primary/30",
-                        )}
-                      >
-                        {t.label}
-                      </button>
-                    ))}
-                  </div>
+                  <>
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      aria-hidden
+                      onClick={() => setShowIndicatorMenu(false)}
+                      className="fixed inset-0 z-20 cursor-default"
+                    />
+                    <div className="absolute right-0 top-full z-30 mt-1 flex flex-wrap gap-1 rounded-xl border border-border bg-card p-2 shadow-xl">
+                      {INDICATOR_TOGGLES.map((t) => (
+                        <button
+                          key={t.key}
+                          type="button"
+                          onClick={() => setIndicators({ ...indicators, [t.key]: !indicators[t.key] })}
+                          className={cn(
+                            "rounded-md border px-2 py-0.5 text-[0.68rem] font-medium transition-colors cursor-pointer",
+                            indicators[t.key]
+                              ? "border-primary/50 bg-primary/15 text-primary"
+                              : "border-border/60 bg-surface text-muted-foreground hover:border-primary/30",
+                          )}
+                        >
+                          {t.label}
+                        </button>
+                      ))}
+                    </div>
+                  </>
                 )}
               </div>
             </div>
           </div>
 
-          {/* Quick Stats Grid */}
-          {stats && (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              <div className="rounded-xl border border-border/60 bg-surface px-3 py-2">
-                <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                  Start Points
-                </p>
-                <p className="num text-sm font-semibold">{formatNumber(stats.start)}</p>
-              </div>
-              <div className="rounded-xl border border-border/60 bg-surface px-3 py-2">
-                <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                  Current Points
-                </p>
-                <p className="num text-sm font-semibold">{formatNumber(stats.end)}</p>
-              </div>
-              <div className="rounded-xl border border-border/60 bg-surface px-3 py-2">
-                <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                  Range High / Low
-                </p>
-                <p className="num text-sm font-semibold">
-                  {formatNumber(stats.high)} / {formatNumber(stats.low)}
-                </p>
-              </div>
-              <div className="rounded-xl border border-border/60 bg-surface px-3 py-2">
-                <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                  Data Points / Volume
-                </p>
-                <p className="num text-sm font-semibold">
-                  {stats.count} bars
-                  {stats.totalVolume && stats.totalVolume > 0
-                    ? ` · ${(stats.totalVolume / 1_000_000).toFixed(1)}M vol`
-                    : ""}
-                </p>
-              </div>
-            </div>
-          )}
           {/* Chart Display Area — stopPropagation keeps dialog overflow from stealing wheel/zoom */}
           <div
             className="relative rounded-2xl border border-border/70 bg-card p-1 min-h-[360px] [&_canvas]:touch-none"
@@ -322,7 +339,7 @@ export function IndexChartModal({
               </div>
             ) : usingIntraday ? (
               <TerminalChart
-                bars={[]}
+                bars={NO_BARS}
                 intraday={intradayPoints}
                 style={chartStyle}
                 indicators={indicators}
@@ -330,12 +347,8 @@ export function IndexChartModal({
                 light={light}
                 height={360}
                 onHover={setHover}
-                onSelectPoint={(p) =>
-                  setPinnedPoint((cur) => (cur && p && cur.time === p.time ? null : p))
-                }
-                onSelectBar={(d) =>
-                  setPinnedBar(d ? (bars.find((b) => b.date === d) ?? null) : null)
-                }
+                onSelectPoint={(p) => setPinnedPoint((cur) => (cur && p && cur.time === p.time ? null : p))}
+                onSelectBar={(d) => setPinnedBar(d ? (bars.find((b) => b.date === d) ?? null) : null)}
               />
             ) : bars.length >= 2 ? (
               <TerminalChart
@@ -348,23 +361,29 @@ export function IndexChartModal({
                 height={360}
                 onHover={setHover}
                 onSelectBar={(d) =>
-                  setPinnedBar((cur) =>
-                    cur && d === cur.date ? null : (bars.find((b) => b.date === d) ?? null),
-                  )
+                  setPinnedBar((cur) => (cur && d === cur.date ? null : (bars.find((b) => b.date === d) ?? null)))
                 }
-                onSelectPoint={(p) =>
-                  setPinnedPoint((cur) => (cur && p && cur.time === p.time ? null : p))
-                }
+                onSelectPoint={(p) => setPinnedPoint((cur) => (cur && p && cur.time === p.time ? null : p))}
               />
             ) : range === "1D" ? (
               <div className="flex h-[360px] flex-col items-center justify-center gap-1.5 p-6 text-center text-muted-foreground">
-                <p className="text-sm font-semibold text-foreground">
-                  Intraday session graph not published
-                </p>
+                <p className="text-sm font-semibold text-foreground">Intraday session graph not published</p>
                 <p className="text-xs">
-                  Real-time ticks stream during active NEPSE trading hours (11:00 AM – 3:00 PM NPT).
-                  Switch to 1W, 1M, or 1Y to view historical daily candles.
+                  Real-time ticks stream during active NEPSE trading hours (11:00 AM – 3:00 PM NPT). Switch to 1W, 1M,
+                  or 1Y to view historical daily candles.
                 </p>
+              </div>
+            ) : dailyQuery.isError ? (
+              <div className="flex h-[360px] flex-col items-center justify-center gap-2 p-6 text-center">
+                <p className="text-sm font-semibold text-foreground">Couldn't load chart data</p>
+                <p className="text-xs text-muted-foreground">Check your connection and try again.</p>
+                <button
+                  type="button"
+                  onClick={() => void dailyQuery.refetch()}
+                  className="mt-1 inline-flex min-h-11 items-center rounded-lg border border-border/60 bg-surface px-3 text-xs font-medium text-foreground transition-colors hover:border-primary/40"
+                >
+                  Try again
+                </button>
               </div>
             ) : (
               <div className="flex h-[360px] flex-col items-center justify-center p-6 text-center text-muted-foreground">
@@ -374,21 +393,10 @@ export function IndexChartModal({
           </div>
 
           {/* Details below chart — hover shows live, tap pins it. Always below chart with progress + terminal link */}
-          {(pinnedBar || pinnedPoint || hover) && (
+          {(hoveredBar || hoveredPt) && (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-border/60 bg-surface px-3 py-2 text-xs">
               {(() => {
-                const barFromHover =
-                  hover && !usingIntraday
-                    ? ({
-                        date: hover.date.slice(0, 10),
-                        open: hover.open,
-                        high: hover.high,
-                        low: hover.low,
-                        close: hover.close,
-                        volume: hover.volume,
-                      } as ChartBar)
-                    : null;
-                const bar = pinnedBar ?? barFromHover;
+                const bar = hoveredBar;
                 if (bar) {
                   const pct = (() => {
                     const r = bar.high - bar.low;
@@ -415,19 +423,14 @@ export function IndexChartModal({
                     </>
                   );
                 }
-                const pt =
-                  pinnedPoint ??
-                  (hover && usingIntraday
-                    ? ({
-                        time: String(Math.floor(new Date(hover.date).getTime() / 1000)),
-                        value: hover.close,
-                      } as unknown as PricePoint)
-                    : null);
+                const pt = hoveredPt;
                 if (pt) {
+                  const first = sessionBase || pt.value;
+                  const ptPct = first ? ((pt.value - first) / first) * 100 : 0;
                   return (
                     <>
                       <span className="num font-semibold">
-                        {new Date(Number((pt as PricePoint).time) * 1000).toLocaleString("en-GB", {
+                        {new Date(Number(pt.time) * 1000).toLocaleString("en-GB", {
                           day: "2-digit",
                           month: "short",
                           year: "numeric",
@@ -435,7 +438,11 @@ export function IndexChartModal({
                           minute: "2-digit",
                         })}
                       </span>
-                      <span>Price: {(pt as PricePoint).value.toFixed(2)}</span>
+                      <span>Price: {pt.value.toFixed(2)}</span>
+                      <span className={ptPct >= 0 ? "text-gain" : "text-loss"}>
+                        {ptPct >= 0 ? "+" : ""}
+                        {ptPct.toFixed(2)}%
+                      </span>
                     </>
                   );
                 }
@@ -443,7 +450,6 @@ export function IndexChartModal({
               })()}
             </div>
           )}
-
         </div>
       </DialogContent>
     </Dialog>

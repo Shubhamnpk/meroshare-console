@@ -10,6 +10,7 @@ import { ModeSwitch } from "@/components/market/heatmap-controls";
 import { ErrorBlock, LoadingBlock, EmptyBlock } from "@/components/states";
 import { StatCard } from "@/components/stat-card";
 import { HistoryPanel } from "@/components/portfolio/history-panel";
+import { PortfolioDayCard } from "@/components/portfolio/portfolio-day-card";
 import { ScripSheet } from "@/components/market/scrip-sheet";
 import { enrichedPortfolioQuery } from "@/lib/queries";
 import { formatNpr, formatPercent, formatQty } from "@/lib/format";
@@ -37,16 +38,7 @@ export const Route = createFileRoute("/_dash/analytics")({
   component: AnalyticsPage,
 });
 
-const PIE_COLORS = [
-  "#6366f1",
-  "#22c55e",
-  "#f59e0b",
-  "#ec4899",
-  "#06b6d4",
-  "#8b5cf6",
-  "#ef4444",
-  "#14b8a6",
-];
+const PIE_COLORS = ["#6366f1", "#22c55e", "#f59e0b", "#ec4899", "#06b6d4", "#8b5cf6", "#ef4444", "#14b8a6"];
 
 interface Slice {
   name: string;
@@ -120,16 +112,11 @@ function AllocationPie({
                   <Cell key={s.name} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                 ))}
               </Pie>
-              <Tooltip
-                wrapperStyle={{ zIndex: 50, outline: "none" }}
-                content={<PieTooltip total={total} />}
-              />
+              <Tooltip wrapperStyle={{ zIndex: 50, outline: "none" }} content={<PieTooltip total={total} />} />
             </PieChart>
           </ResponsiveContainer>
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-            <span className="max-w-24 truncate text-xs font-semibold">
-              {active ? active.name : "Total"}
-            </span>
+            <span className="max-w-24 truncate text-xs font-semibold">{active ? active.name : "Total"}</span>
             <span className="num text-sm font-semibold">
               {formatNpr(active ? active.value : total, { compact: true })}
             </span>
@@ -154,9 +141,7 @@ function AllocationPie({
                 <span className="num shrink-0 text-muted-foreground">
                   {total > 0 ? ((s.value / total) * 100).toFixed(1) : "0.0"}%
                 </span>
-                <span className="num shrink-0 font-medium">
-                  {formatNpr(s.value, { compact: true })}
-                </span>
+                <span className="num shrink-0 font-medium">{formatNpr(s.value, { compact: true })}</span>
               </button>
             </li>
           ))}
@@ -218,9 +203,7 @@ function AnalyticsPage() {
           </div>
           <div className="flex justify-between gap-6">
             <span>Day change:</span>
-            <span className={cn("font-bold", r.pct >= 0 ? "text-gain" : "text-loss")}>
-              {formatPercent(r.pct)}
-            </span>
+            <span className={cn("font-bold", r.pct >= 0 ? "text-gain" : "text-loss")}>{formatPercent(r.pct)}</span>
           </div>
         </div>
       </>
@@ -253,9 +236,7 @@ function AnalyticsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="font-display text-2xl font-semibold sm:text-3xl">Analytics</h1>
-        <p className="mt-1 hidden text-sm text-muted-foreground sm:block">
-          How your capital is distributed today.
-        </p>
+        <p className="mt-1 hidden text-sm text-muted-foreground sm:block">How your capital is distributed today.</p>
       </div>
 
       {q.isLoading ? (
@@ -263,10 +244,7 @@ function AnalyticsPage() {
       ) : q.isError ? (
         <ErrorBlock error={q.error} retry={() => void q.refetch()} />
       ) : rows.length === 0 ? (
-        <EmptyBlock
-          title="Nothing to analyse"
-          description="Analytics appear once you hold at least one scrip."
-        />
+        <EmptyBlock title="Nothing to analyse" description="Analytics appear once you hold at least one stock." />
       ) : (
         <>
           <SwipeStrip cols="sm:grid-cols-3">
@@ -277,7 +255,7 @@ function AnalyticsPage() {
               <StatCard
                 label="Top 5 concentration"
                 value={`${top5.toFixed(1)}%`}
-                sub="Share of portfolio in largest 5 scrips"
+                sub="Share of portfolio in largest 5 stocks"
                 className="h-full"
               />
             </SwipeItem>
@@ -290,6 +268,8 @@ function AnalyticsPage() {
               />
             </SwipeItem>
           </SwipeStrip>
+
+          <PortfolioDayCard holdings={rows.map((r) => ({ scrip: r.scrip, units: r.units, price: r.ltp }))} />
 
           <Panel as="section">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -327,15 +307,8 @@ function AnalyticsPage() {
           </Panel>
 
           <div className={`grid gap-4 ${hasSectors ? "lg:grid-cols-2" : ""}`}>
-            {hasSectors ? (
-              <AllocationPie title="Allocation by sector" slices={sectorSlices} total={total} />
-            ) : null}
-            <AllocationPie
-              title="Allocation by scrip"
-              slices={scripSlices}
-              total={total}
-              onPick={setPicked}
-            />
+            {hasSectors ? <AllocationPie title="Allocation by sector" slices={sectorSlices} total={total} /> : null}
+            <AllocationPie title="Allocation by stock" slices={scripSlices} total={total} onPick={setPicked} />
           </div>
 
           {movers.length > 0 ? (
@@ -353,11 +326,7 @@ function AnalyticsPage() {
                       <span
                         className={`num inline-flex items-center gap-0.5 text-sm font-semibold ${m.pct > 0 ? "text-gain" : "text-loss"}`}
                       >
-                        {m.pct > 0 ? (
-                          <ArrowUpRight className="size-3.5" />
-                        ) : (
-                          <ArrowDownRight className="size-3.5" />
-                        )}
+                        {m.pct > 0 ? <ArrowUpRight className="size-3.5" /> : <ArrowDownRight className="size-3.5" />}
                         {formatPercent(Math.abs(m.pct))}
                       </span>
                     </button>
@@ -366,38 +335,6 @@ function AnalyticsPage() {
               </ul>
             </Panel>
           ) : null}
-
-          <Panel as="section">
-            <h2 className="mb-4 font-display text-base font-semibold">Allocation by scrip</h2>
-            <ul className="space-y-3">
-              {rows.map((r) => (
-                <li key={r.scrip}>
-                  <div className="flex items-baseline justify-between gap-3 text-sm">
-                    <button
-                      type="button"
-                      onClick={() => setPicked(r.scrip)}
-                      className="font-medium transition-colors hover:text-primary"
-                    >
-                      {r.scrip}
-                    </button>
-                    <span className="num text-muted-foreground">
-                      {formatNpr(r.value)} · {r.weight.toFixed(1)}%
-                    </span>
-                  </div>
-                  <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-secondary">
-                    <div
-                      className="h-full rounded-full"
-                      style={{
-                        width: `${Math.max(r.weight, 1)}%`,
-                        background: "var(--gradient-brand)",
-                      }}
-                    />
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </Panel>
-
           <HistoryPanel holdings={holdings} onPickScrip={setPicked} />
         </>
       )}

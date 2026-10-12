@@ -1,6 +1,6 @@
 // Broker order ticket: live quote + depth + buy/sell on a SAVED broker connection.
 // Shown only when a broker is linked; otherwise points at Settings → Advanced.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ArrowDownRight, ArrowUpRight, RefreshCw } from "lucide-react";
@@ -8,24 +8,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AmountInput } from "@/components/ui/amount-input";
 import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DeltaPill } from "@/components/stat-card";
+import { RangeBar } from "@/components/market/range-bar";
 import {
   brokerAmoListQuery,
   brokerConnectionsQuery,
   brokerDepthQuery,
   brokerHoldingsQuery,
-  brokerOrderBookQuery,
   brokerQuoteQuery,
   marketSnapshotQuery,
-  mfSchemesQuery,
 } from "@/lib/queries";
+import { useIsOpenEnd } from "@/components/market/use-holding-age";
 import { placeBrokerAmo, placeBrokerOrder } from "@/lib/brokers/brokers.functions";
 import type { BrokerId } from "@/lib/brokers/types";
 import { errorMessage, formatNpr } from "@/lib/format";
@@ -37,9 +31,16 @@ import { useBrokerMarketWs } from "@/hooks/use-broker-ws";
 const VALIDITIES = ["DAY", "GTD", "GTC", "IOC", "FOK"] as const;
 
 function num(v: number | null | undefined): string {
-  return typeof v === "number" && Number.isFinite(v)
-    ? v.toLocaleString("en-NP", { maximumFractionDigits: 2 })
-    : "-";
+  return typeof v === "number" && Number.isFinite(v) ? v.toLocaleString("en-NP", { maximumFractionDigits: 2 }) : "-";
+}
+
+/** Plain-language read of top-of-book imbalance (share of visible size on the bid side). */
+function depthMood(bidPct: number): string {
+  if (bidPct >= 65) return "Strong buying pressure";
+  if (bidPct >= 55) return "Buying pressure";
+  if (bidPct > 45) return "Balanced book";
+  if (bidPct > 35) return "Selling pressure";
+  return "Strong selling pressure";
 }
 
 export function OrderTicket({
@@ -47,14 +48,22 @@ export function OrderTicket({
   limitPrice,
 }: {
   symbol: string;
-  /** External limit price request (e.g. from the chart); applied on change. */
-  limitPrice?: { price: number; side?: "BUY" | "SELL"; nonce: number } | null | undefined;
+  limitPrice?:
+    | {
+        price: number;
+        side?: "BUY" | "SELL";
+        nonce: number;
+        /** Prefill quantity (order reuse). Omitted by chart-hover drafts. */
+        qty?: number;
+      }
+    | null
+    | undefined;
 }) {
   const queryClient = useQueryClient();
   const connections = useQuery(brokerConnectionsQuery());
   const brokerId = (connections.data?.[0]?.brokerId ?? null) as BrokerId | null;
 
-  const { wsReady } = useBrokerMarketWs(brokerId, symbol);
+  const { wsReady, wsStatus } = useBrokerMarketWs(brokerId, symbol);
   const quote = useQuery({
     ...brokerQuoteQuery(brokerId, symbol),
     refetchInterval: wsReady ? false : 20_000,
@@ -64,22 +73,12 @@ export function OrderTicket({
     refetchInterval: wsReady ? false : 20_000,
   });
   const holdings = useQuery(brokerHoldingsQuery(brokerId));
-  const book = useQuery(brokerOrderBookQuery(brokerId));
   const amoList = useQuery(brokerAmoListQuery(brokerId));
   const market = useQuery(marketSnapshotQuery());
-  const schemesQ = useQuery(mfSchemesQuery());
-
-  // After-market orders: when NEPSE is closed, only limit orders with
-  // standing validity queue for the next session (no market/IOC/FOK).
   const marketOpen = market.data?.status.isOpen ?? true;
   const amo = !marketOpen;
 
-  // Open-end mutual funds are bought/redeemed with the fund manager at NAV —
-  // they are never traded on the exchange, so no broker order may be placed.
-  const isOpenEnd =
-    schemesQ.data?.some(
-      (s) => s.symbol.toUpperCase() === symbol.toUpperCase() && s.fundType === "open_end",
-    ) ?? false;
+  const isOpenEnd = useIsOpenEnd(symbol);
 
   const [side, setSide] = useState<"BUY" | "SELL">("BUY");
   const [quantity, setQuantity] = useState("");
@@ -96,12 +95,39 @@ export function OrderTicket({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ltp, symbol]);
 
-  // Chart-driven limit price: switch to Limit and fill it in.
+  // Consumed reuse/chart drafts, by nonce — so a stale draft never refills
+  // the form after a plain symbol switch.
+  const draftNonce = useRef(0);
+
+  // Symbol change resets the form; a reuse draft arriving with the change
+  // fills it back in. Runs before the draft effect below on remount.
   useEffect(() => {
-    if (limitPrice && limitPrice.price > 0) {
-      if (limitPrice.side) setSide(limitPrice.side);
+    const draft = limitPrice && limitPrice.nonce !== draftNonce.current ? limitPrice : null;
+    if (draft) draftNonce.current = draft.nonce;
+    if (draft?.side) setSide(draft.side);
+    if (draft && draft.price > 0) {
+      setOrderType("LMT");
+      setPrice(String(draft.price));
+    } else {
+      setPrice("");
+    }
+    setQuantity(draft && draft.qty != null && draft.qty > 0 ? String(Math.floor(draft.qty)) : "");
+    setConfirmOpen(false);
+    setPlaceError(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbol]);
+
+  // Chart hover / same-symbol reuse draft (skips drafts the reset consumed).
+  useEffect(() => {
+    if (!limitPrice || limitPrice.nonce === draftNonce.current) return;
+    draftNonce.current = limitPrice.nonce;
+    if (limitPrice.side) setSide(limitPrice.side);
+    if (limitPrice.price > 0) {
       setOrderType("LMT");
       setPrice(String(limitPrice.price));
+    }
+    if (limitPrice.qty != null && limitPrice.qty > 0) {
+      setQuantity(String(Math.floor(limitPrice.qty)));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [limitPrice?.nonce]);
@@ -113,34 +139,23 @@ export function OrderTicket({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [amo]);
 
-  useEffect(() => {
-    setQuantity("");
-    setPrice("");
-    setConfirmOpen(false);
-    setPlaceError(null);
-  }, [symbol]);
-
-  const holding = useMemo(
-    () => holdings.data?.find((h) => h.symbol === symbol) ?? null,
-    [holdings.data, symbol],
-  );
-  const openOrders = useMemo(
-    () =>
-      (book.data ?? []).filter(
-        (o) =>
-          o.symbol === symbol &&
-          /OPEN|PARTIALLY|ACCEPTED|QUEUED|PENDING/.test(o.status.toUpperCase()),
-      ),
-    [book.data, symbol],
-  );
-  const symbolAmoOrders = useMemo(
-    () => (amoList.data ?? []).filter((o) => o.scrip === symbol),
-    [amoList.data, symbol],
-  );
-  const otherAmoOrders = useMemo(
-    () => (amoList.data ?? []).filter((o) => o.scrip !== symbol),
-    [amoList.data, symbol],
-  );
+  const holding = useMemo(() => holdings.data?.find((h) => h.symbol === symbol) ?? null, [holdings.data, symbol]);
+  const symbolAmoOrders = useMemo(() => (amoList.data ?? []).filter((o) => o.scrip === symbol), [amoList.data, symbol]);
+  const otherAmoOrders = useMemo(() => (amoList.data ?? []).filter((o) => o.scrip !== symbol), [amoList.data, symbol]);
+  // Top-of-book size per side for the depth totals + mood gauge below.
+  const depthTotals = useMemo(() => {
+    const bidQty = (depth.data?.bids ?? []).reduce((s, r) => s + (r.quantity ?? 0), 0);
+    const askQty = (depth.data?.asks ?? []).reduce((s, r) => s + (r.quantity ?? 0), 0);
+    const total = bidQty + askQty;
+    return { bidQty, askQty, total, bidPct: total > 0 ? (bidQty / total) * 100 : 0 };
+  }, [depth.data]);
+  // Day + 52-week range ends for the bars below (0 when unusable).
+  const dayLow = quote.data?.low ?? 0;
+  const dayHigh = quote.data?.high ?? 0;
+  const wLow = quote.data?.weekLow52 ?? 0;
+  const wHigh = quote.data?.weekHigh52 ?? 0;
+  const spot = ltp ?? 0;
+  const dayUp = (quote.data?.changePercent ?? 0) >= 0;
 
   const qty = Math.floor(Number(quantity));
   const px = Number(price);
@@ -151,17 +166,15 @@ export function OrderTicket({
       ? (() => {
           const lower = ltp * 0.85;
           const upper = ltp * 1.15;
-          if (px < lower || px > upper) return `Price must be within ±15% of LTP (Rs ${lower.toFixed(2)} – ${upper.toFixed(2)})`;
+          if (px < lower || px > upper)
+            return `Price must be within ±15% of LTP (Rs ${lower.toFixed(2)} – ${upper.toFixed(2)})`;
           return null;
         })()
       : null;
   const amoOddLot = amo && side === "SELL" && validQty && qty < 10;
   const estimated =
-    validQty && (orderType === "MKT" ? ltp !== null : validPx)
-      ? qty * (orderType === "MKT" ? (ltp ?? 0) : px)
-      : null;
-  const shortfall =
-    side === "SELL" && validQty && holding ? Math.max(0, qty - holding.availableQty) : 0;
+    validQty && (orderType === "MKT" ? ltp !== null : validPx) ? qty * (orderType === "MKT" ? (ltp ?? 0) : px) : null;
+  const shortfall = side === "SELL" && validQty && holding ? Math.max(0, qty - holding.availableQty) : 0;
 
   const place = useMutation({
     mutationFn: async () => {
@@ -176,7 +189,14 @@ export function OrderTicket({
         if (res.error || !res.order) throw new Error(res.error ?? "Paper order failed.");
         saveYoWallet(null, res.wallet);
         // mimic PlaceOrderResult shape
-        return { ok: true as const, message: res.wallet.orders[0]?.status === "filled" ? `Filled ${side} ${qty} ${symbol}` : `Paper order placed: ${side} ${qty} ${symbol}`, tranId: res.order.id } as unknown as Awaited<ReturnType<typeof placeBrokerOrder>>;
+        return {
+          ok: true as const,
+          message:
+            res.wallet.orders[0]?.status === "filled"
+              ? `Filled ${side} ${qty} ${symbol}`
+              : `Paper order placed: ${side} ${qty} ${symbol}`,
+          tranId: res.order.id,
+        } as unknown as Awaited<ReturnType<typeof placeBrokerOrder>>;
       }
       if (amo) {
         const ref = ltp ?? quote.data?.close ?? px;
@@ -254,16 +274,23 @@ export function OrderTicket({
               <div className="text-right">
                 <p className="num text-base font-semibold">{formatNpr(quote.data.ltp ?? 0)}</p>
                 <DeltaPill value={quote.data.changePercent ?? 0}>
-                  {quote.data.changePercent !== null
-                    ? `${quote.data.changePercent.toFixed(2)}%`
-                    : "-"}
+                  {quote.data.changePercent !== null ? `${quote.data.changePercent.toFixed(2)}%` : "-"}
                 </DeltaPill>
+                {!wsReady ? (
+                  <p
+                    className="mt-1 text-[0.68rem] font-medium text-warning"
+                    title={
+                      wsStatus === "error"
+                        ? "The live broker feed failed — this is the last fetched quote, refreshing periodically."
+                        : "The live broker feed is reconnecting — this is the last fetched quote, refreshing periodically."
+                    }
+                  >
+                    {wsStatus === "error" ? "Feed unavailable · last quote" : "Feed connected · last quote"}
+                  </p>
+                ) : null}
               </div>
             ) : (
-              <p
-                className="text-xs text-muted-foreground"
-                title={quote.error ? errorMessage(quote.error, "") : ""}
-              >
+              <p className="text-xs text-muted-foreground" title={quote.error ? errorMessage(quote.error, "") : ""}>
                 {quote.isPending
                   ? "Live quote…"
                   : quote.isError
@@ -289,11 +316,7 @@ export function OrderTicket({
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
-              {s === "BUY" ? (
-                <ArrowUpRight className="size-4" />
-              ) : (
-                <ArrowDownRight className="size-4" />
-              )}
+              {s === "BUY" ? <ArrowUpRight className="size-4" /> : <ArrowDownRight className="size-4" />}
               {s}
             </button>
           ))}
@@ -329,9 +352,7 @@ export function OrderTicket({
                 ? "Executes at the best available price."
                 : `LTP ${num(ltp)} · Close ${num(quote.data?.close)}`}
             </p>
-            {priceBandError ? (
-              <p className="mt-1 text-xs font-medium text-destructive">{priceBandError}</p>
-            ) : null}
+            {priceBandError ? <p className="mt-1 text-xs font-medium text-destructive">{priceBandError}</p> : null}
           </div>
         </div>
 
@@ -395,14 +416,12 @@ export function OrderTicket({
 
         <div className="mt-3 flex items-center justify-between rounded-xl bg-muted/40 px-3 py-2 text-sm">
           <span className="text-muted-foreground">Estimated value</span>
-          <span className="num font-semibold">
-            {estimated !== null ? formatNpr(estimated) : "-"}
-          </span>
+          <span className="num font-semibold">{estimated !== null ? formatNpr(estimated) : "-"}</span>
         </div>
         {shortfall > 0 ? (
           <p className="mt-2 text-xs font-medium text-destructive">
-            You hold {holding?.availableQty ?? 0} but are selling {qty}. Short by {shortfall}.
-            Intraday short-selling is blocked by the broker.
+            You hold {holding?.availableQty ?? 0} but are selling {qty}. Short by {shortfall}. Intraday short-selling is
+            blocked by the broker.
           </p>
         ) : null}
         {amoOddLot ? (
@@ -422,9 +441,9 @@ export function OrderTicket({
 
         {isOpenEnd ? (
           <p className="mt-3 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2.5 text-xs leading-relaxed">
-            <span className="font-semibold">Not tradable.</span> {symbol} is an open-end mutual
-            fund — it has no market price and can&apos;t be bought or sold through a broker.
-            Transact directly with the fund manager at NAV instead.
+            <span className="font-semibold">Not tradable.</span> {symbol} is an open-end mutual fund — it has no market
+            price and can&apos;t be bought or sold through a broker. Transact directly with the fund manager at NAV
+            instead.
           </p>
         ) : null}
         <Button
@@ -434,38 +453,13 @@ export function OrderTicket({
               ? "bg-gain hover:bg-gain/90 text-white"
               : "bg-destructive hover:bg-destructive/90 text-white",
           )}
-          disabled={!validQty || !validPx || !!priceBandError || shortfall > 0 || amoOddLot || isOpenEnd || place.isPending}
+          disabled={
+            !validQty || !validPx || !!priceBandError || shortfall > 0 || amoOddLot || isOpenEnd || place.isPending
+          }
           onClick={() => setConfirmOpen(true)}
         >
-          {place.isPending
-            ? "Sending…"
-            : amo
-              ? `Review ${side} order (AMO)`
-              : `Review ${side} order`}
+          {place.isPending ? "Sending…" : amo ? `Review ${side} order (AMO)` : `Review ${side} order`}
         </Button>
-        {openOrders.length > 0 ? (
-          <div className="mt-3 rounded-xl border border-border/60 p-2.5">
-            <p className="px-1 pb-1.5 text-xs font-semibold text-muted-foreground">
-              Your open orders · {symbol}
-            </p>
-            {openOrders.map((o) => (
-              <div
-                key={o.id || `${o.side}-${o.price}-${o.quantity}`}
-                className="flex items-center justify-between px-1 py-1 text-xs"
-              >
-                <span
-                  className={cn("font-bold", o.side === "BUY" ? "text-gain" : "text-destructive")}
-                >
-                  {o.side} {o.quantity.toLocaleString("en-NP")}
-                </span>
-                <span className="num text-muted-foreground">
-                  @ {o.price !== null ? o.price.toLocaleString("en-NP") : "MKT"} · {o.status}
-                </span>
-              </div>
-            ))}
-          </div>
-        ) : null}
-
         <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
@@ -475,7 +469,8 @@ export function OrderTicket({
               <DialogDescription>
                 {brokerId === "yobroker" ? (
                   <>
-                    This is a <strong>paper order</strong> via Yo Broker. No real money moves — fills against live NEPSE prices.
+                    This is a <strong>paper order</strong> via Yo Broker. No real money moves — fills against live NEPSE
+                    prices.
                   </>
                 ) : (
                   <>
@@ -487,12 +482,10 @@ export function OrderTicket({
             <div className="grid grid-cols-2 gap-2 rounded-xl bg-muted/40 p-3 text-sm">
               <span className="text-muted-foreground">Side</span>
               <span className="text-right font-bold">{side}</span>
-              <span className="text-muted-foreground">Scrip</span>
+              <span className="text-muted-foreground">Stock</span>
               <span className="num text-right font-semibold">{symbol}</span>
               <span className="text-muted-foreground">Quantity</span>
-              <span className="num text-right font-semibold">
-                {validQty ? qty.toLocaleString("en-NP") : "-"}
-              </span>
+              <span className="num text-right font-semibold">{validQty ? qty.toLocaleString("en-NP") : "-"}</span>
               <span className="text-muted-foreground">Price</span>
               <span className="num text-right font-semibold">
                 {orderType === "MKT" ? "MARKET" : validPx ? num(px) : "-"}
@@ -503,9 +496,7 @@ export function OrderTicket({
                 {validity !== "DAY" ? ` · ${validity}` : ""}
               </span>
               <span className="text-muted-foreground">Est. value</span>
-              <span className="num text-right font-bold">
-                {estimated !== null ? formatNpr(estimated) : "-"}
-              </span>
+              <span className="num text-right font-bold">{estimated !== null ? formatNpr(estimated) : "-"}</span>
             </div>
             <Button
               className={cn(
@@ -547,9 +538,7 @@ export function OrderTicket({
             disabled={quote.isFetching || depth.isFetching}
             aria-label="Refresh quote and depth"
           >
-            <RefreshCw
-              className={`size-3.5 ${quote.isFetching || depth.isFetching ? "animate-spin" : ""}`}
-            />
+            <RefreshCw className={`size-3.5 ${quote.isFetching || depth.isFetching ? "animate-spin" : ""}`} />
           </Button>
         </div>
         <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
@@ -561,12 +550,16 @@ export function OrderTicket({
               depth.data!.bids.map((r, i) => (
                 <div key={i} className="flex justify-between py-0.5 num">
                   <span>{r.quantity !== null ? r.quantity.toLocaleString("en-NP") : "-"}</span>
-                  <span className="font-semibold text-gain">
-                    {r.price !== null ? num(r.price) : "-"}
-                  </span>
+                  <span className="font-semibold text-gain">{r.price !== null ? num(r.price) : "-"}</span>
                 </div>
               ))
             )}
+            {(depth.data?.bids ?? []).length > 0 ? (
+              <div className="num mt-1 flex justify-between border-t border-border/60 pt-1 text-xs font-semibold">
+                <span className="text-muted-foreground">Total</span>
+                <span className="text-gain">{depthTotals.bidQty.toLocaleString("en-NP")}</span>
+              </div>
+            ) : null}
           </div>
           <div>
             <p className="mb-1 font-semibold text-destructive">Asks</p>
@@ -575,28 +568,85 @@ export function OrderTicket({
             ) : (
               depth.data!.asks.map((r, i) => (
                 <div key={i} className="flex justify-between py-0.5 num">
-                  <span className="font-semibold text-destructive">
-                    {r.price !== null ? num(r.price) : "-"}
-                  </span>
+                  <span className="font-semibold text-destructive">{r.price !== null ? num(r.price) : "-"}</span>
                   <span>{r.quantity !== null ? r.quantity.toLocaleString("en-NP") : "-"}</span>
                 </div>
               ))
             )}
+            {(depth.data?.asks ?? []).length > 0 ? (
+              <div className="num mt-1 flex justify-between border-t border-border/60 pt-1 text-xs font-semibold">
+                <span className="text-muted-foreground">Total</span>
+                <span className="text-destructive">{depthTotals.askQty.toLocaleString("en-NP")}</span>
+              </div>
+            ) : null}
           </div>
         </div>
-        <div className="mt-3 space-y-1 border-t border-border/60 pt-2 text-xs text-muted-foreground">
-          <div className="flex justify-between">
-            <span>High / Low</span>
-            <span className="num">
-              {num(quote.data?.high)} / {num(quote.data?.low)}
-            </span>
+        {depthTotals.total > 0 ? (
+          <div className="mt-3 rounded-xl border border-border/60 bg-muted/10 px-3 py-2.5">
+            <div className="flex items-center justify-between gap-2 text-xs">
+              <span className="font-semibold text-foreground">{depthMood(depthTotals.bidPct)}</span>
+              <span className="num text-muted-foreground">
+                {depthTotals.bidPct.toFixed(0)}% bid · {(100 - depthTotals.bidPct).toFixed(0)}% ask
+              </span>
+            </div>
+            <div
+              className="mt-2 flex h-2 overflow-hidden rounded-full bg-muted"
+              role="img"
+              aria-label={`${depthMood(depthTotals.bidPct)}: ${depthTotals.bidPct.toFixed(0)} percent of top-of-book size on bids`}
+            >
+              <div className="h-full bg-gain" style={{ width: `${depthTotals.bidPct}%` }} />
+              <div className="h-full flex-1 bg-loss/70" />
+            </div>
+            <p className="mt-1.5 text-[0.68rem] text-muted-foreground">
+              Share of the top 5 levels waiting to buy vs waiting to sell.
+            </p>
           </div>
-          <div className="flex justify-between">
-            <span>52w H / L</span>
-            <span className="num">
-              {num(quote.data?.weekHigh52)} / {num(quote.data?.weekLow52)}
-            </span>
-          </div>
+        ) : null}
+        <div className="mt-3 space-y-3 border-t border-border/60 pt-3 text-xs text-muted-foreground">
+          {dayLow > 0 && dayHigh > dayLow && spot > 0 ? (
+            <div>
+              <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-muted-foreground">Day range</p>
+              <RangeBar
+                low={dayLow}
+                high={dayHigh}
+                value={Math.min(Math.max(spot, dayLow), dayHigh)}
+                format={(v) => num(v)}
+                tone={dayUp ? "gain" : "loss"}
+                colorByPosition
+                valueToneByPosition
+              />
+            </div>
+          ) : (
+            <div className="flex justify-between">
+              <span>High / Low</span>
+              <span className="num">
+                {num(quote.data?.high)} / {num(quote.data?.low)}
+              </span>
+            </div>
+          )}
+          {wLow > 0 && wHigh > wLow && spot > 0 ? (
+            <div>
+              <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-muted-foreground">
+                52-week range
+              </p>
+              <RangeBar
+                low={wLow}
+                high={wHigh}
+                value={Math.min(Math.max(spot, wLow), wHigh)}
+                format={(v) => num(v)}
+                tone={dayUp ? "gain" : "loss"}
+                colorByPosition
+                valueToneByPosition
+              />
+            </div>
+          ) : (
+            <div className="flex justify-between">
+              <span>52w H / L</span>
+              <span className="num">
+                {num(quote.data?.weekHigh52)} / {num(quote.data?.weekLow52)}
+              </span>
+            </div>
+          )}
           <div className="flex justify-between">
             <span>Volume</span>
             <span className="num">

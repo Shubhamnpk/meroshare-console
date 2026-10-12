@@ -20,21 +20,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
@@ -102,9 +89,7 @@ function Highlighted({ text, query }: { text: string; query: string }) {
   return (
     <span className="truncate">
       {text.slice(0, idx)}
-      <span className="rounded-sm bg-primary/15 text-primary">
-        {text.slice(idx, idx + trimmed.length)}
-      </span>
+      <span className="rounded-sm bg-primary/15 text-primary">{text.slice(idx, idx + trimmed.length)}</span>
       {text.slice(idx + trimmed.length)}
     </span>
   );
@@ -172,14 +157,10 @@ function LoginPage() {
     staleTime: 60 * 60_000,
   });
 
-  const selected = useMemo(
-    () => capitals.data?.find((c) => c.id === capitalId) ?? null,
-    [capitals.data, capitalId],
-  );
+  const selected = useMemo(() => capitals.data?.find((c) => c.id === capitalId) ?? null, [capitals.data, capitalId]);
 
   const mutation = useMutation({
-    mutationFn: (vars: { capitalId: number; username: string; password: string }) =>
-      login({ data: vars }),
+    mutationFn: (vars: { capitalId: number; username: string; password: string }) => login({ data: vars }),
     onSuccess: async (_data, vars) => {
       if (rememberMe) saveRemembered(vars.username, vars.capitalId);
       else clearRemembered();
@@ -192,9 +173,7 @@ function LoginPage() {
           });
           toast.success("Fingerprint sign-in saved for this device.");
         } catch (err) {
-          toast.error(
-            err instanceof Error ? err.message : "Fingerprint sign-in could not be saved.",
-          );
+          toast.error(err instanceof Error ? err.message : "Fingerprint sign-in could not be saved.");
         }
       }
       navigate({ to: "/dashboard", replace: true });
@@ -314,8 +293,17 @@ function LoginPage() {
       disabled={capitals.isLoading}
       onClick={() => setCapitalOpen(true)}
     >
-      <span className={cn("truncate", !selected && "text-muted-foreground")}>
-        {capitals.isLoading ? "Loading DP list…" : selected ? selected.name : "Select your DP"}
+      <span className={cn("flex min-w-0 items-center gap-1.5", !selected && "text-muted-foreground")}>
+        {capitals.isLoading ? (
+          <span className="truncate">Loading DP list…</span>
+        ) : selected ? (
+          <>
+            <span className="num shrink-0 text-xs text-muted-foreground">{selected.code}</span>
+            <span className="truncate">{selected.name}</span>
+          </>
+        ) : (
+          <span className="truncate">Select your DP</span>
+        )}
       </span>
       <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
     </Button>
@@ -380,25 +368,14 @@ function LoginPage() {
   return (
     <div className="grid min-h-screen lg:grid-cols-[1.05fr_1fr]">
       <section className="relative hidden flex-col justify-between overflow-hidden p-10 lg:flex">
-        <div
-          className="absolute inset-0 opacity-90"
-          style={{ background: "var(--gradient-brand)" }}
-          aria-hidden
-        />
+        <div className="absolute inset-0 opacity-90" style={{ background: "var(--gradient-brand)" }} aria-hidden />
         <div className="absolute inset-0 bg-background/72" aria-hidden />
         <div className="relative">
           <div className="flex items-center gap-3">
-            <img
-              src="/logo-512.png"
-              alt="MeroShare Console logo"
-              className="size-11 rounded-2xl"
-              aria-hidden
-            />
+            <img src="/logo-512.png" alt="MeroShare Console logo" className="size-11 rounded-2xl" aria-hidden />
             <div>
               <p className="font-display text-lg font-semibold">MeroShare Console</p>
-              <p className="text-xs text-muted-foreground">
-                CDSC &amp; Clearing Ltd. account access
-              </p>
+              <p className="text-xs text-muted-foreground">CDSC &amp; Clearing Ltd. account access</p>
             </div>
           </div>
         </div>
@@ -439,12 +416,7 @@ function LoginPage() {
       <section className="flex flex-col justify-center px-5 py-10 sm:px-10">
         <div className="mb-6 flex items-center justify-between lg:hidden">
           <div className="flex items-center gap-2.5">
-            <img
-              src="/logo-512.png"
-              alt="MeroShare Console logo"
-              className="size-9 rounded-xl"
-              aria-hidden
-            />
+            <img src="/logo-512.png" alt="MeroShare Console logo" className="size-9 rounded-xl" aria-hidden />
             <p className="font-display text-base font-semibold">MeroShare Console</p>
           </div>
           <ThemeToggle />
@@ -464,9 +436,7 @@ function LoginPage() {
               <p className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-muted-foreground">
                 <Clock className="mt-0.5 size-3.5 shrink-0 text-amber-500" />
                 Your MeroShare session expired.
-                {bioEnrolled
-                  ? ' Trying your fingerprint to sign you straight back in.'
-                  : " Sign back in to continue."}
+                {bioEnrolled ? " Trying your fingerprint to sign you straight back in." : " Sign back in to continue."}
               </p>
             ) : null}
             {bioEnrolled ? (
@@ -617,8 +587,8 @@ function LoginPage() {
 
             <p className="flex items-start gap-2 text-xs text-muted-foreground">
               <Lock className="mt-0.5 size-3.5 shrink-0" />
-              Your credentials are sent straight to CDSC over our server and are never saved to any
-              database. The session ends when you sign out or after 2 hours.
+              Your credentials are sent straight to CDSC over our server and are never saved to any database. The
+              session ends when you sign out or after 2 hours.
             </p>
           </form>
         </div>

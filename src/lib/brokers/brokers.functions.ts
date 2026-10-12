@@ -104,11 +104,7 @@ const brokerInput = z.object({
   password: z.string().min(1).max(128),
 });
 
-async function runTest(
-  brokerId: BrokerId,
-  username: string,
-  password: string,
-): Promise<BrokerTestResult> {
+async function runTest(brokerId: BrokerId, username: string, password: string): Promise<BrokerTestResult> {
   brokerMeta(brokerId); // throws on unknown broker
   if (brokerId === "naasa-x") return testNaasaLogin(username, password);
   throw new Error(`No login worker for broker: ${brokerId}`);
@@ -169,9 +165,7 @@ export const retestBrokerConnection = createServerFn({ method: "POST" })
 // ---------------------------------------------------------------------------
 
 export const getTmsCaptcha = createServerFn({ method: "POST" })
-  .validator((input: unknown) =>
-    z.object({ host: z.string().trim().max(128).optional() }).parse(input),
-  )
+  .validator((input: unknown) => z.object({ host: z.string().trim().max(128).optional() }).parse(input))
   .handler(async ({ data }): Promise<TmsCaptcha> => getTmsCaptchaWorker(data.host));
 
 const tmsTestInput = z.object({
@@ -233,10 +227,8 @@ function toTmsHoldings(rows: Record<string, unknown>[]): import("./types").Broke
         : typeof r["quantity"] === "number"
           ? r["quantity"]
           : Number(String(r["quantity"] ?? r["qty"] ?? 0).replace(/,/g, "")) || 0,
-    closePrice:
-      r["closePrice"] != null ? Number(String(r["closePrice"]).replace(/,/g, "")) || null : null,
-    marketValue:
-      r["marketValue"] != null ? Number(String(r["marketValue"]).replace(/,/g, "")) || null : null,
+    closePrice: r["closePrice"] != null ? Number(String(r["closePrice"]).replace(/,/g, "")) || null : null,
+    marketValue: r["marketValue"] != null ? Number(String(r["marketValue"]).replace(/,/g, "")) || null : null,
   }));
 }
 
@@ -384,8 +376,18 @@ const numOrNull = (v: unknown): number | null => {
 const strOrNull = (v: unknown): string | null => (typeof v === "string" && v.length > 0 ? v : null);
 
 const MON_IDX: Record<string, string> = {
-  JAN: "01", FEB: "02", MAR: "03", APR: "04", MAY: "05", JUN: "06",
-  JUL: "07", AUG: "08", SEP: "09", OCT: "10", NOV: "11", DEC: "12",
+  JAN: "01",
+  FEB: "02",
+  MAR: "03",
+  APR: "04",
+  MAY: "05",
+  JUN: "06",
+  JUL: "07",
+  AUG: "08",
+  SEP: "09",
+  OCT: "10",
+  NOV: "11",
+  DEC: "12",
 };
 
 /** Split one datetime-ish value into {date, time}; "" when unrecognized. */
@@ -398,10 +400,16 @@ function splitDateTimeValue(v: unknown): { date: string; time: string } {
     try {
       const d = new Date(ms as number);
       const date = new Intl.DateTimeFormat("en-CA", {
-        timeZone: "Asia/Kathmandu", year: "numeric", month: "2-digit", day: "2-digit",
+        timeZone: "Asia/Kathmandu",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
       }).format(d);
       const time = new Intl.DateTimeFormat("en-GB", {
-        timeZone: "Asia/Kathmandu", hour: "2-digit", minute: "2-digit", hour12: false,
+        timeZone: "Asia/Kathmandu",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
       }).format(d);
       return { date, time };
     } catch {
@@ -456,12 +464,28 @@ function splitDateTimeValue(v: unknown): { date: string; time: string } {
  */
 function extractDateTime(row: Record<string, unknown>): { date: string; time: string } {
   const knownDate = [
-    "Date", "OrderDate", "TradeDate", "BusinessDate", "EntryDate", "CreatedDate",
-    "TransactionDate", "LastModifiedDate", "ExpiryDate", "ValidTill",
+    "Date",
+    "OrderDate",
+    "TradeDate",
+    "BusinessDate",
+    "EntryDate",
+    "CreatedDate",
+    "TransactionDate",
+    "LastModifiedDate",
+    "ExpiryDate",
+    "ValidTill",
   ];
   const knownDateTime = [
-    "DateTime", "OrderDateTime", "TradeDateTime", "EntryDateTime", "CreatedDateTime",
-    "BusinessDateTime", "TransactionDateTime", "LastModifiedDateTime", "LastTradeTime", "LogTime",
+    "DateTime",
+    "OrderDateTime",
+    "TradeDateTime",
+    "EntryDateTime",
+    "CreatedDateTime",
+    "BusinessDateTime",
+    "TransactionDateTime",
+    "LastModifiedDateTime",
+    "LastTradeTime",
+    "LogTime",
   ];
   const knownTime = ["Time", "OrderTime", "TradeTime", "EntryTime", "TransactionTime"];
   let date = "";
@@ -494,13 +518,10 @@ function extractDateTime(row: Record<string, unknown>): { date: string; time: st
   return { date, time };
 }
 
-async function withSavedSession(
-  brokerId: BrokerId,
-): Promise<{ session: NaasaSession; cacheKey: string }> {
+async function withSavedSession(brokerId: BrokerId): Promise<{ session: NaasaSession; cacheKey: string }> {
   if (brokerId !== "naasa-x") throw new Error(`No trading worker for broker: ${brokerId}`);
   const creds = await loadCredentials(brokerId);
-  if (!creds)
-    throw new Error("No saved connection for this broker. Connect it in Settings → Advanced.");
+  if (!creds) throw new Error("No saved connection for this broker. Connect it in Settings → Advanced.");
   const cacheKey = `${brokerId}:${creds.username.toLowerCase()}`;
   try {
     return { session: await getNaasaSession(cacheKey, creds.username, creds.password), cacheKey };
@@ -511,10 +532,7 @@ async function withSavedSession(
 }
 
 /** Run an op with the cached session; once stale, re-login and retry once. */
-async function withBrokerSession<T>(
-  brokerId: BrokerId,
-  op: (s: NaasaSession) => Promise<T>,
-): Promise<T> {
+async function withBrokerSession<T>(brokerId: BrokerId, op: (s: NaasaSession) => Promise<T>): Promise<T> {
   const first = await withSavedSession(brokerId);
   try {
     return await op(first.session);
@@ -588,9 +606,7 @@ function toDepthRows(rows: Record<string, unknown>[], side: "bid" | "ask"): Brok
           ? ["bbq", "bidqty", "bid_qty", "buyqty", "qty", "quantity", "volume"]
           : ["bsq", "offerqty", "offer_qty", "sellqty", "qty", "quantity", "volume"];
       const orderKeys =
-        side === "bid"
-          ? ["bo", "buyorders", "bidorders", "orders"]
-          : ["so", "sellorders", "askorders", "orders"];
+        side === "bid" ? ["bo", "buyorders", "bidorders", "orders"] : ["so", "sellorders", "askorders", "orders"];
       return {
         side,
         price: get(priceKeys),
@@ -617,8 +633,7 @@ export const getBrokerDepth = createServerFn({ method: "GET" })
           try {
             const parsed = t ? (JSON.parse(t) as unknown) : [];
             if (Array.isArray(parsed)) rawRows = parsed as Record<string, unknown>[];
-            else if (parsed && typeof parsed === "object")
-              rawRows = [parsed as Record<string, unknown>];
+            else if (parsed && typeof parsed === "object") rawRows = [parsed as Record<string, unknown>];
             else rawRows = [];
           } catch {
             // pipe format: BBR^BBQ^BO^BSR^BSQ^SO | ...
@@ -712,25 +727,15 @@ export const getBrokerOrderBook = createServerFn({ method: "GET" })
         ...(data.toDate ? { toDate: data.toDate } : {}),
       });
       return rows.map((r) => {
-        const sideRaw = String(
-          r["BuySellType"] ?? r["B/S"] ?? r["BuySellIndicator"] ?? "",
-        ).toUpperCase();
+        const sideRaw = String(r["BuySellType"] ?? r["B/S"] ?? r["BuySellIndicator"] ?? "").toUpperCase();
         const id = String(
-          r["LatestOrderID"] ??
-            r["OrderId"] ??
-            r["OrderNo"] ??
-            r["BrokerTranID"] ??
-            r["TranId"] ??
-            "",
+          r["LatestOrderID"] ?? r["OrderId"] ?? r["OrderNo"] ?? r["BrokerTranID"] ?? r["TranId"] ?? "",
         ).trim();
         const qty = numOrNull(r["Quantity"]) ?? 0;
-        const traded =
-          numOrNull(r["TradedQuantity"] ?? r["TradedQty"] ?? r["TradedQtyTotal"]) ?? 0;
+        const traded = numOrNull(r["TradedQuantity"] ?? r["TradedQty"] ?? r["TradedQtyTotal"]) ?? 0;
         const remaining =
           numOrNull(r["RemainingQty"] ?? r["RemainingQuantity"]) ??
-          (numOrNull(r["Quantity"]) !== null && traded !== null
-            ? Math.max(0, qty - traded)
-            : qty);
+          (numOrNull(r["Quantity"]) !== null && traded !== null ? Math.max(0, qty - traded) : qty);
         // Broker reports open orders as ACCEPTED; normalize so the UI can
         // treat ACCEPTED as OPEN (or PARTIALLY COMPLETE when partly filled).
         // See docs/tms-bundles/xnasa-api-reference.md §14.3.
@@ -1033,9 +1038,7 @@ export const cancelBrokerOrder = createServerFn({ method: "POST" })
 export const getBrokerFunds = createServerFn({ method: "GET" })
   .validator((input: unknown) => z.object({ brokerId: z.enum(["naasa-x"]) }).parse(input))
   .handler(async ({ data }): Promise<BrokerFunds> => {
-    const { collateral, utilization } = await withTradeflow(data.brokerId, (bearer) =>
-      getTradeflowFunds(bearer),
-    );
+    const { collateral, utilization } = await withTradeflow(data.brokerId, (bearer) => getTradeflowFunds(bearer));
     return toBrokerFunds(collateral, utilization);
   });
 
@@ -1044,10 +1047,7 @@ export const getBrokerFunds = createServerFn({ method: "GET" })
  * 401s the X-session Keycloak bearer — audience mismatch — but honours its
  * own app family's tokens), then the X-token exchange/fallback chain.
  */
-async function withTradeflow<T>(
-  brokerId: BrokerId,
-  op: (bearer: string) => Promise<T>,
-): Promise<T> {
+async function withTradeflow<T>(brokerId: BrokerId, op: (bearer: string) => Promise<T>): Promise<T> {
   const creds = await loadCredentials(brokerId);
   if (creds) {
     const key = `wallet:${creds.username.toLowerCase()}`;
@@ -1090,9 +1090,7 @@ const fundTxnInput = z.object({
 });
 
 export const getBrokerFundTransactions = createServerFn({ method: "GET" })
-  .validator(
-    (input: unknown): FundTransactionQuery => fundTxnInput.parse(input) as FundTransactionQuery,
-  )
+  .validator((input: unknown): FundTransactionQuery => fundTxnInput.parse(input) as FundTransactionQuery)
   .handler(async ({ data }): Promise<FundTransactionPage> => {
     const page = await withTradeflow(data.brokerId, (bearer) =>
       getTradeflowTxns(bearer, {
@@ -1125,10 +1123,8 @@ function pick(row: Record<string, unknown>, keys: string[]): string {
 
 /** Row normalisation (exact wallet keys first, then fallbacks). */
 function toFundTransaction(row: Record<string, unknown>): FundTransaction {
-  const amountRaw =
-    row["amount"] ?? row["Amount"] ?? row["TransactionAmount"] ?? row["NetAmount"] ?? null;
-  const amount =
-    typeof amountRaw === "number" ? amountRaw : Number(String(amountRaw ?? "").replace(/,/g, ""));
+  const amountRaw = row["amount"] ?? row["Amount"] ?? row["TransactionAmount"] ?? row["NetAmount"] ?? null;
+  const amount = typeof amountRaw === "number" ? amountRaw : Number(String(amountRaw ?? "").replace(/,/g, ""));
   const dt = row["dateTime"] ?? row["Date"] ?? row["TransactionDate"] ?? row["CreatedDate"] ?? null;
   return {
     id: pick(row, ["id", "Id", "TransactionId", "Reference", "ReferenceNo"]),
@@ -1137,16 +1133,7 @@ function toFundTransaction(row: Record<string, unknown>): FundTransaction {
     gateway: pick(row, ["source", "Source", "Gateway", "PaymentMode", "Instrument", "Channel"]),
     status: pick(row, ["status", "Status", "TransactionStatus", "State"]),
     amount: Number.isFinite(amount) ? amount : null,
-    reference: pick(row, [
-      "remark",
-      "id",
-      "Id",
-      "Reference",
-      "ReferenceNo",
-      "Remarks",
-      "Narration",
-      "TransactionId",
-    ]),
+    reference: pick(row, ["remark", "id", "Id", "Reference", "ReferenceNo", "Remarks", "Narration", "TransactionId"]),
   };
 }
 
@@ -1156,10 +1143,7 @@ function formatTxnDate(iso: string): string {
   return d.toLocaleString();
 }
 
-function toBrokerFunds(
-  collateral: Record<string, unknown>,
-  utilization: Record<string, unknown>,
-): BrokerFunds {
+function toBrokerFunds(collateral: Record<string, unknown>, utilization: Record<string, unknown>): BrokerFunds {
   const cn = (v: unknown) => numOrNull(v);
   return {
     balance: cn(collateral["balance"]),
@@ -1228,11 +1212,7 @@ export const getBrokerStatement = createServerFn({ method: "GET" })
     const from = new Date();
     from.setDate(from.getDate() - 29);
     return withTradeflow(data.brokerId, (bearer) =>
-      getTradeflowStatement(
-        bearer,
-        data.fromDate ?? from.toISOString().slice(0, 10),
-        data.toDate ?? today,
-      ),
+      getTradeflowStatement(bearer, data.fromDate ?? from.toISOString().slice(0, 10), data.toDate ?? today),
     );
   });
 
@@ -1261,9 +1241,7 @@ export const saveBrokerWatchlist = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data }) => {
-    return withBrokerSession(data.brokerId, async (s) =>
-      saveNaasaWatchlist(s, data.template, data.symbols),
-    );
+    return withBrokerSession(data.brokerId, async (s) => saveNaasaWatchlist(s, data.template, data.symbols));
   });
 
 export const deleteBrokerWatchlist = createServerFn({ method: "POST" })
@@ -1276,9 +1254,7 @@ export const deleteBrokerWatchlist = createServerFn({ method: "POST" })
 
 export const getBrokerOrderHistory = createServerFn({ method: "GET" })
   .validator((input: unknown) =>
-    z
-      .object({ brokerId: z.enum(["naasa-x"]), orderId: z.string().trim().min(1).max(64) })
-      .parse(input),
+    z.object({ brokerId: z.enum(["naasa-x"]), orderId: z.string().trim().min(1).max(64) }).parse(input),
   )
   .handler(async ({ data }): Promise<BrokerOrderEvent[]> => {
     return withBrokerSession(data.brokerId, async (session) => {
@@ -1301,9 +1277,7 @@ export const getBrokerOrderHistory = createServerFn({ method: "GET" })
 
 export const getBrokerCompanyInfo = createServerFn({ method: "GET" })
   .validator((input: unknown) =>
-    z
-      .object({ brokerId: z.enum(["naasa-x"]), symbol: z.string().trim().min(3).max(24) })
-      .parse(input),
+    z.object({ brokerId: z.enum(["naasa-x"]), symbol: z.string().trim().min(3).max(24) }).parse(input),
   )
   .handler(async ({ data }): Promise<BrokerCompanyInfo | null> => {
     return withBrokerSession(data.brokerId, async (session) => {
@@ -1383,9 +1357,7 @@ const triggerInput = z.object({
 
 /** Places a REAL trigger/stop order via the direct path. Refuses without confirmed: true. */
 export const placeBrokerTrigger = createServerFn({ method: "POST" })
-  .validator(
-    (input: unknown): PlaceTriggerRequest => triggerInput.parse(input) as PlaceTriggerRequest,
-  )
+  .validator((input: unknown): PlaceTriggerRequest => triggerInput.parse(input) as PlaceTriggerRequest)
   .handler(async ({ data }): Promise<PlaceOrderResult> => {
     return withBrokerSession(data.brokerId, async (session) => {
       return placeBlazeTrigger(session, {

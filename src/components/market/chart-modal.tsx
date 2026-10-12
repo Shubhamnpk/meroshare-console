@@ -1,22 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AreaChart } from "@/components/market/area-chart";
-import {
-  DEFAULT_INDICATORS,
-  TerminalChart,
-  type HoverInfo,
-  type IndicatorConfig,
-} from "@/components/market/terminal-chart";
+import { TerminalChart, type HoverInfo, type IndicatorConfig } from "@/components/market/terminal-chart";
 import { DeltaPill } from "@/components/stat-card";
 import { formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useSettings } from "@/lib/settings";
+import { CHART_RANGES, type ChartRangeKey } from "@/lib/charts/ranges";
 import type { ChartBar, DailyBar, PricePoint } from "@/lib/nepse/types";
 
 const TZ = "Asia/Kathmandu";
@@ -24,11 +14,12 @@ const TZ = "Asia/Kathmandu";
 /** Stable empty intraday (a fresh `[]` literal would rebuild TerminalChart each render). */
 const NO_POINTS: PricePoint[] = [];
 
-/** "14:32" in NPT, for intraday series. */
+/** "2:32 PM" in NPT, for intraday series. */
 export function chartTimeLabel(time: number): string {
-  return new Date(time * 1000).toLocaleTimeString("en-GB", {
-    hour: "2-digit",
+  return new Date(time * 1000).toLocaleTimeString("en-US", {
+    hour: "numeric",
     minute: "2-digit",
+    hour12: true,
     timeZone: TZ,
   });
 }
@@ -43,17 +34,33 @@ export function chartDayLabel(time: number): string {
   });
 }
 
-export const SCRIP_RANGES = [
-  { key: "1D", label: "1D", days: null as number | null },
-  { key: "1W", label: "1W", days: 5 },
-  { key: "1M", label: "1M", days: 22 },
-  { key: "3M", label: "3M", days: 66 },
-  { key: "6M", label: "6M", days: 132 },
-  { key: "1Y", label: "1Y", days: 264 },
-  { key: "All", label: "All", days: Number.POSITIVE_INFINITY },
-] as const;
+/** True when the unix time falls on today's NPT calendar day (session check). */
+export function isTodayNpt(time: number): boolean {
+  const fmt = (t: number) =>
+    new Date(t * 1000).toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      timeZone: TZ,
+    });
+  return fmt(time) === fmt(Date.now() / 1000);
+}
 
-/** Slice intraday + daily bars into the 1D/1M/3M/6M/1Y/All buckets. */
+/** Trading days per range key (≈264 sessions/year); MAX keeps the whole array. */
+const SCRIP_RANGE_DAYS: Record<ChartRangeKey, number | null> = {
+  "1D": null,
+  "1W": 5,
+  "1M": 22,
+  "3M": 66,
+  "6M": 132,
+  "1Y": 264,
+  "5Y": 1320,
+  MAX: Number.POSITIVE_INFINITY,
+};
+
+export const SCRIP_RANGES = CHART_RANGES.map((key) => ({ key, label: key, days: SCRIP_RANGE_DAYS[key] }));
+
+/** Slice intraday + daily bars into the 1D/1W/1M/3M/6M/1Y/5Y/MAX buckets. */
 export function buildScripRanges(
   intraday: PricePoint[],
   daily: PricePoint[],
@@ -99,10 +106,7 @@ function useResolvedLight(): boolean {
   const [light, setLight] = useState(false);
   useEffect(() => {
     const resolve = () =>
-      setLight(
-        theme === "light" ||
-          (theme === "system" && window.matchMedia("(prefers-color-scheme: light)").matches),
-      );
+      setLight(theme === "light" || (theme === "system" && window.matchMedia("(prefers-color-scheme: light)").matches));
     resolve();
     const mq = window.matchMedia("(prefers-color-scheme: light)");
     mq.addEventListener("change", resolve);
@@ -124,15 +128,11 @@ function HoverLegend({ info, origin }: { info: HoverInfo | null; origin: number 
   ];
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-      <span className={cn("num font-semibold", up ? "text-gain" : "text-loss")}>
-        {info.date.slice(0, 10)}
-      </span>
+      <span className={cn("num font-semibold", up ? "text-gain" : "text-loss")}>{info.date.slice(0, 10)}</span>
       {cells.map((c) => (
         <span key={c.label} className="num flex items-center gap-1 text-muted-foreground">
           <span className="text-[0.65rem] uppercase">{c.label}</span>
-          <span className={cn("font-medium", c.label === "Δ" && (up ? "text-gain" : "text-loss"))}>
-            {c.value}
-          </span>
+          <span className={cn("font-medium", c.label === "Δ" && (up ? "text-gain" : "text-loss"))}>{c.value}</span>
         </span>
       ))}
       <span
@@ -164,6 +164,9 @@ export function ChartModal({
   formatValue,
   formatIntradayLabel,
   formatDailyLabel,
+  changeBase,
+  officialChange,
+  sessionRange,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -175,13 +178,17 @@ export function ChartModal({
   formatValue: (v: number) => string;
   formatIntradayLabel: (time: number) => string;
   formatDailyLabel: (time: number) => string;
+  /** Official reference (e.g. index previous close): Change reads end-vs-base. */
+  changeBase?: { value: number; label: string } | undefined;
+  /** Provider-stated change: trusted verbatim (pre-market gaps break tick math). */
+  officialChange?: { change: number; pct: number } | undefined;
+  /** Official session extremes; tick-derived when absent. */
+  sessionRange?: { high: number; low: number } | undefined;
 }) {
   const [activeKey, setActiveKey] = useState<string | null>(null);
-  const [indicators, setIndicators] = useState<IndicatorConfig>({
-    ...DEFAULT_INDICATORS,
-    sma20: true,
-    volume: true,
-  });
+  const { chart, setChart } = useSettings();
+  const indicators = chart.indicators;
+  const setIndicators = (v: IndicatorConfig) => setChart({ indicators: v });
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const light = useResolvedLight();
 
@@ -203,8 +210,14 @@ export function ChartModal({
     const end = pts[pts.length - 1]!.value;
     const high = Math.max(...pts.map((p) => p.value));
     const low = Math.min(...pts.map((p) => p.value));
-    return { start, end, high, low, change: end - start, pct: (end - start) / start };
-  }, [active]);
+    // Change reads against the official base when given (index previous
+    // close), in percent units like every other DeltaPill in the app.
+    const base = changeBase && changeBase.value > 0 ? changeBase.value : start;
+    const change = end - base;
+    return { start, end, high, low, base, change, pct: base > 0 ? ((end - base) / base) * 100 : 0 };
+  }, [active, changeBase]);
+  const shownHigh = sessionRange && sessionRange.high > 0 ? sessionRange.high : (stats?.high ?? 0);
+  const shownLow = sessionRange && sessionRange.low > 0 ? sessionRange.low : (stats?.low ?? 0);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -238,7 +251,7 @@ export function ChartModal({
                     <button
                       key={t.key}
                       type="button"
-                      onClick={() => setIndicators((prev) => ({ ...prev, [t.key]: !prev[t.key] }))}
+                      onClick={() => setIndicators({ ...indicators, [t.key]: !indicators[t.key] })}
                       className={cn(
                         "rounded-full border px-2 py-0.5 text-[0.68rem] font-medium transition-colors",
                         indicators[t.key]
@@ -255,39 +268,39 @@ export function ChartModal({
           ) : null}
 
           {stats ? (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
               <div className="rounded-xl border border-border/60 bg-surface px-3 py-2">
                 <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                  Start
+                  {changeBase ? changeBase.label : "Start"}
                 </p>
-                <p className="num text-sm font-medium">{formatValue(stats.start)}</p>
+                <p className="num text-sm font-medium">{formatValue(stats.base)}</p>
               </div>
               <div className="rounded-xl border border-border/60 bg-surface px-3 py-2">
                 <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">End</p>
                 <p className="num text-sm font-medium">{formatValue(stats.end)}</p>
               </div>
               <div className="rounded-xl border border-border/60 bg-surface px-3 py-2">
-                <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                  Change
-                </p>
+                <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">Change</p>
                 <p className="text-sm font-medium">
-                  <DeltaPill value={stats.change}>{formatPercent(stats.pct)}</DeltaPill>
+                  <DeltaPill value={officialChange?.change ?? stats.change}>
+                    {formatPercent(officialChange?.pct ?? stats.pct)}
+                  </DeltaPill>
                 </p>
               </div>
               <div className="rounded-xl border border-border/60 bg-surface px-3 py-2">
-                <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                  High / Low
-                </p>
-                <p className="num text-sm font-medium">
-                  {formatValue(stats.high)} / {formatValue(stats.low)}
-                </p>
+                <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">High</p>
+                <p className="num text-sm font-medium">{formatValue(shownHigh)}</p>
+              </div>
+              <div className="rounded-xl border border-border/60 bg-surface px-3 py-2">
+                <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">Low</p>
+                <p className="num text-sm font-medium">{formatValue(shownLow)}</p>
               </div>
             </div>
           ) : null}
 
           {candleBars ? (
             <div className="space-y-2">
-              <HoverLegend info={hover} origin={stats?.start ?? 0} />
+              <HoverLegend info={hover} origin={stats?.base ?? stats?.start ?? 0} />
               <TerminalChart
                 bars={candleBars}
                 intraday={NO_POINTS}
@@ -304,21 +317,16 @@ export function ChartModal({
               points={active.points}
               height={300}
               formatValue={formatValue}
-              formatLabel={(t) =>
-                active.key === "1D" ? formatIntradayLabel(t) : formatDailyLabel(t)
-              }
+              formatLabel={(t) => (active.key === "1D" ? formatIntradayLabel(t) : formatDailyLabel(t))}
               tooltipExtra={(p) => {
-                const pct =
-                  stats && stats.start ? ((p.value - stats.start) / stats.start) * 100 : 0;
+                const base = stats?.base ?? 0;
+                const pct = base > 0 ? ((p.value - base) / base) * 100 : 0;
                 return (
                   <p
-                    className={cn(
-                      "num text-right text-[0.65rem] font-semibold",
-                      pct >= 0 ? "text-gain" : "text-loss",
-                    )}
+                    className={cn("num text-center text-[0.65rem] font-semibold", pct >= 0 ? "text-gain" : "text-loss")}
                   >
                     {pct >= 0 ? "+" : ""}
-                    {pct.toFixed(2)}% from start
+                    {pct.toFixed(2)}% from {changeBase ? changeBase.label.toLowerCase() : "start"}
                   </p>
                 );
               }}
@@ -330,8 +338,8 @@ export function ChartModal({
           )}
 
           <p className="text-[0.68rem] leading-relaxed text-muted-foreground">
-            Values are indicative figures from the public NEPSE mirror. Hover anywhere on the chart
-            to inspect individual points; the crosshair shows the exact price on the vertical axis.
+            Values are indicative figures from the public NEPSE mirror. Hover anywhere on the chart to inspect
+            individual points; the crosshair shows the exact price on the vertical axis.
           </p>
         </div>
       </DialogContent>

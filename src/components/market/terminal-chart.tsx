@@ -12,6 +12,7 @@ import {
   LineStyle,
   TickMarkType,
   createChart,
+  createSeriesMarkers,
   type IChartApi,
   type ISeriesApi,
   type MouseEventParams,
@@ -19,18 +20,12 @@ import {
   type UTCTimestamp,
 } from "lightweight-charts";
 import type { ChartBar, PricePoint } from "@/lib/nepse/types";
-import {
-  bollinger,
-  ema,
-  macd,
-  rsi,
-  sma,
-  vwap,
-  type Bar,
-  type LinePoint,
-} from "@/lib/nepse/indicators";
+import { bollinger, ema, macd, rsi, sma, vwap, type Bar, type LinePoint } from "@/lib/nepse/indicators";
 
 export type ChartStyle = "candles" | "line" | "area";
+
+/** Every terminal/chart opens on this style unless the user picked otherwise. */
+export const DEFAULT_CHART_STYLE: ChartStyle = "area";
 
 export interface IndicatorConfig {
   sma20: boolean;
@@ -44,7 +39,7 @@ export interface IndicatorConfig {
 }
 
 export const DEFAULT_INDICATORS: IndicatorConfig = {
-  sma20: true,
+  sma20: false,
   sma50: false,
   ema20: false,
   bollinger: false,
@@ -76,16 +71,23 @@ function palette(light: boolean) {
   };
 }
 
-const toLine = (points: LinePoint[]) =>
-  points.map((p) => ({ time: p.date as Time, value: p.value }));
+const toLine = (points: LinePoint[]) => points.map((p) => ({ time: p.date as Time, value: p.value }));
+
+/** One indexed-% overlay line (e.g. a compared symbol). Max two are drawn. */
+export interface CompareLine {
+  label: string;
+  points: LinePoint[];
+}
+
+/** Overlay line colors, in slot order — reused by the terminal legend. */
+export const COMPARE_COLORS = ["#94a3b8", "#2dd4bf"];
 
 export function TerminalChart({
   bars,
   intraday,
   style,
   indicators,
-  compare,
-  compareLabel,
+  compares,
   logScale,
   light,
   height,
@@ -96,13 +98,16 @@ export function TerminalChart({
   onSelectPoint,
   onCreateOrder,
   onCreateAlert,
+  tradeMarkers,
+  orderLines,
+  dayBase,
 }: {
   bars: ChartBar[];
   intraday: PricePoint[];
   style: ChartStyle;
   indicators: IndicatorConfig;
-  compare?: LinePoint[] | undefined;
-  compareLabel?: string | undefined;
+  /** Indexed % overlays, each with its own legend label. */
+  compares?: CompareLine[] | undefined;
   logScale: boolean;
   light: boolean;
   height: number;
@@ -117,6 +122,12 @@ export function TerminalChart({
   onCreateOrder?: ((order: { price: number; side: "BUY" | "SELL" }) => void) | undefined;
   /** Fired from the hover "+" menu ("Remind" row) to set a price alert. */
   onCreateAlert?: ((price: number) => void) | undefined;
+  /** Day-change base for intraday hover % (e.g. previous close); defaults to first tick. */
+  dayBase?: number | null | undefined;
+  /** Executed buy/sell points drawn as arrows on the candles, like the cost line. */
+  tradeMarkers?: { time: string; side: "BUY" | "SELL"; qty: number }[] | undefined;
+  /** Open-order bid/sale marks pinned at their limit prices (day orders + AMO). */
+  orderLines?: { price: number; side: "BUY" | "SELL"; qty: number; amo: boolean }[] | undefined;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const hoverRef = useRef(onHover);
@@ -142,11 +153,7 @@ export function TerminalChart({
 
   const sanitizedBars = useMemo(() => {
     const filtered = bars.filter(
-      (b) =>
-        Number.isFinite(b.open) &&
-        Number.isFinite(b.high) &&
-        Number.isFinite(b.low) &&
-        Number.isFinite(b.close),
+      (b) => Number.isFinite(b.open) && Number.isFinite(b.high) && Number.isFinite(b.low) && Number.isFinite(b.close),
     );
     // lightweight-charts requires asc ordered unique time — dedup by date
     const byDate = new Map<string, (typeof filtered)[number]>();
@@ -154,9 +161,7 @@ export function TerminalChart({
     return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
   }, [bars]);
   const sanitizedIntraday = useMemo(() => {
-    const filtered = intraday.filter(
-      (p) => Number.isFinite(p.value) && Number.isFinite(Number(p.time)),
-    );
+    const filtered = intraday.filter((p) => Number.isFinite(p.value) && Number.isFinite(Number(p.time)));
     const byTime = new Map<number, (typeof filtered)[number]>();
     for (const p of filtered) {
       const t = Number(p.time);
@@ -166,10 +171,7 @@ export function TerminalChart({
   }, [intraday]);
   const isIntraday = sanitizedBars.length === 0 && sanitizedIntraday.length > 0;
 
-  const barByDate = useMemo(
-    () => new Map(sanitizedBars.map((b) => [b.date, b] as const)),
-    [sanitizedBars],
-  );
+  const barByDate = useMemo(() => new Map(sanitizedBars.map((b) => [b.date, b] as const)), [sanitizedBars]);
 
   const [chartError, setChartError] = useState<string | null>(null);
   useEffect(() => {
@@ -261,23 +263,59 @@ export function TerminalChart({
       let mainSeries: ISeriesApi<"Candlestick" | "Line" | "Area"> | null = null;
 
       if (isIntraday) {
-        const points = sanitizedIntraday.map((p) => ({
-          time: p.time as UTCTimestamp,
-          value: p.value,
-        }));
-        const first = points[0]?.value ?? 0;
-        const last = points[points.length - 1]?.value ?? 0;
+        const ohlc = sanitizedIntraday.filter(
+          (p) =>
+            Number.isFinite(p.open) && Number.isFinite(p.high) && Number.isFinite(p.low) && Number.isFinite(p.value),
+        );
+        const first = sanitizedIntraday[0]?.value ?? 0;
+        const last = sanitizedIntraday[sanitizedIntraday.length - 1]?.value ?? 0;
         const colour = last >= first ? UP : DOWN;
-        const series = chart.addSeries(AreaSeries, {
-          lineColor: colour,
-          topColor: `${colour}55`,
-          bottomColor: `${colour}05`,
-          lineWidth: 2,
-          priceLineVisible: false,
-        });
-        series.setData(points);
-        mainSeries = series;
-        seriesRef.current = series;
+        if (style === "candles" && ohlc.length >= 2) {
+          const series = chart.addSeries(CandlestickSeries, {
+            upColor: UP,
+            downColor: DOWN,
+            borderUpColor: UP,
+            borderDownColor: DOWN,
+            wickUpColor: UP,
+            wickDownColor: DOWN,
+          });
+          series.setData(
+            ohlc.map((p) => ({
+              time: p.time as UTCTimestamp,
+              open: p.open!,
+              high: p.high!,
+              low: p.low!,
+              close: p.value,
+            })),
+          );
+          mainSeries = series;
+          seriesRef.current = series;
+        } else if (style === "line") {
+          const series = chart.addSeries(LineSeries, { color: "#2563eb", lineWidth: 2 });
+          series.setData(
+            sanitizedIntraday.map((p) => ({
+              time: p.time as UTCTimestamp,
+              value: p.value,
+            })),
+          );
+          mainSeries = series;
+          seriesRef.current = series;
+        } else {
+          const points = sanitizedIntraday.map((p) => ({
+            time: p.time as UTCTimestamp,
+            value: p.value,
+          }));
+          const series = chart.addSeries(AreaSeries, {
+            lineColor: colour,
+            topColor: `${colour}55`,
+            bottomColor: `${colour}05`,
+            lineWidth: 2,
+            priceLineVisible: false,
+          });
+          series.setData(points);
+          mainSeries = series;
+          seriesRef.current = series;
+        }
       } else if (style === "candles") {
         const series = chart.addSeries(CandlestickSeries, {
           upColor: UP,
@@ -323,6 +361,38 @@ export function TerminalChart({
         close: b.close,
         volume: b.volume,
       }));
+
+      // Open orders as dashed bid/sale lines at their limit prices. Price
+      // lines need no candle date, so unlike trade arrows they also work
+      // on intraday. Capped so a crowded book can't stripe the chart.
+      if (mainSeries && orderLines && orderLines.length > 0) {
+        for (const o of orderLines.slice(0, 25)) {
+          if (!(o.price > 0)) continue;
+          mainSeries.createPriceLine({
+            price: o.price,
+            color: o.side === "BUY" ? UP : DOWN,
+            lineWidth: 1,
+            lineStyle: LineStyle.Dashed,
+            axisLabelVisible: true,
+            title: `${o.side === "BUY" ? "B" : "S"}${o.qty > 0 ? ` ${o.qty}` : ""}${o.amo ? " · AMO" : ""}`,
+          });
+        }
+      }
+
+      // Executed orders as buy/sell arrows under/over their candles. Daily
+      // axis only — intraday runs on timestamps, where date strings misplace.
+      if (!isIntraday && tradeMarkers && tradeMarkers.length > 0 && mainSeries) {
+        createSeriesMarkers(
+          mainSeries,
+          tradeMarkers.map((m) => ({
+            time: m.time as Time,
+            position: m.side === "BUY" ? "belowBar" : "aboveBar",
+            color: m.side === "BUY" ? UP : DOWN,
+            shape: m.side === "BUY" ? "arrowUp" : "arrowDown",
+            text: `${m.side === "BUY" ? "B" : "S"}${m.qty > 0 ? ` ${m.qty}` : ""}`,
+          })),
+        );
+      }
 
       if (!isIntraday) {
         if (indicators.sma20) {
@@ -375,21 +445,26 @@ export function TerminalChart({
           };
           chart.addSeries(LineSeries, opts).setData(toLine(bands.upper));
           chart.addSeries(LineSeries, opts).setData(toLine(bands.lower));
-          chart
-            .addSeries(LineSeries, { ...opts, lineStyle: LineStyle.Dotted })
-            .setData(toLine(bands.middle));
+          chart.addSeries(LineSeries, { ...opts, lineStyle: LineStyle.Dotted }).setData(toLine(bands.middle));
         }
       }
 
-      if (compare && compare.length > 1) {
+      const liveCompares = (compares ?? []).filter((c) => c.points.length > 1).slice(0, 2);
+      liveCompares.forEach((c, i) => {
         const series = chart.addSeries(LineSeries, {
-          color: "#94a3b8",
+          color: COMPARE_COLORS[i % COMPARE_COLORS.length]!,
           lineWidth: 1,
           priceScaleId: "compare",
-          priceLineVisible: false,
-          title: compareLabel ?? "Compare",
+          // Same indication as the main series: a price line in the line's
+          // own color. The scale itself stays hidden so % values never pose
+          // as prices on an axis.
+          priceLineVisible: true,
+          lastValueVisible: true,
+          title: c.label,
         });
-        series.setData(toLine(compare));
+        series.setData(toLine(c.points));
+      });
+      if (liveCompares.length > 0) {
         chart.priceScale("compare").applyOptions({
           scaleMargins: { top: 0.1, bottom: 0.3 },
           visible: false,
@@ -462,11 +537,7 @@ export function TerminalChart({
       }
 
       if (!isIntraday && indicators.rsi) {
-        const series = chart.addSeries(
-          LineSeries,
-          { color: "#eab308", lineWidth: 1, priceLineVisible: false },
-          pane,
-        );
+        const series = chart.addSeries(LineSeries, { color: "#eab308", lineWidth: 1, priceLineVisible: false }, pane);
         series.setData(toLine(rsi(indicatorBars, 14)));
         series.createPriceLine({
           price: 70,
@@ -570,6 +641,33 @@ export function TerminalChart({
         emit(bar ? bar.date : null);
       };
       chart.subscribeClick(onClick);
+      // Tap-to-pin must ignore pan releases: the library fires click on
+      // mouse-up even after a drag, which pinned a bar the user never tapped.
+      // Capture on the wrapper (an ancestor of the canvases, so this runs
+      // before the chart's own listeners) and swallow clicks whose pointer
+      // travelled — real taps barely move.
+      // NOTE: capture must live on the ancestor, not the chart container:
+      // at-target listeners fire in registration order, so the chart (wired
+      // first, inside createChart) would win there.
+      let downX = 0;
+      let downY = 0;
+      let downActive = false;
+      const onPointerDownCapture = (e: PointerEvent) => {
+        downActive = true;
+        downX = e.clientX;
+        downY = e.clientY;
+      };
+      const onClickCapture = (e: MouseEvent) => {
+        if (!downActive) return;
+        // Keyboard-synthesised clicks carry no coordinates; let them through.
+        if (e.clientX === 0 && e.clientY === 0) return;
+        const dx = e.clientX - downX;
+        const dy = e.clientY - downY;
+        if (dx * dx + dy * dy > 36) e.stopPropagation();
+      };
+      const captureHost = container.parentElement;
+      captureHost?.addEventListener("pointerdown", onPointerDownCapture, true);
+      captureHost?.addEventListener("click", onClickCapture, true);
       const handler = (param: MouseEventParams) => {
         if (anchorRef.current && pointerDownRef.current && param.time) {
           draggingRef.current = true;
@@ -591,9 +689,7 @@ export function TerminalChart({
             const price = typeof raw === "number" ? Math.round(raw * 100) / 100 : 0;
             if (price > 0) {
               setOrderAt((prev) =>
-                prev && Math.abs(prev.y - point.y) < 3 && prev.price === price
-                  ? prev
-                  : { y: point.y, price },
+                prev && Math.abs(prev.y - point.y) < 3 && prev.price === price ? prev : { y: point.y, price },
               );
             } else {
               setOrderAt(null);
@@ -607,6 +703,7 @@ export function TerminalChart({
           const value = mainSeries ? param.seriesData.get(mainSeries) : undefined;
           const price = value && "value" in value ? Number(value.value) : 0;
           const first = intraday[0]?.value ?? price;
+          const base = dayBase != null && dayBase > 0 ? dayBase : first;
           // Convert UTC timestamp to Nepal time (UTC+5:45)
           const nepalMs = Number(param.time) * 1000 + 345 * 60 * 1000;
           const nepalDate = new Date(nepalMs);
@@ -623,7 +720,7 @@ export function TerminalChart({
             low: price,
             close: price,
             volume: 0,
-            changePercent: first ? ((price - first) / first) * 100 : 0,
+            changePercent: base ? ((price - base) / base) * 100 : 0,
           });
           return;
         }
@@ -649,6 +746,8 @@ export function TerminalChart({
         chart.unsubscribeCrosshairMove(handler);
         chart.unsubscribeDblClick(onDblClick);
         chart.unsubscribeClick(onClick);
+        captureHost?.removeEventListener("pointerdown", onPointerDownCapture, true);
+        captureHost?.removeEventListener("click", onClickCapture, true);
         chart.remove();
         apiRef.current = null;
       };
@@ -662,14 +761,16 @@ export function TerminalChart({
     sanitizedIntraday,
     style,
     indicators,
-    compare,
-    compareLabel,
+    compares,
     logScale,
     light,
     height,
     isIntraday,
     wacc,
     includeWaccDomain,
+    tradeMarkers,
+    orderLines,
+    dayBase,
   ]);
 
   // "+" quick-order follows the mouse anywhere over the chart body (the
@@ -690,9 +791,7 @@ export function TerminalChart({
       const raw = seriesRef.current.coordinateToPrice(y);
       const price = typeof raw === "number" ? Math.round(raw * 100) / 100 : 0;
       if (price > 0) {
-        setOrderAt((prev) =>
-          prev && Math.abs(prev.y - y) < 3 && prev.price === price ? prev : { y, price },
-        );
+        setOrderAt((prev) => (prev && Math.abs(prev.y - y) < 3 && prev.price === price ? prev : { y, price }));
       } else {
         setOrderAt(null);
         setOrderMenu(false);
@@ -714,10 +813,7 @@ export function TerminalChart({
       const fromBar = barByDate.get(String(measure.from));
       const toBar = barByDate.get(String(measure.to));
       const gain = fromBar && toBar ? toBar.close >= fromBar.close : true;
-      const pct =
-        fromBar && toBar && fromBar.close
-          ? ((toBar.close - fromBar.close) / fromBar.close) * 100
-          : 0;
+      const pct = fromBar && toBar && fromBar.close ? ((toBar.close - fromBar.close) / fromBar.close) * 100 : 0;
       measureOverlay = (
         <>
           <div
@@ -760,6 +856,10 @@ export function TerminalChart({
       onMouseLeave={() => {
         setOrderAt(null);
         setOrderMenu(false);
+        // Cursor left the chart: clear the hover readout everywhere
+        // (lightweight-charts doesn't reliably emit a null crosshair move on
+        // leave, so without this the last hovered value sticks forever).
+        hoverRef.current?.(null);
       }}
       onPointerDown={() => {
         pointerDownRef.current = true;

@@ -12,13 +12,7 @@ import {
   fetchEdisTransferDetail,
   submitEdisTransfer,
 } from "./api.server";
-import type {
-  EdisNodelItem,
-  EdisStatusItem,
-  EdisTransferDetail,
-  EdisTransferItem,
-  JsonRecord,
-} from "./types";
+import type { EdisNodelItem, EdisStatusItem, EdisTransferDetail, EdisTransferItem, JsonRecord } from "./types";
 
 export const getEdisTransferActive = createServerFn({ method: "POST" })
   .validator((input: unknown) =>
@@ -66,37 +60,29 @@ export const getEdisNodel = createServerFn({ method: "POST" })
     return { items: res.object ?? [], total: res.totalCount ?? 0 };
   });
 
-export const getEdisStatuses = createServerFn({ method: "GET" }).handler(
-  async (): Promise<EdisStatusItem[]> => {
-    const auth = await requireAuth();
-    if (auth.demo) return [];
-    return fetchEdisStatuses(auth);
-  },
-);
+export const getEdisStatuses = createServerFn({ method: "GET" }).handler(async (): Promise<EdisStatusItem[]> => {
+  const auth = await requireAuth();
+  if (auth.demo) return [];
+  return fetchEdisStatuses(auth);
+});
 
-export const getEdisDisclaimer = createServerFn({ method: "GET" }).handler(
-  async (): Promise<string> => {
-    const auth = await requireAuth();
-    if (auth.demo) return "EDIS is not available in demo mode.";
-    return fetchEdisDisclaimer(auth);
-  },
-);
+export const getEdisDisclaimer = createServerFn({ method: "GET" }).handler(async (): Promise<string> => {
+  const auth = await requireAuth();
+  if (auth.demo) return "EDIS is not available in demo mode.";
+  return fetchEdisDisclaimer(auth);
+});
 
-export const checkEdisPoolAccountFn = createServerFn({ method: "GET" }).handler(
-  async (): Promise<boolean> => {
-    const auth = await requireAuth();
-    if (auth.demo) return false;
-    return checkEdisPoolAccount(auth);
-  },
-);
+export const checkEdisPoolAccountFn = createServerFn({ method: "GET" }).handler(async (): Promise<boolean> => {
+  const auth = await requireAuth();
+  if (auth.demo) return false;
+  return checkEdisPoolAccount(auth);
+});
 
-export const checkEdisWaccLeftFn = createServerFn({ method: "GET" }).handler(
-  async (): Promise<boolean> => {
-    const auth = await requireAuth();
-    if (auth.demo) return false;
-    return checkEdisWaccLeft(auth);
-  },
-);
+export const checkEdisWaccLeftFn = createServerFn({ method: "GET" }).handler(async (): Promise<boolean> => {
+  const auth = await requireAuth();
+  if (auth.demo) return false;
+  return checkEdisWaccLeft(auth);
+});
 
 export const checkEdisTransferFn = createServerFn({ method: "POST" })
   .validator((input: unknown) =>

@@ -3,10 +3,7 @@ import { fetchUdfHistory, udfResolutionFor, udfToBars } from "./udf";
 import type { UdfResolution } from "./udf";
 
 export const getUdfHistory = createServerFn({ method: "GET" })
-  .validator(
-    (input: unknown) =>
-      input as { symbol: string; range: string; intradayRes?: UdfResolution | null },
-  )
+  .validator((input: unknown) => input as { symbol: string; range: string; intradayRes?: UdfResolution | null })
   .handler(async ({ data }) => {
     const sym = data.symbol.toUpperCase();
     const r = data.range as Parameters<typeof udfResolutionFor>[0];
@@ -29,6 +26,6 @@ export const getUdfHistory = createServerFn({ method: "GET" })
     const from = now - days * 86400;
     const h = await fetchUdfHistory({ symbol: sym, resolution: res, from, to: now });
     const bars = udfToBars(h);
-    const points = bars.map((b) => ({ time: b.time, value: b.close }));
+    const points = bars.map((b) => ({ time: b.time, value: b.close, volume: b.volume }));
     return { bars, points, raw: h, resolution: res };
   });

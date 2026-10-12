@@ -94,8 +94,7 @@ export async function getBrokers(): Promise<BrokerRow[]> {
         : null;
 
     const rawToday = row["todayStats"];
-    const rawTopStock =
-      rawToday && typeof rawToday === "object" ? (rawToday as Rec)["topStock"] : null;
+    const rawTopStock = rawToday && typeof rawToday === "object" ? (rawToday as Rec)["topStock"] : null;
     const topStock =
       rawTopStock && typeof rawTopStock === "object"
         ? {
@@ -120,20 +119,15 @@ export async function getBrokers(): Promise<BrokerRow[]> {
       {
         code,
         name,
-        membershipType:
-          typeof row["membershipType"] === "string" ? row["membershipType"] : "Unknown",
+        membershipType: typeof row["membershipType"] === "string" ? row["membershipType"] : "Unknown",
         phone: typeof row["phone"] === "string" && row["phone"].trim() ? row["phone"].trim() : null,
-        tmsLink:
-          typeof row["tmsLink"] === "string" && row["tmsLink"].trim()
-            ? row["tmsLink"].trim()
-            : null,
+        tmsLink: typeof row["tmsLink"] === "string" && row["tmsLink"].trim() ? row["tmsLink"].trim() : null,
         branchCount: Math.max(0, Number(row["branchCount"]) || 0),
         provinces,
         districts: Array.isArray(row["districts"]) ? row["districts"].map(String) : [],
         isDealer: row["isDealer"] === "Y",
         active: row["activeStatus"] !== "I",
-        logoUrl:
-          typeof row["imageUrl"] === "string" && row["imageUrl"].trim() ? row["imageUrl"] : null,
+        logoUrl: typeof row["imageUrl"] === "string" && row["imageUrl"].trim() ? row["imageUrl"] : null,
         rating,
         thirtyDaysTurnover: Math.max(0, Number(row["thirtyDaysTurnover"]) || 0),
         latestTurnover: Math.max(0, Number(row["latestTurnover"]) || 0),
@@ -340,10 +334,7 @@ function ingest(
  * can hold hundreds of thousands of transactions.
  */
 export async function getFloorSheetDay(date: string): Promise<FloorSheetDay | null> {
-  const [{ sheet, stale }, lookups] = await Promise.all([
-    getDailySheet(date),
-    getFloorSheetLookups(),
-  ]);
+  const [{ sheet, stale }, lookups] = await Promise.all([getDailySheet(date), getFloorSheetLookups()]);
   if (!sheet) return null;
 
   const hourly = new Map<string, HourPoint>();
@@ -526,9 +517,7 @@ export async function getFloorSheetTrail(
   limit = TRAIL_LIMIT,
 ): Promise<FloorSheetTrail | null> {
   const manifest = await getFloorSheetDates();
-  const available = manifest.dates.filter(
-    (d) => d >= date && (!filter.dateTo || d <= filter.dateTo),
-  );
+  const available = manifest.dates.filter((d) => d >= date && (!filter.dateTo || d <= filter.dateTo));
   const days = available.slice(0, TRAIL_MAX_DAYS);
   if (days.length === 0) return null;
   const lookups = await getFloorSheetLookups();
@@ -578,8 +567,7 @@ export async function getFloorSheetTrail(
           sellers.set(seller.code, e);
         }
       }
-      if (trades.length < limit)
-        trades.push({ ...reconstruct(tx, lookups), date: sheet.date ?? day });
+      if (trades.length < limit) trades.push({ ...reconstruct(tx, lookups), date: sheet.date ?? day });
     }
   }
 

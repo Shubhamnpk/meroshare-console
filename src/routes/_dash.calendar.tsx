@@ -5,12 +5,7 @@ import { ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, X } from "lucide-re
 import { EmptyBlock } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { ScripSheet } from "@/components/market/scrip-sheet";
-import {
-  currentIssuesQuery,
-  dividendsQuery,
-  enrichedPortfolioQuery,
-  holdingSymbolsQuery,
-} from "@/lib/queries";
+import { currentIssuesQuery, dividendsQuery, enrichedPortfolioQuery, holdingSymbolsQuery } from "@/lib/queries";
 import { formatDate } from "@/lib/format";
 import { statusGroup } from "@/lib/ipo/status";
 import {
@@ -111,10 +106,7 @@ function dividendText(e: CalEvent): string {
   return parts.join(" + ") || "Dividend";
 }
 
-function ipoTypeLabel(issue: {
-  shareTypeName?: string | null;
-  shareGroupName?: string | null;
-}): string | null {
+function ipoTypeLabel(issue: { shareTypeName?: string | null; shareGroupName?: string | null }): string | null {
   const hay = `${issue.shareTypeName ?? ""} ${issue.shareGroupName ?? ""}`;
   if (/right/i.test(hay)) return "Right";
   if (/fpo/i.test(hay)) return "FPO";
@@ -179,9 +171,7 @@ function MonthGrid({
                   {c.primary}
                 </span>
                 {c.secondary ? (
-                  <span className="num hidden text-[0.65rem] text-muted-foreground sm:block">
-                    {c.secondary}
-                  </span>
+                  <span className="num hidden text-[0.65rem] text-muted-foreground sm:block">{c.secondary}</span>
                 ) : null}
               </span>
               {shown.length > 0 ? (
@@ -194,9 +184,7 @@ function MonthGrid({
                     />
                   ))}
                   {extra > 0 ? (
-                    <span className="num text-[0.62rem] font-semibold text-muted-foreground">
-                      +{extra}
-                    </span>
+                    <span className="num text-[0.62rem] font-semibold text-muted-foreground">+{extra}</span>
                   ) : null}
                 </span>
               ) : null}
@@ -228,18 +216,13 @@ function CalendarPage() {
   const holdingSymbols = useQuery(holdingSymbolsQuery());
   const portfolio = useQuery(enrichedPortfolioQuery());
   const ipoIssues = useQuery(currentIssuesQuery());
-  const focusCanonical = useMemo(
-    () => (focusSymbol ? canonicalSymbol(focusSymbol) : ""),
-    [focusSymbol],
-  );
+  const focusCanonical = useMemo(() => (focusSymbol ? canonicalSymbol(focusSymbol) : ""), [focusSymbol]);
   // Dashboard's "My holdings" uses enrichedPortfolio holdings, which is more
   // reliable than the dedicated symbols endpoint (myPurchase/myShare/ is
   // frequently gated by CDSC's WAF). Merge both so whichever succeeds wins.
   const held = useMemo(() => {
     const fromSymbols = (holdingSymbols.data ?? []).map((s) => canonicalSymbol(s)).filter(Boolean);
-    const fromPortfolio = (portfolio.data?.holdings ?? [])
-      .map((h) => canonicalSymbol(h.scrip))
-      .filter(Boolean);
+    const fromPortfolio = (portfolio.data?.holdings ?? []).map((h) => canonicalSymbol(h.scrip)).filter(Boolean);
     return new Set([...fromSymbols, ...fromPortfolio]);
   }, [holdingSymbols.data, portfolio.data]);
 
@@ -315,8 +298,7 @@ function CalendarPage() {
       ipo_open: 3,
       ipo_upcoming: 4,
     };
-    for (const list of map.values())
-      list.sort((a, b) => (order[a.kind] ?? 99) - (order[b.kind] ?? 99));
+    for (const list of map.values()) list.sort((a, b) => (order[a.kind] ?? 99) - (order[b.kind] ?? 99));
     return map;
   }, [dividends.data, ipoIssues.data, held, scope, focusCanonical]);
 
@@ -477,9 +459,7 @@ function CalendarPage() {
               onClick={() => setView(v)}
               className={cn(
                 "rounded-full px-3 py-1 text-xs font-semibold transition-colors",
-                view === v
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground",
+                view === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
               )}
             >
               {v === "ad" ? "AD" : "BS (Nepali)"}
@@ -494,12 +474,10 @@ function CalendarPage() {
               onClick={() => setScope(v)}
               className={cn(
                 "rounded-full px-3 py-1 text-xs font-semibold transition-colors",
-                scope === v
-                  ? "bg-primary/15 text-primary"
-                  : "text-muted-foreground hover:text-foreground",
+                scope === v ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground",
               )}
             >
-              {v === "mine" ? "My holdings" : "All scrips"}
+              {v === "mine" ? "My holdings" : "All stocks"}
             </button>
           ))}
         </div>
@@ -520,7 +498,7 @@ function CalendarPage() {
         <button
           type="button"
           onClick={() => void navigate({ search: {} })}
-          title="Show all scrips"
+          title="Show all stocks"
           className="num inline-flex w-fit items-center gap-1.5 rounded-full bg-primary/15 px-3 py-1 text-xs font-semibold text-primary hover:bg-primary/20"
         >
           Showing {focusSymbol} only · clear <X className="size-3" />
@@ -530,9 +508,7 @@ function CalendarPage() {
       <div>
         <h2 className="font-display text-xl font-semibold">
           {view === "ad" ? adTitle : bsTitle}
-          {view === "bs" ? (
-            <span className="ml-2 text-sm font-normal text-muted-foreground">{bsTitleNe}</span>
-          ) : null}
+          {view === "bs" ? <span className="ml-2 text-sm font-normal text-muted-foreground">{bsTitleNe}</span> : null}
         </h2>
         <p className="num mt-0.5 text-xs text-muted-foreground">{view === "ad" ? adSub : bsSub}</p>
       </div>
@@ -558,19 +534,11 @@ function CalendarPage() {
                   <span className="flex items-start gap-2.5 text-xs leading-snug">
                     <span className="mt-1 size-2.5 shrink-0 rounded-full bg-gain" aria-hidden />
                     <span>
-                      <span className="font-semibold">Book close</span>: record date; your holdings
-                      get a{" "}
-                      <span className="rounded bg-primary/10 px-1 py-0.5 text-[0.60rem] font-semibold text-primary">
-                        Holding
-                      </span>{" "}
-                      badge
+                      <span className="font-semibold">Book close</span>: record date for dividend eligibility
                     </span>
                   </span>
                   <span className="flex items-start gap-2.5 text-xs leading-snug">
-                    <span
-                      className="mt-1 size-2.5 shrink-0 rounded-full bg-amber-500"
-                      aria-hidden
-                    />
+                    <span className="mt-1 size-2.5 shrink-0 rounded-full bg-amber-500" aria-hidden />
                     <span>
                       <span className="font-semibold">Announced</span>: board declares bonus / cash
                     </span>
@@ -593,10 +561,7 @@ function CalendarPage() {
                     </span>
                   </span>
                   <span className="flex items-start gap-2.5 text-xs leading-snug">
-                    <span
-                      className="mt-1 size-2.5 shrink-0 rounded-full bg-violet-500"
-                      aria-hidden
-                    />
+                    <span className="mt-1 size-2.5 shrink-0 rounded-full bg-violet-500" aria-hidden />
                     <span>
                       <span className="font-semibold">Upcoming</span>: announced future IPO
                     </span>
@@ -605,8 +570,7 @@ function CalendarPage() {
               </div>
             </div>
             <p className="num mt-3 border-t border-border/40 pt-2 text-[0.62rem] leading-snug text-muted-foreground">
-              Tap any day to see details ·{" "}
-              {view === "ad" ? "BS date under each AD day" : "AD date under each BS day"} ·{" "}
+              Tap any day to see details · {view === "ad" ? "BS date under each AD day" : "AD date under each BS day"} ·{" "}
               <span className="inline-flex items-center gap-1">
                 <span className="size-1.5 rounded-full bg-gain" /> dividends
               </span>{" "}
@@ -697,9 +661,7 @@ function CalendarPage() {
                             KIND_STYLE[e.kind].badge,
                           )}
                         >
-                          {isIpo
-                            ? (e.companyName ?? e.symbol).slice(0, 2).toUpperCase()
-                            : e.symbol.slice(0, 2)}
+                          {isIpo ? (e.companyName ?? e.symbol).slice(0, 2).toUpperCase() : e.symbol.slice(0, 2)}
                         </span>
                         <span className="min-w-0 flex-1">
                           <span className="flex flex-wrap items-center gap-2">

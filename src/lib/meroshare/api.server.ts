@@ -1,5 +1,6 @@
 // Server-only MeroShare operations. Every function here talks to CDSC with the
 // caller's own bearer token, taken from the encrypted session cookie.
+import capitalsFallback from "./capitals.json";
 import { CDSC_URLS, cdscRequest } from "./cdsc.server";
 import { readSession, requireAuth, type AuthContext } from "./session.server";
 import type {
@@ -24,8 +25,58 @@ import type {
   WaccReport,
   WaccSearchResponse,
 } from "./types";
-export async function fetchCapitals(): Promise<Capital[]> {
+function fetchCapitals(): Promise<Capital[]> {
   return cdscRequest<Capital[]>(CDSC_URLS.capitals);
+}
+
+/** How long the DP list may take before callers get the vendored fallback. */
+const CAPITALS_TIMEOUT_MS = 3_000;
+/** How long a successful live DP list is reused before re-fetching. */
+const CAPITALS_TTL_MS = 10 * 60_000;
+
+let capitalsCache: { at: number; value: Capital[] } | null = null;
+let capitalsInflight: Promise<Capital[] | null> | null = null;
+
+/**
+ * Live DP list bounded to CAPITALS_TIMEOUT_MS. The first caller starts the
+ * fetch, later callers join it; on timeout (or CDSC failure) this resolves
+ * null so callers serve capitals.json instead. A timed-out fetch keeps
+ * running and populates the cache for the next call; a failed one clears the
+ * memo so the next call retries.
+ */
+async function fetchCapitalsBounded(): Promise<Capital[] | null> {
+  if (capitalsCache && Date.now() - capitalsCache.at < CAPITALS_TTL_MS) {
+    return capitalsCache.value;
+  }
+  capitalsInflight ??= fetchCapitals()
+    .then((value) => {
+      capitalsCache = { at: Date.now(), value };
+      return value;
+    })
+    .catch(() => {
+      capitalsInflight = null;
+      return null;
+    });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      capitalsInflight,
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), CAPITALS_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * The DP list the login picker and performLogin validate against: live from
+ * CDSC, or the vendored capitals.json when CDSC is slower than the timeout or
+ * down — so signing in never waits on a hanging list fetch.
+ */
+export async function fetchCapitalsSafe(): Promise<Capital[]> {
+  return (await fetchCapitalsBounded()) ?? capitalsFallback;
 }
 
 export async function fetchOwnDetail(auth: AuthContext): Promise<OwnDetail> {
@@ -40,10 +91,7 @@ export async function fetchBankList(auth: AuthContext): Promise<BankListItem[]> 
   return cdscRequest<BankListItem[]>(CDSC_URLS.bankList, { token: auth.token });
 }
 
-export async function fetchBankDetail(
-  auth: AuthContext,
-  bankId: number | string,
-): Promise<BankDetail> {
+export async function fetchBankDetail(auth: AuthContext, bankId: number | string): Promise<BankDetail> {
   return cdscRequest<BankDetail>(CDSC_URLS.bankDetail(bankId), { token: auth.token });
 }
 
@@ -139,10 +187,7 @@ export async function fetchBankRequest(auth: AuthContext, bankCode: string): Pro
   return cdscRequest<JsonRecord>(CDSC_URLS.bankRequest(bankCode), { token: auth.token });
 }
 
-export async function checkCanApply(
-  auth: AuthContext,
-  companyShareId: number,
-): Promise<JsonRecord> {
+export async function checkCanApply(auth: AuthContext, companyShareId: number): Promise<JsonRecord> {
   return cdscRequest<JsonRecord>(CDSC_URLS.canApply(companyShareId, auth.demat), {
     token: auth.token,
   });
@@ -194,20 +239,13 @@ export async function fetchOldApplicationReports(
   });
 }
 
-export async function fetchIssueManagerDetail(
-  auth: AuthContext,
-  companyShareId: number,
-): Promise<JsonRecord> {
+export async function fetchIssueManagerDetail(auth: AuthContext, companyShareId: number): Promise<JsonRecord> {
   return cdscRequest<JsonRecord>(CDSC_URLS.issueManagerDetail(companyShareId), {
     token: auth.token,
   });
 }
 
-export async function fetchAppliedDetail(
-  auth: AuthContext,
-  formId: number,
-  old = false,
-): Promise<JsonRecord> {
+export async function fetchAppliedDetail(auth: AuthContext, formId: number, old = false): Promise<JsonRecord> {
   const url = old ? CDSC_URLS.oldAppliedDetail(formId) : CDSC_URLS.appliedDetail(formId);
   return cdscRequest<JsonRecord>(url, { token: auth.token });
 }
@@ -224,10 +262,7 @@ export interface ApplyIpoInput {
   transactionPIN: string;
 }
 
-export async function submitIpoApplication(
-  auth: AuthContext,
-  input: ApplyIpoInput,
-): Promise<JsonRecord> {
+export async function submitIpoApplication(auth: AuthContext, input: ApplyIpoInput): Promise<JsonRecord> {
   const payload: Record<string, unknown> = {
     accountBranchId: input.accountBranchId,
     accountNumber: input.accountNumber,
@@ -325,10 +360,7 @@ export async function fetchActivityLog(
   });
 }
 
-export async function fetchWaccPending(
-  auth: AuthContext,
-  scrip: string,
-): Promise<WaccSearchResponse> {
+export async function fetchWaccPending(auth: AuthContext, scrip: string): Promise<WaccSearchResponse> {
   return cdscRequest<WaccSearchResponse>(CDSC_URLS.waccPending, {
     method: "POST",
     token: auth.token,
@@ -377,8 +409,7 @@ export async function fetchWaccPendingScrips(auth: AuthContext): Promise<WaccPen
         ? ((res as JsonRecord)["scrips"] as WaccPendingScrip[])
         : [];
   return rows.filter(
-    (r): r is WaccPendingScrip =>
-      typeof r === "string" || (typeof r === "object" && r !== null && "scrip" in r),
+    (r): r is WaccPendingScrip => typeof r === "string" || (typeof r === "object" && r !== null && "scrip" in r),
   );
 }
 
@@ -405,10 +436,7 @@ export async function fetchWaccCalculated(auth: AuthContext, scrip: string): Pro
   });
 }
 
-export async function submitWacc(
-  auth: AuthContext,
-  rows: PurchaseSourceItem[],
-): Promise<JsonRecord> {
+export async function submitWacc(auth: AuthContext, rows: PurchaseSourceItem[]): Promise<JsonRecord> {
   // The portal echoes the search rows back with isEdit=true plus any user-set
   // price/remarks; rows without a set price keep their original rate.
   const payload = rows.map((row) => ({
@@ -439,10 +467,7 @@ export async function changePassword(
   });
 }
 
-export async function changePin(
-  auth: AuthContext,
-  input: { oldPin: string; newPin: string },
-): Promise<JsonRecord> {
+export async function changePin(auth: AuthContext, input: { oldPin: string; newPin: string }): Promise<JsonRecord> {
   return cdscRequest<JsonRecord>(CDSC_URLS.changePin, {
     method: "POST",
     retry: false,
@@ -497,10 +522,7 @@ export async function fetchEdisTransferActive(
   });
 }
 
-export async function fetchEdisTransferDetail(
-  auth: AuthContext,
-  transferId: number,
-): Promise<EdisTransferDetail> {
+export async function fetchEdisTransferDetail(auth: AuthContext, transferId: number): Promise<EdisTransferDetail> {
   return cdscRequest<EdisTransferDetail>(CDSC_URLS.edisTransferDetail(transferId), {
     token: auth.token,
   });

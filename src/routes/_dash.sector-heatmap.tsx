@@ -1,12 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Globe } from "lucide-react";
-import {
-  screenerDataQuery,
-  marketSectorsQuery,
-  marketSnapshotQuery,
-  indexGraphQuery,
-} from "@/lib/queries";
+import { screenerDataQuery, marketSectorsQuery, marketSnapshotQuery, indexGraphQuery } from "@/lib/queries";
 import { MarketOverview } from "@/components/tools/market-overview";
 import { LoadingBlock } from "@/components/states";
 
@@ -56,12 +51,7 @@ function MarketOverviewPage() {
           <Globe className="size-5" />
         </span>
         <div>
-          <h1 className="font-display text-2xl font-semibold sm:text-3xl">
-            Market Depth &amp; Heatmap
-          </h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            Live ticker tape, benchmarks with all-time history, market breadth, and sector depth matrix.
-          </p>
+          <h1 className="font-display text-2xl font-semibold sm:text-3xl">Market Depth &amp; Heatmap</h1>
         </div>
       </div>
 

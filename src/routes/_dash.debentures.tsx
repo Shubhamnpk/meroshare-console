@@ -1,24 +1,18 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowUpDown, Landmark, Search } from "lucide-react";
+import { Landmark, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SortableTh, useSort, type SortKind } from "@/components/sortable-table";
+import { SortTabs } from "@/components/ui/sort-tabs";
+import { ViewToggle } from "@/components/ui/view-toggle";
+import { Panel } from "@/components/ui/panel";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ErrorBlock, EmptyBlock, LoadingBlock } from "@/components/states";
+import { StatChip, ChipRow } from "@/components/stat-chip";
 import { BackButton } from "@/components/back-button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { mfDebentureListQuery } from "@/lib/queries";
 import { formatNpr, formatQty } from "@/lib/format";
 import type { MfDebenture } from "@/lib/mutual-funds/types";
@@ -38,22 +32,21 @@ export const Route = createFileRoute("/_dash/debentures")({
   component: DebenturesPage,
 });
 
-type SortKey = "coupon" | "amount" | "recent";
+type SortKey = "coupon" | "amount" | "recent" | "issuer";
 
-const SORTS: { key: SortKey; label: string }[] = [
-  { key: "coupon", label: "Highest coupon" },
-  { key: "amount", label: "Biggest issue" },
-  { key: "recent", label: "Most recent" },
+const SORTS: { key: SortKey; label: string; dir: 1 | -1 }[] = [
+  { key: "coupon", label: "Highest coupon", dir: -1 },
+  { key: "amount", label: "Biggest issue", dir: -1 },
+  { key: "recent", label: "Most recent", dir: -1 },
+  { key: "issuer", label: "Issuer A-Z", dir: 1 },
 ];
 
-function StatChip({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-border/70 bg-card px-3.5 py-2 leading-tight">
-      <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="num font-semibold">{value}</p>
-    </div>
-  );
-}
+const SORT_KINDS: Record<SortKey, SortKind> = {
+  coupon: "number",
+  amount: "number",
+  recent: "number",
+  issuer: "text",
+};
 
 function CouponBadge({ value }: { value: number | null }) {
   if (value == null) return <span className="text-xs text-muted-foreground">-</span>;
@@ -109,21 +102,15 @@ function DebentureDetail({ d, onClose }: { d: MfDebenture | null; onClose: () =>
             <CouponBadge value={d?.couponPct ?? null} />
             <span className="min-w-0">
               <span className="block truncate">{d?.issuer}</span>
-              <span className="block truncate text-xs font-normal text-muted-foreground">
-                {d?.instrument}
-              </span>
+              <span className="block truncate text-xs font-normal text-muted-foreground">{d?.instrument}</span>
             </span>
           </DialogTitle>
-          <DialogDescription className="text-left">
-            Full issue record from SEBON public data.
-          </DialogDescription>
+          <DialogDescription className="text-left">Full issue record from SEBON public data.</DialogDescription>
         </DialogHeader>
         <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm">
           {facts.map(([label, value]) => (
             <div key={label}>
-              <dt className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                {label}
-              </dt>
+              <dt className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">{label}</dt>
               <dd className="num mt-0.5 font-semibold">{value}</dd>
             </div>
           ))}
@@ -131,12 +118,8 @@ function DebentureDetail({ d, onClose }: { d: MfDebenture | null; onClose: () =>
         {registered != null && registered > 0 ? (
           <div className="rounded-xl border border-border/60 bg-muted/30 p-3">
             <p className="flex items-baseline justify-between text-xs">
-              <span className="font-semibold uppercase tracking-wide text-muted-foreground">
-                Registered size
-              </span>
-              <span className="num text-sm font-bold">
-                {formatNpr(registered, { compact: true })}
-              </span>
+              <span className="font-semibold uppercase tracking-wide text-muted-foreground">Registered size</span>
+              <span className="num text-sm font-bold">{formatNpr(registered, { compact: true })}</span>
             </p>
             {pub != null || priv != null ? (
               <>
@@ -162,8 +145,7 @@ function DebentureDetail({ d, onClose }: { d: MfDebenture | null; onClose: () =>
           </div>
         ) : null}
         <p className="text-[0.68rem] leading-relaxed text-muted-foreground">
-          Indicative only, not investment advice. Coupons are annual rates before tax; payout
-          frequency varies by issue.
+          Indicative only, not investment advice. Coupons are annual rates before tax; payout frequency varies by issue.
         </p>
       </DialogContent>
     </Dialog>
@@ -174,8 +156,8 @@ function DebenturesPage() {
   const listQ = useQuery(mfDebentureListQuery());
   const [search, setSearch] = useState("");
   const [sector, setSector] = useState<string>("__all__");
-  const [sortKey, setSortKey] = useState<SortKey>("coupon");
-  const [sortDir, setSortDir] = useState<1 | -1>(-1);
+  const { sort, toggle } = useSort<SortKey>({ key: "coupon", dir: "desc" }, SORT_KINDS);
+  const [viewMode, setViewMode] = useState<"cards" | "list">("cards");
   const [compared, setCompared] = useState<string[]>([]);
   const [principal, setPrincipal] = useState("100000");
   const [detail, setDetail] = useState<MfDebenture | null>(null);
@@ -204,30 +186,31 @@ function DebenturesPage() {
         (d.issueManager ?? "").toLowerCase().includes(term)
       );
     });
+    if (sort.dir === "default") return [...rows];
+    const mul = sort.dir === "asc" ? 1 : -1;
     const score = (d: MfDebenture): number | string => {
-      switch (sortKey) {
+      switch (sort.key) {
         case "coupon":
           return d.couponPct ?? -1;
         case "amount":
           return d.publicIssueAmount ?? d.amountRegistered ?? 0;
         case "recent":
           return d.dateBs ?? d.fiscalYear ?? "";
+        case "issuer":
+          return d.issuer.toLowerCase();
       }
     };
     return [...rows].sort((a, b) => {
       const va = score(a);
       const vb = score(b);
-      if (typeof va === "string" || typeof vb === "string")
-        return String(va).localeCompare(String(vb)) * sortDir;
-      return ((va as number) - (vb as number)) * sortDir;
+      if (typeof va === "string" || typeof vb === "string") return String(va).localeCompare(String(vb)) * mul;
+      return ((va as number) - (vb as number)) * mul;
     });
-  }, [all, search, sector, sortKey, sortDir]);
+  }, [all, search, sector, sort]);
 
   const toggleCompare = (d: MfDebenture) => {
     const k = keyOf(d);
-    setCompared((cur) =>
-      cur.includes(k) ? cur.filter((x) => x !== k) : cur.length >= 3 ? cur : [...cur, k],
-    );
+    setCompared((cur) => (cur.includes(k) ? cur.filter((x) => x !== k) : cur.length >= 3 ? cur : [...cur, k]));
   };
   const compareRows = useMemo(
     () => compared.flatMap((k) => all.filter((d) => keyOf(d) === k)),
@@ -257,13 +240,10 @@ function DebenturesPage() {
       ) : listQ.isError ? (
         <ErrorBlock error={listQ.error} retry={() => void listQ.refetch()} />
       ) : all.length === 0 ? (
-        <EmptyBlock
-          title="No debentures"
-          description="No debenture records in the feed right now."
-        />
+        <EmptyBlock title="No debentures" description="No debenture records in the feed right now." />
       ) : (
         <>
-          <div className="flex flex-wrap gap-2">
+          <ChipRow wrap>
             <StatChip label="Issues" value={String(summary?.count ?? all.length)} />
             <StatChip label="Issuers" value={String(summary?.issuers ?? "-")} />
             <StatChip
@@ -274,10 +254,8 @@ function DebenturesPage() {
                   : "-"
               }
             />
-            {compared.length > 0 ? (
-              <StatChip label="Comparing" value={`${compared.length} / 3`} />
-            ) : null}
-          </div>
+            {compared.length > 0 ? <StatChip label="Comparing" value={`${compared.length} / 3`} /> : null}
+          </ChipRow>
 
           {compareRows.length >= 2 ? (
             <section className="space-y-3 rounded-2xl border border-primary/25 bg-card p-4">
@@ -297,22 +275,11 @@ function DebenturesPage() {
                   <span className="text-xs text-muted-foreground">/ yr each</span>
                 </div>
               </div>
-              <div
-                className={cn(
-                  "grid gap-2",
-                  compareRows.length >= 3 ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2",
-                )}
-              >
+              <div className={cn("grid gap-2", compareRows.length >= 3 ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2")}>
                 {compareRows.map((d) => {
-                  const annual =
-                    principalValid && d.couponPct != null
-                      ? (principalNum * d.couponPct) / 100
-                      : null;
+                  const annual = principalValid && d.couponPct != null ? (principalNum * d.couponPct) / 100 : null;
                   return (
-                    <div
-                      key={keyOf(d)}
-                      className="relative rounded-xl border border-border/60 bg-surface p-3"
-                    >
+                    <div key={keyOf(d)} className="relative rounded-xl border border-border/60 bg-surface p-3">
                       <button
                         type="button"
                         aria-label={`Remove ${d.issuer}`}
@@ -327,10 +294,7 @@ function DebenturesPage() {
                       <p className="mt-1 truncate text-[13px] font-bold" title={d.issuer}>
                         {d.issuer}
                       </p>
-                      <p
-                        className="truncate text-[11px] text-muted-foreground"
-                        title={d.instrument}
-                      >
+                      <p className="truncate text-[11px] text-muted-foreground" title={d.instrument}>
                         {d.instrument}
                       </p>
                       <dl className="num mt-2 space-y-1 text-[11px] text-muted-foreground">
@@ -351,9 +315,7 @@ function DebenturesPage() {
                         <div className="flex justify-between gap-2">
                           <dt>Public issue</dt>
                           <dd className="font-semibold text-foreground">
-                            {d.publicIssueAmount != null
-                              ? formatNpr(d.publicIssueAmount, { compact: true })
-                              : "-"}
+                            {d.publicIssueAmount != null ? formatNpr(d.publicIssueAmount, { compact: true }) : "-"}
                           </dd>
                         </div>
                         <div className="flex justify-between gap-2 border-t border-border/60 pt-1">
@@ -383,9 +345,9 @@ function DebenturesPage() {
                 className="h-10 rounded-xl pl-9"
               />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Select value={sector} onValueChange={setSector}>
-                <SelectTrigger className="h-10 w-[160px] rounded-xl text-xs">
+                <SelectTrigger className="h-10 w-[160px] shrink-0 rounded-xl text-xs">
                   <SelectValue placeholder="All sectors" />
                 </SelectTrigger>
                 <SelectContent>
@@ -397,30 +359,35 @@ function DebenturesPage() {
                   ))}
                 </SelectContent>
               </Select>
-              <div className="flex items-center gap-1 self-start rounded-xl border border-border/60 bg-card p-1">
-                {SORTS.map((s) => (
-                  <button
-                    key={s.key}
-                    type="button"
-                    onClick={() => {
-                      if (s.key === sortKey) setSortDir((d) => (d === 1 ? -1 : 1));
-                      else {
-                        setSortKey(s.key);
-                        setSortDir(-1);
-                      }
-                    }}
-                    className={cn(
-                      "inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-colors",
-                      sortKey === s.key
-                        ? "bg-primary/15 text-primary"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {s.label}
-                    <ArrowUpDown className="size-3 opacity-60" />
-                  </button>
-                ))}
-              </div>
+              <Select value={sort.dir === "default" ? "" : sort.key} onValueChange={(v) => toggle(v as SortKey)}>
+                <SelectTrigger
+                  className="h-10 min-w-0 flex-1 rounded-xl text-xs sm:hidden"
+                  aria-label="Sort debentures"
+                >
+                  <SelectValue placeholder="Sort by…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {SORTS.map((s) => {
+                    const active = sort.key === s.key && sort.dir !== "default";
+                    return (
+                      <SelectItem key={s.key} value={s.key}>
+                        {s.label}
+                        {active ? (sort.dir === "asc" ? " ↑" : " ↓") : ""}
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+              {viewMode === "cards" ? (
+                <SortTabs
+                  options={SORTS}
+                  activeKey={sort.dir === "default" ? null : sort.key}
+                  dir={sort.dir}
+                  onSelect={toggle}
+                  className="hidden sm:flex"
+                />
+              ) : null}
+              <ViewToggle value={viewMode} onChange={setViewMode} modes={["cards", "list"]} />
             </div>
           </div>
 
@@ -432,6 +399,94 @@ function DebenturesPage() {
             <p className="rounded-2xl border border-border/60 bg-card px-4 py-8 text-center text-sm text-muted-foreground">
               No debentures match your filters.
             </p>
+          ) : viewMode === "list" ? (
+            <Panel padding="none" className="overflow-clip">
+              <Table className="min-w-[760px]">
+                <TableHeader className="bg-muted">
+                  <TableRow className="bg-muted/40 hover:bg-muted/40">
+                    <SortableTh
+                      label="Coupon"
+                      active={sort.key === "coupon"}
+                      dir={sort.dir}
+                      kind="number"
+                      align="left"
+                      onClick={() => toggle("coupon")}
+                      className="py-2.5 pl-4 pr-2"
+                    />
+                    <SortableTh
+                      label="Issuer"
+                      active={sort.key === "issuer"}
+                      dir={sort.dir}
+                      kind="text"
+                      align="left"
+                      onClick={() => toggle("issuer")}
+                      className="py-2.5 px-3"
+                    />
+                    <SortableTh
+                      label="Issue size"
+                      active={sort.key === "amount"}
+                      dir={sort.dir}
+                      kind="number"
+                      align="right"
+                      onClick={() => toggle("amount")}
+                      className="py-2.5 px-3"
+                    />
+                    <SortableTh
+                      label="Record"
+                      active={sort.key === "recent"}
+                      dir={sort.dir}
+                      kind="number"
+                      align="right"
+                      onClick={() => toggle("recent")}
+                      className="py-2.5 px-3 hidden sm:table-cell"
+                    />
+                    <TableHead className="py-2.5 pl-2 pr-4 text-right">Compare</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {visible.map((d) => {
+                    const k = keyOf(d);
+                    const picked = compared.includes(k);
+                    const size = d.publicIssueAmount ?? d.amountRegistered ?? null;
+                    return (
+                      <TableRow key={k} className="cursor-pointer" onClick={() => setDetail(d)}>
+                        <TableCell className="py-2.5 pl-4 pr-2">
+                          <CouponBadge value={d.couponPct} />
+                        </TableCell>
+                        <TableCell className="py-2.5 px-3">
+                          <p className="font-semibold">{d.issuer}</p>
+                          <p className="max-w-52 truncate text-xs text-muted-foreground">
+                            {d.instrument}
+                            {d.tenorYears != null ? ` · ${d.tenorYears}yrs` : ""}
+                          </p>
+                        </TableCell>
+                        <TableCell className="num py-2.5 px-3 text-right font-medium">
+                          {size != null ? formatNpr(size, { compact: true }) : "-"}
+                        </TableCell>
+                        <TableCell className="num py-2.5 px-3 text-right text-muted-foreground hidden sm:table-cell">
+                          {d.dateBs ?? d.fiscalYear ?? "-"}
+                        </TableCell>
+                        <TableCell className="py-2.5 pl-2 pr-4 text-right" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={() => toggleCompare(d)}
+                            disabled={!picked && compared.length >= 3}
+                            className={cn(
+                              "rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors disabled:opacity-40",
+                              picked
+                                ? "border-primary/60 bg-primary/15 text-primary"
+                                : "border-border/60 hover:border-primary/40 hover:text-primary",
+                            )}
+                          >
+                            {picked ? "Added" : "Compare"}
+                          </button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </Panel>
           ) : (
             <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3">
               {visible.map((d) => {
@@ -450,10 +505,7 @@ function DebenturesPage() {
                     <div className="flex items-start gap-3">
                       <CouponBadge value={d.couponPct} />
                       <div className="min-w-0 flex-1">
-                        <p
-                          className="truncate text-[15px] font-bold leading-tight"
-                          title={d.issuer}
-                        >
+                        <p className="truncate text-[15px] font-bold leading-tight" title={d.issuer}>
                           {d.issuer}
                         </p>
                         <p className="truncate text-xs text-muted-foreground" title={d.instrument}>
@@ -484,17 +536,13 @@ function DebenturesPage() {
                       <div className="rounded-lg bg-surface px-2.5 py-1.5">
                         <dt className="text-muted-foreground">Public issue</dt>
                         <dd className="font-bold">
-                          {d.publicIssueAmount != null
-                            ? formatNpr(d.publicIssueAmount, { compact: true })
-                            : "-"}
+                          {d.publicIssueAmount != null ? formatNpr(d.publicIssueAmount, { compact: true }) : "-"}
                         </dd>
                       </div>
                     </dl>
 
                     <div className="mt-auto flex items-center justify-between gap-2 border-t border-border/60 pt-2.5 text-[11px] text-muted-foreground">
-                      <span className="truncate">
-                        {d.issueManager ? `via ${d.issueManager}` : "-"}
-                      </span>
+                      <span className="truncate">{d.issueManager ? `via ${d.issueManager}` : "-"}</span>
                       <span className="flex shrink-0 gap-1.5">
                         <button
                           type="button"
@@ -531,8 +579,8 @@ function DebenturesPage() {
             </div>
           )}
           <p className="text-[11px] text-muted-foreground">
-            Issue records from SEBON public data. Indicative only, not investment advice. Coupons
-            are annual rates before tax; payout frequency varies by issue.
+            Issue records from SEBON public data. Indicative only, not investment advice. Coupons are annual rates
+            before tax; payout frequency varies by issue.
           </p>
         </>
       )}

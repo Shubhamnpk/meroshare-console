@@ -18,12 +18,7 @@ import {
   getCurrentIssues,
   getOldApplicationReports,
 } from "./meroshare/ipo.functions";
-import {
-  getAccountProfile,
-  getActivityLog,
-  getBanks,
-  getMyDetail,
-} from "./meroshare/account.functions";
+import { getAccountProfile, getActivityLog, getBanks, getMyDetail } from "./meroshare/account.functions";
 import {
   getBrokerDirectory,
   getChartData,
@@ -56,6 +51,19 @@ import {
   checkEdisPoolAccountFn,
   checkEdisWaccLeftFn,
 } from "./meroshare/edis.functions";
+import {
+  getWorldHistory,
+  getWorldQuote,
+  getGlobalValuation,
+  getWorldSearch,
+  getWorldCompany,
+  getGlobalHistory,
+  getGlobalDaySeries,
+  getWorldIntraday,
+  getFxRates,
+} from "./world/market.functions";
+import type { GlobalValuationRow } from "./world/market.functions";
+import type { WorldRange, WorldTick } from "./world/feed.server";
 import type { ChartRange, PortfolioGranularity } from "./nepse/types";
 import { brokerVaultStatus, listBrokerConnections } from "./brokers/brokers.functions";
 import {
@@ -200,21 +208,13 @@ export const portfolioHistoryQuery = (
   enabled = true,
 ) =>
   queryOptions({
-    queryKey: [
-      "portfolio-history",
-      months,
-      granularity,
-      JSON.stringify(holdings.map((h) => h.scrip)),
-    ],
+    queryKey: ["portfolio-history", months, granularity, JSON.stringify(holdings.map((h) => h.scrip))],
     queryFn: () => getPortfolioHistorySeries({ data: { holdings, months, granularity } }),
     enabled: enabled && holdings.length > 0,
     staleTime: 30 * 60_000,
   });
 
-export const portfolioIntradayQuery = (
-  holdings: { scrip: string; units: number; price: number }[],
-  enabled = true,
-) =>
+export const portfolioIntradayQuery = (holdings: { scrip: string; units: number; price: number }[], enabled = true) =>
   queryOptions({
     queryKey: ["portfolio-intraday", JSON.stringify(holdings.map((h) => [h.scrip, h.units]))],
     queryFn: () => getPortfolioIntradaySeries({ data: { holdings } }),
@@ -580,8 +580,7 @@ export const udfHistoryQuery = (
 ) =>
   queryOptions({
     queryKey: ["udf-history", symbol, range, intradayRes ?? ""],
-    queryFn: () =>
-      getUdfHistory({ data: { symbol: symbol!, range: range!, intradayRes: intradayRes ?? null } }),
+    queryFn: () => getUdfHistory({ data: { symbol: symbol!, range: range!, intradayRes: intradayRes ?? null } }),
     enabled: Boolean(symbol && range),
     staleTime: range === "1D" ? 15_000 : 60_000,
     refetchInterval: range === "1D" ? 15_000 : false,
@@ -1026,6 +1025,112 @@ export const edisWaccLeftQuery = () =>
   queryOptions({
     queryKey: ["edis-wacc-left"],
     queryFn: () => checkEdisWaccLeftFn(),
+    staleTime: 10 * 60_000,
+    retry: false,
+  });
+
+// ---------------------------------------------------------------------------
+// World (non-NEPSE) market data — isolated from NEPSE feeds by design.
+// ---------------------------------------------------------------------------
+
+export const worldQuoteQuery = (symbol: string | null, currency?: string) =>
+  queryOptions({
+    queryKey: ["world-quote", symbol, currency ?? ""],
+    queryFn: () => getWorldQuote({ data: { symbol: symbol ?? "", currency } }),
+    enabled: Boolean(symbol),
+    staleTime: 60_000,
+    retry: false,
+  });
+
+export const worldHistoryQuery = (symbol: string | null, range: WorldRange, currency?: string) =>
+  queryOptions({
+    queryKey: ["world-history", symbol, range, currency ?? ""],
+    queryFn: () => getWorldHistory({ data: { symbol: symbol ?? "", range, currency } }),
+    enabled: Boolean(symbol),
+    staleTime: 10 * 60_000,
+    retry: false,
+  });
+
+export interface GlobalLotInput {
+  symbol: string;
+  qty: number;
+  avgPrice: number;
+  currency: string;
+}
+export const globalValuationQuery = (holdings: GlobalLotInput[], enabled = true) =>
+  queryOptions({
+    queryKey: ["global-valuation", JSON.stringify(holdings.map((h) => [h.symbol, h.qty]))],
+    queryFn: async (): Promise<{ rows: GlobalValuationRow[] }> => getGlobalValuation({ data: { holdings } }),
+    enabled: enabled && holdings.length > 0,
+    staleTime: 60_000,
+    retry: false,
+  });
+
+export const fxRatesQuery = (sources: string[], to: string) =>
+  queryOptions({
+    queryKey: ["fx-rates", [...new Set(sources)].sort(), to],
+    queryFn: async (): Promise<{ rates: Record<string, number> }> => getFxRates({ data: { sources, to } }),
+    enabled: sources.length > 0,
+    staleTime: 60 * 60_000,
+    retry: false,
+  });
+
+export const globalDaySeriesQuery = (holdings: GlobalLotInput[], enabled = true) =>
+  queryOptions({
+    queryKey: ["global-day-series", JSON.stringify(holdings.map((h) => [h.symbol, h.qty]))],
+    queryFn: async (): Promise<{ points: { time: number; value: number }[]; failed: string[]; cost: number }> =>
+      getGlobalDaySeries({ data: { holdings } }),
+    enabled: enabled && holdings.length > 0,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+
+export const worldSearchQuery = (query: string) =>
+  queryOptions({
+    queryKey: ["world-search", query.trim().toLowerCase()],
+    queryFn: async () => getWorldSearch({ data: { query: query.trim() } }),
+    enabled: query.trim().length >= 2,
+    staleTime: 60 * 60_000,
+    retry: false,
+  });
+
+export const worldCompanyQuery = (symbol: string | null) =>
+  queryOptions({
+    queryKey: ["world-company", symbol],
+    queryFn: async () => getWorldCompany({ data: { symbol: symbol ?? "" } }),
+    enabled: Boolean(symbol),
+    staleTime: 24 * 60 * 60_000,
+    retry: false,
+  });
+
+export const worldIntradayQuery = (symbol: string | null, currency?: string, interval: "5m" | "15m" = "15m") =>
+  queryOptions({
+    queryKey: ["world-intraday", symbol, currency ?? "", interval],
+    queryFn: async (): Promise<{
+      ticks: WorldTick[];
+      live: number | null;
+      interval: "5m" | "15m";
+    }> => getWorldIntraday({ data: { symbol: symbol ?? "", currency, interval } }),
+    enabled: Boolean(symbol),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+
+export interface GlobalHistoryLot {
+  symbol: string;
+  currency: string;
+  lots: { date: string; side: string; qty: number; price: number }[];
+}
+
+export const globalHistoryQuery = (holdings: GlobalHistoryLot[], range: WorldRange) =>
+  queryOptions({
+    queryKey: [
+      "global-history",
+      JSON.stringify(holdings.map((h) => [h.symbol, h.lots.map((l) => [l.date.slice(0, 10), l.side, l.qty, l.price])])),
+      range,
+    ],
+    queryFn: async () => getGlobalHistory({ data: { holdings, range } }),
+    enabled: holdings.length > 0,
     staleTime: 10 * 60_000,
     retry: false,
   });

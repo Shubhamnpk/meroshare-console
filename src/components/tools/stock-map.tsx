@@ -44,9 +44,7 @@ export function StockMap({
           {formatNpr(map.totalMarketValue, { compact: true })} mapped · {map.coverage} schemes
         </p>
       </div>
-      {hint ? (
-        <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{hint}</p>
-      ) : null}
+      {hint ? <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{hint}</p> : null}
 
       {slices.length === 0 ? (
         <p className="mt-3 rounded-xl bg-surface px-3 py-4 text-center text-xs text-muted-foreground">
@@ -69,16 +67,11 @@ export function StockMap({
                   <span className="w-20 shrink-0 truncate font-bold">{s.stockSymbol}</span>
                   <span className="relative h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
                     <span
-                      className={cn(
-                        "absolute inset-y-0 left-0 rounded-full",
-                        BAR_COLORS[i % BAR_COLORS.length],
-                      )}
+                      className={cn("absolute inset-y-0 left-0 rounded-full", BAR_COLORS[i % BAR_COLORS.length])}
                       style={{ width: `${Math.min(100, Math.max(2, s.weightPct))}%` }}
                     />
                   </span>
-                  <span className="num w-14 shrink-0 text-right font-bold">
-                    {s.weightPct.toFixed(1)}%
-                  </span>
+                  <span className="num w-14 shrink-0 text-right font-bold">{s.weightPct.toFixed(1)}%</span>
                 </div>
                 <p className="num mt-0.5 pl-7 text-[0.68rem] text-muted-foreground sm:pl-0 sm:text-right">
                   {formatNpr(s.marketValue, { compact: true })}

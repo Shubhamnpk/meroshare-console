@@ -17,16 +17,9 @@ export function StatCard({
   className?: string;
 }) {
   return (
-    <div
-      className={cn(
-        "relative overflow-hidden rounded-2xl border border-border/70 bg-card p-4 sm:p-5",
-        className,
-      )}
-    >
+    <div className={cn("relative overflow-hidden rounded-2xl border border-border/70 bg-card p-4 sm:p-5", className)}>
       <div className="flex items-start justify-between gap-3">
-        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          {label}
-        </p>
+        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
         {icon ? <span className="text-muted-foreground">{icon}</span> : null}
       </div>
       <p
@@ -48,22 +41,22 @@ export function DeltaPill({
   value,
   children,
   className,
+  title,
 }: {
   value: number;
   children: ReactNode;
   className?: string;
+  title?: string;
 }) {
   return (
     <span
+      title={title}
       className={cn(
         // text-center + leading-snug keep the stadium shape clean when long
         // values wrap onto a 2nd/3rd row in squeezed table cells.
         "num inline-flex max-w-full items-center justify-center gap-1 rounded-full px-2 py-0.5 text-center text-xs font-semibold leading-snug",
-        value > 0
-          ? "bg-gain/15 text-gain"
-          : value < 0
-            ? "bg-loss/15 text-loss"
-            : "bg-muted text-muted-foreground",
+        title && "cursor-help",
+        value > 0 ? "bg-gain/15 text-gain" : value < 0 ? "bg-loss/15 text-loss" : "bg-muted text-muted-foreground",
         className,
       )}
     >

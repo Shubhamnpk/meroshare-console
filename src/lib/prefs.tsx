@@ -1,22 +1,16 @@
 // Unified client-only preferences: theme, display, sidebar, terminal, watchlist.
 // All persisted in a single localStorage key (ms-prefs.v1).
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { fetchServerWatchlist, pushWatchlist } from "@/lib/meroshare/watchlist.functions";
+import type { ChartStyle, IndicatorConfig } from "@/components/market/terminal-chart";
+import type { BarAgg } from "@/lib/charts/aggregate";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 export type ThemePref = "light" | "dark" | "system";
+export type NumberFormatPref = "np" | "us" | "eu";
 export type ColorTheme = "teal" | "blue" | "purple" | "green" | "orange" | "pink";
 
 export const COLOR_OPTIONS: { value: ColorTheme; label: string; swatch: string }[] = [
@@ -36,6 +30,30 @@ export interface TerminalState {
   logScale: boolean;
 }
 
+/** Shared chart preferences — one store, every terminal. */
+export interface ChartPrefs {
+  style: ChartStyle;
+  indicators: IndicatorConfig;
+  logScale: boolean;
+  barAgg: BarAgg;
+}
+
+export const DEFAULT_CHART: ChartPrefs = {
+  style: "area",
+  indicators: {
+    sma20: false,
+    sma50: false,
+    ema20: false,
+    bollinger: false,
+    vwap: false,
+    volume: true,
+    rsi: false,
+    macd: false,
+  },
+  logScale: false,
+  barAgg: "day",
+};
+
 export interface Prefs {
   // Display
   theme: ThemePref;
@@ -43,6 +61,17 @@ export interface Prefs {
   compactNumbers: boolean;
   autoRefresh: boolean;
   refreshMinutes: number;
+  /** Nepali / international / European digit grouping for amount inputs. */
+  numberFormat: NumberFormatPref;
+  /** One currency for cross-currency totals (earned chips, etc.). Default NPR. */
+  displayCurrency: string;
+  /** Global toast kill-switch (Settings → display). Off = Toaster unmounts. */
+  toastsEnabled: boolean;
+  // Shared chart preferences: every terminal reads these, so volume on here
+  // means volume on everywhere. Literals mirror terminal-chart defaults
+  // (type-only import — a runtime import would drag lightweight-charts into
+  // every prefs consumer).
+  chart: ChartPrefs;
   // Sidebar
   sidebarCollapsed: boolean;
   // Terminal
@@ -51,6 +80,8 @@ export interface Prefs {
   watchlist: string[];
   // Beta features (opt-in via Settings → Advanced)
   edisBeta: boolean;
+  /** Demo-mode IPO playground (Settings → Advanced, demo users only). */
+  demoIpoEnabled: boolean;
 }
 
 export interface PrefsApi extends Prefs {
@@ -62,6 +93,10 @@ export interface PrefsApi extends Prefs {
   setCompactNumbers: (value: boolean) => void;
   setAutoRefresh: (value: boolean) => void;
   setRefreshMinutes: (minutes: number) => void;
+  setNumberFormat: (format: NumberFormatPref) => void;
+  setDisplayCurrency: (currency: string) => void;
+  setToastsEnabled: (on: boolean) => void;
+  setChart: (patch: Partial<ChartPrefs>) => void;
   // Sidebar
   setSidebarCollapsed: (collapsed: boolean) => void;
   // Terminal
@@ -72,6 +107,7 @@ export interface PrefsApi extends Prefs {
   hasInWatchlist: (symbol: string) => boolean;
   // Beta features
   setEdisBeta: (on: boolean) => void;
+  setDemoIpoEnabled: (on: boolean) => void;
   // Modal helpers
   openPassword: () => void;
   closePassword: () => void;
@@ -96,9 +132,9 @@ const LEGACY_KEYS = {
 
 const DEFAULT_TERMINAL: TerminalState = {
   symbol: "NABIL",
-  range: "1Y",
-  style: "candles",
-  indicators: { sma: true, ema: false, bb: false, vwap: false, rsi: false, macd: false },
+  range: "1D",
+  style: "area",
+  indicators: { sma: false, ema: false, bb: false, vwap: false, rsi: false, macd: false, volume: true },
   logScale: false,
 };
 
@@ -108,10 +144,18 @@ export const DEFAULT_PREFS: Prefs = {
   compactNumbers: false,
   autoRefresh: true,
   refreshMinutes: 5,
+  numberFormat: "np",
+  displayCurrency: "NPR",
+  toastsEnabled: true,
+  chart: {
+    ...DEFAULT_CHART,
+    indicators: { ...DEFAULT_CHART.indicators },
+  },
   sidebarCollapsed: false,
   terminal: DEFAULT_TERMINAL,
   watchlist: [],
   edisBeta: false,
+  demoIpoEnabled: true,
 };
 
 function readJson<T>(key: string): T | null {
@@ -137,6 +181,34 @@ function removeKey(key: string) {
   } catch {
     // ignore
   }
+}
+
+/** First run with the shared chart store: adopt the terminal's saved look
+ * (legacy indicator keys sma/ema/bb map to sma20/ema20/bollinger) so a
+ * customized terminal keeps its face everywhere. */
+function seedChartFromTerminal(term: unknown): ChartPrefs {
+  const t = (term ?? {}) as {
+    style?: unknown;
+    logScale?: unknown;
+    indicators?: Record<string, boolean>;
+  };
+  const old = t.indicators ?? {};
+  const pick = (v: unknown, fb: boolean) => (typeof v === "boolean" ? v : fb);
+  return {
+    style: t.style === "candles" || t.style === "line" || t.style === "area" ? t.style : DEFAULT_CHART.style,
+    indicators: {
+      sma20: pick(old["sma20"] ?? old["sma"], DEFAULT_CHART.indicators.sma20),
+      sma50: pick(old["sma50"], DEFAULT_CHART.indicators.sma50),
+      ema20: pick(old["ema20"] ?? old["ema"], DEFAULT_CHART.indicators.ema20),
+      bollinger: pick(old["bollinger"] ?? old["bb"], DEFAULT_CHART.indicators.bollinger),
+      vwap: pick(old["vwap"], DEFAULT_CHART.indicators.vwap),
+      volume: pick(old["volume"], DEFAULT_CHART.indicators.volume),
+      rsi: pick(old["rsi"], DEFAULT_CHART.indicators.rsi),
+      macd: pick(old["macd"], DEFAULT_CHART.indicators.macd),
+    },
+    logScale: pick(t.logScale, DEFAULT_CHART.logScale),
+    barAgg: DEFAULT_CHART.barAgg,
+  };
 }
 
 /** Migrate legacy keys into the unified key, then delete the old ones. */
@@ -180,6 +252,7 @@ function migrateLegacy(prefs: Prefs): Prefs {
       ...term,
       indicators: { ...DEFAULT_TERMINAL.indicators, ...(term.indicators ?? {}) },
     };
+    next.chart = seedChartFromTerminal(term);
   }
 
   // ms.watchlist.v1
@@ -203,10 +276,33 @@ function loadPrefs(): Prefs {
   try {
     const stored = readJson<Partial<Prefs>>(STORAGE_KEY);
     const base = stored ? { ...DEFAULT_PREFS, ...stored } : { ...DEFAULT_PREFS };
+    // One-time inherit from the old standalone number-format keys.
+    if (stored?.numberFormat == null) {
+      const raw =
+        window.localStorage.getItem("ms-number-format") ?? window.localStorage.getItem("wallet_number_format");
+      if (raw === "us" || raw === "eu" || raw === "np") base.numberFormat = raw;
+      else if (raw === "in") base.numberFormat = "np";
+    }
+    // First run with the shared chart store: adopt the terminal's saved look
+    // (legacy indicator keys sma/ema/bb map to sma20/ema20/bollinger) so a
+    // customized terminal keeps its face everywhere.
+    if (stored?.chart == null && stored?.terminal) {
+      base.chart = seedChartFromTerminal(stored.terminal);
+    }
+    // Backfill indicator flags added after the prefs were saved (e.g.
+    // volume) — an explicit stored false still wins over the default.
+    base.terminal = {
+      ...DEFAULT_TERMINAL,
+      ...(base.terminal ?? {}),
+      indicators: { ...DEFAULT_TERMINAL.indicators, ...(base.terminal?.indicators ?? {}) },
+    };
+    // New kill-switch inherits the old notification pop-up choice once, so
+    // users who muted urgent pop-ups stay muted after the merge.
+    if (stored?.toastsEnabled == null && window.localStorage.getItem("ms-notif-popups.v1") === "0") {
+      base.toastsEnabled = false;
+    }
     // Only migrate if legacy keys still exist
-    const hasLegacy = Object.values(LEGACY_KEYS).some(
-      (k) => window.localStorage.getItem(k) !== null,
-    );
+    const hasLegacy = Object.values(LEGACY_KEYS).some((k) => window.localStorage.getItem(k) !== null);
     if (hasLegacy) return migrateLegacy(base);
     return base;
   } catch {
@@ -220,9 +316,7 @@ function loadPrefs(): Prefs {
 
 export function applyTheme(theme: ThemePref) {
   if (typeof document === "undefined") return;
-  const light =
-    theme === "light" ||
-    (theme === "system" && window.matchMedia("(prefers-color-scheme: light)").matches);
+  const light = theme === "light" || (theme === "system" && window.matchMedia("(prefers-color-scheme: light)").matches);
   document.documentElement.classList.toggle("light", light);
 }
 
@@ -273,9 +367,15 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
       compactNumbers,
       autoRefresh,
       refreshMinutes,
+      numberFormat,
+      displayCurrency,
+      toastsEnabled,
+      chart,
       sidebarCollapsed,
       terminal,
       watchlist,
+      edisBeta,
+      demoIpoEnabled,
     } = prefs;
     writeJson(STORAGE_KEY, {
       theme,
@@ -283,9 +383,15 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
       compactNumbers,
       autoRefresh,
       refreshMinutes,
+      numberFormat,
+      displayCurrency,
+      toastsEnabled,
+      chart,
       sidebarCollapsed,
       terminal,
       watchlist,
+      edisBeta,
+      demoIpoEnabled,
     });
   }, [prefs]);
 
@@ -309,9 +415,7 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
     (symbol: string) => {
       const upper = symbol.toUpperCase();
       setPrefs((s) => {
-        const next = s.watchlist.includes(upper)
-          ? s.watchlist.filter((x) => x !== upper)
-          : [...s.watchlist, upper];
+        const next = s.watchlist.includes(upper) ? s.watchlist.filter((x) => x !== upper) : [...s.watchlist, upper];
         syncWatchlist(next);
         return { ...s, watchlist: next };
       });
@@ -364,12 +468,21 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
       setCompactNumbers: (compactNumbers) => setPrefs((s) => ({ ...s, compactNumbers })),
       setAutoRefresh: (autoRefresh) => setPrefs((s) => ({ ...s, autoRefresh })),
       setRefreshMinutes: (refreshMinutes) => setPrefs((s) => ({ ...s, refreshMinutes })),
+      setNumberFormat: (numberFormat) => setPrefs((s) => ({ ...s, numberFormat })),
+      setDisplayCurrency: (displayCurrency) => setPrefs((s) => ({ ...s, displayCurrency })),
+      setToastsEnabled: (toastsEnabled) => setPrefs((s) => ({ ...s, toastsEnabled })),
+      setChart: (patch) =>
+        setPrefs((s) => ({
+          ...s,
+          chart: { ...s.chart, ...patch, indicators: { ...s.chart.indicators, ...(patch.indicators ?? {}) } },
+        })),
       setSidebarCollapsed: (sidebarCollapsed) => setPrefs((s) => ({ ...s, sidebarCollapsed })),
       setTerminal: (terminal) => setPrefs((s) => ({ ...s, terminal })),
       toggleWatchlist,
       removeFromWatchlist,
       hasInWatchlist,
       setEdisBeta: (edisBeta) => setPrefs((s) => ({ ...s, edisBeta })),
+      setDemoIpoEnabled: (demoIpoEnabled) => setPrefs((s) => ({ ...s, demoIpoEnabled })),
       openPassword: () => setPasswordOpen(true),
       closePassword: () => setPasswordOpen(false),
       openPin: () => setPinOpen(true),
@@ -378,11 +491,7 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
     [prefs, toggleWatchlist, removeFromWatchlist, hasInWatchlist],
   );
 
-  return (
-    <PrefsContext.Provider value={{ ...api, passwordOpen, pinOpen }}>
-      {children}
-    </PrefsContext.Provider>
-  );
+  return <PrefsContext.Provider value={{ ...api, passwordOpen, pinOpen }}>{children}</PrefsContext.Provider>;
 }
 
 export function usePrefs(): PrefsApi {

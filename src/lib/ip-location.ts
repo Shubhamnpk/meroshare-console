@@ -58,8 +58,7 @@ export function isPrivateIp(ip: string): boolean {
   if (!v || v === "—" || v === "-") return true;
   if (v === "::1" || v === "::ffff:127.0.0.1") return true;
   if (v.startsWith("192.168.") || v.startsWith("10.")) return true;
-  if (v.startsWith("127.") || v.startsWith("169.254.") || v.startsWith("fc") || v.startsWith("fd"))
-    return true;
+  if (v.startsWith("127.") || v.startsWith("169.254.") || v.startsWith("fc") || v.startsWith("fd")) return true;
   const m172 = /^172\.(1[6-9]|2\d|3[01])\./;
   if (m172.test(v)) return true;
   return false;
@@ -135,13 +134,7 @@ async function fetchOne(ip: string, cache: Map<string, CacheEntry>): Promise<IpL
  * Failed or private lookups degrade to a label-only entry - never throws.
  */
 export function useIpLocations(ips: string[]) {
-  const unique = [
-    ...new Set(
-      ips
-        .map((ip) => ip.split(",")[0]?.trim() ?? "")
-        .filter((ip) => ip && ip !== "—"),
-    ),
-  ].sort();
+  const unique = [...new Set(ips.map((ip) => ip.split(",")[0]?.trim() ?? "").filter((ip) => ip && ip !== "—"))].sort();
   const query = useQuery({
     queryKey: ["ip-locations", unique],
     enabled: unique.length > 0,

@@ -49,12 +49,7 @@ export function Sparkline({
 
   if (points.length < 2) {
     return (
-      <div
-        className={cn(
-          "flex h-16 items-center justify-center text-xs text-muted-foreground",
-          className,
-        )}
-      >
+      <div className={cn("flex h-16 items-center justify-center text-xs text-muted-foreground", className)}>
         No history yet
       </div>
     );

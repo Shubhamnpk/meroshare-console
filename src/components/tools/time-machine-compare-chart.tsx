@@ -40,11 +40,7 @@ function palette(light: boolean) {
   };
 }
 
-export function TimeMachineCompareChart({
-  series,
-  height = 380,
-  className,
-}: TimeMachineCompareChartProps) {
+export function TimeMachineCompareChart({ series, height = 380, className }: TimeMachineCompareChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
 
@@ -53,9 +49,7 @@ export function TimeMachineCompareChart({
   const { theme } = useSettings();
   const light =
     theme === "light" ||
-    (theme === "system" &&
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-color-scheme: light)").matches);
+    (theme === "system" && typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: light)").matches);
 
   // Map each series by symbol -> date -> value for rapid crosshair lookup
   const seriesValueMap = useMemo(() => {
@@ -176,21 +170,18 @@ export function TimeMachineCompareChart({
   }
 
   return (
-    <div className={cn("relative flex flex-col rounded-2xl overflow-hidden border border-border/70 bg-card", className)}>
+    <div
+      className={cn("relative flex flex-col rounded-2xl overflow-hidden border border-border/70 bg-card", className)}
+    >
       {/* Top Legend Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-muted/20 px-4 py-2.5">
         <div className="flex flex-wrap items-center gap-3">
           {series.map((s) => {
-            const val = activeDate
-              ? seriesValueMap.get(s.symbol)?.get(activeDate) ?? s.finalValue
-              : s.finalValue;
+            const val = activeDate ? (seriesValueMap.get(s.symbol)?.get(activeDate) ?? s.finalValue) : s.finalValue;
 
             return (
               <div key={s.symbol} className="flex items-center gap-1.5 text-xs font-mono">
-                <span
-                  className="inline-block size-2 rounded-full"
-                  style={{ backgroundColor: s.color }}
-                />
+                <span className="inline-block size-2 rounded-full" style={{ backgroundColor: s.color }} />
                 <span className="font-bold text-foreground">{s.symbol}:</span>
                 <span className="font-medium text-foreground">{formatNpr(val)}</span>
               </div>
@@ -200,9 +191,7 @@ export function TimeMachineCompareChart({
 
         <div className="flex items-center gap-2">
           {activeDate && (
-            <span className="font-mono text-[0.72rem] text-muted-foreground">
-              {formatDate(activeDate)}
-            </span>
+            <span className="font-mono text-[0.72rem] text-muted-foreground">{formatDate(activeDate)}</span>
           )}
 
           <button
@@ -217,11 +206,7 @@ export function TimeMachineCompareChart({
       </div>
 
       {/* Lightweight-Charts Host */}
-      <div
-        ref={containerRef}
-        className="w-full touch-pan-x"
-        style={{ height }}
-      />
+      <div ref={containerRef} className="w-full touch-pan-x" style={{ height }} />
     </div>
   );
 }

@@ -80,13 +80,11 @@ function EdisPage() {
         <BackButton fallback="/tools" label="Tools" />
         <h1 className="flex items-center gap-2 font-display text-2xl font-bold tracking-tight">
           EDIS Share Transfer
-          <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[0.68rem] font-semibold text-warning">
-            Beta
-          </span>
+          <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[0.68rem] font-semibold text-warning">Beta</span>
         </h1>
         <p className="text-sm text-muted-foreground">
-          Electronic Delivery Instruction System. Transfer shares between demat accounts, view
-          active transfers, and track no-delivery trades.
+          Electronic Delivery Instruction System. Transfer shares between demat accounts, view active transfers, and
+          track no-delivery trades.
         </p>
       </header>
 
@@ -100,9 +98,7 @@ function EdisPage() {
             onClick={() => setTab(t.key)}
             className={cn(
               "flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-              tab === t.key
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground",
+              tab === t.key ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
             )}
           >
             <t.icon className="size-4" />

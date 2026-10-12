@@ -32,7 +32,8 @@ export function useSort<K extends string>(initial: SortState<K>, kinds: Record<K
       const next = cycle[(cycle.indexOf(s.dir) + 1) % cycle.length]!;
       return { key, dir: next };
     });
-  return { sort, toggle };
+  const reset = (next: SortState<K> = initial) => setSort(next);
+  return { sort, toggle, reset };
 }
 
 /** Sort rows by an accessor; numbers compare numerically, everything else as strings. */

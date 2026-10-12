@@ -34,9 +34,7 @@ const BS_MONTH_PREFIX: Record<string, number> = {
 };
 
 export function parseBsRange(raw: string): { start: Date; end: Date } | null {
-  const m = raw.match(
-    /(\d{1,2})(?:st|nd|rd|th)?\s*(?:-\s*(\d{1,2})(?:st|nd|rd|th)?)?\s*([A-Za-z]{3,})\s*,?\s*(\d{4})/,
-  );
+  const m = raw.match(/(\d{1,2})(?:st|nd|rd|th)?\s*(?:-\s*(\d{1,2})(?:st|nd|rd|th)?)?\s*([A-Za-z]{3,})\s*,?\s*(\d{4})/);
   if (!m) return null;
   const month = BS_MONTH_PREFIX[m[3]!.slice(0, 3).toLowerCase()];
   const year = Number(m[4]);
@@ -58,18 +56,16 @@ export function archiveEndPassed(row: { dateRange?: string | null }): boolean {
     today.setHours(0, 0, 0, 0);
     return bs.end.getTime() < today.getTime();
   }
-  const candidates = raw.match(/\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}\s+[A-Za-z]{3,9}\s*,?\s*\d{4}|[A-Za-z]{3,9}\s+\d{1,2},?\s*\d{4}/g);
+  const candidates = raw.match(
+    /\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}\s+[A-Za-z]{3,9}\s*,?\s*\d{4}|[A-Za-z]{3,9}\s+\d{1,2},?\s*\d{4}/g,
+  );
   if (!candidates || candidates.length === 0) return false;
   const end = new Date(candidates[candidates.length - 1]!);
   if (Number.isNaN(end.getTime()) || end.getFullYear() >= 2080) return false;
   return end.getTime() < new Date(new Date().toDateString()).getTime();
 }
 
-export function upcomingMerged(
-  open: ApplicableIssue[],
-  calendarList: ApplicableIssue[],
-  archived: IpoArchiveRow[],
-) {
+export function upcomingMerged(open: ApplicableIssue[], calendarList: ApplicableIssue[], archived: IpoArchiveRow[]) {
   const listedNames = [...open, ...calendarList].map((i) => i.companyName || i.scrip || "");
   const cdscUpcoming = calendarList.filter((i) => statusGroup(i) === "upcoming");
   const known = [...listedNames, ...cdscUpcoming.map((i) => i.companyName || i.scrip || "")];

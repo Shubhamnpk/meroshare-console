@@ -1,5 +1,4 @@
 import "./lib/error-capture";
-
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 
@@ -11,9 +10,7 @@ let serverEntryPromise: Promise<ServerEntry> | undefined;
 
 async function getServerEntry(): Promise<ServerEntry> {
   if (!serverEntryPromise) {
-    serverEntryPromise = import("@tanstack/react-start/server-entry").then(
-      (m) => (m.default ?? m) as ServerEntry,
-    );
+    serverEntryPromise = import("@tanstack/react-start/server-entry").then((m) => (m.default ?? m) as ServerEntry);
   }
   return serverEntryPromise;
 }
@@ -86,13 +83,7 @@ function sitemapXml(origin: string): string {
 }
 
 function robotsTxt(origin: string): string {
-  return [
-    "User-agent: *",
-    "Allow: /",
-    "Disallow: /api/",
-    `Sitemap: ${origin}/sitemap.xml`,
-    "",
-  ].join("\n");
+  return ["User-agent: *", "Allow: /", "Disallow: /api/", `Sitemap: ${origin}/sitemap.xml`, ""].join("\n");
 }
 
 function staticFileResponse(request: Request): Response | null {

@@ -51,7 +51,11 @@ export function CommandPalette({
       name: p.name,
       ltp: p.ltp,
       pct: p.percentChange,
-      kind: (p.asset_type === "open_ended_mutual_fund" ? "open_end_mf" : /mutual fund/i.test(p.sector) ? "mutual_fund" : "equity") as "equity" | "mutual_fund" | "open_end_mf",
+      kind: (p.asset_type === "open_ended_mutual_fund"
+        ? "open_end_mf"
+        : /mutual fund/i.test(p.sector)
+          ? "mutual_fund"
+          : "equity") as "equity" | "mutual_fund" | "open_end_mf",
     }));
     for (const s of schemesQ.data ?? []) {
       const sym = s.symbol.toUpperCase();
@@ -83,37 +87,32 @@ export function CommandPalette({
 
   const list = (
     <Command shouldFilter={false}>
-      <CommandInput placeholder="Search any listed scrip…" value={query} onValueChange={setQuery} />
+      <CommandInput placeholder="Search any listed stock…" value={query} onValueChange={setQuery} />
       <CommandList>
         <CommandEmpty>
           {snapshot.isLoading
-            ? "Loading scrips…"
+            ? "Loading stocks…"
             : query
-              ? "No scrip matches that search."
-              : "No scrips in the live feed right now."}
+              ? "No stock matches that search."
+              : "No stocks in the live feed right now."}
         </CommandEmpty>
         <CommandGroup heading={query ? "Matches" : "Top traded"}>
           {results.map((item) => (
-            <CommandItem
-              key={item.symbol}
-              value={`${item.symbol} ${item.name}`}
-              onSelect={() => pick(item.symbol)}
-            >
+            <CommandItem key={item.symbol} value={`${item.symbol} ${item.name}`} onSelect={() => pick(item.symbol)}>
               <LineChart className="size-4 text-muted-foreground" aria-hidden />
               <span className="min-w-0 flex-1">
                 <span className="font-semibold">{item.symbol}</span>{" "}
                 <span className="truncate text-xs text-muted-foreground">{item.name}</span>
                 {item.kind === "open_end_mf" ? (
-                  <span className="ml-1 rounded bg-primary/10 px-1 py-0.5 text-[0.62rem] font-semibold text-primary">Open-End NAV</span>
+                  <span className="ml-1 rounded bg-primary/10 px-1 py-0.5 text-[0.62rem] font-semibold text-primary">
+                    Open-End NAV
+                  </span>
                 ) : null}
               </span>
               <span className="num text-sm font-medium">{item.ltp != null ? formatNpr(item.ltp) : "NAV"}</span>
               {item.pct != null ? <DeltaPill value={item.pct}>{formatPercent(item.pct)}</DeltaPill> : null}
               {watchlist.has(item.symbol) ? (
-                <Star
-                  className="size-3.5 fill-warning text-warning"
-                  aria-label="On your watchlist"
-                />
+                <Star className="size-3.5 fill-warning text-warning" aria-label="On your watchlist" />
               ) : null}
             </CommandItem>
           ))}
@@ -128,7 +127,7 @@ export function CommandPalette({
         <SheetContent side="bottom" className="h-[70dvh] px-0 pt-2" onClose={() => setOpen(false)}>
           <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-muted-foreground/30" />
           <SheetHeader className="px-4 text-left">
-            <SheetTitle>Search scrips</SheetTitle>
+            <SheetTitle>Search stocks</SheetTitle>
           </SheetHeader>
           <div className="mt-2 overflow-y-auto px-2">{list}</div>
         </SheetContent>

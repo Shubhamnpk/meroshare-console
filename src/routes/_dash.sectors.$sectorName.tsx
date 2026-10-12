@@ -14,6 +14,7 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import {
   screenerDataQuery,
   marketSectorsQuery,
@@ -27,8 +28,8 @@ import { useSettings } from "@/lib/settings";
 import { canonicalLink, ogImage } from "@/lib/seo";
 import { ErrorBlock, LoadingBlock, EmptyBlock } from "@/components/states";
 import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
+import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
 import {
-  DEFAULT_INDICATORS,
   TerminalChart,
   type ChartStyle,
   type HoverInfo,
@@ -38,8 +39,10 @@ import { MoverRows, SentimentGauge } from "@/components/tools/market-overview";
 import { SectorBadge } from "@/components/market/sector-icon";
 import { CompactNpr, CompactQty } from "@/components/market/compact-value";
 import { normalizeSectorKey, subindexKeyFor } from "@/lib/nepse/sectors";
+import { CHART_RANGES, type ChartRangeKey } from "@/lib/charts/ranges";
+import { avgCashLast5Y, avgTotalLast5Y } from "@/lib/nepse/timeline";
 import { ScripSheet } from "@/components/market/scrip-sheet";
-import type { LivePrice, SectorIndex } from "@/lib/nepse/types";
+import type { ChartBar, LivePrice, PricePoint, SectorIndex } from "@/lib/nepse/types";
 
 export const Route = createFileRoute("/_dash/sectors/$sectorName")({
   head: () => ({
@@ -58,19 +61,26 @@ export const Route = createFileRoute("/_dash/sectors/$sectorName")({
   component: SectorDetailPage,
 });
 
-const RANGES = [
-  { key: "1D", label: "1D", days: 2 },
-  { key: "1W", label: "1W", days: 7 },
-  { key: "1M", label: "1M", days: 30 },
-  { key: "3M", label: "3M", days: 90 },
-  { key: "6M", label: "6M", days: 180 },
-  { key: "1Y", label: "1Y", days: 365 },
-  { key: "3Y", label: "3Y", days: 1095 },
-  { key: "5Y", label: "5Y", days: 1825 },
-  { key: "ALL", label: "All", days: 0 },
-] as const;
+// Stable empty series: inline [] gets a fresh identity every render, which
+// rebuilds the whole chart on every hover (the spinning-chart bug).
+const NO_BARS: ChartBar[] = [];
+const NO_POINTS: PricePoint[] = [];
 
-type RangeKey = (typeof RANGES)[number]["key"];
+/** Archive days per range key; MAX (0) means the whole archive, uncapped. */
+const SECTOR_RANGE_DAYS: Record<ChartRangeKey, number> = {
+  "1D": 2,
+  "1W": 7,
+  "1M": 30,
+  "3M": 90,
+  "6M": 180,
+  "1Y": 365,
+  "5Y": 1825,
+  MAX: 0,
+};
+
+const RANGES = CHART_RANGES.map((key) => ({ key, label: key, days: SECTOR_RANGE_DAYS[key] }));
+
+type RangeKey = ChartRangeKey;
 
 const INDICATOR_TOGGLES: { key: keyof IndicatorConfig; label: string }[] = [
   { key: "volume", label: "Vol" },
@@ -134,21 +144,10 @@ function findQuote(name: string, sectorIndices: SectorIndex[]): SectorIndex | un
   );
 }
 
-type ConstituentKey =
-  | "symbol"
-  | "ltp"
-  | "change"
-  | "yield"
-  | "eps"
-  | "high"
-  | "low"
-  | "volume"
-  | "turnover"
-  | "trades";
+type ConstituentKey = "symbol" | "ltp" | "change" | "yield" | "eps" | "high" | "low" | "volume" | "turnover" | "trades";
 
-// Latest-dividend yield % + latest reported EPS per symbol, same convention
-// as Best Shares / stock compare: yield = latest totalDividend × faceValue
-// ÷ (ltp × 100), EPS = newest financial report's EPS.
+// 5-year average dividend yield % + latest reported EPS per symbol (shared
+// calendar rule, see lib/nepse/timeline). yield = avg total × face ÷ ltp.
 function useFundamentals(
   prices: LivePrice[],
   dividends: Record<string, import("@/lib/nepse/types").DividendRow[]>,
@@ -156,14 +155,17 @@ function useFundamentals(
   faceValues: Record<string, number>,
 ) {
   return useMemo(() => {
-    const map = new Map<string, { yieldPct: number | null; eps: number | null }>();
+    const map = new Map<string, { yieldPct: number | null; yieldCashPct: number | null; eps: number | null }>();
     for (const p of prices) {
-      const latest = (dividends[p.symbol] ?? [])[0] ?? null;
+      const rows = dividends[p.symbol] ?? [];
+      const avgTotal = avgTotalLast5Y(rows);
+      const avgCash = avgCashLast5Y(rows);
       const fv = faceValues[p.symbol] ?? 100;
-      const raw =
-        latest && fv > 0 && p.ltp > 0 ? (latest.totalDividend * fv) / (p.ltp * 100) : null;
+      const raw = avgTotal !== null && avgTotal > 0 && fv > 0 && p.ltp > 0 ? (avgTotal * fv) / p.ltp : null;
+      const rawCash = avgCash !== null && avgCash > 0 && fv > 0 && p.ltp > 0 ? (avgCash * fv) / p.ltp : null;
       map.set(p.symbol, {
         yieldPct: raw != null ? Math.round(raw * 100) / 100 : null,
+        yieldCashPct: rawCash != null ? Math.round(rawCash * 100) / 100 : null,
         eps: financials[p.symbol]?.[0]?.eps ?? null,
       });
     }
@@ -182,7 +184,12 @@ interface MoodStats {
   avgChange: number;
 }
 
-function breadthMood(adv: number, dec: number, total: number, avg: number): {
+function breadthMood(
+  adv: number,
+  dec: number,
+  total: number,
+  avg: number,
+): {
   label: string;
   color: string;
 } {
@@ -232,10 +239,7 @@ function MoodCard({ stats }: { stats: MoodStats }) {
                 className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60"
                 style={{ background: mood.color }}
               />
-              <span
-                className="relative inline-flex size-1.5 rounded-full"
-                style={{ background: mood.color }}
-              />
+              <span className="relative inline-flex size-1.5 rounded-full" style={{ background: mood.color }} />
             </span>
             {mood.label}
           </span>
@@ -249,10 +253,7 @@ function MoodCard({ stats }: { stats: MoodStats }) {
 
         {/* Meter: floating tag → needle → breadth bar */}
         <div className="relative mt-8">
-          <div
-            className="absolute -top-7 -translate-x-1/2 transition-all duration-500"
-            style={{ left: `${needle}%` }}
-          >
+          <div className="absolute -top-7 -translate-x-1/2 transition-all duration-500" style={{ left: `${needle}%` }}>
             <span
               className="num rounded-md px-1.5 py-0.5 text-[11px] font-bold whitespace-nowrap"
               style={{ background: `${mood.color}22`, color: mood.color }}
@@ -292,8 +293,7 @@ function MoodCard({ stats }: { stats: MoodStats }) {
 
         <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 border-t border-border/50 pt-3 text-xs text-muted-foreground">
           <span>
-            Turnover{" "}
-            <CompactNpr value={stats.turnover} className="num font-bold text-foreground" />
+            Turnover <CompactNpr value={stats.turnover} className="num font-bold text-foreground" />
           </span>
           <span>
             Volume <CompactQty value={stats.volume} className="num font-bold text-foreground" />
@@ -310,20 +310,20 @@ function MoodCard({ stats }: { stats: MoodStats }) {
 function SectorDetailPage() {
   const navigate = useNavigate();
   const { sectorName } = Route.useParams();
-  const { theme } = useSettings();
+  const { theme, chart, setChart } = useSettings();
   const light =
     theme === "light" ||
-    (theme === "system" &&
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-color-scheme: light)").matches);
+    (theme === "system" && typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: light)").matches);
 
   const screenerQuery = useQuery(screenerDataQuery());
   const sectorsQuery = useQuery(marketSectorsQuery());
   const snapshotQuery = useQuery(marketSnapshotQuery());
 
   const [range, setRange] = useState<RangeKey>("1D");
-  const [chartStyle, setChartStyle] = useState<ChartStyle>("area");
-  const [indicators, setIndicators] = useState<IndicatorConfig>({ ...DEFAULT_INDICATORS });
+  const chartStyle = chart.style;
+  const setChartStyle = (s: ChartStyle) => setChart({ style: s });
+  const indicators = chart.indicators;
+  const setIndicators = (v: IndicatorConfig) => setChart({ indicators: v });
   const [showIndicatorMenu, setShowIndicatorMenu] = useState(false);
   const [picked, setPicked] = useState<string | null>(null);
   const [hover, setHover] = useState<HoverInfo | null>(null);
@@ -343,17 +343,11 @@ function SectorDetailPage() {
     return map;
   }, [prices]);
 
-  const resolved = useMemo(
-    () => resolveSector(sectorName, groups, sectorIndices),
-    [sectorName, groups, sectorIndices],
-  );
+  const resolved = useMemo(() => resolveSector(sectorName, groups, sectorIndices), [sectorName, groups, sectorIndices]);
 
   const rangeDays = RANGES.find((r) => r.key === range)?.days ?? 365;
   const dailyQuery = useQuery(indexDailyQuery(resolved?.name ?? "", rangeDays, Boolean(resolved)));
-  const bars = useMemo(
-    () => (dailyQuery.data ?? []).filter((b) => b.close > 0),
-    [dailyQuery.data],
-  );
+  const bars = useMemo(() => (dailyQuery.data ?? []).filter((b) => b.close > 0), [dailyQuery.data]);
 
   // Intraday session line — default view. Falls back to 1W when unpublished.
   const intradayQuery = useQuery({
@@ -407,8 +401,7 @@ function SectorDetailPage() {
     const turnover = items.reduce((s, p) => s + p.turnover, 0);
     const volume = items.reduce((s, p) => s + p.volume, 0);
     const trades = items.reduce((s, p) => s + p.trades, 0);
-    const avgChange =
-      items.length > 0 ? items.reduce((s, p) => s + p.percentChange, 0) / items.length : 0;
+    const avgChange = items.length > 0 ? items.reduce((s, p) => s + p.percentChange, 0) / items.length : 0;
     const grand = marketPrices.reduce((s, p) => s + p.turnover, 0);
     const byChange = [...items].sort((a, b) => b.percentChange - a.percentChange);
     const gainers = byChange.filter((p) => p.percentChange > 0).slice(0, 10);
@@ -518,7 +511,7 @@ function SectorDetailPage() {
         <BackButton onBack={() => void navigate({ to: "/market-depth" })} />
         <EmptyBlock
           title="Sector not found"
-          description={`No scrips grouped under "${sectorName}". Pick a sector from the market depth heatmap.`}
+          description={`No stocks grouped under "${sectorName}". Pick a sector from the market depth heatmap.`}
         />
       </div>
     );
@@ -526,13 +519,10 @@ function SectorDetailPage() {
   const quote = resolved.quote;
   const points = quote?.close ?? null;
   const up = stats.chg >= 0;
-  const headerRangeLabel = usingIntraday
-    ? "Live intraday session"
-    : (RANGES.find((r) => r.key === range)?.label ?? "");
+  const headerRangeLabel = usingIntraday ? "Live intraday session" : (RANGES.find((r) => r.key === range)?.label ?? "");
   const maxLeader = stats.leaders[0]?.turnover ?? 1;
   const moverCols = stats.flats.length > 0 ? 3 : 2;
-  const extremeCols =
-    1 + (stats.nearHigh.length > 0 ? 1 : 0) + (stats.nearLow.length > 0 ? 1 : 0);
+  const extremeCols = 1 + (stats.nearHigh.length > 0 ? 1 : 0) + (stats.nearLow.length > 0 ? 1 : 0);
 
   return (
     <div className="space-y-5">
@@ -542,13 +532,11 @@ function SectorDetailPage() {
         <div className="min-w-0 flex-1">
           <h1 className="font-display text-xl font-semibold sm:text-3xl">{resolved.name}</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            {stats.items.length} listed scrips · {stats.share.toFixed(1)}% of market turnover
+            {stats.items.length} listed stocks · {stats.share.toFixed(1)}% of market turnover
           </p>
         </div>
         <div className="text-right">
-          <p className="num text-2xl font-bold">
-            {points != null ? formatNumber(points) : "—"}
-          </p>
+          <p className="num text-2xl font-bold">{points != null ? formatNumber(points) : "—"}</p>
           <p className={cn("num text-xs font-bold", up ? "text-emerald-400" : "text-red-400")}>
             {formatPercent(stats.chg)}
           </p>
@@ -590,9 +578,7 @@ function SectorDetailPage() {
                   onClick={() => setRange(r.key)}
                   className={cn(
                     "rounded-lg px-2.5 py-1 text-xs font-medium transition-colors",
-                    disabled
-                      ? "cursor-not-allowed opacity-35"
-                      : "cursor-pointer",
+                    disabled ? "cursor-not-allowed opacity-35" : "cursor-pointer",
                     range === r.key && !disabled
                       ? "bg-primary text-primary-foreground font-semibold shadow-xs"
                       : "text-muted-foreground hover:text-foreground",
@@ -651,9 +637,7 @@ function SectorDetailPage() {
                     <button
                       key={t.key}
                       type="button"
-                      onClick={() =>
-                        setIndicators((prev) => ({ ...prev, [t.key]: !prev[t.key] }))
-                      }
+                      onClick={() => setIndicators({ ...indicators, [t.key]: !indicators[t.key] })}
                       className={cn(
                         "rounded-md border px-2 py-0.5 text-[0.68rem] font-medium transition-colors cursor-pointer",
                         indicators[t.key]
@@ -676,7 +660,7 @@ function SectorDetailPage() {
             </div>
           ) : usingIntraday ? (
             <TerminalChart
-              bars={[]}
+              bars={NO_BARS}
               intraday={intradayPoints}
               style={chartStyle}
               indicators={indicators}
@@ -692,7 +676,7 @@ function SectorDetailPage() {
           ) : bars.length >= 2 ? (
             <TerminalChart
               bars={bars}
-              intraday={[]}
+              intraday={NO_POINTS}
               style={chartStyle}
               indicators={indicators}
               logScale={false}
@@ -702,21 +686,15 @@ function SectorDetailPage() {
             />
           ) : range === "1D" ? (
             <div className="flex h-[300px] flex-col items-center justify-center gap-1.5 p-6 text-center text-muted-foreground">
-              <p className="text-sm font-semibold text-foreground">
-                Intraday session graph not published
-              </p>
+              <p className="text-sm font-semibold text-foreground">Intraday session graph not published</p>
               <p className="text-xs">
-                Real-time ticks stream during active NEPSE trading hours (11:00 AM – 3:00 PM NPT).
-                Switch to 1W or a longer range instead.
+                Real-time ticks stream during active NEPSE trading hours (11:00 AM – 3:00 PM NPT). Switch to 1W or a
+                longer range instead.
               </p>
             </div>
           ) : (
             <div className="flex h-[300px] flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted-foreground">
-              <p>
-                {dailyQuery.isError
-                  ? "Couldn't load sector history."
-                  : "No sector history found for this range."}
-              </p>
+              <p>{dailyQuery.isError ? "Couldn't load sector history." : "No sector history found for this range."}</p>
               {dailyQuery.isError && (
                 <button
                   type="button"
@@ -745,7 +723,7 @@ function SectorDetailPage() {
           <MoverRows
             title="Neutral"
             rows={stats.flats}
-            emptyLabel="No flat scrips this session"
+            emptyLabel="No flat stocks this session"
             tone="flat"
             onPick={setPicked}
             stat={<CompactNpr value={stats.flatsTurnover} />}
@@ -797,9 +775,7 @@ function SectorDetailPage() {
                 </button>
               </li>
             ))}
-            {stats.leaders.length === 0 && (
-              <p className="text-xs text-muted-foreground">No turnover yet.</p>
-            )}
+            {stats.leaders.length === 0 && <p className="text-xs text-muted-foreground">No turnover yet.</p>}
           </ul>
         </div>
 
@@ -825,83 +801,178 @@ function SectorDetailPage() {
       </div>
 
       {/* All constituents */}
-      <div className="overflow-hidden rounded-2xl border border-border/70 bg-card/80 shadow-xs">
+      <div className="overflow-clip rounded-2xl border border-border/70 bg-card/80 shadow-xs">
         <div className="flex items-center gap-2 border-b border-border/60 px-4 py-3">
           <ListOrdered className="size-4 text-primary" />
-          <h3 className="font-display text-sm font-semibold">
-            All Constituents ({stats.items.length})
-          </h3>
+          <h3 className="font-display text-sm font-semibold">All Constituents ({stats.items.length})</h3>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="border-b border-border/60 bg-surface/80 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                <SortableTh label="Symbol" active={sort.key === "symbol"} dir={sort.dir} onClick={() => toggle("symbol")} kind="text" className="py-2.5 pl-4 pr-2" />
-                <SortableTh label="LTP" active={sort.key === "ltp"} dir={sort.dir} onClick={() => toggle("ltp")} align="right" className="py-2.5 px-3" />
-                <SortableTh label="Change" active={sort.key === "change"} dir={sort.dir} onClick={() => toggle("change")} align="right" className="py-2.5 px-3" />
-                <SortableTh label="Yield" active={sort.key === "yield"} dir={sort.dir} onClick={() => toggle("yield")} align="right" className="py-2.5 px-3" />
-                <SortableTh label="EPS" active={sort.key === "eps"} dir={sort.dir} onClick={() => toggle("eps")} align="right" className="py-2.5 px-3" />
-                <SortableTh label="High" active={sort.key === "high"} dir={sort.dir} onClick={() => toggle("high")} align="right" className="py-2.5 px-3" />
-                <SortableTh label="Low" active={sort.key === "low"} dir={sort.dir} onClick={() => toggle("low")} align="right" className="py-2.5 px-3" />
-                <SortableTh label="Volume" active={sort.key === "volume"} dir={sort.dir} onClick={() => toggle("volume")} align="right" className="py-2.5 px-3" />
-                <SortableTh label="Turnover" active={sort.key === "turnover"} dir={sort.dir} onClick={() => toggle("turnover")} align="right" className="py-2.5 px-3" />
-                <SortableTh label="Trades" active={sort.key === "trades"} dir={sort.dir} onClick={() => toggle("trades")} align="right" className="py-2.5 px-3 pr-4" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/40">
+        <div className="overflow-x-auto xl:overflow-x-clip">
+          <Table className="text-left text-xs">
+            <TableHeader>
+              <TableRow className="bg-muted/40 hover:bg-muted/40">
+                <SortableTh
+                  label="Symbol"
+                  active={sort.key === "symbol"}
+                  dir={sort.dir}
+                  onClick={() => toggle("symbol")}
+                  kind="text"
+                  className="py-2.5 pl-4 pr-2"
+                />
+                <SortableTh
+                  label="LTP"
+                  active={sort.key === "ltp"}
+                  dir={sort.dir}
+                  onClick={() => toggle("ltp")}
+                  align="right"
+                  className="py-2.5 px-3"
+                />
+                <SortableTh
+                  label="Change"
+                  active={sort.key === "change"}
+                  dir={sort.dir}
+                  onClick={() => toggle("change")}
+                  align="right"
+                  className="py-2.5 px-3"
+                />
+                <SortableTh
+                  label="Yield"
+                  active={sort.key === "yield"}
+                  dir={sort.dir}
+                  onClick={() => toggle("yield")}
+                  align="right"
+                  className="py-2.5 px-3"
+                />
+                <SortableTh
+                  label="EPS"
+                  active={sort.key === "eps"}
+                  dir={sort.dir}
+                  onClick={() => toggle("eps")}
+                  align="right"
+                  className="py-2.5 px-3"
+                />
+                <SortableTh
+                  label="High"
+                  active={sort.key === "high"}
+                  dir={sort.dir}
+                  onClick={() => toggle("high")}
+                  align="right"
+                  className="py-2.5 px-3"
+                />
+                <SortableTh
+                  label="Low"
+                  active={sort.key === "low"}
+                  dir={sort.dir}
+                  onClick={() => toggle("low")}
+                  align="right"
+                  className="py-2.5 px-3"
+                />
+                <SortableTh
+                  label="Volume"
+                  active={sort.key === "volume"}
+                  dir={sort.dir}
+                  onClick={() => toggle("volume")}
+                  align="right"
+                  className="py-2.5 px-3"
+                />
+                <SortableTh
+                  label="Turnover"
+                  active={sort.key === "turnover"}
+                  dir={sort.dir}
+                  onClick={() => toggle("turnover")}
+                  align="right"
+                  className="py-2.5 px-3"
+                />
+                <SortableTh
+                  label="Trades"
+                  active={sort.key === "trades"}
+                  dir={sort.dir}
+                  onClick={() => toggle("trades")}
+                  align="right"
+                  className="py-2.5 px-3 pr-4"
+                />
+              </TableRow>
+            </TableHeader>
+            <TableBody className="divide-y divide-border/40">
               {rows.map((p) => {
                 const upRow = p.percentChange >= 0;
                 const fund = fundamentals.get(p.symbol);
                 return (
-                  <tr
+                  <TableRow
                     key={p.symbol}
                     onClick={() => setPicked(p.symbol)}
                     className="cursor-pointer transition-colors hover:bg-surface/50"
                   >
-                    <td className="py-2.5 pl-4 pr-2">
+                    <TableCell className="py-2.5 pl-4 pr-2">
                       <p className="font-bold text-foreground">{p.symbol}</p>
-                      <p className="max-w-[220px] truncate text-[10px] text-muted-foreground">
-                        {p.name}
-                      </p>
-                    </td>
-                    <td className="num py-2.5 px-3 text-right font-semibold text-foreground">
+                      <p className="max-w-[220px] truncate text-[10px] text-muted-foreground">{p.name}</p>
+                    </TableCell>
+                    <TableCell className="num py-2.5 px-3 text-right font-semibold text-foreground">
                       {formatNpr(p.ltp)}
-                    </td>
-                    <td className={cn("num py-2.5 px-3 text-right font-semibold", upRow ? "text-gain" : "text-loss")}>
-                      {formatPercent(p.percentChange)}
-                    </td>
-                    <td
-                      className="num py-2.5 px-3 text-right font-semibold text-primary"
-                      title={fund?.yieldPct != null ? "Latest dividend yield on LTP" : "No dividend on record"}
+                    </TableCell>
+                    <TableCell
+                      className={cn("num py-2.5 px-3 text-right font-semibold", upRow ? "text-gain" : "text-loss")}
                     >
-                      {fund?.yieldPct != null ? `${fund.yieldPct.toFixed(2)}%` : "—"}
-                    </td>
-                    <td
+                      {formatPercent(p.percentChange)}
+                    </TableCell>
+                    <TableCell className="num py-2.5 px-3 text-right font-semibold text-primary">
+                      {fund?.yieldPct != null ? (
+                        <HoverCard>
+                          <HoverCardTrigger asChild>
+                            <span className="cursor-help underline decoration-dotted underline-offset-2">
+                              {fund.yieldPct.toFixed(2)}%
+                            </span>
+                          </HoverCardTrigger>
+                          <HoverCardContent className="w-56 p-3 text-left text-xs">
+                            <p className="mb-1.5 font-semibold">5-yr average · {p.symbol}</p>
+                            <div className="flex justify-between py-0.5">
+                              <span className="text-muted-foreground">Cash yield</span>
+                              <span className="num font-medium">
+                                {fund.yieldCashPct != null ? `+${fund.yieldCashPct.toFixed(2)}%` : "—"}
+                              </span>
+                            </div>
+                            <div className="flex justify-between py-0.5">
+                              <span className="text-muted-foreground">Bonus yield</span>
+                              <span className="num font-medium">
+                                {fund.yieldCashPct != null
+                                  ? `+${(fund.yieldPct - fund.yieldCashPct).toFixed(2)}%`
+                                  : "—"}
+                              </span>
+                            </div>
+                            <p className="mt-1.5 border-t border-border/60 pt-1.5 text-[0.65rem] leading-relaxed text-muted-foreground">
+                              Bonus valued at face value (convention, not cash).
+                            </p>
+                          </HoverCardContent>
+                        </HoverCard>
+                      ) : (
+                        "—"
+                      )}
+                    </TableCell>
+                    <TableCell
                       className="num py-2.5 px-3 text-right text-muted-foreground"
                       title={fund?.eps != null ? "Latest reported EPS" : "No financials on record"}
                     >
                       {fund?.eps != null ? formatNumber(fund.eps) : "—"}
-                    </td>
-                    <td className="num py-2.5 px-3 text-right text-muted-foreground">
+                    </TableCell>
+                    <TableCell className="num py-2.5 px-3 text-right text-muted-foreground">
                       {formatNpr(p.high)}
-                    </td>
-                    <td className="num py-2.5 px-3 text-right text-muted-foreground">
+                    </TableCell>
+                    <TableCell className="num py-2.5 px-3 text-right text-muted-foreground">
                       {formatNpr(p.low)}
-                    </td>
-                    <td className="num py-2.5 px-3 text-right text-muted-foreground">
+                    </TableCell>
+                    <TableCell className="num py-2.5 px-3 text-right text-muted-foreground">
                       {formatQty(p.volume)}
-                    </td>
-                    <td className="num py-2.5 px-3 text-right text-foreground">
+                    </TableCell>
+                    <TableCell className="num py-2.5 px-3 text-right text-foreground">
                       {formatNpr(p.turnover, { compact: true })}
-                    </td>
-                    <td className="num py-2.5 px-3 pr-4 text-right text-muted-foreground">
+                    </TableCell>
+                    <TableCell className="num py-2.5 px-3 pr-4 text-right text-muted-foreground">
                       {formatQty(p.trades)}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 );
               })}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       </div>
 
@@ -935,9 +1006,7 @@ function ChartHeader({
   return (
     <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2 border-b border-border/50 pb-3">
       <div className="min-w-0">
-        <p className="truncate font-display text-sm font-bold text-foreground">
-          {name} Index
-        </p>
+        <p className="truncate font-display text-sm font-bold text-foreground">{name} Index</p>
         <p className="text-[11px] text-muted-foreground">{rangeLabel}</p>
       </div>
       <div className="flex items-baseline gap-2">
@@ -955,29 +1024,14 @@ function ChartHeader({
 
 function BackButton({ onBack }: { onBack: () => void }) {
   return (
-    <Button
-      variant="ghost"
-      size="icon"
-      className="size-8 shrink-0"
-      onClick={onBack}
-      aria-label="Go back"
-    >
+    <Button variant="ghost" size="icon" className="size-8 shrink-0" onClick={onBack} aria-label="Go back">
       <ArrowLeft className="size-4" />
     </Button>
   );
 }
 
-function ExtremeList({
-  items,
-  onPick,
-  high,
-}: {
-  items: LivePrice[];
-  onPick: (symbol: string) => void;
-  high: boolean;
-}) {
-  if (items.length === 0)
-    return <p className="text-xs text-muted-foreground">None in range this session.</p>;
+function ExtremeList({ items, onPick, high }: { items: LivePrice[]; onPick: (symbol: string) => void; high: boolean }) {
+  if (items.length === 0) return <p className="text-xs text-muted-foreground">None in range this session.</p>;
   return (
     <ul className="space-y-1.5">
       {items.map((p) => {
@@ -994,9 +1048,7 @@ function ExtremeList({
               <Icon className={cn("size-3.5 shrink-0", high ? "text-emerald-400" : "text-red-400")} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-xs font-bold text-foreground">{p.symbol}</span>
-                <span className="num block text-[10px] text-muted-foreground">
-                  {formatNpr(p.ltp)}
-                </span>
+                <span className="num block text-[10px] text-muted-foreground">{formatNpr(p.ltp)}</span>
               </span>
               <span className={cn("num text-[11px] font-bold", high ? "text-emerald-400" : "text-red-400")}>
                 {dist >= 0 ? "+" : ""}

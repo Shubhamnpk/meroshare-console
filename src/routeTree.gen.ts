@@ -22,6 +22,7 @@ import { Route as DashDashboardRouteImport } from './routes/_dash.dashboard'
 import { Route as DashDebenturesRouteImport } from './routes/_dash.debentures'
 import { Route as DashDividendVsFdRouteImport } from './routes/_dash.dividend-vs-fd'
 import { Route as DashEdisRouteImport } from './routes/_dash.edis'
+import { Route as DashGlobalRouteImport } from './routes/_dash.global'
 import { Route as DashIpoRouteImport } from './routes/_dash.ipo'
 import { Route as DashIpoPipelineRouteImport } from './routes/_dash.ipo-pipeline'
 import { Route as DashMarketRouteImport } from './routes/_dash.market'
@@ -103,6 +104,11 @@ const DashDividendVsFdRoute = DashDividendVsFdRouteImport.update({
 const DashEdisRoute = DashEdisRouteImport.update({
   id: '/edis',
   path: '/edis',
+  getParentRoute: () => DashRoute,
+} as any)
+const DashGlobalRoute = DashGlobalRouteImport.update({
+  id: '/global',
+  path: '/global',
   getParentRoute: () => DashRoute,
 } as any)
 const DashIpoRoute = DashIpoRouteImport.update({
@@ -209,6 +215,7 @@ export interface FileRoutesByFullPath {
   '/debentures': typeof DashDebenturesRoute
   '/dividend-vs-fd': typeof DashDividendVsFdRoute
   '/edis': typeof DashEdisRoute
+  '/global': typeof DashGlobalRoute
   '/ipo': typeof DashIpoRoute
   '/ipo-pipeline': typeof DashIpoPipelineRoute
   '/market': typeof DashMarketRoute
@@ -241,6 +248,7 @@ export interface FileRoutesByTo {
   '/debentures': typeof DashDebenturesRoute
   '/dividend-vs-fd': typeof DashDividendVsFdRoute
   '/edis': typeof DashEdisRoute
+  '/global': typeof DashGlobalRoute
   '/ipo': typeof DashIpoRoute
   '/ipo-pipeline': typeof DashIpoPipelineRoute
   '/market': typeof DashMarketRoute
@@ -275,6 +283,7 @@ export interface FileRoutesById {
   '/_dash/debentures': typeof DashDebenturesRoute
   '/_dash/dividend-vs-fd': typeof DashDividendVsFdRoute
   '/_dash/edis': typeof DashEdisRoute
+  '/_dash/global': typeof DashGlobalRoute
   '/_dash/ipo': typeof DashIpoRoute
   '/_dash/ipo-pipeline': typeof DashIpoPipelineRoute
   '/_dash/market': typeof DashMarketRoute
@@ -309,6 +318,7 @@ export interface FileRouteTypes {
     | '/debentures'
     | '/dividend-vs-fd'
     | '/edis'
+    | '/global'
     | '/ipo'
     | '/ipo-pipeline'
     | '/market'
@@ -341,6 +351,7 @@ export interface FileRouteTypes {
     | '/debentures'
     | '/dividend-vs-fd'
     | '/edis'
+    | '/global'
     | '/ipo'
     | '/ipo-pipeline'
     | '/market'
@@ -374,6 +385,7 @@ export interface FileRouteTypes {
     | '/_dash/debentures'
     | '/_dash/dividend-vs-fd'
     | '/_dash/edis'
+    | '/_dash/global'
     | '/_dash/ipo'
     | '/_dash/ipo-pipeline'
     | '/_dash/market'
@@ -492,6 +504,13 @@ declare module '@tanstack/react-router' {
       path: '/edis'
       fullPath: '/edis'
       preLoaderRoute: typeof DashEdisRouteImport
+      parentRoute: typeof DashRoute
+    }
+    '/_dash/global': {
+      id: '/_dash/global'
+      path: '/global'
+      fullPath: '/global'
+      preLoaderRoute: typeof DashGlobalRouteImport
       parentRoute: typeof DashRoute
     }
     '/_dash/ipo': {
@@ -634,6 +653,7 @@ interface DashRouteChildren {
   DashDebenturesRoute: typeof DashDebenturesRoute
   DashDividendVsFdRoute: typeof DashDividendVsFdRoute
   DashEdisRoute: typeof DashEdisRoute
+  DashGlobalRoute: typeof DashGlobalRoute
   DashIpoRoute: typeof DashIpoRoute
   DashIpoPipelineRoute: typeof DashIpoPipelineRoute
   DashMarketRoute: typeof DashMarketRoute
@@ -664,6 +684,7 @@ const DashRouteChildren: DashRouteChildren = {
   DashDebenturesRoute: DashDebenturesRoute,
   DashDividendVsFdRoute: DashDividendVsFdRoute,
   DashEdisRoute: DashEdisRoute,
+  DashGlobalRoute: DashGlobalRoute,
   DashIpoRoute: DashIpoRoute,
   DashIpoPipelineRoute: DashIpoPipelineRoute,
   DashMarketRoute: DashMarketRoute,

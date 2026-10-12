@@ -52,10 +52,7 @@ export function PriceAlertsPanel() {
       </div>
       <div className="flex flex-wrap items-end gap-2">
         <div className="min-w-28 flex-1 space-y-1">
-          <label
-            htmlFor="alert-symbol"
-            className="text-[0.68rem] font-medium text-muted-foreground"
-          >
+          <label htmlFor="alert-symbol" className="text-[0.68rem] font-medium text-muted-foreground">
             Symbol
           </label>
           <Input
@@ -93,10 +90,7 @@ export function PriceAlertsPanel() {
           ))}
         </div>
         <div className="min-w-28 flex-1 space-y-1">
-          <label
-            htmlFor="alert-target"
-            className="text-[0.68rem] font-medium text-muted-foreground"
-          >
+          <label htmlFor="alert-target" className="text-[0.68rem] font-medium text-muted-foreground">
             Target price
           </label>
           <Input
@@ -114,8 +108,8 @@ export function PriceAlertsPanel() {
       </div>
       {alerts.length === 0 ? (
         <p className="text-xs text-muted-foreground">
-          No alerts yet. Set one and you&apos;ll get a toast the moment the live price crosses it -
-          even without a broker linked.
+          No alerts yet. Set one and you&apos;ll get a toast the moment the live price crosses it - even without a
+          broker linked.
         </p>
       ) : (
         <ul className="space-y-1.5">
@@ -135,24 +129,16 @@ export function PriceAlertsPanel() {
                     <span className="font-bold">{a.symbol}</span>{" "}
                     <span className="text-muted-foreground">
                       {a.direction === "above" ? "≥" : "≤"}{" "}
-                      <span className="num font-semibold text-foreground">
-                        {a.target.toLocaleString("en-NP")}
-                      </span>
+                      <span className="num font-semibold text-foreground">{a.target.toLocaleString("en-NP")}</span>
                     </span>
                   </p>
                   <p className="num text-[0.7rem] text-muted-foreground">
-                    Live {ltp != null ? formatNpr(ltp) : "-"} ·{" "}
-                    {a.hitAt ? "fired" : hit ? "crossed now" : "watching"}
+                    Live {ltp != null ? formatNpr(ltp) : "-"} · {a.hitAt ? "fired" : hit ? "crossed now" : "watching"}
                   </p>
                 </div>
                 <div className="flex shrink-0 gap-1.5">
                   {a.hitAt ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-xs"
-                      onClick={() => reset(a.id)}
-                    >
+                    <Button variant="ghost" size="sm" className="text-xs" onClick={() => reset(a.id)}>
                       Re-arm
                     </Button>
                   ) : null}

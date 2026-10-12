@@ -179,9 +179,7 @@ export function aggregateManager(
   livePrices: Map<string, LivePrice>,
 ): ManagerAgg {
   const list = schemes.filter(
-    (s) =>
-      (s.managerSlug && s.managerSlug === manager.slug) ||
-      (!s.managerSlug && s.manager === manager.name),
+    (s) => (s.managerSlug && s.managerSlug === manager.slug) || (!s.managerSlug && s.manager === manager.name),
   );
   let aum = 0;
   const discounts: number[] = [];
@@ -239,10 +237,7 @@ export interface LtpBucket {
 }
 
 /** Bucket daily closes into weekly/monthly averages (daily passes through). */
-export function bucketCloses(
-  bars: { date: string; close: number }[],
-  freq: LtpFrequency,
-): LtpBucket[] {
+export function bucketCloses(bars: { date: string; close: number }[], freq: LtpFrequency): LtpBucket[] {
   if (freq === "daily") {
     return bars.filter((b) => b.close > 0).map((b) => ({ date: b.date, ltp: b.close, points: 1 }));
   }
@@ -371,9 +366,7 @@ export function groupSchemeFacts(facts: { label: string; value: string }[]): Fac
 /** "2y 4m left" style countdown; null when no usable date. */
 export function maturityCountdown(maturityDate: string | null): string | null {
   if (!maturityDate) return null;
-  const ms = Date.parse(
-    maturityDate.includes("T") ? maturityDate : `${maturityDate}T00:00:00+05:45`,
-  );
+  const ms = Date.parse(maturityDate.includes("T") ? maturityDate : `${maturityDate}T00:00:00+05:45`);
   if (!Number.isFinite(ms)) return null;
   const days = Math.ceil((ms - Date.now()) / DAY);
   if (days <= 0) return "Matured";
@@ -385,17 +378,10 @@ export function maturityCountdown(maturityDate: string | null): string | null {
 }
 
 /** 0–1 life progress from allotment → maturity; null when dates missing. */
-export function maturityProgress(
-  allotmentDate: string | null,
-  maturityDate: string | null,
-): number | null {
+export function maturityProgress(allotmentDate: string | null, maturityDate: string | null): number | null {
   if (!allotmentDate || !maturityDate) return null;
-  const start = Date.parse(
-    allotmentDate.includes("T") ? allotmentDate : `${allotmentDate}T00:00:00+05:45`,
-  );
-  const end = Date.parse(
-    maturityDate.includes("T") ? maturityDate : `${maturityDate}T00:00:00+05:45`,
-  );
+  const start = Date.parse(allotmentDate.includes("T") ? allotmentDate : `${allotmentDate}T00:00:00+05:45`);
+  const end = Date.parse(maturityDate.includes("T") ? maturityDate : `${maturityDate}T00:00:00+05:45`);
   if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
   return Math.min(1, Math.max(0, (Date.now() - start) / (end - start)));
 }

@@ -6,31 +6,13 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/states";
 import { BackButton } from "@/components/back-button";
 import { BrokerLeaderboard as BrokerLeaderboardView } from "@/components/tools/broker-leaderboard";
 import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
-import {
-  brokerDirectoryQuery,
-  floorSheetDatesQuery,
-  floorSheetRangeQuery,
-  floorSheetTrailQuery,
-} from "@/lib/queries";
+import { brokerDirectoryQuery, floorSheetDatesQuery, floorSheetRangeQuery, floorSheetTrailQuery } from "@/lib/queries";
 import { formatNpr, formatNumber, formatQty } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { ogImage, canonicalLink } from "@/lib/seo";
@@ -43,13 +25,12 @@ export const Route = createFileRoute("/_dash/brokers")({
       {
         name: "description",
         content:
-          "Every NEPSE member broker with branch coverage, plus the daily floor sheet: broker leaderboard, scrip leaderboard, hourly activity and per-transaction trade trails.",
+          "Every NEPSE member broker with branch coverage, plus the daily floor sheet: broker leaderboard, stock leaderboard, hourly activity and per-transaction trade trails.",
       },
       { property: "og:title", content: "Brokers & Floor Sheet | MeroShare Investor Console" },
       {
         property: "og:description",
-        content:
-          "NEPSE broker directory and daily floor sheet analytics. Who traded what, with whom, and when.",
+        content: "NEPSE broker directory and daily floor sheet analytics. Who traded what, with whom, and when.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -77,13 +58,10 @@ function BrokersPage() {
     <div className="space-y-6">
       <BackButton fallback="/tools" />
       <header>
-        <h1 className="font-display text-2xl font-semibold tracking-tight">
-          Brokers & Floor Sheet
-        </h1>
+        <h1 className="font-display text-2xl font-semibold tracking-tight">Brokers & Floor Sheet</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          All <span className="font-medium text-foreground">NEPSE member brokers</span>, and the
-          day's floor sheet every transaction each broker executed, aggregated from the community
-          YONEPSE feed. Indicative data only.
+          All <span className="font-medium text-foreground">NEPSE member brokers</span>, and the day's floor sheet every
+          transaction each broker executed, aggregated from the community YONEPSE feed. Indicative data only.
         </p>
       </header>
 
@@ -103,20 +81,10 @@ function BrokersPage() {
   );
 }
 
-function StatCard({
-  label,
-  value,
-  hint,
-}: {
-  label: string;
-  value: string;
-  hint?: string | undefined;
-}) {
+function StatCard({ label, value, hint }: { label: string; value: string; hint?: string | undefined }) {
   return (
     <div className="rounded-2xl border border-border/60 bg-surface p-4">
-      <p className="text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-        {label}
-      </p>
+      <p className="text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
       <p className="num mt-1.5 text-lg font-semibold leading-tight sm:text-xl">{value}</p>
       {hint ? <p className="mt-1 text-xs text-muted-foreground">{hint}</p> : null}
     </div>
@@ -186,9 +154,7 @@ function FlowSide({
                     <span className="flex items-center gap-1.5">
                       <span className="num text-[0.8125rem] font-bold">{row.code}</span>
                       <span className="truncate text-xs text-muted-foreground">{row.name}</span>
-                      {row.spike !== null && row.spike >= 2 ? (
-                        <SpikePill value={row.spike} />
-                      ) : null}
+                      {row.spike !== null && row.spike >= 2 ? <SpikePill value={row.spike} /> : null}
                     </span>
                     <span className="mt-1 flex h-1 overflow-hidden rounded-full bg-muted">
                       <span className="bg-emerald-500/80" style={{ width: `${buyPct}%` }} />
@@ -196,10 +162,7 @@ function FlowSide({
                     </span>
                   </span>
                   <span
-                    className={cn(
-                      "num shrink-0 text-[0.8125rem] font-bold",
-                      up ? "text-emerald-600" : "text-rose-600",
-                    )}
+                    className={cn("num shrink-0 text-[0.8125rem] font-bold", up ? "text-emerald-600" : "text-rose-600")}
                   >
                     {up ? "+" : "-"}
                     {formatNpr(Math.abs(row.netBuy), { compact: true })}
@@ -312,22 +275,14 @@ function FloorSheetTab({
 
   if (datesQuery.isLoading || (date && dayQuery.isLoading)) return <LoadingBlock />;
   if (datesQuery.isError) return <ErrorBlock error={datesQuery.error} />;
-  if (!date)
-    return <EmptyBlock title="No floor sheet yet" description="No trading days published." />;
+  if (!date) return <EmptyBlock title="No floor sheet yet" description="No trading days published." />;
   if (dayQuery.isError) return <ErrorBlock error={dayQuery.error} />;
   const day = dayQuery.data;
   if (!day)
-    return (
-      <EmptyBlock
-        title="No data for this range"
-        description="The feed has no floor sheet for these dates yet."
-      />
-    );
+    return <EmptyBlock title="No data for this range" description="The feed has no floor sheet for these dates yet." />;
   const sessions = Math.max(1, day.sessions);
 
-  const selectedBroker = trail.brokerCode
-    ? day.brokerLeaderboard.find((b) => b.code === trail.brokerCode)
-    : null;
+  const selectedBroker = trail.brokerCode ? day.brokerLeaderboard.find((b) => b.code === trail.brokerCode) : null;
 
   const multiDay = Boolean(toDate && toDate !== date);
 
@@ -382,9 +337,7 @@ function FloorSheetTab({
             cached / feed delayed
           </Badge>
         ) : null}
-        {sessions > 1 ? (
-          <span className="num text-xs text-muted-foreground">{sessions} sessions combined</span>
-        ) : null}
+        {sessions > 1 ? <span className="num text-xs text-muted-foreground">{sessions} sessions combined</span> : null}
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -392,7 +345,7 @@ function FloorSheetTab({
         <StatCard label="Trades" value={formatNumber(day.totalTrades)} />
         <StatCard label="Traded shares" value={formatQty(day.totalVolume)} />
         <StatCard
-          label="Scrips / brokers"
+          label="Stocks / brokers"
           value={`${day.scripsTraded} / ${day.brokersActive}`}
           hint={
             day.biggestTrade
@@ -439,32 +392,26 @@ function FloorSheetTab({
         <section className="rounded-2xl border border-border/60 bg-surface">
           <header className="border-b border-border/60 px-4 py-3">
             <h2 className="text-sm font-semibold">Broker leaderboard</h2>
-            <p className="text-xs text-muted-foreground">
-              Tap a broker to follow every trade it made that day.
-            </p>
+            <p className="text-xs text-muted-foreground">Tap a broker to follow every trade it made that day.</p>
           </header>
           <BrokerLeaderboard
             rows={day.brokerLeaderboard}
             selectedCode={trail.brokerCode}
             onSelect={(code) =>
-              setTrail((f) =>
-                f.brokerCode === code ? { ...f, brokerCode: null } : { ...f, brokerCode: code },
-              )
+              setTrail((f) => (f.brokerCode === code ? { ...f, brokerCode: null } : { ...f, brokerCode: code }))
             }
           />
         </section>
 
         <section className="rounded-2xl border border-border/60 bg-surface">
           <header className="border-b border-border/60 px-4 py-3">
-            <h2 className="text-sm font-semibold">Scrip leaderboard</h2>
+            <h2 className="text-sm font-semibold">Stock leaderboard</h2>
             <p className="text-xs text-muted-foreground">By turnover for the day.</p>
           </header>
           <SymbolLeaderboard
             rows={day.symbolLeaderboard}
             selectedSymbol={trail.symbol}
-            onSelect={(symbol) =>
-              setTrail((f) => (f.symbol === symbol ? { ...f, symbol: null } : { ...f, symbol }))
-            }
+            onSelect={(symbol) => setTrail((f) => (f.symbol === symbol ? { ...f, symbol: null } : { ...f, symbol }))}
           />
         </section>
       </div>
@@ -479,7 +426,7 @@ function FloorSheetTab({
                 : `Trade trail - ${trail.symbol}`
           }
           subtitle={[
-            trail.symbol ? `Scrip ${trail.symbol}` : null,
+            trail.symbol ? `Stock ${trail.symbol}` : null,
             trail.brokerCode ? `Broker ${trail.brokerCode}` : null,
             multiDay && date && toDate ? `${date} → ${toDate}` : null,
           ]
@@ -511,8 +458,7 @@ function FloorSheetTab({
 
 type BrokerSortKey = "code" | "trades" | "buyAmount" | "sellAmount" | "totalAmount" | "netAmount";
 
-type TrailSortKey =
-  "contractId" | "symbol" | "buyer" | "seller" | "quantity" | "rate" | "amount" | "time";
+type TrailSortKey = "contractId" | "symbol" | "buyer" | "seller" | "quantity" | "rate" | "amount" | "time";
 
 function BrokerLeaderboard({
   rows,
@@ -536,9 +482,9 @@ function BrokerLeaderboard({
   );
   const sorted = useMemo(() => sortBy(rows, (r) => r[sort.key], sort.dir), [rows, sort]);
   return (
-    <div className="max-h-[520px] overflow-auto">
+    <div className="overflow-x-auto xl:overflow-x-clip">
       <Table>
-        <TableHeader className="sticky top-0 z-10 bg-surface">
+        <TableHeader className="bg-surface">
           <TableRow>
             <SortableTh
               label="Broker"
@@ -589,10 +535,7 @@ function BrokerLeaderboard({
             <TableRow
               key={row.code}
               onClick={() => onSelect(row.code)}
-              className={cn(
-                "cursor-pointer",
-                selectedCode === row.code && "bg-primary/10 hover:bg-primary/10",
-              )}
+              className={cn("cursor-pointer", selectedCode === row.code && "bg-primary/10 hover:bg-primary/10")}
             >
               <TableCell className="max-w-[220px] py-2">
                 <p className="num text-[0.8125rem] font-semibold">
@@ -608,20 +551,13 @@ function BrokerLeaderboard({
                 </p>
               </TableCell>
               <TableCell className="num py-2 text-right">{formatNumber(row.trades)}</TableCell>
-              <TableCell className="num py-2 text-right">
-                {formatNpr(row.buyAmount, { compact: true })}
-              </TableCell>
-              <TableCell className="num py-2 text-right">
-                {formatNpr(row.sellAmount, { compact: true })}
-              </TableCell>
+              <TableCell className="num py-2 text-right">{formatNpr(row.buyAmount, { compact: true })}</TableCell>
+              <TableCell className="num py-2 text-right">{formatNpr(row.sellAmount, { compact: true })}</TableCell>
               <TableCell className="num py-2 text-right font-semibold">
                 {formatNpr(row.totalAmount, { compact: true })}
               </TableCell>
               <TableCell
-                className={cn(
-                  "num py-2 text-right",
-                  row.netAmount >= 0 ? "text-emerald-600" : "text-rose-600",
-                )}
+                className={cn("num py-2 text-right", row.netAmount >= 0 ? "text-emerald-600" : "text-rose-600")}
               >
                 <span className="inline-flex items-center justify-end gap-1">
                   {row.netAmount >= 0 ? (
@@ -671,12 +607,12 @@ function SymbolLeaderboard({
   );
   const sorted = useMemo(() => sortBy(rows, (r) => r[sort.key], sort.dir), [rows, sort]);
   return (
-    <div className="max-h-[520px] overflow-auto">
+    <div className="overflow-x-auto xl:overflow-x-clip">
       <Table>
-        <TableHeader className="sticky top-0 z-10 bg-surface">
+        <TableHeader className="bg-surface">
           <TableRow>
             <SortableTh
-              label="Scrip"
+              label="Stock"
               active={sort.key === "symbol"}
               dir={sort.dir}
               onClick={() => toggle("symbol")}
@@ -717,10 +653,7 @@ function SymbolLeaderboard({
             <TableRow
               key={row.symbol}
               onClick={() => onSelect(row.symbol)}
-              className={cn(
-                "cursor-pointer",
-                selectedSymbol === row.symbol && "bg-primary/10 hover:bg-primary/10",
-              )}
+              className={cn("cursor-pointer", selectedSymbol === row.symbol && "bg-primary/10 hover:bg-primary/10")}
             >
               <TableCell className="max-w-[220px] py-2">
                 <p className="text-[0.8125rem] font-semibold">{row.symbol}</p>
@@ -758,21 +691,17 @@ function PartyBoard({
   if (parties.length === 0) return null;
   return (
     <div className="rounded-xl border border-border/60 bg-background p-3">
-      <p className="text-[0.68rem] font-semibold uppercase tracking-wide text-muted-foreground">
-        {title}
-      </p>
+      <p className="text-[0.68rem] font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
       <ul className="mt-1.5 space-y-1">
         {parties.slice(0, 5).map((p, i) => (
           <li key={p.code}>
             <button
               type="button"
               onClick={() => onPick(p.code)}
-              title={`Follow broker ${p.code} in this scrip`}
+              title={`Follow broker ${p.code} in this stock`}
               className="flex w-full items-center gap-2 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-accent/60"
             >
-              <span className="num w-4 shrink-0 text-[11px] font-bold text-muted-foreground">
-                {i + 1}
-              </span>
+              <span className="num w-4 shrink-0 text-[11px] font-bold text-muted-foreground">{i + 1}</span>
               <span className="min-w-0 flex-1">
                 <span className="flex items-baseline gap-1.5">
                   <span className="num text-xs font-bold">{p.code}</span>
@@ -785,9 +714,7 @@ function PartyBoard({
                   />
                 </span>
               </span>
-              <span className="num shrink-0 text-xs font-semibold">
-                {formatNpr(p.amount, { compact: true })}
-              </span>
+              <span className="num shrink-0 text-xs font-semibold">{formatNpr(p.amount, { compact: true })}</span>
             </button>
           </li>
         ))}
@@ -908,9 +835,7 @@ function TradeTrail({
           <div className="flex flex-wrap items-center gap-x-6 gap-y-1 border-b border-border/60 px-4 py-2 text-xs text-muted-foreground">
             <span>
               Matching trades:{" "}
-              <span className="num font-semibold text-foreground">
-                {formatNumber(data.totalTrades)}
-              </span>
+              <span className="num font-semibold text-foreground">{formatNumber(data.totalTrades)}</span>
             </span>
             <span>
               Amount:{" "}
@@ -942,9 +867,9 @@ function TradeTrail({
               />
             </div>
           ) : null}
-          <div className="max-h-[520px] overflow-auto">
+          <div className="overflow-x-auto xl:overflow-x-clip">
             <Table>
-              <TableHeader className="sticky top-0 z-10 bg-surface">
+              <TableHeader className="bg-surface">
                 <TableRow>
                   {multiDay ? (
                     <SortableTh
@@ -962,7 +887,7 @@ function TradeTrail({
                     kind="text"
                   />
                   <SortableTh
-                    label="Scrip"
+                    label="Stock"
                     active={sort.key === "symbol"}
                     dir={sort.dir}
                     onClick={() => toggle("symbol")}
@@ -1013,12 +938,8 @@ function TradeTrail({
                         {t.date ?? "-"}
                       </TableCell>
                     ) : null}
-                    <TableCell className="num py-1.5 text-xs text-muted-foreground">
-                      {t.contractId}
-                    </TableCell>
-                    <TableCell className="py-1.5 text-[0.8125rem] font-semibold">
-                      {t.symbol}
-                    </TableCell>
+                    <TableCell className="num py-1.5 text-xs text-muted-foreground">{t.contractId}</TableCell>
+                    <TableCell className="py-1.5 text-[0.8125rem] font-semibold">{t.symbol}</TableCell>
                     <TableCell className="max-w-[180px] truncate py-1.5 text-xs">
                       {t.buyer ? (
                         <span>
@@ -1041,9 +962,7 @@ function TradeTrail({
                     </TableCell>
                     <TableCell className="num py-1.5 text-right">{formatQty(t.quantity)}</TableCell>
                     <TableCell className="num py-1.5 text-right">{formatNpr(t.rate)}</TableCell>
-                    <TableCell className="num py-1.5 text-right font-semibold">
-                      {formatNpr(t.amount)}
-                    </TableCell>
+                    <TableCell className="num py-1.5 text-right font-semibold">{formatNpr(t.amount)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

@@ -6,16 +6,12 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Panel } from "@/components/ui/panel";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ErrorBlock, EmptyBlock, SkeletonCards } from "@/components/states";
-import { ExportButton, csvRow } from "@/components/export-dialog";
+import { ExportButton, buildCsv } from "@/components/export-dialog";
 import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   holdingSymbolsQuery,
   investmentSummaryQuery,
@@ -41,8 +37,7 @@ export const Route = createFileRoute("/_dash/wacc")({
       { title: "Purchase Source | MeroShare Investor Console" },
       {
         name: "description",
-        content:
-          "Set purchase prices for your transactions and submit them so CDSC calculates your WACC.",
+        content: "Set purchase prices for your transactions and submit them so CDSC calculates your WACC.",
       },
       { property: "og:title", content: "Purchase Source | MeroShare Investor Console" },
       {
@@ -69,21 +64,16 @@ function rowPrice(r: PurchaseSourceItem): number {
 }
 
 function waccCsv(scrip: string, rows: PurchaseSourceItem[]) {
-  const lines = rows.map((r, idx) =>
-    csvRow([
-      idx + 1,
-      String(r.scrip ?? scrip),
-      String(r.postDate ?? r.transactionDate ?? ""),
-      String(r.quantity ?? r.transactionQuantity ?? ""),
-      String(rowPrice(r)),
-      String(toNumber(r.userCost)),
-      String(r.remarks ?? ""),
-    ]),
-  );
-  return [
-    csvRow(["SN", "Scrip", "Post date", "Quantity", "Price", "User cost", "Remarks"]),
-    ...lines,
-  ].join("\n");
+  const lines = rows.map((r, idx) => [
+    idx + 1,
+    String(r.scrip ?? scrip),
+    String(r.postDate ?? r.transactionDate ?? ""),
+    String(r.quantity ?? r.transactionQuantity ?? ""),
+    String(rowPrice(r)),
+    String(toNumber(r.userCost)),
+    String(r.remarks ?? ""),
+  ]);
+  return buildCsv(["SN", "Stock", "Post date", "Quantity", "Price", "User cost", "Remarks"], lines);
 }
 
 type RowSortKey = "date" | "qty" | "price" | "cost";
@@ -142,13 +132,13 @@ function SummaryTable({ scrip, rows }: { scrip: string; rows: PurchaseSourceItem
           ]}
         />
       </div>
-      <div className="overflow-x-auto rounded-2xl border border-border/70 bg-card">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border/70 bg-muted/40 text-muted-foreground">
-              <th className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+      <div className="overflow-x-auto rounded-2xl border border-border/70 bg-card xl:overflow-x-clip">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/40 hover:bg-muted/40">
+              <TableHead className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 SN
-              </th>
+              </TableHead>
               <SortableTh
                 label="Post date"
                 active={sort.key === "date"}
@@ -176,28 +166,28 @@ function SummaryTable({ scrip, rows }: { scrip: string; rows: PurchaseSourceItem
                 dir={sort.dir}
                 onClick={() => toggle("cost")}
               />
-              <th className="hidden px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground sm:table-cell">
+              <TableHead className="hidden px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground sm:table-cell">
                 Remarks
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border/60">
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody className="divide-y divide-border/60">
             {sorted.map((r, idx) => (
-              <tr key={`${r.postDate}-${idx}`} className="hover:bg-accent/30">
-                <td className="px-4 py-2.5 text-muted-foreground">{idx + 1}</td>
-                <td className="px-4 py-2.5">{formatDate(r.postDate ?? r.transactionDate)}</td>
-                <td className="num px-4 py-2.5 text-right">{formatQty(rowQty(r))}</td>
-                <td className="num px-4 py-2.5 text-right">{formatNpr(rowPrice(r))}</td>
-                <td className="num px-4 py-2.5 text-right font-medium">
+              <TableRow key={`${r.postDate}-${idx}`} className="hover:bg-accent/30">
+                <TableCell className="px-4 py-2.5 text-muted-foreground">{idx + 1}</TableCell>
+                <TableCell className="px-4 py-2.5">{formatDate(r.postDate ?? r.transactionDate)}</TableCell>
+                <TableCell className="num px-4 py-2.5 text-right">{formatQty(rowQty(r))}</TableCell>
+                <TableCell className="num px-4 py-2.5 text-right">{formatNpr(rowPrice(r))}</TableCell>
+                <TableCell className="num px-4 py-2.5 text-right font-medium">
                   {formatNpr(toNumber(r.userCost))}
-                </td>
-                <td className="hidden px-4 py-2.5 text-muted-foreground sm:table-cell">
+                </TableCell>
+                <TableCell className="hidden px-4 py-2.5 text-muted-foreground sm:table-cell">
                   {r.remarks || ""}
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
     </div>
   );
@@ -354,29 +344,27 @@ function PendingTable({ scrip, rows }: { scrip: string; rows: PurchaseSourceItem
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-border/70 bg-card">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border/70 bg-muted/40 text-muted-foreground">
-              <th className="w-10 px-3 py-2.5">
+      <div className="overflow-x-auto rounded-2xl border border-border/70 bg-card xl:overflow-x-clip">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/40 hover:bg-muted/40">
+              <TableHead className="w-10 px-3 py-2.5">
                 <input
                   type="checkbox"
                   aria-label="Select all rows"
                   checked={allChecked}
-                  onChange={(e) =>
-                    setDrafts((prev) => prev.map((d) => ({ ...d, checked: e.target.checked })))
-                  }
+                  onChange={(e) => setDrafts((prev) => prev.map((d) => ({ ...d, checked: e.target.checked })))}
                 />
-              </th>
+              </TableHead>
               <SortableTh
                 label="Post date"
                 active={sort.key === "date"}
                 dir={sort.dir}
                 onClick={() => toggle("date")}
               />
-              <th className="hidden px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground sm:table-cell">
+              <TableHead className="hidden px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground sm:table-cell">
                 Type
-              </th>
+              </TableHead>
               <SortableTh
                 label="Quantity"
                 align="right"
@@ -397,36 +385,36 @@ function PendingTable({ scrip, rows }: { scrip: string; rows: PurchaseSourceItem
                 dir={sort.dir}
                 onClick={() => toggle("cost")}
               />
-              <th className="hidden px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground md:table-cell">
+              <TableHead className="hidden px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground md:table-cell">
                 Remarks
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border/60">
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody className="divide-y divide-border/60">
             {sortedView.map(({ d, idx }) => {
               const price = toNumber(d.priceText);
               const invalid = d.checked && price <= 0;
               return (
-                <tr
+                <TableRow
                   key={d.id ?? `${d.transactionDate}-${idx}`}
                   className={cn("hover:bg-accent/30", !d.checked && "opacity-50")}
                 >
-                  <td className="px-3 py-2.5">
+                  <TableCell className="px-3 py-2.5">
                     <input
                       type="checkbox"
                       aria-label={`Select row ${idx + 1}`}
                       checked={d.checked}
                       onChange={(e) => updateDraft(idx, { checked: e.target.checked })}
                     />
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-2.5">
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap px-4 py-2.5">
                     {formatDate(d.postDate ?? d.transactionDate)}
-                  </td>
-                  <td className="hidden px-4 py-2.5 text-xs text-muted-foreground sm:table-cell">
+                  </TableCell>
+                  <TableCell className="hidden px-4 py-2.5 text-xs text-muted-foreground sm:table-cell">
                     {String(d["transactionType"] ?? d.source ?? "")}
-                  </td>
-                  <td className="num px-4 py-2.5 text-right">{formatQty(rowQty(d))}</td>
-                  <td className="px-4 py-2.5">
+                  </TableCell>
+                  <TableCell className="num px-4 py-2.5 text-right">{formatQty(rowQty(d))}</TableCell>
+                  <TableCell className="px-4 py-2.5">
                     <Input
                       inputMode="decimal"
                       className={cn("h-8 w-28", invalid && "border-destructive")}
@@ -435,11 +423,11 @@ function PendingTable({ scrip, rows }: { scrip: string; rows: PurchaseSourceItem
                       value={d.priceText}
                       onChange={(e) => updateDraft(idx, { priceText: e.target.value })}
                     />
-                  </td>
-                  <td className="num px-4 py-2.5 text-right text-muted-foreground">
+                  </TableCell>
+                  <TableCell className="num px-4 py-2.5 text-right text-muted-foreground">
                     {price > 0 ? formatNpr(rowQty(d) * price) : ""}
-                  </td>
-                  <td className="hidden px-4 py-2.5 md:table-cell">
+                  </TableCell>
+                  <TableCell className="hidden px-4 py-2.5 md:table-cell">
                     <Input
                       className="h-8 w-full min-w-40"
                       placeholder="e.g. contract no."
@@ -447,12 +435,12 @@ function PendingTable({ scrip, rows }: { scrip: string; rows: PurchaseSourceItem
                       value={d.remarksText}
                       onChange={(e) => updateDraft(idx, { remarksText: e.target.value })}
                     />
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               );
             })}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
 
       <div className="rounded-2xl border border-border/70 bg-card p-4">
@@ -477,10 +465,7 @@ function PendingTable({ scrip, rows }: { scrip: string; rows: PurchaseSourceItem
                 )}`
               : "Tick rows and set a price above 0 to proceed."}
           </p>
-          <Button
-            disabled={!declared || !selected.length || submit.isPending}
-            onClick={() => submit.mutate()}
-          >
+          <Button disabled={!declared || !selected.length || submit.isPending} onClick={() => submit.mutate()}>
             {submit.isPending ? "Submitting…" : `Proceed (${selected.length})`}
           </Button>
         </div>
@@ -490,18 +475,14 @@ function PendingTable({ scrip, rows }: { scrip: string; rows: PurchaseSourceItem
 }
 
 function reportCsv(holdings: WaccReportItem[]) {
-  const lines = holdings.map((h) =>
-    csvRow([
-      String(h.scrip ?? ""),
-      String(toNumber(h.totalQuantity)),
-      String(toNumber(h.averageBuyRate)),
-      String(toNumber(h.totalCost)),
-      String(h.lastModifiedDate ?? ""),
-    ]),
-  );
-  return [csvRow(["Scrip", "Quantity", "WACC rate", "Total cost", "Last modified"]), ...lines].join(
-    "\n",
-  );
+  const lines = holdings.map((h) => [
+    String(h.scrip ?? ""),
+    String(toNumber(h.totalQuantity)),
+    String(toNumber(h.averageBuyRate)),
+    String(toNumber(h.totalCost)),
+    String(h.lastModifiedDate ?? ""),
+  ]);
+  return buildCsv(["Stock", "Quantity", "WACC rate", "Total cost", "Last modified"], lines);
 }
 
 function WaccReportPanel({
@@ -515,9 +496,9 @@ function WaccReportPanel({
 }) {
   const report = useQuery(waccReportQuery());
   const holdings = report.data?.waccReportResponse ?? [];
-  const { sort, toggle } = useSort<"scrip" | "qty" | "rate" | "cost">(
+  const { sort, toggle } = useSort<"scrip" | "qty" | "rate" | "cost" | "updated">(
     { key: "scrip", dir: "asc" },
-    { scrip: "text", qty: "number", rate: "number", cost: "number" },
+    { scrip: "text", qty: "number", rate: "number", cost: "number", updated: "text" },
   );
   const sorted = useMemo(() => {
     switch (sort.key) {
@@ -527,6 +508,8 @@ function WaccReportPanel({
         return sortBy(holdings, (h) => toNumber(h.averageBuyRate), sort.dir);
       case "cost":
         return sortBy(holdings, (h) => toNumber(h.totalCost), sort.dir);
+      case "updated":
+        return sortBy(holdings, (h) => String(h.lastModifiedDate ?? ""), sort.dir);
       default:
         return sortBy(holdings, (h) => String(h.scrip ?? ""), sort.dir);
     }
@@ -552,15 +535,15 @@ function WaccReportPanel({
     <section className="space-y-3 pt-4">
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="font-display text-base font-semibold">Calculated WACC</h2>
-        <span className="text-xs text-muted-foreground">all scrips</span>
+        <span className="text-xs text-muted-foreground">all stocks</span>
         <span className="num ml-auto rounded-full border border-border/70 bg-card px-3 py-1.5 text-xs text-muted-foreground">
-          {holdings.length} scrips · {formatQty(totalUnits)} units · {formatNpr(totalCost)} invested
+          {holdings.length} stocks · {formatQty(totalUnits)} units · {formatNpr(totalCost)} invested
         </span>
         <ExportButton
           formats={[
             {
               title: "CSV",
-              description: "Calculated WACC for every scrip",
+              description: "Calculated WACC for every stock",
               filename: "wacc-report",
               extension: "csv",
               build: () => reportCsv(holdings),
@@ -575,12 +558,15 @@ function WaccReportPanel({
           ]}
         />
       </div>
-      <div className="overflow-x-auto rounded-2xl border border-border/70 bg-card">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border/70 bg-muted/40 text-muted-foreground">
+      <Panel padding="none" className="overflow-clip">
+        <Table className="min-w-[560px]">
+          <TableHeader>
+            <TableRow className="bg-muted/40 hover:bg-muted/40">
+              <TableHead className="w-10 pl-4" scope="col">
+                SN
+              </TableHead>
               <SortableTh
-                label="Scrip"
+                label="Stock"
                 active={sort.key === "scrip"}
                 dir={sort.dir}
                 onClick={() => toggle("scrip")}
@@ -607,59 +593,61 @@ function WaccReportPanel({
                 dir={sort.dir}
                 onClick={() => toggle("cost")}
               />
-              <th className="hidden px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground md:table-cell">
-                Updated
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border/60">
-            {sorted.map((h) => {
+              <SortableTh
+                label="Updated"
+                active={sort.key === "updated"}
+                dir={sort.dir}
+                onClick={() => toggle("updated")}
+                kind="text"
+                className="hidden pr-4 md:table-cell"
+              />
+            </TableRow>
+          </TableHeader>
+          <TableBody className="divide-y divide-border/60">
+            {sorted.map((h, idx) => {
               const key = String(h.scrip ?? "").toUpperCase();
               const isHi = highlight !== "" && key === highlight;
               return (
-              <tr
-                key={String(h.scrip)}
-                ref={(el) => {
-                  if (el) rowRefs.current.set(key, el);
-                  else rowRefs.current.delete(key);
-                }}
-                onClick={() => onPickScrip(String(h.scrip ?? ""))}
-                title={`View WACC detail for ${String(h.scrip ?? "")}`}
-                className={cn("cursor-pointer hover:bg-accent/30", isHi && "bg-primary/10")}
-              >
-                <td className="px-4 py-2.5 font-semibold">{h.scrip}</td>
-                <td className="num px-4 py-2.5 text-right">
-                  {formatQty(toNumber(h.totalQuantity))}
-                </td>
-                <td className="num px-4 py-2.5 text-right">
-                  {formatNpr(toNumber(h.averageBuyRate))}
-                </td>
-                <td className="num px-4 py-2.5 text-right">{formatNpr(toNumber(h.totalCost))}</td>
-                <td className="hidden px-4 py-2.5 text-muted-foreground md:table-cell">
-                  {h.lastModifiedDate ?? ""}
-                </td>
-              </tr>
+                <TableRow
+                  key={String(h.scrip)}
+                  ref={(el) => {
+                    if (el) rowRefs.current.set(key, el);
+                    else rowRefs.current.delete(key);
+                  }}
+                  onClick={() => onPickScrip(String(h.scrip ?? ""))}
+                  title={`View WACC detail for ${String(h.scrip ?? "")}`}
+                  className={cn("cursor-pointer hover:bg-accent/30", isHi && "bg-primary/10")}
+                >
+                  <TableCell className="pl-4 text-xs text-muted-foreground">{idx + 1}</TableCell>
+                  <TableCell className="px-4 py-2.5 font-semibold">{h.scrip}</TableCell>
+                  <TableCell className="num px-4 py-2.5 text-right">{formatQty(toNumber(h.totalQuantity))}</TableCell>
+                  <TableCell className="num px-4 py-2.5 text-right">{formatNpr(toNumber(h.averageBuyRate))}</TableCell>
+                  <TableCell className="num px-4 py-2.5 text-right">{formatNpr(toNumber(h.totalCost))}</TableCell>
+                  <TableCell className="hidden px-4 py-2.5 text-muted-foreground md:table-cell">
+                    {h.lastModifiedDate ?? ""}
+                  </TableCell>
+                </TableRow>
               );
             })}
-          </tbody>
-          <tfoot>
-            <tr className="border-t border-border/70 bg-muted/40 font-semibold">
-              <td className="px-4 py-2.5">
-                Total · {holdings.length} scrip{holdings.length > 1 ? "s" : ""}
-              </td>
-              <td className="num px-4 py-2.5 text-right">{formatQty(totalUnits)}</td>
-              <td
+          </TableBody>
+          <TableFooter>
+            <TableRow className="border-t border-border/70 bg-muted/40 font-semibold">
+              <TableCell className="px-4 py-2.5" colSpan={2}>
+                Total · {holdings.length} stock{holdings.length > 1 ? "s" : ""}
+              </TableCell>
+              <TableCell className="num px-4 py-2.5 text-right">{formatQty(totalUnits)}</TableCell>
+              <TableCell
                 className="num px-4 py-2.5 text-right"
-                title="Average WACC across all scrips (total cost / total units)"
+                title="Average WACC across all stocks (total cost / total units)"
               >
                 {formatNpr(Math.round(avgWacc * 100) / 100)}
-              </td>
-              <td className="num px-4 py-2.5 text-right">{formatNpr(totalCost)}</td>
-              <td className="hidden md:table-cell" />
-            </tr>
-          </tfoot>
-        </table>
-      </div>
+              </TableCell>
+              <TableCell className="num px-4 py-2.5 text-right">{formatNpr(totalCost)}</TableCell>
+              <TableCell className="hidden md:table-cell" />
+            </TableRow>
+          </TableFooter>
+        </Table>
+      </Panel>
       <p className="text-[0.68rem] text-muted-foreground">
         This cost basis is what determines your capital gains tax when you sell.
       </p>
@@ -701,9 +689,7 @@ function WaccPage() {
         waccRate: reportRate > 0 ? reportRate : reportUnits > 0 ? reportCost / reportUnits : 0,
         status: "calculated" as const,
       }
-    : ((investment.data?.scrips ?? []).find(
-        (s) => s.scrip === upperScrip && s.cost > 0 && s.units > 0,
-      ) ?? null);
+    : ((investment.data?.scrips ?? []).find((s) => s.scrip === upperScrip && s.cost > 0 && s.units > 0) ?? null);
   const searchHasSummary = (search.data?.waccSummaryResponse ?? []).length > 0;
   // Calculated WACC renders its SummaryTable by default from the known basis
   // when the per-scrip search can't supply its own rows (blocked or empty).
@@ -725,9 +711,7 @@ function WaccPage() {
         ]
       : [];
   // Pending estimates keep the compact banner (no table to fill).
-  const showBasisBanner = Boolean(
-    scrip && basisEntry && basisEntry.status === "pending" && !search.isPending,
-  );
+  const showBasisBanner = Boolean(scrip && basisEntry && basisEntry.status === "pending" && !search.isPending);
 
   const pendingList = pendingScrips.data?.scrips ?? [];
   const pendingFailed = pendingScrips.data?.failed === true;
@@ -747,23 +731,13 @@ function WaccPage() {
     [investment.data],
   );
   const todoScrips = useMemo(() => {
-    const fromPending = pendingList.filter(
-      (s) => !doneScrips.some((d) => d.scrip === s),
-    );
+    const fromPending = pendingList.filter((s) => !doneScrips.some((d) => d.scrip === s));
     if (fromPending.length > 0) return fromPending;
     return (investment.data?.scrips ?? [])
       .filter((s) => s.status !== "calculated")
       .map((s) => s.scrip)
       .sort();
   }, [pendingList, investment.data, doneScrips]);
-  const doneTotals = useMemo(
-    () => ({
-      units: doneScrips.reduce((s, r) => s + r.units, 0),
-      cost: doneScrips.reduce((s, r) => s + r.cost, 0),
-    }),
-    [doneScrips],
-  );
-
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-3">
@@ -795,15 +769,13 @@ function WaccPage() {
         Set the price you paid for each transaction and submit it so CDSC calculates your WACC.
       </p>
 
-      {symbols.isError ? (
-        <ErrorBlock error={symbols.error} retry={() => void symbols.refetch()} />
-      ) : null}
+      {symbols.isError ? <ErrorBlock error={symbols.error} retry={() => void symbols.refetch()} /> : null}
 
       <div className="space-y-3 rounded-2xl border border-border/70 bg-card p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <Select value={scrip} onValueChange={setScrip}>
             <SelectTrigger className="sm:w-72">
-              <SelectValue placeholder="Select a scrip" />
+              <SelectValue placeholder="Select a stock" />
             </SelectTrigger>
             <SelectContent>
               {pendingList.length ? (
@@ -833,9 +805,7 @@ function WaccPage() {
             </SelectContent>
           </Select>
           {pendingScrips.isLoading || symbols.isLoading ? (
-            <span className="animate-pulse text-xs text-muted-foreground">
-              Checking pending scrips…
-            </span>
+            <span className="animate-pulse text-xs text-muted-foreground">Checking pending stocks…</span>
           ) : null}
           {scrip ? (
             <Button
@@ -893,74 +863,8 @@ function WaccPage() {
           <SkeletonCards count={2} />
         ) : doneScrips.length > 0 || todoScrips.length > 0 ? (
           <div className="space-y-8">
-            {doneScrips.length > 0 ? (
-              <section className="space-y-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="font-display text-base font-semibold">Calculated WACC</h2>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-600">
-                    <ShieldCheck className="size-3" /> {doneScrips.length} done
-                  </span>
-                  <span className="num ml-auto rounded-full border border-border/70 bg-card px-3 py-1.5 text-xs text-muted-foreground">
-                    {formatQty(doneTotals.units)} units · {formatNpr(doneTotals.cost)} invested
-                  </span>
-                </div>
-                <div className="overflow-x-auto rounded-2xl border border-border/70 bg-card">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border/70 bg-muted/40 text-muted-foreground">
-                        <th className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider">
-                          Scrip
-                        </th>
-                        <th className="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wider">
-                          Quantity
-                        </th>
-                        <th className="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wider">
-                          WACC rate
-                        </th>
-                        <th className="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wider">
-                          Total cost
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/60">
-                      {doneScrips.map((s) => (
-                        <tr
-                          key={s.scrip}
-                          onClick={() => setScrip(s.scrip)}
-                          title={`View WACC detail for ${s.scrip}`}
-                          className="cursor-pointer hover:bg-accent/30"
-                        >
-                          <td className="px-4 py-2.5 font-semibold">{s.scrip}</td>
-                          <td className="num px-4 py-2.5 text-right">{formatQty(s.units)}</td>
-                          <td className="num px-4 py-2.5 text-right">{formatNpr(s.waccRate)}</td>
-                          <td className="num px-4 py-2.5 text-right">{formatNpr(s.cost)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot>
-                      <tr className="border-t border-border/70 bg-muted/40 font-semibold">
-                        <td className="px-4 py-2.5">
-                          Total · {doneScrips.length} scrip{doneScrips.length > 1 ? "s" : ""}
-                        </td>
-                        <td className="num px-4 py-2.5 text-right">{formatQty(doneTotals.units)}</td>
-                        <td
-                          className="num px-4 py-2.5 text-right"
-                          title="Average WACC across calculated scrips (total cost / total units)"
-                        >
-                          {formatNpr(
-                            Math.round((doneTotals.cost / Math.max(1, doneTotals.units)) * 100) /
-                              100,
-                          )}
-                        </td>
-                        <td className="num px-4 py-2.5 text-right">
-                          {formatNpr(doneTotals.cost)}
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              </section>
-            ) : null}
+            {/* Calculated rows live only in the sortable report table below —
+                a second copy here duplicated every scrip once all WACC was done. */}
             {todoScrips.length > 0 ? (
               <section className="space-y-3 rounded-2xl border border-border/70 bg-card p-4">
                 <div className="flex flex-wrap items-center gap-2">
@@ -970,8 +874,7 @@ function WaccPage() {
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  These still need their purchase prices confirmed. Tap one to jump straight
-                  into its calculation.
+                  These still need their purchase prices confirmed. Tap one to jump straight into its calculation.
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {todoScrips.map((s) => (
@@ -989,17 +892,13 @@ function WaccPage() {
             ) : null}
           </div>
         ) : (
-          <EmptyBlock
-            title="Select a scrip"
-            description="Pick a scrip above to load its purchase source entries."
-          />
+          <EmptyBlock title="Select a stock" description="Pick a stock above to load its purchase source entries." />
         )
       ) : search.isPending ? (
         <SkeletonCards count={2} />
       ) : search.isError ? (
         <ErrorBlock error={search.error} retry={() => void search.refetch()} />
-      ) : (search.data?.waccUpdateResponse ?? []).length > 0 ||
-        (search.data?.waccSummaryResponse ?? []).length > 0 ? (
+      ) : (search.data?.waccUpdateResponse ?? []).length > 0 || (search.data?.waccSummaryResponse ?? []).length > 0 ? (
         <div className="space-y-8">
           {(search.data?.waccUpdateResponse ?? []).length > 0 ? (
             <PendingTable key={scrip} scrip={scrip} rows={search.data!.waccUpdateResponse!} />
@@ -1017,10 +916,7 @@ function WaccPage() {
           <SummaryTable scrip={scrip} rows={fallbackSummaryRows} />
         </section>
       ) : (
-        <EmptyBlock
-          title="Nothing to do"
-          description={`No purchase source entries found for ${scrip}.`}
-        />
+        <EmptyBlock title="Nothing to do" description={`No purchase source entries found for ${scrip}.`} />
       )}
 
       <WaccReportPanel

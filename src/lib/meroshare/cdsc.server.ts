@@ -24,12 +24,9 @@ export const CDSC_URLS = {
   applyShare: `${CDSC_BASE}/api/meroShare/applicantForm/share/apply`,
   applicationReports: `${CDSC_BASE}/api/meroShare/applicantForm/active/search/`,
   oldApplicationReports: `${CDSC_BASE}/api/meroShare/migrated/applicantForm/search/`,
-  issueManagerDetail: (companyShareId: number | string) =>
-    `${CDSC_BASE}/api/meroShare/active/${companyShareId}`,
-  appliedDetail: (formId: number | string) =>
-    `${CDSC_BASE}/api/meroShare/applicantForm/report/detail/${formId}`,
-  oldAppliedDetail: (formId: number | string) =>
-    `${CDSC_BASE}/api/meroShare/migrated/applicantForm/report/${formId}`,
+  issueManagerDetail: (companyShareId: number | string) => `${CDSC_BASE}/api/meroShare/active/${companyShareId}`,
+  appliedDetail: (formId: number | string) => `${CDSC_BASE}/api/meroShare/applicantForm/report/detail/${formId}`,
+  oldAppliedDetail: (formId: number | string) => `${CDSC_BASE}/api/meroShare/migrated/applicantForm/report/${formId}`,
   changePassword: `${CDSC_BASE}/api/meroShare/changePassword/`,
   changePin: `${CDSC_BASE}/api/meroShare/changeTransactionPIN/`,
   myShares: `${CDSC_BASE}/api/meroShareView/myShare/`,
@@ -137,10 +134,7 @@ const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
 const MAX_ATTEMPTS = 3;
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-export async function cdscRequest<T = unknown>(
-  url: string,
-  options: RequestOptions = {},
-): Promise<T> {
+export async function cdscRequest<T = unknown>(url: string, options: RequestOptions = {}): Promise<T> {
   const { method = "GET", token, body, retry = true } = options;
   const headers: Record<string, string> = { ...BASE_HEADERS };
   if (token) headers["Authorization"] = token;
@@ -177,11 +171,7 @@ export async function cdscRequest<T = unknown>(
     }
 
     if (!res.ok) {
-      throw new CdscError(
-        messageFrom(payload, `MeroShare request failed (${res.status})`),
-        res.status,
-        payload,
-      );
+      throw new CdscError(messageFrom(payload, `MeroShare request failed (${res.status})`), res.status, payload);
     }
 
     return payload as T;
@@ -215,11 +205,7 @@ export async function cdscRequestWithHeaders<T = unknown>(
     throw new SessionExpiredError();
   }
   if (!res.ok) {
-    throw new CdscError(
-      messageFrom(payload, `MeroShare request failed (${res.status})`),
-      res.status,
-      payload,
-    );
+    throw new CdscError(messageFrom(payload, `MeroShare request failed (${res.status})`), res.status, payload);
   }
   return { data: payload as T, headers: res.headers, status: res.status };
 }

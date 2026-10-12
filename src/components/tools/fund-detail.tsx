@@ -24,12 +24,7 @@ import { HoldingsDetailSheet } from "./holdings-detail-sheet";
 import { formatDate, formatNpr, formatPercent, formatQty } from "@/lib/format";
 import type { LivePrice } from "@/lib/nepse/types";
 import type { ChartRange } from "@/lib/nepse/types";
-import type {
-  MfManager,
-  MfManagerProductDetail,
-  MfNavPoint,
-  MfSchemeBundle,
-} from "@/lib/mutual-funds/types";
+import type { MfManager, MfManagerProductDetail, MfNavPoint, MfSchemeBundle } from "@/lib/mutual-funds/types";
 import { chartSeriesQuery } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 import {
@@ -180,8 +175,7 @@ export function FundDetail({
   const disc = discountPct(ltp, refNav);
   // Open-end funds never trade: their live feed row is the mapped daily NAV
   // (daily value, previous close and day change straight from the feed).
-  const omfRow =
-    !closeEnd && live?.assetType === "open_ended_mutual_fund" && live.ltp > 0 ? live : null;
+  const omfRow = !closeEnd && live?.assetType === "open_ended_mutual_fund" && live.ltp > 0 ? live : null;
   const heroNav = omfRow?.ltp ?? refNav;
   const heroNavLabel = omfRow ? "daily NAV" : navLabel;
   const heroChange = omfRow ? omfRow.percentChange : null;
@@ -190,17 +184,13 @@ export function FundDetail({
   const navLatest = nav.length > 0 ? (nav[nav.length - 1] ?? null) : null;
   const navPrev = nav.length > 1 ? (nav[nav.length - 2] ?? null) : null;
   const navChange = navLatest && navPrev && navPrev.nav > 0 ? navLatest.nav - navPrev.nav : null;
-  const navChangePct =
-    navChange !== null && navPrev && navPrev.nav > 0 ? (navChange / navPrev.nav) * 100 : null;
+  const navChangePct = navChange !== null && navPrev && navPrev.nav > 0 ? (navChange / navPrev.nav) * 100 : null;
   const fallbackChange = omfRow ? null : navChangePct;
   const fallbackDate = omfRow ? null : (navLatest?.date ?? null);
   const heroChangeShown = heroChange ?? fallbackChange;
   const heroDateShown = heroDate ?? fallbackDate;
   const countdown = maturityCountdown(scheme?.maturityDate ?? perf?.maturityDate ?? null);
-  const lifeProgress = maturityProgress(
-    scheme?.allotmentDate ?? null,
-    scheme?.maturityDate ?? null,
-  );
+  const lifeProgress = maturityProgress(scheme?.allotmentDate ?? null, scheme?.maturityDate ?? null);
 
   const trailing = useMemo(() => trailingReturns(nav), [nav]);
   const risk = useMemo(() => riskStats(nav, []), [nav]);
@@ -256,10 +246,7 @@ export function FundDetail({
     return { rows, total };
   }, [perf]);
 
-  const holdingsTotal = useMemo(
-    () => holdings.reduce((s, h) => s + (h.marketValue ?? 0), 0),
-    [holdings],
-  );
+  const holdingsTotal = useMemo(() => holdings.reduce((s, h) => s + (h.marketValue ?? 0), 0), [holdings]);
   const maxHoldingWeight = useMemo(() => {
     if (holdingsTotal <= 0) return 0;
     return Math.max(...holdings.map((h) => ((h.marketValue ?? 0) / holdingsTotal) * 100), 0);
@@ -309,9 +296,7 @@ export function FundDetail({
     const navReports = schemeDocs
       .filter((d) => /nav/i.test(d.category ?? ""))
       .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
-    const others = schemeDocs.filter(
-      (d) => !/prospectus/i.test(d.category ?? "") && !/nav/i.test(d.category ?? ""),
-    );
+    const others = schemeDocs.filter((d) => !/prospectus/i.test(d.category ?? "") && !/nav/i.test(d.category ?? ""));
     return [
       { key: "prospectus", label: "Prospectus", docs: prospectus, accent: "text-primary" },
       {
@@ -353,11 +338,7 @@ export function FundDetail({
             <button
               key={j.id}
               type="button"
-              onClick={() =>
-                document
-                  .getElementById(j.id)
-                  ?.scrollIntoView({ behavior: "smooth", block: "start" })
-              }
+              onClick={() => document.getElementById(j.id)?.scrollIntoView({ behavior: "smooth", block: "start" })}
               className="shrink-0 rounded-full border border-border/60 bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
             >
               {j.label}
@@ -384,9 +365,7 @@ export function FundDetail({
                         disc >= -2 && disc <= 2 && "bg-muted text-muted-foreground",
                       )}
                     >
-                      {disc <= 0
-                        ? `${Math.abs(disc).toFixed(2)}% below NAV`
-                        : `${disc.toFixed(2)}% above NAV`}
+                      {disc <= 0 ? `${Math.abs(disc).toFixed(2)}% below NAV` : `${disc.toFixed(2)}% above NAV`}
                     </span>
                   ) : null}
                   {perf?.dataStatus && perf.dataStatus !== "ok" ? (
@@ -419,34 +398,22 @@ export function FundDetail({
                   NAV <span className="normal-case">({closeEnd ? navLabel : heroNavLabel})</span>
                 </p>
                 <p className="num text-2xl font-bold sm:text-3xl">
-                  {closeEnd
-                    ? refNav != null
-                      ? formatNpr(refNav)
-                      : "-"
-                    : heroNav != null
-                      ? formatNpr(heroNav)
-                      : "-"}
+                  {closeEnd ? (refNav != null ? formatNpr(refNav) : "-") : heroNav != null ? formatNpr(heroNav) : "-"}
                 </p>
                 {closeEnd ? (
                   <p className="num mt-0.5 text-sm text-muted-foreground">
                     Market {ltp != null ? formatNpr(ltp) : "-"}{" "}
                     {live ? (
-                      <DeltaPill value={live.percentChange}>
-                        {formatPercent(live.percentChange)}
-                      </DeltaPill>
+                      <DeltaPill value={live.percentChange}>{formatPercent(live.percentChange)}</DeltaPill>
                     ) : null}
                   </p>
                 ) : (
                   <div className="mt-1 flex items-center justify-end gap-2">
                     {heroChangeShown !== null ? (
-                      <DeltaPill value={heroChangeShown}>
-                        {formatPercent(heroChangeShown)}
-                      </DeltaPill>
+                      <DeltaPill value={heroChangeShown}>{formatPercent(heroChangeShown)}</DeltaPill>
                     ) : null}
                     {heroDateShown ? (
-                      <span className="num text-[11px] text-muted-foreground">
-                        as of {formatDate(heroDateShown)}
-                      </span>
+                      <span className="num text-[11px] text-muted-foreground">as of {formatDate(heroDateShown)}</span>
                     ) : null}
                   </div>
                 )}
@@ -474,24 +441,17 @@ export function FundDetail({
                 onClick={() => setShowHoldingsDetail(true)}
                 className="bg-card px-3 py-2.5 text-left transition-colors hover:bg-muted/50"
               >
-                <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                  Stocks held
-                </p>
+                <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">Stocks</p>
                 <p className="num text-sm font-bold text-primary underline-offset-2 hover:underline">
                   {holdings.length}
                 </p>
               </button>
             ) : (
-              <HeroStat
-                label="Stocks held"
-                value={perf?.holdingsCount != null ? formatQty(perf.holdingsCount) : "-"}
-              />
+              <HeroStat label="Stocks" value={perf?.holdingsCount != null ? formatQty(perf.holdingsCount) : "-"} />
             )}
             <HeroStat
               label="Expected payout"
-              value={
-                perf?.expectedDividendPct != null ? formatPercent(perf.expectedDividendPct) : "-"
-              }
+              value={perf?.expectedDividendPct != null ? formatPercent(perf.expectedDividendPct) : "-"}
             />
             <HeroStat label="Matures" value={countdown ?? "-"} />
           </div>
@@ -532,20 +492,8 @@ export function FundDetail({
               <SnapshotStat
                 label="LTP vs NAV"
                 value={disc != null ? formatPercent(disc) : "-"}
-                hint={
-                  disc != null
-                    ? disc >= 0
-                      ? "trading at premium"
-                      : "trading at discount"
-                    : "not traded"
-                }
-                tone={
-                  disc != null
-                    ? disc >= 0
-                      ? "text-amber-600 dark:text-amber-400"
-                      : "text-gain"
-                    : undefined
-                }
+                hint={disc != null ? (disc >= 0 ? "trading at premium" : "trading at discount") : "not traded"}
+                tone={disc != null ? (disc >= 0 ? "text-amber-600 dark:text-amber-400" : "text-gain") : undefined}
               />
             </div>
           </Section>
@@ -566,9 +514,7 @@ export function FundDetail({
           <div className="mt-3">
             {returns && !returns.available ? (
               <div className="mt-3 rounded-xl border border-border/60 bg-surface px-3 py-4 text-center">
-                <p className="text-xs font-semibold text-muted-foreground">
-                  Not enough history yet
-                </p>
+                <p className="text-xs font-semibold text-muted-foreground">Not enough history yet</p>
                 <p className="mt-1 text-[11px] text-muted-foreground">
                   Only {returns.points} NAV point{returns.points === 1 ? "" : "s"} recorded so far.
                 </p>
@@ -580,8 +526,7 @@ export function FundDetail({
               <div className="mt-3 space-y-1.5">
                 <div className="num flex items-center justify-between px-1 text-[11px] text-muted-foreground">
                   <span>
-                    {returnRows.filter((r) => r.available).length} of {returnRows.length} periods
-                    available
+                    {returnRows.filter((r) => r.available).length} of {returnRows.length} periods available
                   </span>
                   {returns?.asOf ? <span>As of {returns.asOf}</span> : null}
                 </div>
@@ -600,11 +545,7 @@ export function FundDetail({
                       <span
                         className={cn(
                           "absolute bottom-0 left-0 top-0 w-1",
-                          !r.available
-                            ? "bg-muted-foreground/30"
-                            : positive
-                              ? "bg-gain"
-                              : "bg-loss",
+                          !r.available ? "bg-muted-foreground/30" : positive ? "bg-gain" : "bg-loss",
                         )}
                       />
                       <span className="pl-2">
@@ -654,17 +595,13 @@ export function FundDetail({
           >
             <div className="grid grid-cols-2 gap-2">
               <div className="rounded-xl border border-border/60 bg-surface px-3 py-2.5">
-                <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                  Yearly swing
-                </p>
+                <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">Yearly swing</p>
                 <p className="num text-lg font-bold">
                   {risk.volatilityPct != null ? `±${risk.volatilityPct.toFixed(1)}%` : "-"}
                 </p>
               </div>
               <div className="rounded-xl border border-border/60 bg-surface px-3 py-2.5">
-                <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                  Worst dip
-                </p>
+                <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">Worst dip</p>
                 <p className="num text-lg font-bold text-loss">
                   {risk.maxDrawdownPct != null ? `${risk.maxDrawdownPct.toFixed(1)}%` : "-"}
                 </p>
@@ -735,9 +672,7 @@ export function FundDetail({
                         </span>
                         <span className="num shrink-0 text-muted-foreground">
                           {weight.toFixed(1)}% ·{" "}
-                          {h.marketValue != null
-                            ? formatNpr(h.marketValue, { compact: true })
-                            : "-"}
+                          {h.marketValue != null ? formatNpr(h.marketValue, { compact: true }) : "-"}
                         </span>
                       </div>
                       <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
@@ -804,34 +739,22 @@ export function FundDetail({
                   className="num h-8 w-28 rounded-lg text-xs"
                   aria-label="Amount in rupees"
                 />
-                <span className="text-xs text-muted-foreground">
-                  {sipMode === "sip" ? "/month" : "once"}
-                </span>
+                <span className="text-xs text-muted-foreground">{sipMode === "sip" ? "/month" : "once"}</span>
               </div>
             </div>
             {sim ? (
               <div className="mt-3 space-y-2">
                 <div className="grid grid-cols-3 gap-2">
                   <div className="rounded-xl border border-border/60 bg-surface px-3 py-2">
-                    <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                      You put in
-                    </p>
-                    <p className="num text-sm font-bold">
-                      {formatNpr(sim.invested, { compact: true })}
-                    </p>
+                    <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">You put in</p>
+                    <p className="num text-sm font-bold">{formatNpr(sim.invested, { compact: true })}</p>
                   </div>
                   <div className="rounded-xl border border-border/60 bg-surface px-3 py-2">
-                    <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                      Worth now
-                    </p>
-                    <p className="num text-sm font-bold">
-                      {formatNpr(sim.value, { compact: true })}
-                    </p>
+                    <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">Worth now</p>
+                    <p className="num text-sm font-bold">{formatNpr(sim.value, { compact: true })}</p>
                   </div>
                   <div className="rounded-xl border border-border/60 bg-surface px-3 py-2">
-                    <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                      Gain
-                    </p>
+                    <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">Gain</p>
                     <p className="num text-sm font-bold">
                       <PercentText value={sim.gainPct} />
                     </p>
@@ -840,9 +763,7 @@ export function FundDetail({
                 {navOnly && navOnly.value !== sim.value ? (
                   <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-3 py-2">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-[0.68rem] text-muted-foreground">
-                        From NAV only (no dividends)
-                      </span>
+                      <span className="text-[0.68rem] text-muted-foreground">From NAV only (no dividends)</span>
                       <span className="num text-xs font-semibold">
                         {formatNpr(navOnly.value, { compact: true })}{" "}
                         <span className="text-muted-foreground">
@@ -851,14 +772,10 @@ export function FundDetail({
                       </span>
                     </div>
                     <div className="mt-1 flex items-center justify-between gap-2">
-                      <span className="text-[0.68rem] text-emerald-600 dark:text-emerald-400">
-                        Dividends added
-                      </span>
+                      <span className="text-[0.68rem] text-emerald-600 dark:text-emerald-400">Dividends added</span>
                       <span className="num text-xs font-semibold text-emerald-600 dark:text-emerald-400">
                         +{formatNpr(sim.value - navOnly.value, { compact: true })} (
-                        {sim.invested > 0
-                          ? (((sim.value - navOnly.value) / sim.invested) * 100).toFixed(1)
-                          : "0"}
+                        {sim.invested > 0 ? (((sim.value - navOnly.value) / sim.invested) * 100).toFixed(1) : "0"}
                         %)
                       </span>
                     </div>
@@ -896,9 +813,7 @@ export function FundDetail({
                   >
                     <span className="w-20 shrink-0 text-xs font-bold">{p.symbol}</span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[11px] text-muted-foreground">
-                        {p.name}
-                      </span>
+                      <span className="block truncate text-[11px] text-muted-foreground">{p.name}</span>
                       <span className="mt-1 block h-1 overflow-hidden rounded-full bg-muted">
                         <span
                           className="block h-full rounded-full bg-primary/70"
@@ -914,9 +829,7 @@ export function FundDetail({
                       </span>
                     </span>
                     <span className="num shrink-0 text-right text-xs">
-                      <span className="block font-semibold">
-                        {p.nav != null ? formatNpr(p.nav) : "-"}
-                      </span>
+                      <span className="block font-semibold">{p.nav != null ? formatNpr(p.nav) : "-"}</span>
                       <PercentText value={p.discount} />
                     </span>
                   </button>
@@ -939,10 +852,7 @@ export function FundDetail({
                 {groupedFacts
                   .filter((g) => g.prose)
                   .map((g) => (
-                    <div
-                      key="objective"
-                      className="rounded-2xl border border-border/60 bg-surface p-3.5"
-                    >
+                    <div key="objective" className="rounded-2xl border border-border/60 bg-surface p-3.5">
                       <div className="space-y-2">
                         {g.items.map((f) => (
                           <p key={f.label} className="text-[13px] leading-relaxed">
@@ -976,9 +886,7 @@ export function FundDetail({
                               <dt className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
                                 {f.label}
                               </dt>
-                              <dd className="num mt-0.5 text-[13px] font-medium leading-relaxed">
-                                {f.value}
-                              </dd>
+                              <dd className="num mt-0.5 text-[13px] font-medium leading-relaxed">{f.value}</dd>
                             </div>
                           ))}
                         </dl>
@@ -1004,9 +912,7 @@ export function FundDetail({
                     {featuredDoc.doc.title}
                   </span>
                   {featuredDoc.doc.date ? (
-                    <span className="num mt-0.5 block text-[11px] text-muted-foreground">
-                      {featuredDoc.doc.date}
-                    </span>
+                    <span className="num mt-0.5 block text-[11px] text-muted-foreground">{featuredDoc.doc.date}</span>
                   ) : null}
                 </span>
                 <span className="shrink-0 rounded-full bg-primary px-3 py-1.5 text-[11px] font-bold text-primary-foreground">
@@ -1026,13 +932,7 @@ export function FundDetail({
                   }))
                   .filter((g) => g.docs.length > 0)
                   .map((g) => (
-                    <DocGroup
-                      key={g.label}
-                      label={g.label}
-                      docs={g.docs}
-                      accent={g.accent}
-                      onPreview={openPreview}
-                    />
+                    <DocGroup key={g.label} label={g.label} docs={g.docs} accent={g.accent} onPreview={openPreview} />
                   ))}
               </div>
             ) : null}
@@ -1066,10 +966,7 @@ export function FundDetail({
               }
             />
             <Fact label="Units" value={scheme?.units != null ? formatQty(scheme.units) : "-"} />
-            <Fact
-              label="Face value"
-              value={scheme?.faceValue != null ? formatNpr(scheme.faceValue) : "-"}
-            />
+            <Fact label="Face value" value={scheme?.faceValue != null ? formatNpr(scheme.faceValue) : "-"} />
             <Fact label="Allotted" value={scheme?.allotmentDate ?? "-"} />
             <Fact label="Matures" value={scheme?.maturityDate ?? perf?.maturityDate ?? "-"} />
           </dl>
@@ -1092,9 +989,7 @@ export function FundDetail({
             const links = [
               managerInfo?.website ? { label: "Manager site", href: managerInfo.website } : null,
               managerInfo?.navUrl ? { label: "NAV reports", href: managerInfo.navUrl } : null,
-              managerInfo?.reportsUrl
-                ? { label: "Fund reports", href: managerInfo.reportsUrl }
-                : null,
+              managerInfo?.reportsUrl ? { label: "Fund reports", href: managerInfo.reportsUrl } : null,
             ].flatMap((l) => (l ? [l] : []));
             return links.length > 0 ? (
               <div className="mt-3 flex flex-wrap gap-2">
@@ -1115,25 +1010,16 @@ export function FundDetail({
         </Section>
 
         <p className="text-[0.68rem] leading-relaxed text-muted-foreground">
-          NAV, holdings and returns come from the community fund feed and the manager's published
-          reports, indicative only, not investment advice. Past performance doesn't predict future
-          returns. Mutual fund investments are subject to market risks.
+          NAV, holdings and returns come from the community fund feed and the manager's published reports, indicative
+          only, not investment advice. Past performance doesn't predict future returns. Mutual fund investments are
+          subject to market risks.
         </p>
       </div>
     </TooltipProvider>
   );
 }
 
-const DONUT_COLORS = [
-  "#10b981",
-  "#0ea5e9",
-  "#8b5cf6",
-  "#f59e0b",
-  "#ef4444",
-  "#14b8d4",
-  "#f43f5e",
-  "#6366f1",
-];
+const DONUT_COLORS = ["#10b981", "#0ea5e9", "#8b5cf6", "#f59e0b", "#ef4444", "#14b8d4", "#f43f5e", "#6366f1"];
 
 /** Top-6 + Others donut with the total in the middle. */
 function HoldingsDonut({
@@ -1153,14 +1039,7 @@ function HoldingsDonut({
     <div className="flex items-center gap-4 rounded-xl border border-border/60 bg-surface p-3">
       <div className="relative size-28 shrink-0">
         <svg viewBox="0 0 42 42" className="size-full -rotate-0">
-          <circle
-            cx="21"
-            cy="21"
-            r="15.9155"
-            fill="none"
-            strokeWidth="6"
-            className="stroke-muted"
-          />
+          <circle cx="21" cy="21" r="15.9155" fill="none" strokeWidth="6" className="stroke-muted" />
           {slices.map((s, i) => {
             const pct = total > 0 ? (s.value / total) * 100 : 0;
             const el = (
@@ -1183,9 +1062,7 @@ function HoldingsDonut({
         </svg>
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
           <span className="num text-sm font-bold">{formatNpr(total, { compact: true })}</span>
-          <span className="text-[0.6rem] font-bold uppercase tracking-widest text-muted-foreground">
-            Total
-          </span>
+          <span className="text-[0.6rem] font-bold uppercase tracking-widest text-muted-foreground">Total</span>
         </div>
       </div>
       <ul className="min-w-0 flex-1 space-y-1.5">
@@ -1216,9 +1093,7 @@ function DocRowIcon({ title, date }: { title: string; date: string | null }) {
         <FileText className="size-4" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-xs font-semibold group-hover:text-primary">
-          {title}
-        </span>
+        <span className="block truncate text-xs font-semibold group-hover:text-primary">{title}</span>
         {date ? <span className="num block text-[10px] text-muted-foreground">{date}</span> : null}
       </span>
     </>
@@ -1251,9 +1126,7 @@ function DocGroup({
             {docs.length}
           </span>
         </span>
-        <ChevronDown
-          className={cn("size-4 text-muted-foreground transition-transform", open && "rotate-180")}
-        />
+        <ChevronDown className={cn("size-4 text-muted-foreground transition-transform", open && "rotate-180")} />
       </button>
       {open ? (
         <ul className="space-y-1 border-t border-border/60 px-2 py-2">
@@ -1292,9 +1165,7 @@ function DocGroup({
           <p className="truncate text-[11px] font-medium text-muted-foreground">
             Latest: <span className="text-foreground">{docs[0]?.title}</span>
           </p>
-          {docs[0]?.date ? (
-            <p className="num mt-0.5 text-[10px] text-muted-foreground">{docs[0]?.date}</p>
-          ) : null}
+          {docs[0]?.date ? <p className="num mt-0.5 text-[10px] text-muted-foreground">{docs[0]?.date}</p> : null}
         </div>
       ) : null}
       {open && docs.length > 3 ? (
@@ -1360,15 +1231,7 @@ const LTP_FREQS: { key: LtpFrequency; label: string }[] = [
 ];
 
 /** Market-price journey: LTP history with ranges, Best Entry/Exit and range position. */
-function PriceNavChart({
-  symbol,
-  nav,
-  closeEnd,
-}: {
-  symbol: string;
-  nav: MfNavPoint[];
-  closeEnd: boolean;
-}) {
+function PriceNavChart({ symbol, nav, closeEnd }: { symbol: string; nav: MfNavPoint[]; closeEnd: boolean }) {
   const [range, setRange] = useState<ChartRange>("1Y");
   const [freq, setFreq] = useState<LtpFrequency>("daily");
   const [hover, setHover] = useState<number | null>(null);
@@ -1393,16 +1256,8 @@ function PriceNavChart({
         const pt = t(p.date);
         return Number.isFinite(pt) && pt >= t0 && pt <= t1 && p.nav > 0;
       });
-      const lo = Math.min(
-        ...buckets.map((b) => b.ltp),
-        ...navIn.map((p) => p.nav),
-        ...navIn.map((p) => p.adjNav),
-      );
-      const hi = Math.max(
-        ...buckets.map((b) => b.ltp),
-        ...navIn.map((p) => p.nav),
-        ...navIn.map((p) => p.adjNav),
-      );
+      const lo = Math.min(...buckets.map((b) => b.ltp), ...navIn.map((p) => p.nav), ...navIn.map((p) => p.adjNav));
+      const hi = Math.max(...buckets.map((b) => b.ltp), ...navIn.map((p) => p.nav), ...navIn.map((p) => p.adjNav));
       if (!Number.isFinite(lo) || !Number.isFinite(hi)) return null;
       const span = t1 - t0;
       const rg = hi - lo || 1;
@@ -1416,8 +1271,7 @@ function PriceNavChart({
       navIn.forEach((p, i) => {
         const X = x(t(p.date)).toFixed(1);
         navPath += i === 0 ? `M ${X},${y(p.nav).toFixed(1)}` : ` H ${X} V ${y(p.nav).toFixed(1)}`;
-        adjNavPath +=
-          i === 0 ? `M ${X},${y(p.adjNav).toFixed(1)}` : ` H ${X} V ${y(p.adjNav).toFixed(1)}`;
+        adjNavPath += i === 0 ? `M ${X},${y(p.adjNav).toFixed(1)}` : ` H ${X} V ${y(p.adjNav).toFixed(1)}`;
       });
       return { t0, t1, x, y, ltpPath, navPath, adjNavPath, navIn, lo, hi };
     }
@@ -1443,9 +1297,7 @@ function PriceNavChart({
         .map((p, i) => `${i === 0 ? "M" : "L"} ${x(t(p.date)).toFixed(1)},${y(p.nav).toFixed(1)}`)
         .join(" ");
       const adjNavPath = validNav
-        .map(
-          (p, i) => `${i === 0 ? "M" : "L"} ${x(t(p.date)).toFixed(1)},${y(p.adjNav).toFixed(1)}`,
-        )
+        .map((p, i) => `${i === 0 ? "M" : "L"} ${x(t(p.date)).toFixed(1)},${y(p.adjNav).toFixed(1)}`)
         .join(" ");
       return { t0, t1, x, y, ltpPath: "", navPath, adjNavPath, navIn: validNav, lo, hi };
     }
@@ -1455,13 +1307,9 @@ function PriceNavChart({
 
   const hovered = hover != null ? (buckets[hover] ?? null) : null;
   const hoverNav =
-    hovered != null && geom
-      ? ([...geom.navIn].reverse().find((p) => p.date <= hovered.date) ?? null)
-      : null;
+    hovered != null && geom ? ([...geom.navIn].reverse().find((p) => p.date <= hovered.date) ?? null) : null;
   const hoverDisc =
-    hovered && hoverNav && hoverNav.nav > 0
-      ? ((hovered.ltp - hoverNav.nav) / hoverNav.nav) * 100
-      : null;
+    hovered && hoverNav && hoverNav.nav > 0 ? ((hovered.ltp - hoverNav.nav) / hoverNav.nav) * 100 : null;
 
   const onMove = (e: React.MouseEvent) => {
     const el = wrapRef.current;
@@ -1561,9 +1409,7 @@ function PriceNavChart({
                 <span
                   className={cn(
                     "w-5",
-                    closeEnd
-                      ? "h-0 border-t-2 border-dashed border-amber-500"
-                      : "h-0.5 rounded-full bg-amber-500",
+                    closeEnd ? "h-0 border-t-2 border-dashed border-amber-500" : "h-0.5 rounded-full bg-amber-500",
                   )}
                 />{" "}
                 NAV (price only)
@@ -1571,19 +1417,13 @@ function PriceNavChart({
             ) : null}
             {geom.navIn.some((p) => p.adjNav !== p.nav) ? (
               <span className="inline-flex items-center gap-1.5">
-                <span className="h-0 w-5 border-t-2 border-dashed border-emerald-500" /> Total
-                return (incl. dividends)
+                <span className="h-0 w-5 border-t-2 border-dashed border-emerald-500" /> Total return (incl. dividends)
               </span>
             ) : null}
             {closeEnd ? <span className="ml-auto hidden sm:inline">Hover for values</span> : null}
           </div>
 
-          <div
-            ref={wrapRef}
-            onMouseMove={onMove}
-            onMouseLeave={() => setHover(null)}
-            className="relative"
-          >
+          <div ref={wrapRef} onMouseMove={onMove} onMouseLeave={() => setHover(null)} className="relative">
             <svg
               viewBox={`0 0 ${W} ${H}`}
               preserveAspectRatio="none"
@@ -1664,14 +1504,10 @@ function PriceNavChart({
                 }}
               >
                 <p className="font-bold text-muted-foreground">{hovered.date}</p>
-                {closeEnd ? (
-                  <p className="font-bold text-primary">Price {formatNpr(hovered.ltp)}</p>
-                ) : null}
+                {closeEnd ? <p className="font-bold text-primary">Price {formatNpr(hovered.ltp)}</p> : null}
                 {hoverNav ? (
                   <>
-                    <p className="font-bold text-amber-600 dark:text-amber-400">
-                      NAV {formatNpr(hoverNav.nav)}
-                    </p>
+                    <p className="font-bold text-amber-600 dark:text-amber-400">NAV {formatNpr(hoverNav.nav)}</p>
                     {hoverNav.adjNav !== hoverNav.nav ? (
                       <p className="font-bold text-emerald-600 dark:text-emerald-400">
                         Total {formatNpr(hoverNav.adjNav)}
@@ -1696,9 +1532,7 @@ function PriceNavChart({
                   Best entry · lowest price
                 </p>
                 <div className="mt-1.5 flex items-end justify-between gap-2">
-                  <p className="num text-lg font-bold text-gain">
-                    {formatNpr(stats.bestEntry.ltp)}
-                  </p>
+                  <p className="num text-lg font-bold text-gain">{formatNpr(stats.bestEntry.ltp)}</p>
                   <p className="num text-[11px] text-muted-foreground">{stats.bestEntry.date}</p>
                 </div>
                 <p className="num mt-1 text-[11px] text-muted-foreground">
@@ -1727,9 +1561,7 @@ function PriceNavChart({
                   <p className="text-[0.65rem] font-bold uppercase tracking-widest text-muted-foreground">
                     Range position
                   </p>
-                  <p className="num mt-1 text-xs text-muted-foreground">
-                    Average {formatNpr(stats.average)}
-                  </p>
+                  <p className="num mt-1 text-xs text-muted-foreground">Average {formatNpr(stats.average)}</p>
                 </div>
                 <p className="num text-sm font-bold">{stats.rangePositionPct.toFixed(0)}%</p>
               </div>

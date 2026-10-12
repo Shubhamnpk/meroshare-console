@@ -24,12 +24,14 @@ export interface TerminalChartPoint {
   invested: number;
   price: number;
   units: number;
-  event?: {
-    bonusPct: number;
-    cashPct: number;
-    bonusUnits: number;
-    cashAmount: number;
-  } | undefined;
+  event?:
+    | {
+        bonusPct: number;
+        cashPct: number;
+        bonusUnits: number;
+        cashAmount: number;
+      }
+    | undefined;
 }
 
 interface TimeMachineTerminalChartProps {
@@ -47,11 +49,7 @@ function palette(light: boolean) {
   };
 }
 
-export function TimeMachineTerminalChart({
-  points,
-  height = 360,
-  className,
-}: TimeMachineTerminalChartProps) {
+export function TimeMachineTerminalChart({ points, height = 360, className }: TimeMachineTerminalChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const valSeriesRef = useRef<ISeriesApi<"Area"> | null>(null);
@@ -63,9 +61,7 @@ export function TimeMachineTerminalChart({
   const { theme } = useSettings();
   const light =
     theme === "light" ||
-    (theme === "system" &&
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-color-scheme: light)").matches);
+    (theme === "system" && typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: light)").matches);
 
   // Map for fast date lookup on crosshair hover
   const pointsMap = useMemo(() => {
@@ -144,7 +140,7 @@ export function TimeMachineTerminalChart({
       points.map((p) => ({
         time: p.date as Time,
         value: p.value,
-      }))
+      })),
     );
     valSeriesRef.current = valSeries;
 
@@ -166,7 +162,7 @@ export function TimeMachineTerminalChart({
         points.map((p) => ({
           time: p.date as Time,
           value: p.invested,
-        }))
+        })),
       );
       invSeriesRef.current = invSeries;
     }
@@ -203,24 +199,20 @@ export function TimeMachineTerminalChart({
   }
 
   const pnl = (active?.value ?? 0) - (active?.invested ?? 0);
-  const pnlPct =
-    (active?.invested ?? 0) > 0 ? (pnl / (active?.invested ?? 1)) * 100 : 0;
+  const pnlPct = (active?.invested ?? 0) > 0 ? (pnl / (active?.invested ?? 1)) * 100 : 0;
   const wacc = (active?.units ?? 0) > 0 ? (active?.invested ?? 0) / active!.units : 0;
 
   return (
-    <div className={cn("relative flex flex-col rounded-2xl overflow-hidden border border-border/70 bg-card", className)}>
+    <div
+      className={cn("relative flex flex-col rounded-2xl overflow-hidden border border-border/70 bg-card", className)}
+    >
       {/* Top Terminal HUD / Legend */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-muted/20 px-4 py-2.5">
         <div className="flex flex-wrap items-center gap-3.5">
           {/* Portfolio Value */}
           <div className="flex items-center gap-1.5">
-            <span
-              className="inline-block size-2 rounded-full"
-              style={{ backgroundColor: primaryColor }}
-            />
-            <span className="font-mono text-xs font-bold text-foreground">
-              {formatNpr(active?.value ?? 0)}
-            </span>
+            <span className="inline-block size-2 rounded-full" style={{ backgroundColor: primaryColor }} />
+            <span className="font-mono text-xs font-bold text-foreground">{formatNpr(active?.value ?? 0)}</span>
             <span className="text-[0.68rem] text-muted-foreground">Portfolio</span>
           </div>
 
@@ -238,12 +230,7 @@ export function TimeMachineTerminalChart({
           {/* Net P&L */}
           <div className="flex items-center gap-1.5 border-l border-border/60 pl-3 text-xs">
             <span className="text-muted-foreground text-[0.68rem]">P&L:</span>
-            <span
-              className={cn(
-                "num font-mono font-semibold",
-                pnl >= 0 ? "text-gain" : "text-loss"
-              )}
-            >
+            <span className={cn("num font-mono font-semibold", pnl >= 0 ? "text-gain" : "text-loss")}>
               {pnl >= 0 ? "+" : ""}
               {formatNpr(pnl)} ({formatPercent(pnlPct)})
             </span>
@@ -266,7 +253,7 @@ export function TimeMachineTerminalChart({
               <span
                 className={cn(
                   "rounded-full px-1.5 py-0.5 text-[0.65rem] font-bold",
-                  active.price >= wacc ? "bg-gain/15 text-gain" : "bg-loss/15 text-loss"
+                  active.price >= wacc ? "bg-gain/15 text-gain" : "bg-loss/15 text-loss",
                 )}
               >
                 {active.price >= wacc ? "+" : ""}
@@ -286,18 +273,14 @@ export function TimeMachineTerminalChart({
             </span>
           )}
 
-          <span className="font-mono text-[0.72rem] text-muted-foreground">
-            {formatDate(active?.date)}
-          </span>
+          <span className="font-mono text-[0.72rem] text-muted-foreground">{formatDate(active?.date)}</span>
 
           <button
             type="button"
             onClick={() => setShowInvested(!showInvested)}
             className={cn(
               "rounded px-2 py-0.5 text-[0.68rem] font-medium border transition-colors",
-              showInvested
-                ? "border-primary/40 bg-primary/10 text-primary"
-                : "border-border/60 text-muted-foreground"
+              showInvested ? "border-primary/40 bg-primary/10 text-primary" : "border-border/60 text-muted-foreground",
             )}
           >
             Invested Line
@@ -315,11 +298,7 @@ export function TimeMachineTerminalChart({
       </div>
 
       {/* Lightweight-Charts Canvas Host */}
-      <div
-        ref={containerRef}
-        className="w-full touch-pan-x"
-        style={{ height }}
-      />
+      <div ref={containerRef} className="w-full touch-pan-x" style={{ height }} />
     </div>
   );
 }

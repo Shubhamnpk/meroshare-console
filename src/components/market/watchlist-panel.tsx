@@ -4,13 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { CalendarDays, Search, Star, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { EmptyBlock } from "@/components/states";
 import { DeltaPill } from "@/components/stat-card";
 import { brokerWatchlistsQuery, marketSnapshotQuery } from "@/lib/queries";
@@ -51,8 +45,7 @@ export function WatchlistPanel({
     staleTime: 30_000,
     retry: false,
   });
-  const brokerId = (brokerConns.data?.[0]?.brokerId ?? null) as
-    import("@/lib/brokers/types").BrokerId | null;
+  const brokerId = (brokerConns.data?.[0]?.brokerId ?? null) as import("@/lib/brokers/types").BrokerId | null;
   const brokerWatchlists = useQuery({
     ...brokerWatchlistsQuery(brokerId),
     enabled: Boolean(brokerId) && open,
@@ -76,19 +69,18 @@ export function WatchlistPanel({
       const templates = brokerWatchlists.data ?? [];
       const target = templates.find((t) => /default/i.test(t.name)) ?? templates[0];
       const template = target?.name ?? "Default";
-      const merged = [
-        ...new Set(
-          [...(target?.symbols ?? []), ...prefsWatchlist.symbols].map((s) => s.toUpperCase()),
-        ),
-      ];
+      const merged = [...new Set([...(target?.symbols ?? []), ...prefsWatchlist.symbols].map((s) => s.toUpperCase()))];
       const res = await saveBrokerWatchlist({
         data: { brokerId: brokerId!, template, symbols: merged },
       });
       if (!res.ok) throw new Error(res.message);
       return res.message;
     },
-    onSuccess: (msg) => {
-      toast.success(msg);
+    // Silent on success: this push runs automatically on every open, so
+    // toasting the broker's raw reply ("Market Watch Default saved
+    // successfully") surprises users who asked for nothing. Failures still
+    // surface — a dead sync needs attention.
+    onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["broker-watchlists"] });
     },
     onError: (err) => toast.error(errorMessage(err, "Push failed.")),
@@ -113,8 +105,7 @@ export function WatchlistPanel({
         added++;
       }
     }
-    if (added > 0)
-      toast.success(`Synced ${added} scrip${added === 1 ? "" : "s"} from broker watchlist.`);
+    if (added > 0) toast.success(`Synced ${added} stock${added === 1 ? "" : "s"} from broker watchlist.`);
     if (onlyLocal.length > 0 && !pushLocalToBroker.isPending) pushLocalToBroker.mutate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, brokerId, brokerWatchlists.isPending, brokerKey, localKey]);
@@ -161,9 +152,7 @@ export function WatchlistPanel({
               <CalendarDays className="size-4" />
             </Link>
           </div>
-          <SheetDescription className="text-xs">
-            Stored privately on this device only.
-          </SheetDescription>
+          <SheetDescription className="text-xs">Stored privately on this device only.</SheetDescription>
         </SheetHeader>
 
         <div className="border-b border-border/60 px-4 py-3">
@@ -172,7 +161,7 @@ export function WatchlistPanel({
             <Input
               value={term}
               onChange={(e) => setTerm(e.target.value)}
-              placeholder="Add a scrip by symbol or name…"
+              placeholder="Add a stock by symbol or name…"
               className="h-9 rounded-xl pl-9"
             />
           </div>
@@ -206,7 +195,7 @@ export function WatchlistPanel({
           {rows.length === 0 ? (
             <EmptyBlock
               title="Nothing on your watchlist yet"
-              description="Search above, or tap the star next to any scrip."
+              description="Search above, or tap the star next to any stock."
               icon={<Star className="size-6" />}
             />
           ) : (
@@ -216,25 +205,17 @@ export function WatchlistPanel({
                   key={symbol}
                   className="flex items-center gap-2 rounded-xl border border-border/60 bg-surface px-3 py-2.5 transition-colors hover:border-primary/30 hover:bg-accent/5"
                 >
-                  <button
-                    type="button"
-                    onClick={() => onPick(symbol)}
-                    className="min-w-0 flex-1 text-left"
-                  >
+                  <button type="button" onClick={() => onPick(symbol)} className="min-w-0 flex-1 text-left">
                     <span className="flex items-baseline justify-between gap-2">
                       <span className="truncate text-sm font-semibold">{symbol}</span>
-                      <span className="num shrink-0 text-sm font-semibold">
-                        {price ? formatNpr(price.ltp) : "-"}
-                      </span>
+                      <span className="num shrink-0 text-sm font-semibold">{price ? formatNpr(price.ltp) : "-"}</span>
                     </span>
                     <span className="mt-0.5 flex items-center justify-between gap-2">
                       <span className="truncate text-xs text-muted-foreground">
                         {price?.name ?? "Not in the live feed"}
                       </span>
                       {price ? (
-                        <DeltaPill value={price.percentChange}>
-                          {formatPercent(price.percentChange)}
-                        </DeltaPill>
+                        <DeltaPill value={price.percentChange}>{formatPercent(price.percentChange)}</DeltaPill>
                       ) : null}
                     </span>
                   </button>

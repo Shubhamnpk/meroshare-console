@@ -75,12 +75,9 @@ export async function fetchUdfHistory(params: {
 }
 
 export async function fetchUdfSymbols(symbol: string): Promise<Record<string, unknown> | null> {
-  const res = await fetch(
-    `${UDF_BASE}/symbols?symbol=${encodeURIComponent(symbol.toUpperCase())}`,
-    {
-      headers: { "User-Agent": UA, Accept: "application/json" },
-    },
-  );
+  const res = await fetch(`${UDF_BASE}/symbols?symbol=${encodeURIComponent(symbol.toUpperCase())}`, {
+    headers: { "User-Agent": UA, Accept: "application/json" },
+  });
   if (!res.ok) return null;
   return (await res.json().catch(() => null)) as Record<string, unknown> | null;
 }

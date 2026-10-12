@@ -1,13 +1,5 @@
 import { useMemo } from "react";
-import {
-  ArrowLeft,
-  ArrowUpRight,
-  Building2,
-  ExternalLink,
-  Landmark,
-  PieChart,
-  ScrollText,
-} from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Building2, ExternalLink, Landmark, PieChart, ScrollText } from "lucide-react";
 import { DeltaPill } from "@/components/stat-card";
 import { formatNpr, formatPercent, formatQty } from "@/lib/format";
 import type { LivePrice } from "@/lib/nepse/types";
@@ -27,13 +19,7 @@ function shortName(name: string): string {
   return name.replace(/ Capital( Limited)?$| Mutual Fund$/i, "").trim() || name;
 }
 
-export function ManagerGrid({
-  aggs,
-  onPick,
-}: {
-  aggs: ManagerAgg[];
-  onPick: (slug: string) => void;
-}) {
+export function ManagerGrid({ aggs, onPick }: { aggs: ManagerAgg[]; onPick: (slug: string) => void }) {
   const sorted = useMemo(() => [...aggs].sort((a, b) => b.aum - a.aum), [aggs]);
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -50,14 +36,10 @@ export function ManagerGrid({
                 {shortName(a.manager.name).slice(0, 2).toUpperCase()}
               </span>
               <div className="min-w-0">
-                <p className="truncate font-display text-[15px] font-bold leading-tight">
-                  {shortName(a.manager.name)}
-                </p>
+                <p className="truncate font-display text-[15px] font-bold leading-tight">{shortName(a.manager.name)}</p>
                 <p className="text-[11px] text-muted-foreground">
                   {a.schemes.length} scheme{a.schemes.length === 1 ? "" : "s"}
-                  {a.openCount > 0 && a.closeCount > 0
-                    ? ` · ${a.openCount} open / ${a.closeCount} closed`
-                    : ""}
+                  {a.openCount > 0 && a.closeCount > 0 ? ` · ${a.openCount} open / ${a.closeCount} closed` : ""}
                 </p>
               </div>
             </div>
@@ -66,23 +48,12 @@ export function ManagerGrid({
 
           <div className="flex items-end justify-between gap-2">
             <div>
-              <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                Funds managed
-              </p>
-              <p className="num text-xl font-bold">
-                {a.aum > 0 ? formatNpr(a.aum, { compact: true }) : "-"}
-              </p>
+              <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">Funds managed</p>
+              <p className="num text-xl font-bold">{a.aum > 0 ? formatNpr(a.aum, { compact: true }) : "-"}</p>
             </div>
             <div className="text-right">
-              <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                Avg. discount
-              </p>
-              <p
-                className={cn(
-                  "num text-sm font-bold",
-                  a.avgDiscount != null && a.avgDiscount < -2 && "text-gain",
-                )}
-              >
+              <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">Avg. discount</p>
+              <p className={cn("num text-sm font-bold", a.avgDiscount != null && a.avgDiscount < -2 && "text-gain")}>
                 {a.avgDiscount != null ? formatPercent(a.avgDiscount) : "-"}
               </p>
             </div>
@@ -190,12 +161,8 @@ export function ManagerDetail({
               </div>
             </div>
             <div className="text-right">
-              <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                Funds managed
-              </p>
-              <p className="num text-2xl font-bold">
-                {agg.aum > 0 ? formatNpr(agg.aum, { compact: true }) : "-"}
-              </p>
+              <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">Funds managed</p>
+              <p className="num text-2xl font-bold">{agg.aum > 0 ? formatNpr(agg.aum, { compact: true }) : "-"}</p>
               {agg.avgDiscount != null ? (
                 <p className="num text-xs text-muted-foreground">
                   avg.{" "}
@@ -208,9 +175,7 @@ export function ManagerDetail({
             </div>
           </div>
           {mfBlurb ? (
-            <p className="mt-3 max-w-3xl text-[13px] leading-relaxed text-muted-foreground">
-              {mfBlurb}
-            </p>
+            <p className="mt-3 max-w-3xl text-[13px] leading-relaxed text-muted-foreground">{mfBlurb}</p>
           ) : null}
           <div className="mt-3 flex flex-wrap gap-2">
             {m.website ? <ManagerLink href={m.website} label="Website" /> : null}
@@ -223,11 +188,7 @@ export function ManagerDetail({
           <HeroTile label="Schemes" value={String(agg.schemes.length)} />
           <HeroTile label="Open-end" value={agg.openCount > 0 ? String(agg.openCount) : "-"} />
           <HeroTile label="Close-end" value={agg.closeCount > 0 ? String(agg.closeCount) : "-"} />
-          <HeroTile
-            label="Bargains"
-            value={agg.bargains > 0 ? String(agg.bargains) : "-"}
-            accent={agg.bargains > 0}
-          />
+          <HeroTile label="Bargains" value={agg.bargains > 0 ? String(agg.bargains) : "-"} accent={agg.bargains > 0} />
         </div>
 
         {agg.allocCap + agg.allocFix + agg.allocCash > 0 ? (
@@ -271,9 +232,7 @@ export function ManagerDetail({
       <Panel as="section">
         <h3 className="flex items-center gap-2 font-display text-sm font-semibold">
           <Landmark className="size-4 text-primary" /> Schemes
-          <span className="num rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-            {rows.length}
-          </span>
+          <span className="num rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">{rows.length}</span>
         </h3>
         <ul className="mt-2 divide-y divide-border/50">
           {rows.map((r) => (
@@ -290,22 +249,14 @@ export function ManagerDetail({
                       {r.scheme.fundType === "open_end" ? "Open" : "Closed"}
                     </span>
                   </span>
-                  <span className="block truncate text-[11px] text-muted-foreground">
-                    {r.scheme.name}
-                  </span>
+                  <span className="block truncate text-[11px] text-muted-foreground">{r.scheme.name}</span>
                 </span>
                 <span className="num hidden shrink-0 text-right text-xs sm:block">
-                  <span className="block text-muted-foreground">
-                    NAV {r.nav != null ? formatNpr(r.nav) : "-"}
-                  </span>
+                  <span className="block text-muted-foreground">NAV {r.nav != null ? formatNpr(r.nav) : "-"}</span>
                   <span className="block font-semibold">
-                    {(r.live?.ltp ?? r.perf?.ltp) != null
-                      ? formatNpr(r.live?.ltp ?? r.perf?.ltp ?? 0)
-                      : "-"}{" "}
+                    {(r.live?.ltp ?? r.perf?.ltp) != null ? formatNpr(r.live?.ltp ?? r.perf?.ltp ?? 0) : "-"}{" "}
                     {r.live ? (
-                      <DeltaPill value={r.live.percentChange}>
-                        {formatPercent(r.live.percentChange)}
-                      </DeltaPill>
+                      <DeltaPill value={r.live.percentChange}>{formatPercent(r.live.percentChange)}</DeltaPill>
                     ) : null}
                   </span>
                 </span>
@@ -340,9 +291,7 @@ export function ManagerDetail({
                   f.value.length > 90 && "sm:col-span-2",
                 )}
               >
-                <dt className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                  {f.label}
-                </dt>
+                <dt className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">{f.label}</dt>
                 <dd className="mt-1 leading-relaxed">{f.value}</dd>
               </div>
             ))}
@@ -355,9 +304,7 @@ export function ManagerDetail({
                   <li key={v.name} className="text-[13px]">
                     <span className="font-medium">{v.name}</span>
                     {v.description ? (
-                      <span className="block text-xs leading-relaxed text-muted-foreground">
-                        {v.description}
-                      </span>
+                      <span className="block text-xs leading-relaxed text-muted-foreground">{v.description}</span>
                     ) : null}
                   </li>
                 ))}
@@ -386,8 +333,7 @@ export function ManagerDetail({
           </div>
           <p className="mt-2 text-[11px] text-muted-foreground">
             {formatQty(otherProducts.length)} more service
-            {otherProducts.length === 1 ? "" : "s"} beyond mutual funds, SIP, PMS, DP and issue
-            management.
+            {otherProducts.length === 1 ? "" : "s"} beyond mutual funds, SIP, PMS, DP and issue management.
           </p>
         </Panel>
       ) : null}
@@ -438,9 +384,7 @@ export function ManagerDetail({
                       <ExternalLink className="size-3.5 shrink-0 text-muted-foreground" />
                     </a>
                   ) : (
-                    <div className="rounded-xl border border-border/60 bg-surface px-3 py-2 text-[13px]">
-                      {d.title}
-                    </div>
+                    <div className="rounded-xl border border-border/60 bg-surface px-3 py-2 text-[13px]">{d.title}</div>
                   )}
                 </li>
               ))}

@@ -71,15 +71,13 @@ function createClient(): TmsClient {
       if (ck) headers.set("Cookie", ck);
       const res = await fetch(url, { ...opts, headers, signal, redirect: "manual" });
       const getSetCookie =
-        typeof (res.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie ===
-        "function"
+        typeof (res.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie === "function"
           ? (res.headers as Headers & { getSetCookie: () => string[] }).getSetCookie()
           : [];
       for (const c of getSetCookie) {
         const eq = c.indexOf("=");
         const sc = c.indexOf(";");
-        if (eq > 0)
-          jar.cookies.set(c.slice(0, eq).trim(), c.slice(eq + 1, sc > 0 ? sc : undefined).trim());
+        if (eq > 0) jar.cookies.set(c.slice(0, eq).trim(), c.slice(eq + 1, sc > 0 ? sc : undefined).trim());
       }
       return res;
     } finally {
@@ -147,10 +145,7 @@ export async function getTmsCaptcha(host?: string): Promise<TmsCaptcha> {
   const { req } = createClient();
   const idRes = await req(`${base}/captcha/id`, { headers: { Accept: "application/json" } });
   if (!idRes.ok) {
-    throw new TmsLoginError(
-      "TMS site unreachable.",
-      "Check the host address and your connection, then try again.",
-    );
+    throw new TmsLoginError("TMS site unreachable.", "Check the host address and your connection, then try again.");
   }
   const { id } = (await idRes.json().catch(() => ({}))) as { id?: unknown };
   if (typeof id !== "string" || !id) {
@@ -169,9 +164,10 @@ export async function getTmsCaptcha(host?: string): Promise<TmsCaptcha> {
 
 function decodeJwtUsername(jwt: string): string | null {
   try {
-    const payload = JSON.parse(
-      Buffer.from(jwt.split(".")[1] ?? "", "base64").toString("utf8"),
-    ) as Record<string, unknown>;
+    const payload = JSON.parse(Buffer.from(jwt.split(".")[1] ?? "", "base64").toString("utf8")) as Record<
+      string,
+      unknown
+    >;
     for (const k of ["userName", "username", "name", "fullName", "clientName", "sub"]) {
       const v = payload[k];
       if (typeof v === "string" && v.length > 0) return v;
@@ -233,12 +229,7 @@ interface ProofCtx {
 
 const proofStore = new Map<string, ProofCtx>();
 
-function mintProof(
-  host: string,
-  username: string,
-  password: string,
-  displayName: string | null,
-): string {
+function mintProof(host: string, username: string, password: string, displayName: string | null): string {
   const proofId = crypto.randomUUID();
   proofStore.set(proofId, { host, username, password, displayName, createdAt: Date.now() });
   return proofId;
@@ -307,17 +298,11 @@ export async function testTmsLogin(input: TmsTestInput): Promise<TmsTestResult> 
     });
     if (first.status === 400 || first.status === 401) {
       const msg = typeof first.json["message"] === "string" ? first.json["message"] : "";
-      throw new TmsLoginError(
-        "TMS rejected the login.",
-        msg.slice(0, 200) || "Wrong username, password, or captcha.",
-      );
+      throw new TmsLoginError("TMS rejected the login.", msg.slice(0, 200) || "Wrong username, password, or captcha.");
     }
     const message = typeof first.json["message"] === "string" ? first.json["message"] : "";
     const data = (first.json["data"] ?? {}) as Record<string, unknown>;
-    const jwt =
-      typeof data["jwt"] === "string" && data["jwt"]
-        ? (data["jwt"] as string)
-        : first.token || null;
+    const jwt = typeof data["jwt"] === "string" && data["jwt"] ? (data["jwt"] as string) : first.token || null;
 
     // Branch 1: two-factor token OTP.
     if (message === "otpVerification") {
@@ -348,10 +333,7 @@ export async function testTmsLogin(input: TmsTestInput): Promise<TmsTestResult> 
     }
 
     if (!jwt) {
-      throw new TmsLoginError(
-        "TMS session failed.",
-        "Signed in but no token came back. Try again.",
-      );
+      throw new TmsLoginError("TMS session failed.", "Signed in but no token came back. Try again.");
     }
     // Branch 2/3: direct login (OTP modal, if any, is handled via pending below).
     const proof = await proofHoldings(base, client, jwt);
@@ -405,10 +387,8 @@ export async function reauthTmsLogin(input: {
 }): Promise<TmsReauthResult> {
   const base = `${normalizeTmsHost(input.host)}/tmsapi`;
   const username = input.username.trim();
-  if (!username)
-    return { ok: false, error: "No TMS username saved.", hint: "Reconnect in Settings." };
-  if (!input.password)
-    return { ok: false, error: "No TMS password saved.", hint: "Reconnect in Settings." };
+  if (!username) return { ok: false, error: "No TMS username saved.", hint: "Reconnect in Settings." };
+  if (!input.password) return { ok: false, error: "No TMS password saved.", hint: "Reconnect in Settings." };
   if (!input.captchaText.trim() || !input.captchaId) {
     return { ok: false, error: "Solve the captcha first." };
   }
@@ -432,10 +412,7 @@ export async function reauthTmsLogin(input: {
     }
     const message = typeof first.json["message"] === "string" ? first.json["message"] : "";
     const data = (first.json["data"] ?? {}) as Record<string, unknown>;
-    const jwt =
-      typeof data["jwt"] === "string" && data["jwt"]
-        ? (data["jwt"] as string)
-        : first.token || null;
+    const jwt = typeof data["jwt"] === "string" && data["jwt"] ? (data["jwt"] as string) : first.token || null;
 
     // OTP required — can't silently reauth with OTP, user must handle it.
     if (message === "otpVerification") {
@@ -461,10 +438,7 @@ export async function reauthTmsLogin(input: {
 }
 
 /** Complete the OTP step started by testTmsLogin. Single attempt per call. */
-export async function verifyTmsOtp(input: {
-  pendingId: string;
-  otp: string;
-}): Promise<TmsTestResult> {
+export async function verifyTmsOtp(input: { pendingId: string; otp: string }): Promise<TmsTestResult> {
   const ctx = pendingStore.get(input.pendingId);
   if (!ctx || Date.now() - ctx.createdAt > PENDING_TTL_MS) {
     pendingStore.delete(input.pendingId);
@@ -499,9 +473,7 @@ export async function verifyTmsOtp(input: {
     }
     const data = (res.json["data"] ?? {}) as Record<string, unknown>;
     const jwt =
-      (typeof data["jwt"] === "string" && data["jwt"] ? (data["jwt"] as string) : null) ??
-      res.token ??
-      ctx.jwt;
+      (typeof data["jwt"] === "string" && data["jwt"] ? (data["jwt"] as string) : null) ?? res.token ?? ctx.jwt;
     if (!jwt) throw new TmsLoginError("TMS session failed.", "No token came back. Start over.");
     const proof = await proofHoldings(ctx.base, ctx.client, jwt);
     cacheTmsSession(ctx.base, ctx.username, ctx.client, jwt);
@@ -617,12 +589,7 @@ export async function getTmsOrderBook(
 ): Promise<{ rows: Record<string, unknown>[]; token: string }> {
   // Bundle probes: /orderbook/, /tmsapi/orderbook, /tmsapi/orderbook/client etc.
   // Start with the simplest that the probe bundles list.
-  const candidates = [
-    "/orderbook/",
-    "/tmsapi/orderbook/",
-    "/orderbook/client/",
-    "/tmsapi/orderbook/client/",
-  ];
+  const candidates = ["/orderbook/", "/tmsapi/orderbook/", "/orderbook/client/", "/tmsapi/orderbook/client/"];
   let lastErr: unknown = null;
   for (const path of candidates) {
     const full = path.startsWith("/tmsapi") ? `${normalizeTmsHost(base)}${path}` : `${base}${path}`;
@@ -692,15 +659,13 @@ export function createTmsClientFromSession(cookies: string, xsrf: string): TmsCl
       if (ck) headers.set("Cookie", ck);
       const res = await fetch(url, { ...opts, headers, signal, redirect: "manual" });
       const getSetCookie =
-        typeof (res.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie ===
-        "function"
+        typeof (res.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie === "function"
           ? (res.headers as Headers & { getSetCookie: () => string[] }).getSetCookie()
           : [];
       for (const c of getSetCookie) {
         const eq = c.indexOf("=");
         const sc = c.indexOf(";");
-        if (eq > 0)
-          jar.cookies.set(c.slice(0, eq).trim(), c.slice(eq + 1, sc > 0 ? sc : undefined).trim());
+        if (eq > 0) jar.cookies.set(c.slice(0, eq).trim(), c.slice(eq + 1, sc > 0 ? sc : undefined).trim());
       }
       return res;
     } finally {

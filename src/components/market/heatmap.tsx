@@ -1,12 +1,7 @@
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { useSettings } from "@/lib/prefs";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 /** Same theme resolution as the charts: app pref, falling back to the OS. */
 function useResolvedLight(): boolean {
@@ -14,10 +9,7 @@ function useResolvedLight(): boolean {
   const [light, setLight] = useState(false);
   useEffect(() => {
     const resolve = () =>
-      setLight(
-        theme === "light" ||
-          (theme === "system" && window.matchMedia("(prefers-color-scheme: light)").matches),
-      );
+      setLight(theme === "light" || (theme === "system" && window.matchMedia("(prefers-color-scheme: light)").matches));
     resolve();
     const mq = window.matchMedia("(prefers-color-scheme: light)");
     mq.addEventListener("change", resolve);
@@ -90,9 +82,7 @@ function squarify(
     const rowSize = isVertical ? (frac * rect.w * rect.h) / rect.h : (frac * rect.w * rect.h) / rect.w;
 
     const aspects = candidate.map((e) => {
-      const c = isVertical
-        ? ((e.value / cv) * rect.w) / rowSize
-        : ((e.value / cv) * rect.h) / rowSize;
+      const c = isVertical ? ((e.value / cv) * rect.w) / rowSize : ((e.value / cv) * rect.h) / rowSize;
       return Math.max(c, 1 / c);
     });
     const worst = Math.max(...aspects);
@@ -237,10 +227,7 @@ export function Heatmap({
     const regionOf = new Map(groupRects.map((r) => [r.index, r]));
     groups.forEach((g, gi) => {
       const region = regionOf.get(gi) ?? { x: 0, y: 0, w: 0, h: 0 };
-      const sub =
-        g.total > 0
-          ? { x: region.x, y: region.y, w: region.w, h: region.h }
-          : { x: 0, y: 0, w: 0, h: 0 };
+      const sub = g.total > 0 ? { x: region.x, y: region.y, w: region.w, h: region.h } : { x: 0, y: 0, w: 0, h: 0 };
       const entries = g.idx
         .map((i) => ({ value: Math.abs(tiles[i]!.value) / grand, index: i }))
         .sort((a, b) => b.value - a.value);
@@ -270,7 +257,7 @@ export function Heatmap({
                   key={g.key}
                   className="num pointer-events-none absolute z-10 rounded-md bg-background/85 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest text-muted-foreground backdrop-blur-sm"
                   style={{ left: `${g.x + 0.6}%`, top: `${g.y + 0.8}%` }}
-                  title={`${g.count} scrips · ${Math.round(g.share * 100)}% of map area`}
+                  title={`${g.count} stocks · ${Math.round(g.share * 100)}% of map area`}
                 >
                   {g.label} ({g.count} · {Math.round(g.share * 100)}%)
                 </div>
@@ -292,17 +279,12 @@ export function Heatmap({
           const showLabel = cellArea > 12 && r.w > 6 && r.h > 6;
           const showValue = cellArea > 35 && r.w > 8 && r.h > 8;
           const fontSize = Math.max(9, Math.min(22, Math.sqrt(cellArea * 0.18)));
-          const shadow =
-            !isFlat && fg === "#ffffff"
-              ? { textShadow: "0 1px 2px rgba(0,0,0,0.5)" }
-              : undefined;
+          const shadow = !isFlat && fg === "#ffffff" ? { textShadow: "0 1px 2px rgba(0,0,0,0.5)" } : undefined;
 
           // Inset hairline so flush tiles still read as individual cards.
           const divider = "inset 0 0 0 1px rgb(128 128 128 / 0.35)";
-          const isDimmed =
-            highlightedKeys && highlightedKeys.size > 0 && !highlightedKeys.has(t.key);
-          const isAccented =
-            highlightedKeys && highlightedKeys.size > 0 && highlightedKeys.has(t.key);
+          const isDimmed = highlightedKeys && highlightedKeys.size > 0 && !highlightedKeys.has(t.key);
+          const isAccented = highlightedKeys && highlightedKeys.size > 0 && highlightedKeys.has(t.key);
           const isSelected = selectedKey != null && selectedKey === t.key;
 
           const cell = (
@@ -331,10 +313,7 @@ export function Heatmap({
               {showLabel ? (
                 <span className="flex max-w-full flex-col items-center px-1">
                   <span
-                    className={cn(
-                      "max-w-full truncate font-black leading-none",
-                      isFlat && "text-muted-foreground",
-                    )}
+                    className={cn("max-w-full truncate font-black leading-none", isFlat && "text-muted-foreground")}
                     style={{ fontSize: `${fontSize}px`, color: fg, ...shadow }}
                   >
                     {t.label}
@@ -375,24 +354,24 @@ export function Heatmap({
         })}
       </div>
       {hideLegend ? null : (
-      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        <div className="flex items-center gap-1.5 text-[0.68rem] font-semibold text-muted-foreground">
-          <span>Fall</span>
-          <div
-            className="h-2.5 w-32 rounded-md"
-            style={{
-              background:
-                "linear-gradient(90deg, #991b1b 0%, #dc2626 25%, #fee2e2 42%, #f1f5f9 50%, #dcfce7 58%, #16a34a 75%, #166534 100%)",
-            }}
-            role="img"
-            aria-label="Color scale from -3 percent or worse on the left to +3 percent or better on the right"
-          />
-          <span>Rise</span>
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <div className="flex items-center gap-1.5 text-[0.68rem] font-semibold text-muted-foreground">
+            <span>Fall</span>
+            <div
+              className="h-2.5 w-32 rounded-md"
+              style={{
+                background:
+                  "linear-gradient(90deg, #991b1b 0%, #dc2626 25%, #fee2e2 42%, #f1f5f9 50%, #dcfce7 58%, #16a34a 75%, #166534 100%)",
+              }}
+              role="img"
+              aria-label="Color scale from -3 percent or worse on the left to +3 percent or better on the right"
+            />
+            <span>Rise</span>
+          </div>
+          <p className="text-[0.68rem] text-muted-foreground">
+            Size = {sizeLabel} · −3% · −1% · 0 · +1% · +3% · Tap a tile for detail.
+          </p>
         </div>
-        <p className="text-[0.68rem] text-muted-foreground">
-          Size = {sizeLabel} · −3% · −1% · 0 · +1% · +3% · Tap a tile for detail.
-        </p>
-      </div>
       )}
     </div>
   );

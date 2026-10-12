@@ -2,13 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { WandSparkles } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,13 +15,7 @@ import { cn } from "@/lib/utils";
  * Lightweight re-auth modal. Appears when the TMS session expires.
  * Auto-solves the captcha in the background: user only sees it if OCR fails.
  */
-export function TmsReauthModal({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
+export function TmsReauthModal({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const queryClient = useQueryClient();
   const [captchaId, setCaptchaId] = useState("");
   const [imageDataUrl, setImageDataUrl] = useState("");
@@ -145,11 +133,7 @@ export function TmsReauthModal({
                 <span
                   className={cn(
                     "text-[0.65rem]",
-                    confidence >= 70
-                      ? "text-gain"
-                      : confidence >= 40
-                        ? "text-muted-foreground"
-                        : "text-destructive",
+                    confidence >= 70 ? "text-gain" : confidence >= 40 ? "text-muted-foreground" : "text-destructive",
                   )}
                 >
                   {confidence >= 70 ? "Auto-solved" : "Low confidence"} ({confidence}%)
@@ -184,9 +168,7 @@ export function TmsReauthModal({
           </div>
 
           {completeMut.isError ? (
-            <p className="text-xs text-destructive">
-              {errorMessage(completeMut.error, "Re-auth failed. Try again.")}
-            </p>
+            <p className="text-xs text-destructive">{errorMessage(completeMut.error, "Re-auth failed. Try again.")}</p>
           ) : null}
 
           <div className="flex gap-2">

@@ -1,12 +1,5 @@
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
-import {
-  Outlet,
-  Link,
-  createRootRouteWithContext,
-  useRouter,
-  HeadContent,
-  Scripts,
-} from "@tanstack/react-router";
+import { Outlet, Link, createRootRouteWithContext, useRouter, HeadContent, Scripts } from "@tanstack/react-router";
 import { useEffect, useRef, type ReactNode } from "react";
 import { toast } from "sonner";
 
@@ -24,6 +17,11 @@ import { WatchlistProvider } from "@/lib/watchlist";
 
 import { SecurityDialogs } from "@/components/security-dialog";
 import { InstallBanner } from "@/components/install-banner";
+import { DevPanel } from "@/components/dev-panel";
+
+if (import.meta.env.DEV && typeof window !== "undefined") {
+  (window as unknown as { toast: typeof toast }).toast = toast;
+}
 
 function NotFoundComponent() {
   return (
@@ -57,9 +55,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          This page didn't load
-        </h1>
+        <h1 className="text-xl font-semibold tracking-tight text-foreground">This page didn't load</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           Something went wrong on our end. You can try refreshing or head back home.
         </p>
@@ -99,8 +95,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:title", content: SITE_NAME },
       {
         property: "og:description",
-        content:
-          "Portfolio valuation, IPO applications, transactions and analytics for your CDSC demat account.",
+        content: "Portfolio valuation, IPO applications, transactions and analytics for your CDSC demat account.",
       },
       { property: "og:type", content: "website" },
       { property: "og:url", content: SITE_URL },
@@ -234,7 +229,8 @@ function SessionExpiryHandler() {
 }
 
 function ThemedToaster() {
-  const { theme } = useSettings();
+  const { theme, toastsEnabled } = useSettings();
+  if (!toastsEnabled) return null;
   return <Toaster theme={theme} position="top-center" closeButton />;
 }
 
@@ -262,6 +258,7 @@ function RootComponent() {
             <SessionExpiryHandler />
             <SecurityDialogs />
             <ThemedToaster />
+            {import.meta.env.DEV && <DevPanel />}
           </WatchlistProvider>
         </QueryClientProvider>
       </SettingsProvider>

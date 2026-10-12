@@ -1,30 +1,14 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueries } from "@tanstack/react-query";
 import { toast } from "sonner";
-import {
-  Activity,
-  CalendarDays,
-  ChartCandlestick,
-  Layers,
-  Maximize2,
-  RefreshCw,
-  Search,
-  Star,
-} from "lucide-react";
+import { Activity, CalendarDays, ChartCandlestick, Layers, Maximize2, RefreshCw, Search, Star } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
 import { MiniMood } from "@/components/tools/market-overview";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ErrorBlock, LoadingBlock, EmptyBlock } from "@/components/states";
 import { SwipeStrip } from "@/components/swipeable-cards";
 import { Heatmap, type HeatTile } from "@/components/market/heatmap";
@@ -34,14 +18,20 @@ import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
 import { DeltaPill } from "@/components/stat-card";
 import { ScripSheet } from "@/components/market/scrip-sheet";
 import { WatchlistPanel } from "@/components/market/watchlist-panel";
+import { WatchlistFloat } from "@/components/market/watchlist-float";
 import { IndexChartModal } from "@/components/tools/index-chart-modal";
 import {
   marketMoversQuery,
   marketSectorsQuery,
   marketSnapshotQuery,
   indexGraphQuery,
+  dividendsQuery,
+  faceValuesQuery,
 } from "@/lib/queries";
-import { formatDateTime, formatNpr, formatNumber, formatPercent, formatQty } from "@/lib/format";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
+import { avgCashLast5Y, avgTotalLast5Y } from "@/lib/nepse/timeline";
+import type { DividendRow } from "@/lib/nepse/types";
+import { formatDateTime, formatNpr, formatNumber, formatPercent, formatQty, sessionAgeLabel } from "@/lib/format";
 import { sectorOf } from "@/lib/nepse/sectors";
 import { useWatchlist } from "@/lib/watchlist";
 import { useSettings } from "@/lib/settings";
@@ -56,13 +46,12 @@ export const Route = createFileRoute("/_dash/market")({
       { title: "Market | MeroShare Investor Console" },
       {
         name: "description",
-        content:
-          "Live NEPSE indices, market summary, top gainers and losers, and every listed scrip.",
+        content: "Live NEPSE indices, market summary, top gainers and losers, and every listed stock.",
       },
       { property: "og:title", content: "Market | MeroShare Investor Console" },
       {
         property: "og:description",
-        content: "Live NEPSE indices, top movers and every listed scrip in one place.",
+        content: "Live NEPSE indices, top movers and every listed stock in one place.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -73,49 +62,50 @@ export const Route = createFileRoute("/_dash/market")({
   component: MarketPage,
 });
 
-function MoverList({
-  rows,
-  kind,
-  onPick,
-}: {
-  rows: MoverRow[];
-  kind: MoverRow["label"];
-  onPick: (s: string) => void;
-}) {
+const MOVER_INITIAL = 5;
+
+function MoverList({ rows, kind, onPick }: { rows: MoverRow[]; kind: MoverRow["label"]; onPick: (s: string) => void }) {
+  const [expanded, setExpanded] = useState(false);
   if (rows.length === 0)
-    return (
-      <EmptyBlock title="No data" description="The market feed has nothing for this bucket yet." />
-    );
+    return <EmptyBlock title="No data" description="The market feed has nothing for this bucket yet." />;
+  const shown = expanded ? rows : rows.slice(0, MOVER_INITIAL);
   return (
-    <ul className="grid grid-cols-1 gap-1.5 min-[420px]:grid-cols-2 sm:gap-2">
-      {rows.map((row) => (
-        <li key={row.symbol} className="min-w-0">
-          <button
-            type="button"
-            onClick={() => onPick(row.symbol)}
-            className="flex w-full items-center justify-between gap-2 rounded-xl border border-border/60 bg-surface px-2.5 py-2 text-left transition-colors hover:border-primary/40 sm:px-3 sm:py-2.5"
-          >
-            <div className="min-w-0">
-              <p className="text-[0.8125rem] font-semibold leading-tight sm:text-sm">
-                {row.symbol}
-              </p>
-              <p className="truncate text-xs text-muted-foreground">{row.name}</p>
-            </div>
-            {kind === "%" ? (
-              <DeltaPill value={row.value}>{formatPercent(row.value)}</DeltaPill>
-            ) : kind === "npr" ? (
-              <span className="num shrink-0 text-[0.8125rem] font-medium sm:text-sm">
-                {formatNpr(row.value, { compact: true })}
-              </span>
-            ) : (
-              <span className="num shrink-0 text-[0.8125rem] font-medium sm:text-sm">
-                {formatQty(row.value)}
-              </span>
-            )}
-          </button>
-        </li>
-      ))}
-    </ul>
+    <div className="space-y-2">
+      <ul className="grid grid-cols-1 gap-1.5 min-[420px]:grid-cols-2 sm:gap-2">
+        {shown.map((row) => (
+          <li key={row.symbol} className="min-w-0">
+            <button
+              type="button"
+              onClick={() => onPick(row.symbol)}
+              className="flex w-full items-center justify-between gap-2 rounded-xl border border-border/60 bg-surface px-2.5 py-2 text-left transition-colors hover:border-primary/40 sm:px-3 sm:py-2.5"
+            >
+              <div className="min-w-0">
+                <p className="text-[0.8125rem] font-semibold leading-tight sm:text-sm">{row.symbol}</p>
+                <p className="truncate text-xs text-muted-foreground">{row.name}</p>
+              </div>
+              {kind === "%" ? (
+                <DeltaPill value={row.value}>{formatPercent(row.value)}</DeltaPill>
+              ) : kind === "npr" ? (
+                <span className="num shrink-0 text-[0.8125rem] font-medium sm:text-sm">
+                  {formatNpr(row.value, { compact: true })}
+                </span>
+              ) : (
+                <span className="num shrink-0 text-[0.8125rem] font-medium sm:text-sm">{formatQty(row.value)}</span>
+              )}
+            </button>
+          </li>
+        ))}
+      </ul>
+      {rows.length > MOVER_INITIAL ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((e) => !e)}
+          className="w-full rounded-xl border border-border/60 bg-surface px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground"
+        >
+          {expanded ? "Show less" : `Show ${rows.length - MOVER_INITIAL} more`}
+        </button>
+      ) : null}
+    </div>
   );
 }
 
@@ -125,15 +115,7 @@ const INDEX_GRAPH_NAMES: Record<string, string> = {
   "Float Index": "Float",
 };
 
-function IndexCard({
-  index,
-  onExpand,
-  className,
-}: {
-  index: MarketIndex;
-  onExpand: () => void;
-  className?: string;
-}) {
+function IndexCard({ index, onExpand, className }: { index: MarketIndex; onExpand: () => void; className?: string }) {
   const graphName = INDEX_GRAPH_NAMES[index.name];
   const graph = useQuery({
     ...(graphName
@@ -149,7 +131,7 @@ function IndexCard({
       type="button"
       onClick={onExpand}
       className={cn(
-        "group rounded-2xl border border-border/70 bg-card p-4 text-left transition-colors hover:border-primary/40",
+        "group overflow-hidden rounded-2xl border border-border/70 bg-card p-4 text-left transition-colors hover:border-primary/40",
         className,
       )}
     >
@@ -157,11 +139,6 @@ function IndexCard({
         {index.name}
         <Maximize2 className="size-3 opacity-0 transition-opacity group-hover:opacity-100" />
       </p>
-      {graphName && graph.data && graph.data.length >= 2 ? (
-        <div className="mt-3 h-16">
-          <Sparkline points={graph.data} showLastDot />
-        </div>
-      ) : null}
       <p className="num mt-2 text-2xl font-semibold">{formatNumber(index.close)}</p>
       <div className="mt-1.5 flex items-center gap-2 text-xs text-muted-foreground">
         <DeltaPill value={index.percentChange}>{formatPercent(index.percentChange)}</DeltaPill>
@@ -171,6 +148,11 @@ function IndexCard({
           </span>
         ) : null}
       </div>
+      {graphName && graph.data && graph.data.length >= 2 ? (
+        <div className="-mx-4 -mb-4 mt-3 h-16">
+          <Sparkline points={graph.data} showLastDot />
+        </div>
+      ) : null}
     </button>
   );
 }
@@ -199,7 +181,43 @@ function MarketPage() {
   const [watchlistOpen, setWatchlistOpen] = useState(false);
 
   const prices = snapshot.data?.prices ?? [];
-  const { sort, toggle } = useSort<"symbol" | "ltp" | "percentChange" | "volume" | "turnover">(
+  // Per-stock 5-yr yields (same calendar rule as sector details); cash kept
+  // alongside total so the hover can split them without another lookup.
+  const divSymbols = useMemo(() => prices.map((p) => p.symbol), [prices]);
+  const faceChunks = useMemo(() => {
+    const out: string[][] = [];
+    for (let i = 0; i < divSymbols.length; i += 200) out.push(divSymbols.slice(i, i + 200));
+    return out;
+  }, [divSymbols]);
+  const dividendsQ = useQuery(dividendsQuery());
+  const facesQs = useQueries({ queries: faceChunks.map((chunk) => faceValuesQuery(chunk)) });
+  const divBySymbol = useMemo(() => {
+    const map = new Map<string, DividendRow[]>();
+    for (const d of dividendsQ.data ?? []) {
+      const arr = map.get(d.symbol) ?? [];
+      arr.push(d);
+      map.set(d.symbol, arr);
+    }
+    return map;
+  }, [dividendsQ.data]);
+  const faces = useMemo(() => {
+    const merged: Record<string, number> = {};
+    for (const q of facesQs) Object.assign(merged, q.data ?? {});
+    return merged;
+  }, [facesQs]);
+  const stockYield = useMemo(() => {
+    const map = new Map<string, { cash: number; total: number }>();
+    for (const p of prices) {
+      const rows = divBySymbol.get(p.symbol) ?? [];
+      const avgCash = avgCashLast5Y(rows);
+      const avgTotal = avgTotalLast5Y(rows);
+      const fv = faces[p.symbol] ?? 100;
+      if (avgCash === null || avgTotal === null || fv <= 0 || p.ltp <= 0) continue;
+      map.set(p.symbol, { cash: (avgCash * fv) / p.ltp, total: (avgTotal * fv) / p.ltp });
+    }
+    return map;
+  }, [prices, divBySymbol, faces]);
+  const { sort, toggle } = useSort<"symbol" | "ltp" | "percentChange" | "volume" | "turnover" | "yield">(
     {
       key: "turnover",
       dir: "desc",
@@ -210,14 +228,13 @@ function MarketPage() {
       percentChange: "number",
       volume: "number",
       turnover: "number",
+      yield: "number",
     },
   );
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     const rows = term
-      ? prices.filter(
-          (p) => p.symbol.toLowerCase().includes(term) || p.name.toLowerCase().includes(term),
-        )
+      ? prices.filter((p) => p.symbol.toLowerCase().includes(term) || p.name.toLowerCase().includes(term))
       : prices;
     const getter = (p: (typeof rows)[number]): string | number => {
       switch (sort.key) {
@@ -229,12 +246,14 @@ function MarketPage() {
           return p.percentChange;
         case "volume":
           return p.volume;
+        case "yield":
+          return stockYield.get(p.symbol)?.total ?? Number.NEGATIVE_INFINITY;
         default:
           return p.turnover;
       }
     };
     return sortBy(rows, getter, sort.dir).slice(0, 200);
-  }, [prices, search, sort]);
+  }, [prices, search, sort, stockYield]);
 
   // Whole-market heatmap: top 60 scrips by turnover. Grouped splits sectors
   // into labeled regions on one scale; mixed throws all into a single pool
@@ -261,9 +280,7 @@ function MarketPage() {
   const heatTiles: HeatTile[] = useMemo(
     () =>
       [...prices]
-        .filter((p) =>
-          heatSector ? (p.sector ?? sectorOf(p.symbol) ?? "Unclassified") === heatSector : true,
-        )
+        .filter((p) => (heatSector ? (p.sector ?? sectorOf(p.symbol) ?? "Unclassified") === heatSector : true))
         .sort((a, b) => (heatSize === "turnover" ? b.turnover - a.turnover : b.volume - a.volume))
         .slice(0, 60)
         .map((p) => {
@@ -309,9 +326,7 @@ function MarketPage() {
           </div>
           <div className="flex justify-between gap-6">
             <span>Turnover:</span>
-            <span className="font-bold text-foreground">
-              {formatNpr(p.turnover, { compact: true })}
-            </span>
+            <span className="font-bold text-foreground">{formatNpr(p.turnover, { compact: true })}</span>
           </div>
           <div className="flex justify-between gap-6">
             <span>Volume:</span>
@@ -322,8 +337,9 @@ function MarketPage() {
     );
   };
 
-  const nepse =
-    snapshot.data?.indices.find((i) => /nepse/i.test(i.name)) ?? snapshot.data?.indices[0];
+  const nepse = snapshot.data?.indices.find((i) => /nepse/i.test(i.name)) ?? snapshot.data?.indices[0];
+
+  const closedAge = snapshot.data && !snapshot.data.status.isOpen ? sessionAgeLabel(nepse?.generatedTime, false) : null;
 
   // Whole-NEPSE mood for the heatmap header: advancer breadth + index move.
   const marketScore = useMemo(() => {
@@ -355,7 +371,9 @@ function MarketPage() {
             {snapshot.data
               ? snapshot.data.status.isOpen
                 ? "Market is open."
-                : "Market is closed."
+                : closedAge && closedAge !== "closed"
+                  ? `Market is closed · ${closedAge}.`
+                  : "Market is closed."
               : null}
           </p>
         </div>
@@ -366,13 +384,11 @@ function MarketPage() {
                 Updated {formatDateTime(snapshot.data.fetchedAt)}
               </span>
             ) : null}
-            <Button variant="outline" size="sm" onClick={() => setWatchlistOpen(true)} aria-label="Watchlist">
+            <Button variant="outline" size="sm" onClick={() => setWatchlistOpen(true)} aria-label="Watchlist" className="lg:hidden">
               <Star className={watchlist.symbols.length > 0 ? "fill-warning text-warning" : ""} />
               <span className="hidden sm:inline">Watchlist</span>
               {watchlist.symbols.length > 0 ? (
-                <span className="num rounded-full bg-muted px-1.5 text-[0.68rem]">
-                  {watchlist.symbols.length}
-                </span>
+                <span className="num rounded-full bg-muted px-1.5 text-[0.68rem]">{watchlist.symbols.length}</span>
               ) : null}
             </Button>
             <Button
@@ -383,10 +399,12 @@ function MarketPage() {
             >
               <Layers /> <span className="hidden sm:inline">Depth</span>
             </Button>
-            <Button variant="outline" size="sm" onClick={() => void navigate({ to: "/terminal" })} aria-label="Terminal">
-              <ChartCandlestick /> <span className="hidden sm:inline">Terminal</span>
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => void navigate({ to: "/calendar" })} aria-label="Calendar">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void navigate({ to: "/calendar" })}
+              aria-label="Calendar"
+            >
               <CalendarDays /> <span className="hidden sm:inline">Calendar</span>
             </Button>
             <Button
@@ -396,7 +414,8 @@ function MarketPage() {
               disabled={snapshot.isFetching}
               aria-label="Refresh"
             >
-              <RefreshCw className={snapshot.isFetching ? "animate-spin" : ""} /> <span className="hidden sm:inline">Refresh</span>
+              <RefreshCw className={snapshot.isFetching ? "animate-spin" : ""} />{" "}
+              <span className="hidden sm:inline">Refresh</span>
             </Button>
           </div>
         </div>
@@ -413,9 +432,7 @@ function MarketPage() {
             indexName: idx,
           })
         }
-        onSelectSector={(sec) =>
-          void navigate({ to: "/sectors/$sectorName", params: { sectorName: sec } })
-        }
+        onSelectSector={(sec) => void navigate({ to: "/sectors/$sectorName", params: { sectorName: sec } })}
         onSelectScrip={(sym) => setPicked(sym)}
       />
 
@@ -458,13 +475,9 @@ function MarketPage() {
                   {row.detail.replace(/:$/, "").replace(/^Total\s*/, "")}
                 </p>
                 <p className="num mt-2 text-2xl font-semibold">
-                  {/Rs|turnover/i.test(row.detail)
-                    ? formatNpr(row.value, { compact: true })
-                    : formatQty(row.value)}
+                  {/Rs|turnover/i.test(row.detail) ? formatNpr(row.value, { compact: true }) : formatQty(row.value)}
                 </p>
-                {nepse ? (
-                  <p className="mt-1.5 text-xs text-muted-foreground">as of latest session</p>
-                ) : null}
+                {nepse ? <p className="mt-1.5 text-xs text-muted-foreground">as of latest session</p> : null}
               </div>
             ))}
           </SwipeStrip>
@@ -501,15 +514,16 @@ function MarketPage() {
                   value={heatGrouped ? "grouped" : "mixed"}
                   onChange={(v) => setHeatGrouped(v === "grouped")}
                 />
-                <div
-                  className="hidden shrink-0 items-center gap-2 rounded-xl border border-border/60 bg-surface px-2.5 py-1 md:flex"
-                  title="Whole-NEPSE sentiment: advancer breadth blended with the NEPSE move"
+                <button
+                  type="button"
+                  onClick={() => void navigate({ to: "/market-depth" })}
+                  className="hidden shrink-0 cursor-pointer items-center gap-2 rounded-xl border border-border/60 bg-surface px-2.5 py-1 transition-colors hover:border-primary/40 hover:text-foreground md:flex"
+                  title="Whole-NEPSE sentiment: advancer breadth blended with the NEPSE move. Click to open market depth."
+                  aria-label="Open market depth"
                 >
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                    Mood
-                  </span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Mood</span>
                   <MiniMood score={marketScore} />
-                </div>
+                </button>
               </div>
             </div>
             <CategoryDropdown
@@ -526,10 +540,7 @@ function MarketPage() {
               className="mb-2.5"
             />
             {heatTiles.length === 0 ? (
-              <EmptyBlock
-                title="No heatmap data"
-                description="Turnover data is unavailable for this session."
-              />
+              <EmptyBlock title="No heatmap data" description="Turnover data is unavailable for this session." />
             ) : (
               <Heatmap
                 tiles={heatTiles}
@@ -581,20 +592,20 @@ function MarketPage() {
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search all listed scrips…"
+                placeholder="Search all listed stocks…"
                 className="h-10 rounded-xl pl-9"
               />
             </div>
 
             {filtered.length === 0 ? (
-              <EmptyBlock title="No matches" description="No listed scrip matches that search." />
+              <EmptyBlock title="No matches" description="No listed stock matches that search." />
             ) : (
-              <Panel padding="none" className="overflow-hidden">
+              <Panel padding="none" className="overflow-clip">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/40 hover:bg-muted/40">
                       <SortableTh
-                        label="Scrip"
+                        label="Stock"
                         active={sort.key === "symbol"}
                         dir={sort.dir}
                         onClick={() => toggle("symbol")}
@@ -632,35 +643,61 @@ function MarketPage() {
                         align="right"
                         className="hidden md:table-cell"
                       />
+                      <SortableTh
+                        label="Yield 5Y"
+                        active={sort.key === "yield"}
+                        dir={sort.dir}
+                        onClick={() => toggle("yield")}
+                        align="right"
+                      />
                       <TableHead className="w-12 pr-4" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filtered.map((price) => (
-                      <TableRow
-                        key={price.symbol}
-                        className="cursor-pointer"
-                        onClick={() => setPicked(price.symbol)}
-                      >
+                      <TableRow key={price.symbol} className="cursor-pointer" onClick={() => setPicked(price.symbol)}>
                         <TableCell className="pl-4">
                           <p className="font-semibold">{price.symbol}</p>
-                          <p className="max-w-52 truncate text-xs text-muted-foreground">
-                            {price.name}
-                          </p>
+                          <p className="max-w-52 truncate text-xs text-muted-foreground">{price.name}</p>
                         </TableCell>
-                        <TableCell className="num text-right font-medium">
-                          {formatNpr(price.ltp)}
-                        </TableCell>
+                        <TableCell className="num text-right font-medium">{formatNpr(price.ltp)}</TableCell>
                         <TableCell className="text-right">
-                          <DeltaPill value={price.percentChange}>
-                            {formatPercent(price.percentChange)}
-                          </DeltaPill>
+                          <DeltaPill value={price.percentChange}>{formatPercent(price.percentChange)}</DeltaPill>
                         </TableCell>
                         <TableCell className="num hidden text-right text-muted-foreground sm:table-cell">
                           {formatQty(price.volume)}
                         </TableCell>
                         <TableCell className="num hidden text-right text-muted-foreground md:table-cell">
                           {formatNpr(price.turnover, { compact: true })}
+                        </TableCell>
+                        <TableCell className="num text-right font-semibold text-primary">
+                          {(() => {
+                            const y = stockYield.get(price.symbol);
+                            if (y == null) return "—";
+                            return (
+                              <HoverCard>
+                                <HoverCardTrigger asChild>
+                                  <span className="cursor-help underline decoration-dotted underline-offset-2">
+                                    {y.total.toFixed(2)}%
+                                  </span>
+                                </HoverCardTrigger>
+                                <HoverCardContent className="w-56 p-3 text-left text-xs">
+                                  <p className="mb-1.5 font-semibold">5-yr average · {price.symbol}</p>
+                                  <div className="flex justify-between py-0.5">
+                                    <span className="text-muted-foreground">Cash yield</span>
+                                    <span className="num font-medium">+{y.cash.toFixed(2)}%</span>
+                                  </div>
+                                  <div className="flex justify-between py-0.5">
+                                    <span className="text-muted-foreground">Bonus yield</span>
+                                    <span className="num font-medium">+{(y.total - y.cash).toFixed(2)}%</span>
+                                  </div>
+                                  <p className="mt-1.5 border-t border-border/60 pt-1.5 text-[0.65rem] leading-relaxed text-muted-foreground">
+                                    Bonus valued at face value (convention, not cash).
+                                  </p>
+                                </HoverCardContent>
+                              </HoverCard>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell className="pr-4 text-right">
                           <button
@@ -674,18 +711,12 @@ function MarketPage() {
                               e.stopPropagation();
                               const wasIn = watchlist.has(price.symbol);
                               watchlist.toggle(price.symbol);
-                              toast.success(
-                                wasIn ? "Removed from watchlist" : "Added to watchlist",
-                              );
+                              toast.success(wasIn ? "Removed from watchlist" : "Added to watchlist");
                             }}
                             className="text-muted-foreground transition-colors hover:text-warning"
                           >
                             <Star
-                              className={
-                                watchlist.has(price.symbol)
-                                  ? "size-4 fill-warning text-warning"
-                                  : "size-4"
-                              }
+                              className={watchlist.has(price.symbol) ? "size-4 fill-warning text-warning" : "size-4"}
                             />
                           </button>
                         </TableCell>
@@ -711,13 +742,9 @@ function MarketPage() {
                     className="rounded-xl border border-border/60 bg-surface px-3 py-2"
                   >
                     <div className="flex items-center justify-between gap-3">
-                      <p className="truncate text-sm font-medium">
-                        {sector.name.replace(/\s*Index$/i, "")}
-                      </p>
+                      <p className="truncate text-sm font-medium">{sector.name.replace(/\s*Index$/i, "")}</p>
                       {sector.percentChange != null ? (
-                        <DeltaPill value={sector.percentChange}>
-                          {formatPercent(sector.percentChange)}
-                        </DeltaPill>
+                        <DeltaPill value={sector.percentChange}>{formatPercent(sector.percentChange)}</DeltaPill>
                       ) : null}
                     </div>
                     <p className="num mt-1 text-sm text-muted-foreground">
@@ -730,8 +757,7 @@ function MarketPage() {
           </Panel>
 
           <p className="text-xs text-muted-foreground">
-            Market data comes from the live NEPSE mirror plus a community YONEPSE feed and is
-            indicative only.
+            Market data comes from the live NEPSE mirror plus a community YONEPSE feed and is indicative only.
           </p>
         </>
       )}
@@ -751,6 +777,7 @@ function MarketPage() {
           setPicked(symbol);
         }}
       />
+      <WatchlistFloat count={watchlist.symbols.length} onOpen={() => setWatchlistOpen(true)} />
 
       <IndexChartModal
         open={chartModal.open}

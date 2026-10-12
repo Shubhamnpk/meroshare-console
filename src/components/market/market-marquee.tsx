@@ -1,14 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  TrendingUp,
-  TrendingDown,
-  Play,
-  Pause,
-  Layers,
-  Flame,
-  LineChart,
-} from "lucide-react";
+import { TrendingUp, TrendingDown, Play, Pause, Layers, Flame, LineChart } from "lucide-react";
 import type { LivePrice, MarketIndex, SectorIndex } from "@/lib/nepse/types";
 import { formatNumber, formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -77,15 +69,9 @@ export function MarketMarquee({
 
     // Top active movers (gainers + active turnover)
     const activePrices = [...prices].filter((p) => p.ltp > 0);
-    const topGainers = [...activePrices]
-      .sort((a, b) => b.percentChange - a.percentChange)
-      .slice(0, 6);
-    const topLosers = [...activePrices]
-      .sort((a, b) => a.percentChange - b.percentChange)
-      .slice(0, 4);
-    const topTurnover = [...activePrices]
-      .sort((a, b) => b.turnover - a.turnover)
-      .slice(0, 6);
+    const topGainers = [...activePrices].sort((a, b) => b.percentChange - a.percentChange).slice(0, 6);
+    const topLosers = [...activePrices].sort((a, b) => a.percentChange - b.percentChange).slice(0, 4);
+    const topTurnover = [...activePrices].sort((a, b) => b.turnover - a.turnover).slice(0, 6);
 
     // De-duplicate scrip items
     const scripMap = new Map<string, LivePrice>();
@@ -172,7 +158,11 @@ export function MarketMarquee({
           <span
             className={cn(
               "text-[0.68rem] font-semibold uppercase tracking-wider",
-              marketOpen === true ? "text-emerald-500" : marketOpen === false ? "text-red-500" : "text-muted-foreground",
+              marketOpen === true
+                ? "text-emerald-500"
+                : marketOpen === false
+                  ? "text-red-500"
+                  : "text-muted-foreground",
             )}
           >
             {marketOpen === true ? "Live Ticker" : marketOpen === false ? "Market Closed" : "Ticker"}
@@ -292,17 +282,13 @@ export function MarketMarquee({
                     </span>
                   </div>
                   {item.subLabel && item.type === "scrip" ? (
-                    <span className="text-[10px] text-muted-foreground truncate max-w-[110px]">
-                      {item.subLabel}
-                    </span>
+                    <span className="text-[10px] text-muted-foreground truncate max-w-[110px]">{item.subLabel}</span>
                   ) : null}
                 </div>
 
                 {/* Points / LTP */}
                 <div className="flex flex-col items-end">
-                  <span className="num font-semibold text-xs text-foreground">
-                    {formatNumber(item.points)}
-                  </span>
+                  <span className="num font-semibold text-xs text-foreground">{formatNumber(item.points)}</span>
                   <div className="flex items-center gap-0.5 text-[11px] font-medium">
                     {isUp ? (
                       <TrendingUp className="size-2.5 text-gain stroke-[2.5]" />
@@ -318,8 +304,7 @@ export function MarketMarquee({
                       )}
                     >
                       {isUp ? "+" : ""}
-                      {formatNumber(item.change)}{" "}
-                      ({formatPercent(item.percentChange)})
+                      {formatNumber(item.change)} ({formatPercent(item.percentChange)})
                     </span>
                   </div>
                 </div>

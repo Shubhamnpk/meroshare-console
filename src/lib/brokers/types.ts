@@ -19,33 +19,29 @@ export const BROKERS: BrokerMeta[] = [
   {
     id: "naasa-x",
     name: "Naasa X",
-    tagline: "Naasa Securities web trading (NEPSE)",
+    tagline: "Naasa Securities private TMS",
     capabilities: ["Holdings & dashboard", "Order book & trades", "Live market data"],
   },
   {
     id: "tms",
     name: "NEPSE TMS",
-    tagline: "Classic TMS terminal (captcha login)",
+    tagline: "Classic TMS terminal ",
     capabilities: ["Holdings", "Order book & trades"],
   },
   {
     id: "yobroker",
     name: "Yo Broker",
-    tagline: "Paper trading account (no real settlement)",
+    tagline: "Paper trading account",
     capabilities: ["Virtual holdings", "Paper orders & trades", "No real settlement"],
   },
 ];
 
-/** What the client is ever allowed to see about a saved connection. */
 export interface BrokerConnectionMeta {
   brokerId: BrokerId;
-  /** Login email as typed (identifies the account, not a secret). */
   username: string;
-  /** Display name proven by the last successful test. */
   displayName: string | null;
   connectedAt: string;
   lastTestedAt: string;
-  /** TMS host (hostname only, not a secret). Absent for Naasa X. */
   host?: string | null | undefined;
 }
 
@@ -54,7 +50,6 @@ export interface BrokerTestResult {
   ok: boolean;
   brokerId: BrokerId;
   displayName: string | null;
-  /** First 4 chars + ellipsis: enough to recognise, useless to reuse. */
   clientCodeHint: string | null;
   holdingSymbols: string[];
   steps: string[];

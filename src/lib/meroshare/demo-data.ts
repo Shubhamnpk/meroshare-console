@@ -10,6 +10,7 @@ import type {
   PortfolioResponse,
   TransactionItem,
   MyShareItem,
+  ApplicableIssue,
   ApplicationReportItem,
   ActivityLogItem,
   BankListItem,
@@ -35,29 +36,31 @@ export const DEMO_USER: OwnDetail = {
 };
 
 const HELD: Record<string, number> = {
-  NABIL: 50,
-  NICA: 100,
-  NPRD: 200,
+  // NABIL 50 bought + 5 bonus, NICA 100 bought + 50 bought — must equal the
+  // transaction ledger below, or portfolio and transaction views disagree.
+  NABIL: 55,
+  NICA: 130,
+  NBL: 200,
   NMB: 75,
-  SANIMA: 40,
-  SBL: 150,
-  HDFC: 60,
+  SANIMA: 30,
+  SBL: 100,
+  EBL: 60,
   KPCL: 80,
   NTC: 30,
-  PUBJKBLI: 25,
+  PCBL: 25,
 };
 
 const BUY_RATES: Record<string, number> = {
   NABIL: 1280,
   NICA: 430,
-  NPRD: 270,
+  NBL: 270,
   NMB: 385,
   SANIMA: 620,
   SBL: 310,
-  HDFC: 240,
+  EBL: 240,
   KPCL: 540,
   NTC: 1150,
-  PUBJKBLI: 185,
+  PCBL: 185,
 };
 
 export const DEMO_PORTFOLIO: PortfolioResponse = {
@@ -74,10 +77,7 @@ export const DEMO_PORTFOLIO: PortfolioResponse = {
     valueOfPrevClosingPrice: String(qty * ((BUY_RATES[scrip] ?? 500) - 10)),
   })),
   totalItems: Object.keys(HELD).length,
-  totalValueAsOfLastTransactionPrice: Object.entries(HELD).reduce(
-    (s, [k, q]) => s + q * (BUY_RATES[k] ?? 500),
-    0,
-  ),
+  totalValueAsOfLastTransactionPrice: Object.entries(HELD).reduce((s, [k, q]) => s + q * (BUY_RATES[k] ?? 500), 0),
   totalValueAsOfPreviousClosingPrice: Object.entries(HELD).reduce(
     (s, [k, q]) => s + q * ((BUY_RATES[k] ?? 500) - 10),
     0,
@@ -105,85 +105,126 @@ function daysAgo(n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+function daysFromNow(n: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Open demo issues for the IPO playground (demo mode only). Clearly fake
+ * companies so nobody mistakes them for real issues.
+ */
+export const DEMO_APPLICABLE_ISSUES: ApplicableIssue[] = [
+  {
+    companyShareId: 9101,
+    scrip: "DMHL",
+    companyName: "Demo Mountain Hydropower Ltd.",
+    shareTypeName: "IPO",
+    shareGroupName: "Ordinary Share",
+    statusName: "Open",
+    issueOpenDate: daysAgo(2),
+    issueCloseDate: daysFromNow(5),
+    sharePerUnit: 100,
+    minUnit: 10,
+    maxUnit: 100000,
+  },
+  {
+    companyShareId: 9102,
+    scrip: "DSBL",
+    companyName: "Demo Sunrise Bank Ltd.",
+    shareTypeName: "FPO",
+    shareGroupName: "Ordinary Share",
+    statusName: "Open",
+    issueOpenDate: daysAgo(1),
+    issueCloseDate: daysFromNow(9),
+    sharePerUnit: 100,
+    minUnit: 10,
+    maxUnit: 50000,
+  },
+];
+
 export const DEMO_TRANSACTIONS: TransactionItem[] = [
   {
     script: "NABIL",
-    transactionDate: daysAgo(30),
+    // Fixed old date on purpose: a genuinely long-held lot, so demo mode
+    // exercises the long-term CGT band (everything else is short-term).
+    transactionDate: "2024-05-12",
     historyDescription: "Buy",
-    debitQuantity: 50,
-    creditQuantity: 0,
+    debitQuantity: 0,
+    creditQuantity: 50,
     balanceAfterTransaction: 50,
   },
   {
     script: "NICA",
-    transactionDate: daysAgo(25),
+    transactionDate: "2026-09-13",
     historyDescription: "Buy",
-    debitQuantity: 100,
-    creditQuantity: 0,
+    debitQuantity: 0,
+    creditQuantity: 100,
     balanceAfterTransaction: 100,
   },
   {
-    script: "NPRD",
-    transactionDate: daysAgo(20),
+    script: "NBL",
+    transactionDate: "2026-09-18",
     historyDescription: "Buy",
-    debitQuantity: 200,
-    creditQuantity: 0,
+    debitQuantity: 0,
+    creditQuantity: 200,
     balanceAfterTransaction: 200,
   },
   {
     script: "NMB",
-    transactionDate: daysAgo(18),
+    transactionDate: "2026-09-20",
     historyDescription: "Buy",
-    debitQuantity: 75,
-    creditQuantity: 0,
+    debitQuantity: 0,
+    creditQuantity: 75,
     balanceAfterTransaction: 75,
   },
   {
     script: "SANIMA",
     transactionDate: daysAgo(15),
     historyDescription: "Buy",
-    debitQuantity: 40,
-    creditQuantity: 0,
+    debitQuantity: 0,
+    creditQuantity: 40,
     balanceAfterTransaction: 40,
   },
   {
     script: "SBL",
     transactionDate: daysAgo(12),
     historyDescription: "Buy",
-    debitQuantity: 150,
-    creditQuantity: 0,
+    debitQuantity: 0,
+    creditQuantity: 150,
     balanceAfterTransaction: 150,
   },
   {
-    script: "HDFC",
+    script: "EBL",
     transactionDate: daysAgo(10),
     historyDescription: "Buy",
-    debitQuantity: 60,
-    creditQuantity: 0,
+    debitQuantity: 0,
+    creditQuantity: 60,
     balanceAfterTransaction: 60,
   },
   {
     script: "KPCL",
     transactionDate: daysAgo(8),
     historyDescription: "Buy",
-    debitQuantity: 80,
-    creditQuantity: 0,
+    debitQuantity: 0,
+    creditQuantity: 80,
     balanceAfterTransaction: 80,
   },
   {
     script: "NTC",
     transactionDate: daysAgo(5),
     historyDescription: "Buy",
-    debitQuantity: 30,
-    creditQuantity: 0,
+    debitQuantity: 0,
+    creditQuantity: 30,
     balanceAfterTransaction: 30,
   },
   {
-    script: "PUBJKBLI",
+    script: "PCBL",
     transactionDate: daysAgo(3),
     historyDescription: "Buy",
-    debitQuantity: 25,
-    creditQuantity: 0,
+    debitQuantity: 0,
+    creditQuantity: 25,
     balanceAfterTransaction: 25,
   },
   {
@@ -198,9 +239,33 @@ export const DEMO_TRANSACTIONS: TransactionItem[] = [
     script: "NICA",
     transactionDate: daysAgo(1),
     historyDescription: "Buy",
+    debitQuantity: 0,
+    creditQuantity: 50,
+    balanceAfterTransaction: 130,
+  },
+  {
+    script: "NICA",
+    transactionDate: daysAgo(10),
+    historyDescription: "Sell",
+    debitQuantity: 20,
+    creditQuantity: 0,
+    balanceAfterTransaction: 80,
+  },
+  {
+    script: "SANIMA",
+    transactionDate: daysAgo(7),
+    historyDescription: "Sell",
+    debitQuantity: 10,
+    creditQuantity: 0,
+    balanceAfterTransaction: 30,
+  },
+  {
+    script: "SBL",
+    transactionDate: daysAgo(4),
+    historyDescription: "Sell",
     debitQuantity: 50,
     creditQuantity: 0,
-    balanceAfterTransaction: 150,
+    balanceAfterTransaction: 100,
   },
 ];
 
@@ -216,8 +281,8 @@ export const DEMO_APPLICATIONS: ApplicationReportItem[] = [
   },
   {
     companyShareId: 9002,
-    scrip: "HURI",
-    companyName: "Hurasahar Laghubitta Bittiya Sanstha Ltd.",
+    scrip: "FOWAD",
+    companyName: "Forward Community Microfinance Bittiya Sanstha Ltd.",
     shareTypeName: "FPO",
     shareGroupName: "Ordinary Share",
     statusName: "Allotted",
@@ -310,21 +375,19 @@ export const DEMO_WACC_REPORT: WaccReport = {
   })),
 };
 
-export const DEMO_PURCHASE_SOURCES: PurchaseSourceItem[] = Object.entries(HELD).map(
-  ([scrip, qty]) => ({
-    scrip,
-    quantity: qty,
-    rate: BUY_RATES[scrip] ?? 500,
-    amount: qty * (BUY_RATES[scrip] ?? 500),
-    transactionDate: daysAgo(30),
-    source: "Secondary Market",
-    purchaseSource: "Secondary Market",
-    purchasePrice: BUY_RATES[scrip] ?? 500,
-    transactionQuantity: qty,
-    userPrice: BUY_RATES[scrip] ?? 500,
-    userCost: qty * (BUY_RATES[scrip] ?? 500),
-    remarks: "Demo purchase",
-    postDate: daysAgo(30),
-    updatedDate: daysAgo(1),
-  }),
-);
+export const DEMO_PURCHASE_SOURCES: PurchaseSourceItem[] = Object.entries(HELD).map(([scrip, qty]) => ({
+  scrip,
+  quantity: qty,
+  rate: BUY_RATES[scrip] ?? 500,
+  amount: qty * (BUY_RATES[scrip] ?? 500),
+  transactionDate: daysAgo(30),
+  source: "Secondary Market",
+  purchaseSource: "Secondary Market",
+  purchasePrice: BUY_RATES[scrip] ?? 500,
+  transactionQuantity: qty,
+  userPrice: BUY_RATES[scrip] ?? 500,
+  userCost: qty * (BUY_RATES[scrip] ?? 500),
+  remarks: "Demo purchase",
+  postDate: daysAgo(30),
+  updatedDate: daysAgo(1),
+}));

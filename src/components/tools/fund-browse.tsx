@@ -1,15 +1,15 @@
 import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, Building2, Search, X } from "lucide-react";
+import { Building2, Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Panel } from "@/components/ui/panel";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SortableTh } from "@/components/sortable-table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DeltaPill } from "@/components/stat-card";
+import { ModeSwitch } from "@/components/market/heatmap-controls";
+import { SortTabs } from "@/components/ui/sort-tabs";
+import { ViewToggle } from "@/components/ui/view-toggle";
+import { useSort, type SortKind } from "@/components/sortable-table";
 import { formatNpr, formatPercent } from "@/lib/format";
 import type { LivePrice } from "@/lib/nepse/types";
 import type { MfManager, MfPerformance, MfScheme } from "@/lib/mutual-funds/types";
@@ -24,16 +24,29 @@ export interface BrowseFund {
 
 type SortKey = "discount" | "nav" | "ltp" | "dividend" | "size" | "holdings" | "name" | "symbol";
 
-const SORTS: { key: SortKey; label: string; dir: 1 | -1 }[] = [
-  { key: "discount", label: "Biggest discount", dir: 1 },
-  { key: "nav", label: "Highest NAV", dir: -1 },
-  { key: "ltp", label: "Highest LTP", dir: -1 },
-  { key: "dividend", label: "Expected payout", dir: -1 },
-  { key: "size", label: "Fund size", dir: -1 },
-  { key: "holdings", label: "Most holdings", dir: -1 },
-  { key: "name", label: "Name A-Z", dir: 1 },
-  { key: "symbol", label: "Symbol A-Z", dir: 1 },
+const SORTS: { key: SortKey; label: string }[] = [
+  { key: "discount", label: "Discount" },
+  { key: "nav", label: "NAV" },
+  { key: "ltp", label: "LTP" },
+  { key: "dividend", label: "Payout" },
+  { key: "size", label: "Size" },
+  { key: "holdings", label: "Holdings" },
+  { key: "name", label: "Name" },
+  { key: "symbol", label: "Symbol" },
 ];
+
+// Shared sort kinds. Discount is ascending-natural (biggest discount first),
+// so it takes the text kind for cycle purposes; values stay numeric.
+const SORT_KINDS: Record<SortKey, SortKind> = {
+  discount: "text",
+  nav: "number",
+  ltp: "number",
+  dividend: "number",
+  size: "number",
+  holdings: "number",
+  name: "text",
+  symbol: "text",
+};
 
 function fundTypeLabel(t: string): string {
   return t === "close_end" ? "Close-end" : t === "open_end" ? "Open-end" : t;
@@ -75,19 +88,31 @@ function AllocBar({ perf }: { perf: MfPerformance | null }) {
   );
 }
 
-function FundCard({ fund, onPick }: { fund: BrowseFund; onPick: (symbol: string) => void }) {
+/** Shared per-fund display values for the cards and the list view. */
+function describeFund(fund: BrowseFund) {
   const { scheme, perf, live } = fund;
   const { nav, label: navLabel } = perf ? referenceNav(perf) : { nav: null, label: "NAV" };
   const ltp = live?.ltp ?? perf?.ltp ?? null;
   const disc = discountPct(ltp, nav);
-  const countdown = maturityCountdown(scheme.maturityDate ?? perf?.maturityDate ?? null);
   const closeEnd = scheme.fundType === "close_end";
   // Open-end rows in the live file carry the mapped daily NAV (value, previous
   // close and day change), so show that instead of the weekly figure.
-  const omfLive =
-    !closeEnd && live?.assetType === "open_ended_mutual_fund" && live.ltp > 0 ? live : null;
-  const navValue = omfLive?.ltp ?? nav;
-  const navLabelShown = omfLive ? "daily NAV" : navLabel;
+  const omfLive = !closeEnd && live?.assetType === "open_ended_mutual_fund" && live.ltp > 0 ? live : null;
+  return {
+    nav,
+    ltp,
+    disc,
+    closeEnd,
+    omfLive,
+    navValue: omfLive?.ltp ?? nav,
+    navLabelShown: omfLive ? "daily NAV" : navLabel,
+  };
+}
+
+function FundCard({ fund, onPick }: { fund: BrowseFund; onPick: (symbol: string) => void }) {
+  const { scheme, perf, live } = fund;
+  const { navValue, navLabelShown, ltp, disc, closeEnd, omfLive } = describeFund(fund);
+  const countdown = maturityCountdown(scheme.maturityDate ?? perf?.maturityDate ?? null);
   return (
     <Panel
       as="button"
@@ -127,9 +152,7 @@ function FundCard({ fund, onPick }: { fund: BrowseFund; onPick: (symbol: string)
           <p className="num text-xl font-bold">
             {navValue != null ? formatNpr(navValue) : "-"}{" "}
             {omfLive ? (
-              <DeltaPill value={omfLive.percentChange}>
-                {formatPercent(omfLive.percentChange)}
-              </DeltaPill>
+              <DeltaPill value={omfLive.percentChange}>{formatPercent(omfLive.percentChange)}</DeltaPill>
             ) : null}
           </p>
         </div>
@@ -138,11 +161,7 @@ function FundCard({ fund, onPick }: { fund: BrowseFund; onPick: (symbol: string)
             <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">Market</p>
             <p className="num text-sm font-semibold">
               {ltp != null ? formatNpr(ltp) : "-"}{" "}
-              {live ? (
-                <DeltaPill value={live.percentChange}>
-                  {formatPercent(live.percentChange)}
-                </DeltaPill>
-              ) : null}
+              {live ? <DeltaPill value={live.percentChange}>{formatPercent(live.percentChange)}</DeltaPill> : null}
             </p>
           </div>
         ) : null}
@@ -188,8 +207,8 @@ export function FundBrowse({
   const [search, setSearch] = useState("");
   const [manager, setManager] = useState<string | null>(null);
   const [type, setType] = useState<"all" | "close_end" | "open_end">("all");
-  const [sortKey, setSortKey] = useState<SortKey>("discount");
-  const [sortDir, setSortDir] = useState<1 | -1>(1);
+  const { sort, toggle } = useSort<SortKey>({ key: "discount", dir: "asc" }, SORT_KINDS);
+  const [viewMode, setViewMode] = useState<"cards" | "list">("cards");
 
   const funds = useMemo<BrowseFund[]>(
     () =>
@@ -207,12 +226,12 @@ export function FundBrowse({
       if (manager && f.scheme.managerSlug !== manager && f.scheme.manager !== manager) return false;
       if (type !== "all" && f.scheme.fundType !== type) return false;
       if (!term) return true;
-      return (
-        f.scheme.symbol.toLowerCase().includes(term) || f.scheme.name.toLowerCase().includes(term)
-      );
+      return f.scheme.symbol.toLowerCase().includes(term) || f.scheme.name.toLowerCase().includes(term);
     });
+    if (sort.dir === "default") return [...rows];
+    const mul = sort.dir === "asc" ? 1 : -1;
     const score = (f: BrowseFund): number | string | null => {
-      switch (sortKey) {
+      switch (sort.key) {
         case "dividend":
           return f.perf?.expectedDividendPct ?? null;
         case "size":
@@ -243,11 +262,10 @@ export function FundBrowse({
       if (va == null && vb == null) return 0;
       if (va == null) return 1;
       if (vb == null) return -1;
-      if (typeof va === "string" || typeof vb === "string")
-        return String(va).localeCompare(String(vb)) * sortDir;
-      return (va - vb) * sortDir;
+      if (typeof va === "string" || typeof vb === "string") return String(va).localeCompare(String(vb)) * mul;
+      return (va - vb) * mul;
     });
-  }, [funds, search, manager, type, sortKey, sortDir]);
+  }, [funds, search, manager, type, sort]);
 
   const usedManagers = useMemo(() => {
     const counts = new Map<string, number>();
@@ -300,49 +318,27 @@ export function FundBrowse({
         </Select>
       </div>
 
-      <div className="flex flex-wrap items-center gap-1.5">
-        {(["all", "close_end", "open_end"] as const).map((t) => (
-          <FilterChip
-            key={t}
-            active={type === t}
-            onClick={() => setType(t)}
-            label={t === "all" ? "All types" : fundTypeLabel(t)}
+      <div className="flex flex-nowrap items-center gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <ModeSwitch
+          options={[
+            { key: "all", label: "All" },
+            { key: "close_end", label: "Close-end" },
+            { key: "open_end", label: "Open-end" },
+          ]}
+          value={type}
+          onChange={setType}
+        />
+        {viewMode === "cards" ? (
+          <SortTabs
+            options={SORTS}
+            activeKey={sort.dir === "default" ? null : sort.key}
+            dir={sort.dir}
+            onSelect={toggle}
+            className="shrink-0"
           />
-        ))}
-        <span className="mx-1 hidden h-4 w-px bg-border sm:block" />
-        <div className="flex flex-wrap gap-1.5">
-          {SORTS.map((s) => (
-            <button
-              key={s.key}
-              type="button"
-              onClick={() => {
-                if (s.key === sortKey) setSortDir((d) => (d === 1 ? -1 : 1));
-                else {
-                  setSortKey(s.key);
-                  setSortDir(s.dir);
-                }
-              }}
-              className={cn(
-                "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
-                sortKey === s.key
-                  ? "border-primary/50 bg-primary/15 text-primary"
-                  : "border-border/60 bg-surface text-muted-foreground",
-              )}
-            >
-              {s.label}
-              {sortKey === s.key ? (
-                sortDir === 1 ? (
-                  <ArrowUp className="size-3 opacity-80" />
-                ) : (
-                  <ArrowDown className="size-3 opacity-80" />
-                )
-              ) : (
-                <ArrowUpDown className="size-3 opacity-60" />
-              )}
-            </button>
-          ))}
-        </div>
-        <span className="num ml-auto text-[11px] text-muted-foreground">
+        ) : null}
+        <ViewToggle value={viewMode} onChange={setViewMode} modes={["cards", "list"]} className="ml-auto shrink-0" />
+        <span className="num shrink-0 text-[11px] text-muted-foreground">
           {visible.length} of {funds.length}
         </span>
       </div>
@@ -351,6 +347,120 @@ export function FundBrowse({
         <p className="rounded-2xl border border-border/60 bg-card px-4 py-8 text-center text-sm text-muted-foreground">
           No schemes match your filters.
         </p>
+      ) : viewMode === "list" ? (
+        <Panel padding="none" className="overflow-clip">
+          <Table className="min-w-[760px]">
+            <TableHeader className="bg-muted">
+              <TableRow className="bg-muted/40 hover:bg-muted/40">
+                <SortableTh
+                  label="Symbol"
+                  active={sort.key === "symbol"}
+                  dir={sort.dir}
+                  kind="text"
+                  align="left"
+                  onClick={() => toggle("symbol")}
+                  className="py-2.5 pl-4 pr-2"
+                />
+                <SortableTh
+                  label="NAV"
+                  active={sort.key === "nav"}
+                  dir={sort.dir}
+                  kind="number"
+                  align="right"
+                  onClick={() => toggle("nav")}
+                  className="py-2.5 px-3"
+                />
+                <SortableTh
+                  label="Market"
+                  active={sort.key === "ltp"}
+                  dir={sort.dir}
+                  kind="number"
+                  align="right"
+                  onClick={() => toggle("ltp")}
+                  className="py-2.5 px-3"
+                />
+                <SortableTh
+                  label="Discount"
+                  active={sort.key === "discount"}
+                  dir={sort.dir}
+                  kind="text"
+                  align="right"
+                  onClick={() => toggle("discount")}
+                  className="py-2.5 px-3"
+                />
+                <SortableTh
+                  label="Payout"
+                  active={sort.key === "dividend"}
+                  dir={sort.dir}
+                  kind="number"
+                  align="right"
+                  onClick={() => toggle("dividend")}
+                  className="py-2.5 px-3 hidden sm:table-cell"
+                />
+                <SortableTh
+                  label="Size"
+                  active={sort.key === "size"}
+                  dir={sort.dir}
+                  kind="number"
+                  align="right"
+                  onClick={() => toggle("size")}
+                  className="py-2.5 px-3 hidden md:table-cell"
+                />
+                <SortableTh
+                  label="Holdings"
+                  active={sort.key === "holdings"}
+                  dir={sort.dir}
+                  kind="number"
+                  align="right"
+                  onClick={() => toggle("holdings")}
+                  className="py-2.5 px-3 hidden lg:table-cell"
+                />
+                <TableHead className="py-2.5 pl-2 pr-4">Manager</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {visible.map((f) => {
+                const d = describeFund(f);
+                const size = f.perf?.totalPaidUp ?? f.scheme.paidUp ?? null;
+                return (
+                  <TableRow key={f.scheme.symbol} className="cursor-pointer" onClick={() => onPick(f.scheme.symbol)}>
+                    <TableCell className="py-2.5 pl-4 pr-2">
+                      <p className="font-semibold">{f.scheme.symbol}</p>
+                      <p className="max-w-44 truncate text-xs text-muted-foreground">{f.scheme.name}</p>
+                    </TableCell>
+                    <TableCell className="num py-2.5 px-3 text-right">
+                      {d.navValue != null ? formatNpr(d.navValue) : "-"}
+                    </TableCell>
+                    <TableCell className="num py-2.5 px-3 text-right font-medium">
+                      {d.closeEnd ? (d.ltp != null ? formatNpr(d.ltp) : "-") : "—"}
+                    </TableCell>
+                    <TableCell className="py-2.5 px-3 text-right">
+                      {d.closeEnd ? (
+                        <DiscountPill value={d.disc} />
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="num py-2.5 px-3 text-right text-muted-foreground hidden sm:table-cell">
+                      {f.perf?.expectedDividendPct != null && f.perf.expectedDividendPct > 0
+                        ? `≈${f.perf.expectedDividendPct.toFixed(1)}%`
+                        : "-"}
+                    </TableCell>
+                    <TableCell className="num py-2.5 px-3 text-right text-muted-foreground hidden md:table-cell">
+                      {size != null && size > 0 ? formatNpr(size, { compact: true }) : "-"}
+                    </TableCell>
+                    <TableCell className="num py-2.5 px-3 text-right text-muted-foreground hidden lg:table-cell">
+                      {f.perf?.holdingsCount ?? "-"}
+                    </TableCell>
+                    <TableCell className="max-w-40 truncate py-2.5 pl-2 pr-4 text-xs text-muted-foreground">
+                      {f.scheme.manager || "-"}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </Panel>
       ) : (
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {visible.map((f) => (
@@ -359,30 +469,5 @@ export function FundBrowse({
         </div>
       )}
     </div>
-  );
-}
-
-function FilterChip({
-  active,
-  onClick,
-  label,
-}: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
-        active
-          ? "border-primary/50 bg-primary/15 text-primary"
-          : "border-border/60 bg-surface text-muted-foreground hover:border-primary/30",
-      )}
-    >
-      {label}
-    </button>
   );
 }

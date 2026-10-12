@@ -4,39 +4,15 @@ import { DeltaPill } from "@/components/stat-card";
 import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
 import { useMemo, useState, type ReactNode } from "react";
 import { ChevronDown, Gift, LineChart } from "lucide-react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableFooter,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AreaChart } from "@/components/market/area-chart";
-import {
-  dividendsQuery,
-  faceValuesQuery,
-  portfolioHistoryQuery,
-  transactionsQuery,
-} from "@/lib/queries";
+import { dividendsQuery, faceValuesQuery, portfolioHistoryQuery, transactionsQuery } from "@/lib/queries";
 import { useSettings } from "@/lib/settings";
 import { parseNptEpoch, unitsHeldAt, type UnitSnapshot } from "@/lib/nepse/timeline";
 import { formatDate, formatNpr, formatPercent, formatQty, toNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type {
-  DividendRow,
-  EnrichedHolding,
-  PortfolioGranularity,
-  PortfolioHistoryPoint,
-} from "@/lib/nepse/types";
+import type { DividendRow, EnrichedHolding, PortfolioGranularity, PortfolioHistoryPoint } from "@/lib/nepse/types";
 import type { TransactionItem } from "@/lib/meroshare/types";
 
 export type HistoryTab = "price" | "dividend";
@@ -95,9 +71,7 @@ export function HistoryTabButton({
       <span
         className={cn(
           "flex size-10 shrink-0 items-center justify-center rounded-lg transition-colors",
-          active
-            ? "bg-primary text-primary-foreground"
-            : "bg-muted text-muted-foreground group-hover:text-primary",
+          active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground group-hover:text-primary",
         )}
       >
         {icon}
@@ -114,14 +88,17 @@ export function HistoryTabButton({
 function PriceHistoryTab({
   holdings,
   onPickScrip,
+  waccOf,
 }: {
   holdings: EnrichedHolding[];
   onPickScrip: (scrip: string) => void;
+  waccOf?: ((scrip: string) => { rate: number; pending: boolean } | undefined) | undefined;
 }) {
   const { compactNumbers } = useSettings();
   const [granularity, setGranularity] = useState<PortfolioGranularity>("day");
   const [rangeMonths, setRangeMonths] = useState<number>(12);
   const [selected, setSelected] = useState<number | null>(null);
+  const [mode, setMode] = useState<"profit" | "total">("profit");
 
   const history = useQuery(
     portfolioHistoryQuery(
@@ -132,6 +109,17 @@ function PriceHistoryTab({
   );
   const timelinePoints = useMemo(() => history.data?.points ?? [], [history.data?.points]);
   const failedSymbols = history.data?.failed ?? [];
+  // Profit mode subtracts average-cost basis (current WACC × units actually
+  // held at each point). Only offered when a WACC source is wired in.
+  const showToggle = waccOf !== undefined;
+  const activeMode = showToggle ? mode : "total";
+  const displayPoints = useMemo(() => {
+    if (activeMode !== "profit") return timelinePoints.map((p) => ({ time: p.time, value: p.value }));
+    return timelinePoints.map((p) => ({
+      time: p.time,
+      value: p.value - p.breakdown.reduce((sum, b) => sum + b.units * (waccOf?.(b.symbol.toUpperCase())?.rate ?? 0), 0),
+    }));
+  }, [timelinePoints, activeMode, waccOf]);
 
   const formatLabel = (time: number) => {
     if (granularity === "day")
@@ -150,32 +138,30 @@ function PriceHistoryTab({
   };
 
   const historyStats = useMemo(() => {
-    if (timelinePoints.length < 2) return null;
-    const start = timelinePoints[0]!.value;
-    const end = timelinePoints[timelinePoints.length - 1]!.value;
+    if (displayPoints.length < 2) return null;
+    const start = displayPoints[0]!.value;
+    const end = displayPoints[displayPoints.length - 1]!.value;
     return {
       start,
       end,
       change: end - start,
       pct: start > 0 ? ((end - start) / start) * 100 : 0,
-      high: Math.max(...timelinePoints.map((p) => p.value)),
-      low: Math.min(...timelinePoints.map((p) => p.value)),
+      high: Math.max(...displayPoints.map((p) => p.value)),
+      low: Math.min(...displayPoints.map((p) => p.value)),
     };
-  }, [timelinePoints]);
+  }, [displayPoints]);
 
-  const selectedPoint =
-    selected != null ? timelinePoints.find((p) => p.time === selected) : undefined;
+  const selectedPoint = selected != null ? timelinePoints.find((p) => p.time === selected) : undefined;
 
   if (history.isLoading) return <LoadingBlock label="Building price history" />;
-  if (history.isError)
-    return <ErrorBlock error={history.error} retry={() => void history.refetch()} />;
+  if (history.isError) return <ErrorBlock error={history.error} retry={() => void history.refetch()} />;
   if (timelinePoints.length < 2)
     return (
       <EmptyBlock
         title="No price history"
         description={
           failedSymbols.length > 0
-            ? "We couldn't load demat history for some of your scrips, so there is nothing to chart yet. Retry, or pick a shorter range."
+            ? "We couldn't load demat history for some of your stocks, so there is nothing to chart yet. Retry, or pick a shorter range."
             : "The YONEPSE LTP archive has no points for your holdings in this range yet."
         }
       >
@@ -194,10 +180,29 @@ function PriceHistoryTab({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="flex items-center gap-2 font-display text-sm font-semibold">
-          Portfolio value over time
-        </h3>
+        <h3 className="flex items-center gap-2 font-display text-sm font-semibold">Portfolio value over time</h3>
         <div className="flex flex-wrap items-center gap-1.5">
+          {showToggle ? (
+            <div
+              role="group"
+              aria-label="History measure"
+              className="flex overflow-hidden rounded-full border border-border/60"
+            >
+              {(["profit", "total"] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  aria-pressed={activeMode === m}
+                  onClick={() => setMode(m)}
+                  className={`h-8 px-2.5 text-xs font-medium capitalize transition-colors ${
+                    activeMode === m ? "bg-primary/15 text-primary" : "bg-surface text-muted-foreground"
+                  }`}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+          ) : null}
           <Select
             value={granularity}
             onValueChange={(v) => {
@@ -239,10 +244,10 @@ function PriceHistoryTab({
 
       {failedSymbols.length > 0 ? (
         <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
-          Couldn&apos;t load demat history for {failedSymbols.length} scrip
+          Couldn&apos;t load demat history for {failedSymbols.length} stock
           {failedSymbols.length === 1 ? "" : "s"}:{" "}
-          <span className="font-medium">{failedSymbols.map((f) => f.symbol).join(", ")}</span>.
-          They&apos;re missing from this chart:{" "}
+          <span className="font-medium">{failedSymbols.map((f) => f.symbol).join(", ")}</span>. They&apos;re missing
+          from this chart:{" "}
           <button
             type="button"
             onClick={() => void history.refetch()}
@@ -259,17 +264,13 @@ function PriceHistoryTab({
             <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
               Start ({formatLabel(timelinePoints[0]!.time)})
             </p>
-            <p className="num text-sm font-medium">
-              {formatNpr(historyStats.start, { compact: compactNumbers })}
-            </p>
+            <p className="num text-sm font-medium">{formatNpr(historyStats.start, { compact: compactNumbers })}</p>
           </div>
           <div className="rounded-xl border border-border/60 bg-surface px-3 py-2">
             <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
               End ({formatLabel(timelinePoints[timelinePoints.length - 1]!.time)})
             </p>
-            <p className="num text-sm font-medium">
-              {formatNpr(historyStats.end, { compact: compactNumbers })}
-            </p>
+            <p className="num text-sm font-medium">{formatNpr(historyStats.end, { compact: compactNumbers })}</p>
           </div>
           <div className="rounded-xl border border-border/60 bg-surface px-3 py-2">
             <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">Change</p>
@@ -278,9 +279,7 @@ function PriceHistoryTab({
             </p>
           </div>
           <div className="rounded-xl border border-border/60 bg-surface px-3 py-2">
-            <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-              Best / worst
-            </p>
+            <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">Best / worst</p>
             <p className="num text-sm font-medium">
               {formatNpr(historyStats.high, { compact: compactNumbers })} /{" "}
               {formatNpr(historyStats.low, { compact: compactNumbers })}
@@ -290,7 +289,7 @@ function PriceHistoryTab({
       ) : null}
 
       <AreaChart
-        points={timelinePoints.map((p) => ({ time: p.time, value: p.value }))}
+        points={displayPoints}
         height={240}
         formatValue={(v) => formatNpr(v, { compact: true })}
         formatLabel={formatLabel}
@@ -301,23 +300,26 @@ function PriceHistoryTab({
           if (!point) return null;
           const count = point.breakdown.length;
           return (
-            <p className="text-[0.65rem] text-muted-foreground">
-              {count} {count === 1 ? "scrip" : "scrips"}
+            <p className="text-center text-[0.65rem] text-muted-foreground">
+              {count} {count === 1 ? "stock" : "stocks"}
             </p>
           );
         }}
       />
 
       {selectedPoint ? (
-        <PointBreakdown point={selectedPoint} formatLabel={formatLabel} onPickScrip={onPickScrip} />
+        <PointBreakdown point={selectedPoint} formatLabel={formatLabel} onPickScrip={onPickScrip} costOf={waccOf} />
       ) : null}
 
       <p className="text-[0.68rem] text-muted-foreground">
+        {activeMode === "profit"
+          ? "Profit = value minus what you paid (current average buy price × units held at each point). Total = value plus cost. "
+          : null}
         {granularity === "day"
-          ? "Daily closing values from the YONEPSE LTP archive. Hover for the per-scrip breakdown. Click a point to pin it below."
+          ? "Daily closing values from the YONEPSE LTP archive. Hover for the per-stock breakdown. Click a point to pin it below."
           : granularity === "year"
-            ? "Year-end closing values from the YONEPSE LTP archive. Hover for the per-scrip breakdown. Click a point to pin it below."
-            : "Month-end closing values from the YONEPSE LTP archive. Hover for the per-scrip breakdown. Click a point to pin it below."}
+            ? "Year-end closing values from the YONEPSE LTP archive. Hover for the per-stock breakdown. Click a point to pin it below."
+            : "Month-end closing values from the YONEPSE LTP archive. Hover for the per-stock breakdown. Click a point to pin it below."}
       </p>
     </div>
   );
@@ -329,19 +331,26 @@ export function PointBreakdown({
   formatLabel,
   onPickScrip,
   costOf,
+  prevValue,
+  prevCloses,
 }: {
   point: PortfolioHistoryPoint;
   formatLabel: (time: number) => string;
   onPickScrip: (scrip: string) => void;
   /** Optional est. cost basis per scrip; when given, Cost/Profit columns appear. */
   costOf?: ((symbol: string) => { rate: number; pending: boolean } | undefined) | undefined;
+  /** Previous point's total; when given without costOf, the header shows day % vs prev close. */
+  prevValue?: number | null | undefined;
+  /** Previous point's close per symbol (uppercase); when given, a per-row Chg % column appears. */
+  prevCloses?: Record<string, number> | undefined;
 }) {
-  type Key = "symbol" | "close" | "units" | "value" | "cost" | "profit";
+  type Key = "symbol" | "close" | "change" | "units" | "value" | "cost" | "profit";
   const { sort, toggle } = useSort<Key>(
     { key: "value", dir: "desc" },
     {
       symbol: "text",
       close: "number",
+      change: "number",
       units: "number",
       value: "number",
       cost: "number",
@@ -353,9 +362,18 @@ export function PointBreakdown({
       point.breakdown.map((b) => {
         const entry = costOf?.(b.symbol.toUpperCase());
         const cost = entry ? b.units * entry.rate : null;
-        return { ...b, cost, profit: cost === null ? null : b.value - cost, pending: entry?.pending ?? false };
+        const prevClose = prevCloses?.[b.symbol.toUpperCase()] ?? null;
+        const hasPrev = prevClose !== null && prevClose > 0;
+        return {
+          ...b,
+          cost,
+          profit: cost === null ? null : b.value - cost,
+          pending: entry?.pending ?? false,
+          change: hasPrev ? ((b.close - prevClose) / prevClose) * 100 : null,
+          changeValue: hasPrev ? (b.close - prevClose) * b.units : null,
+        };
       }),
-    [point, costOf],
+    [point, costOf, prevCloses],
   );
   const rows = useMemo(() => {
     const getter = (b: (typeof enriched)[number]): string | number => {
@@ -364,6 +382,8 @@ export function PointBreakdown({
           return b.symbol;
         case "close":
           return b.close;
+        case "change":
+          return b.change ?? Number.NEGATIVE_INFINITY;
         case "units":
           return b.units;
         case "cost":
@@ -377,27 +397,44 @@ export function PointBreakdown({
     return sortBy([...enriched], getter, sort.dir);
   }, [enriched, sort]);
   const showCost = costOf !== undefined;
+  const showChange = prevCloses !== undefined && Object.keys(prevCloses).length > 0;
+  // Zero move is neutral gray, never gain-green: applies to every money/%
+  // figure in this table.
+  const tone = (v: number) => (v > 0 ? "text-gain" : v < 0 ? "text-loss" : "text-muted-foreground");
+  const sign = (v: number) => (v > 0 ? "+" : v < 0 ? "-" : "");
   const totalCost = rows.reduce((sum, b) => sum + (b.cost ?? 0), 0);
   const totalProfit = rows.reduce((sum, b) => sum + (b.profit ?? 0), 0);
+  const changeTotal = rows.reduce((sum, b) => sum + (b.changeValue ?? 0), 0);
+  const dayPct = !showCost && prevValue != null && prevValue > 0 ? ((point.value - prevValue) / prevValue) * 100 : null;
   return (
-    <div className="overflow-hidden rounded-xl border border-border/60 bg-surface">
+    <div className="overflow-clip rounded-xl border border-border/60 bg-surface">
       <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 px-3 py-2">
         <h4 className="text-xs font-semibold">Held on {formatLabel(point.time)}</h4>
         <span className="num text-xs text-muted-foreground">
           {showCost ? (
             <>
-              <span className={cn("font-semibold", totalProfit >= 0 ? "text-gain" : "text-loss")}>
-                {totalProfit >= 0 ? "+" : "-"}{formatNpr(Math.abs(totalProfit))}
+              <span className={cn("font-semibold", tone(totalProfit))}>
+                {sign(totalProfit)}
+                {formatNpr(Math.abs(totalProfit))}
               </span>{" "}
               profit ·{" "}
             </>
           ) : null}
-          {formatNpr(point.value)} across {rows.length} scrip{rows.length === 1 ? "" : "s"}
+          {formatNpr(point.value)} across {rows.length} stock{rows.length === 1 ? "" : "s"}
+          {dayPct !== null ? (
+            <>
+              {" · "}
+              <span className={cn("font-semibold", tone(dayPct))}>
+                {sign(dayPct)}
+                {dayPct.toFixed(2)}% vs prev close
+              </span>
+            </>
+          ) : null}
         </span>
       </header>
       <Table>
         <TableHeader>
-          <TableRow className="bg-muted/30 hover:bg-muted/30">
+          <TableRow className="bg-muted/40 hover:bg-muted/40">
             <SortableTh
               label="Symbol"
               active={sort.key === "symbol"}
@@ -413,6 +450,15 @@ export function PointBreakdown({
               onClick={() => toggle("close")}
               align="right"
             />
+            {showChange ? (
+              <SortableTh
+                label="Chg"
+                active={sort.key === "change"}
+                dir={sort.dir}
+                onClick={() => toggle("change")}
+                align="right"
+              />
+            ) : null}
             <SortableTh
               label="Units"
               active={sort.key === "units"}
@@ -460,6 +506,24 @@ export function PointBreakdown({
                 </button>
               </TableCell>
               <TableCell className="num text-right">{formatNpr(b.close)}</TableCell>
+              {showChange ? (
+                <TableCell className={cn("num text-right", b.change !== null && tone(b.change))}>
+                  {b.change === null || b.changeValue === null ? (
+                    <span className="text-muted-foreground">-</span>
+                  ) : (
+                    <>
+                      <div>
+                        {sign(b.change)}
+                        {b.change.toFixed(2)}%
+                      </div>
+                      <div className="text-[0.68rem] text-muted-foreground">
+                        {sign(b.changeValue)}
+                        {formatNpr(Math.abs(Math.round(b.changeValue)))}
+                      </div>
+                    </>
+                  )}
+                </TableCell>
+              ) : null}
               <TableCell className="num text-right">{formatQty(b.units)}</TableCell>
               <TableCell className="num text-right">{formatNpr(b.value)}</TableCell>
               {showCost ? (
@@ -475,7 +539,7 @@ export function PointBreakdown({
                 </TableCell>
               ) : null}
               {showCost ? (
-                <TableCell className={cn("num pr-3 text-right", b.profit !== null && (b.profit >= 0 ? "text-gain" : "text-loss"))}>
+                <TableCell className={cn("num pr-3 text-right", b.profit !== null && tone(b.profit))}>
                   {b.profit === null ? "-" : formatNpr(b.profit)}
                 </TableCell>
               ) : null}
@@ -486,17 +550,21 @@ export function PointBreakdown({
           <TableRow>
             <TableCell className="pl-3 font-semibold">Total</TableCell>
             <TableCell />
+            {showChange ? (
+              <TableCell className={cn("num text-right font-semibold", tone(changeTotal))}>
+                {sign(changeTotal)}
+                {formatNpr(Math.abs(Math.round(changeTotal)))}
+              </TableCell>
+            ) : null}
             <TableCell className="num text-right font-semibold">
               {formatQty(rows.reduce((sum, b) => sum + b.units, 0))}
             </TableCell>
             <TableCell className={cn("num text-right font-semibold", !showCost && "pr-3")}>
               {formatNpr(point.value)}
             </TableCell>
+            {showCost ? <TableCell className="num text-right font-semibold">{formatNpr(totalCost)}</TableCell> : null}
             {showCost ? (
-              <TableCell className="num text-right font-semibold">{formatNpr(totalCost)}</TableCell>
-            ) : null}
-            {showCost ? (
-              <TableCell className={cn("num pr-3 text-right font-semibold", totalProfit >= 0 ? "text-gain" : "text-loss")}>
+              <TableCell className={cn("num pr-3 text-right font-semibold", tone(totalProfit))}>
                 {formatNpr(totalProfit)}
               </TableCell>
             ) : null}
@@ -549,10 +617,11 @@ function emptyDivEntry(): DivEntry {
 
 type DivRow = DivEntry["divRows"][number];
 
+const DIVIDEND_ROWS_INITIAL = 5;
+
 function DividendTable({ rows, scrip }: { rows: DivRow[]; scrip: string }) {
-  const { sort, toggle } = useSort<
-    "year" | "cash" | "bonus" | "total" | "announced" | "estCash" | "estBonus"
-  >(
+  const [expanded, setExpanded] = useState(false);
+  const { sort, toggle } = useSort<"year" | "cash" | "bonus" | "total" | "announced" | "estCash" | "estBonus">(
     {
       key: "year",
       dir: "desc",
@@ -604,51 +673,64 @@ function DividendTable({ rows, scrip }: { rows: DivRow[]; scrip: string }) {
       kind={key === "year" ? "text" : "number"}
     />
   );
+  const shown = expanded ? sorted : sorted.slice(0, DIVIDEND_ROWS_INITIAL);
   return (
-    <div className="overflow-x-auto rounded-lg border border-border/60">
-      <Table>
-        <TableHeader>
-          <TableRow className="bg-muted/30 hover:bg-muted/30">
-            {th("Dividend", "year", "left", "pl-3")}
-            {th("Cash", "cash")}
-            {th("Bonus", "bonus")}
-            {th("Total", "total")}
-            {th("Announced", "announced", "left", "hidden sm:table-cell")}
-            {th("Est. cash (your units)", "estCash")}
-            {th("Est. bonus (your units)", "estBonus", "right", "pr-3")}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {sorted.map((r, i) => (
-            <TableRow key={`${scrip}-div-${r.fiscalYear ?? i}`}>
-              <TableCell className="num pl-3 font-medium">{r.fiscalYear ?? "-"}</TableCell>
-              <TableCell className="num text-right text-muted-foreground">
-                {r.cashDividend > 0 ? `${r.cashDividend}%` : "-"}
-              </TableCell>
-              <TableCell className="num text-right text-muted-foreground">
-                {r.bonusShare > 0 ? `${r.bonusShare}%` : "-"}
-              </TableCell>
-              <TableCell className="num text-right font-semibold">
-                {r.totalDividend > 0 ? `${r.totalDividend}%` : "-"}
-              </TableCell>
-              <TableCell className="num hidden text-left text-muted-foreground sm:table-cell">
-                {r.announcementDate ? formatDate(r.announcementDate) : "-"}
-              </TableCell>
-              <TableCell className="num text-right font-medium">
-                {r.cashValue > 0 ? formatNpr(r.cashValue) : "-"}
-              </TableCell>
-              <TableCell className="num pr-3 text-right font-medium text-primary">
-                {r.bonusUnits > 0 ? `+${formatQty(r.bonusUnits)}` : "-"}
-              </TableCell>
+    <div className="space-y-1.5">
+      <div className="overflow-x-auto rounded-lg border border-border/60 xl:overflow-x-clip">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/40 hover:bg-muted/40">
+              {th("Dividend", "year", "left", "pl-3")}
+              {th("Cash", "cash")}
+              {th("Bonus", "bonus")}
+              {th("Total", "total")}
+              {th("Announced", "announced", "left", "hidden sm:table-cell")}
+              {th("Est. cash (your units)", "estCash")}
+              {th("Est. bonus (your units)", "estBonus", "right", "pr-3")}
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {shown.map((r, i) => (
+              <TableRow key={`${scrip}-div-${r.fiscalYear ?? i}`}>
+                <TableCell className="num pl-3 font-medium">{r.fiscalYear ?? "-"}</TableCell>
+                <TableCell className="num text-right text-muted-foreground">
+                  {r.cashDividend > 0 ? `${r.cashDividend}%` : "-"}
+                </TableCell>
+                <TableCell className="num text-right text-muted-foreground">
+                  {r.bonusShare > 0 ? `${r.bonusShare}%` : "-"}
+                </TableCell>
+                <TableCell className="num text-right font-semibold">
+                  {r.totalDividend > 0 ? `${r.totalDividend}%` : "-"}
+                </TableCell>
+                <TableCell className="num hidden text-left text-muted-foreground sm:table-cell">
+                  {r.announcementDate ? formatDate(r.announcementDate) : "-"}
+                </TableCell>
+                <TableCell className="num text-right font-medium">
+                  {r.cashValue > 0 ? formatNpr(r.cashValue) : "-"}
+                </TableCell>
+                <TableCell className="num pr-3 text-right font-medium text-primary">
+                  {r.bonusUnits > 0 ? `+${formatQty(r.bonusUnits)}` : "-"}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+      {sorted.length > DIVIDEND_ROWS_INITIAL ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((e) => !e)}
+          className="w-full rounded-lg border border-border/60 bg-surface px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground"
+        >
+          {expanded ? "Show less" : `Show ${sorted.length - DIVIDEND_ROWS_INITIAL} more`}
+        </button>
+      ) : null}
     </div>
   );
 }
 
 function CreditTable({ rows, scrip }: { rows: TransactionItem[]; scrip: string }) {
+  const [expanded, setExpanded] = useState(false);
   const { sort, toggle } = useSort<"date" | "description" | "units">(
     {
       key: "date",
@@ -669,56 +751,63 @@ function CreditTable({ rows, scrip }: { rows: TransactionItem[]; scrip: string }
     };
     return sortBy(rows, getter, sort.dir);
   }, [rows, sort]);
+  const shown = expanded ? sorted : sorted.slice(0, DIVIDEND_ROWS_INITIAL);
   return (
-    <div className="overflow-x-auto rounded-lg border border-border/60">
-      <Table>
-        <TableHeader>
-          <TableRow className="bg-muted/30 hover:bg-muted/30">
-            <SortableTh
-              label="Credited"
-              active={sort.key === "date"}
-              dir={sort.dir}
-              onClick={() => toggle("date")}
-              align="left"
-              className="pl-3"
-            />
-            <SortableTh
-              label="Description"
-              active={sort.key === "description"}
-              dir={sort.dir}
-              onClick={() => toggle("description")}
-              align="left"
-              kind="text"
-            />
-            <SortableTh
-              label="Units"
-              active={sort.key === "units"}
-              dir={sort.dir}
-              onClick={() => toggle("units")}
-              align="right"
-              className="pr-3"
-            />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {sorted.map((r, i) => (
-            <TableRow key={`${scrip}-credit-${String(r.transactionDate)}-${i}`}>
-              <TableCell className="num whitespace-nowrap pl-3 text-xs">
-                {formatDate(r.transactionDate)}
-              </TableCell>
-              <TableCell
-                className="max-w-64 truncate text-xs text-muted-foreground"
-                title={r.historyDescription}
-              >
-                {r.historyDescription ?? "-"}
-              </TableCell>
-              <TableCell className="num pr-3 text-right font-semibold text-gain">
-                +{formatQty(r.creditQuantity)}
-              </TableCell>
+    <div className="space-y-1.5">
+      <div className="overflow-x-auto rounded-lg border border-border/60 xl:overflow-x-clip">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/40 hover:bg-muted/40">
+              <SortableTh
+                label="Credited"
+                active={sort.key === "date"}
+                dir={sort.dir}
+                onClick={() => toggle("date")}
+                align="left"
+                className="pl-3"
+              />
+              <SortableTh
+                label="Description"
+                active={sort.key === "description"}
+                dir={sort.dir}
+                onClick={() => toggle("description")}
+                align="left"
+                kind="text"
+              />
+              <SortableTh
+                label="Units"
+                active={sort.key === "units"}
+                dir={sort.dir}
+                onClick={() => toggle("units")}
+                align="right"
+                className="pr-3"
+              />
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {shown.map((r, i) => (
+              <TableRow key={`${scrip}-credit-${String(r.transactionDate)}-${i}`}>
+                <TableCell className="num whitespace-nowrap pl-3 text-xs">{formatDate(r.transactionDate)}</TableCell>
+                <TableCell className="max-w-64 truncate text-xs text-muted-foreground" title={r.historyDescription}>
+                  {r.historyDescription ?? "-"}
+                </TableCell>
+                <TableCell className="num pr-3 text-right font-semibold text-gain">
+                  +{formatQty(r.creditQuantity)}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+      {sorted.length > DIVIDEND_ROWS_INITIAL ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((e) => !e)}
+          className="w-full rounded-lg border border-border/60 bg-surface px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground"
+        >
+          {expanded ? "Show less" : `Show ${sorted.length - DIVIDEND_ROWS_INITIAL} more`}
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -804,10 +893,14 @@ function DividendHistoryTab({ onPickScrip }: { onPickScrip: (scrip: string) => v
       const y = yearOf(d.announcementDate);
       if (year !== "all" && y !== year) continue;
       const key = String(d.symbol ?? "").toUpperCase();
-      if (!key || (map.has(key) === false && year !== "all")) continue;
-      const entry = map.get(key) ?? emptyDivEntry();
+      if (!key) continue;
       const epoch = parseNptEpoch(d.announcementDate) ?? parseNptEpoch(d.bookCloseDate);
       const held = epoch == null ? 0 : unitsHeldAt(snapshotsBySymbol.get(key) ?? [], epoch);
+      // Announcements count when you actually held the scrip then — not only
+      // when you also received credited units that year. Zero rows are still
+      // hidden by the render guard below.
+      if (held <= 0 && !map.has(key)) continue;
+      const entry = map.get(key) ?? emptyDivEntry();
       const cashValue = (d.cashDividend / 100) * (faceValues.data?.[key] ?? 100) * held;
       const bonusUnits = (d.bonusShare / 100) * held;
       entry.estCash += cashValue;
@@ -925,17 +1018,11 @@ function DividendHistoryTab({ onPickScrip }: { onPickScrip: (scrip: string) => v
               </span>
               <span className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
                 <span className="text-muted-foreground">
-                  Cash{" "}
-                  <span className="num font-semibold text-gain">
-                    {formatNpr(s.cash, { compact: true })}
-                  </span>
+                  Cash <span className="num font-semibold text-gain">{formatNpr(s.cash, { compact: true })}</span>
                 </span>
                 {s.bonus > 0 ? (
                   <span className="text-muted-foreground">
-                    Bonus{" "}
-                    <span className="num font-semibold text-primary">
-                      +{formatQty(Math.floor(s.bonus))}
-                    </span>
+                    Bonus <span className="num font-semibold text-primary">+{formatQty(Math.floor(s.bonus))}</span>
                   </span>
                 ) : null}
                 {s.credited > 0 ? (
@@ -1006,13 +1093,9 @@ function DividendHistoryTab({ onPickScrip }: { onPickScrip: (scrip: string) => v
                   </div>
                 </summary>
                 <div className="space-y-3 border-t border-border/60 p-3">
-                  {entry.divRows.length > 0 ? (
-                    <DividendTable rows={entry.divRows} scrip={entry.scrip} />
-                  ) : null}
+                  {entry.divRows.length > 0 ? <DividendTable rows={entry.divRows} scrip={entry.scrip} /> : null}
 
-                  {entry.creditRows.length > 0 ? (
-                    <CreditTable rows={entry.creditRows} scrip={entry.scrip} />
-                  ) : null}
+                  {entry.creditRows.length > 0 ? <CreditTable rows={entry.creditRows} scrip={entry.scrip} /> : null}
                 </div>
               </details>
             );
@@ -1021,10 +1104,10 @@ function DividendHistoryTab({ onPickScrip }: { onPickScrip: (scrip: string) => v
       </div>
 
       <p className="text-[0.68rem] leading-relaxed text-muted-foreground">
-        Units credited (bonus, mergers, rights) come straight from your MeroShare movement history;
-        IPO allotments are skipped. Cash dividend estimates apply the announced rate to the units
-        you actually held on each announcement date, on the company&apos;s face value (indicative,
-        actual payouts depend on book-close records and 5% tax is withheld at source.
+        Units credited (bonus, mergers, rights) come straight from your MeroShare movement history; IPO allotments are
+        skipped. Cash dividend estimates apply the announced rate to the units you actually held on each announcement
+        date, on the company&apos;s face value (indicative, actual payouts depend on book-close records and 5% tax is
+        withheld at source.
       </p>
     </div>
   );
@@ -1035,10 +1118,13 @@ export function HistoryPanel({
   holdings,
   onPickScrip,
   defaultTab = null,
+  waccOf,
 }: {
   holdings: EnrichedHolding[];
   onPickScrip: (scrip: string) => void;
   defaultTab?: HistoryTab | null;
+  /** Average buy price per scrip; when given, the price tab gains a Profit/Total toggle. */
+  waccOf?: ((scrip: string) => { rate: number; pending: boolean } | undefined) | undefined;
 }) {
   const [tab, setTab] = useState<HistoryTab | null>(defaultTab);
 
@@ -1063,17 +1149,15 @@ export function HistoryPanel({
           description="Cash, bonus, merger & right credits"
         />
       </div>
-      <div className="px-4 pb-4">
-        {tab === null ? (
-          <p className="rounded-xl border border-dashed border-border/70 px-4 py-8 text-center text-sm text-muted-foreground">
-            Choose an insight above to load it on demand: past prices and your dividend record.
-          </p>
-        ) : tab === "price" ? (
-          <PriceHistoryTab holdings={holdings} onPickScrip={onPickScrip} />
-        ) : (
-          <DividendHistoryTab onPickScrip={onPickScrip} />
-        )}
-      </div>
+      {tab !== null ? (
+        <div className="px-4 pb-4">
+          {tab === "price" ? (
+            <PriceHistoryTab holdings={holdings} onPickScrip={onPickScrip} waccOf={waccOf} />
+          ) : (
+            <DividendHistoryTab onPickScrip={onPickScrip} />
+          )}
+        </div>
+      ) : null}
     </section>
   );
 }

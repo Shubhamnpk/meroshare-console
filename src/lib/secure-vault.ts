@@ -57,10 +57,7 @@ async function getOrCreateKey(): Promise<CryptoKey> {
   } catch {
     // fall through to generation
   }
-  const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, [
-    "encrypt",
-    "decrypt",
-  ]);
+  const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
   const raw = await crypto.subtle.exportKey("raw", key);
   try {
     localStorage.setItem(VAULT_ENC_KEY, bufToBase64(raw));

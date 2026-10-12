@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, LogOut, Search, Settings, UserRound } from "lucide-react";
 import { marketSnapshotQuery } from "@/lib/queries";
@@ -21,6 +21,28 @@ import { CommandPalette } from "@/components/command-palette";
 import { NotificationBell } from "@/components/notification-bell";
 import { ScripSheet } from "@/components/market/scrip-sheet";
 import { AppSidebar, MobileNav } from "@/components/app-sidebar";
+import { WatchlistFloatHost } from "@/components/market/watchlist-float";
+
+/**
+ * Pages (besides terminal/market, which wire their own float) where the
+ * floating watchlist tab appears. One scoped mount instead of per-page wiring.
+ */
+const FLOAT_PATHS = [
+  "/portfolio",
+  "/transactions",
+  "/analytics",
+  "/tools",
+  "/time-machine",
+  "/stock-compare",
+  "/dividend-vs-fd",
+  "/best-shares",
+  "/market-depth",
+  "/mutual-funds",
+  "/brokers",
+  "/ipo-pipeline",
+  "/debentures",
+  "/global",
+];
 import { usePrefs } from "@/lib/prefs";
 
 function initials(name: string) {
@@ -43,6 +65,8 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
   const [pickedScrip, setPickedScrip] = useState<string | null>(null);
 
   const toggleCollapsed = () => setSidebarCollapsed(!sidebarCollapsed);
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const showFloat = FLOAT_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
   const snapshot = useQuery(marketSnapshotQuery());
   const marketOpen = snapshot.data?.status.isOpen ?? null;
 
@@ -89,9 +113,7 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
       >
         <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border/70 bg-background/85 px-4 backdrop-blur-xl sm:px-6">
           <div className="min-w-0 flex-1">
-            <p className="truncate font-display text-sm font-semibold sm:text-base">
-              {user.name || user.username}
-            </p>
+            <p className="truncate font-display text-sm font-semibold sm:text-base">{user.name || user.username}</p>
             <p className="num truncate text-xs text-muted-foreground">BOID {user.demat}</p>
           </div>
 
@@ -146,20 +168,18 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
             type="button"
             onClick={() => setPaletteOpen(true)}
             className="hidden items-center gap-2 rounded-xl border border-border/70 bg-secondary px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent md:flex"
-            aria-label="Search scrips (Ctrl+K)"
+            aria-label="Search stocks (Ctrl+K)"
           >
             <Search className="size-3.5" aria-hidden />
-            <span>Search scrips…</span>
-            <kbd className="num rounded-md bg-muted px-1.5 py-0.5 font-sans text-[0.65rem]">
-              Ctrl K
-            </kbd>
+            <span>Search stocks…</span>
+            <kbd className="num rounded-md bg-muted px-1.5 py-0.5 font-sans text-[0.65rem]">Ctrl K</kbd>
           </button>
           <Button
             variant="ghost"
             size="icon"
             className="md:hidden"
             onClick={() => setPaletteOpen(true)}
-            aria-label="Search scrips"
+            aria-label="Search stocks"
           >
             <Search className="size-4" />
           </Button>
@@ -183,12 +203,8 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
             <DropdownMenuContent align="end" className="w-60">
               <DropdownMenuLabel>
                 <div className="flex flex-col">
-                  <span className="truncate font-display font-semibold">
-                    {user.name || user.username}
-                  </span>
-                  <span className="num truncate text-xs font-normal text-muted-foreground">
-                    BOID {user.demat}
-                  </span>
+                  <span className="truncate font-display font-semibold">{user.name || user.username}</span>
+                  <span className="num truncate text-xs font-normal text-muted-foreground">BOID {user.demat}</span>
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
@@ -224,7 +240,7 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
                 className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-secondary/70 px-2.5 py-0.5 text-[0.725rem] font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:bg-accent hover:text-foreground"
               >
                 <span className="size-1.5 rounded-full bg-emerald-500" />
-                <span>{APP_VERSION} Release Notes</span>
+                <span>{APP_VERSION}</span>
               </Link>
             </div>
             <p className="text-[0.68rem] text-muted-foreground/60">
@@ -236,11 +252,9 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
 
       <MobileNav />
 
-      <CommandPalette
-        open={paletteOpen}
-        setOpen={setPaletteOpen}
-        onPick={(symbol) => setPickedScrip(symbol)}
-      />
+      {showFloat ? <WatchlistFloatHost /> : null}
+
+      <CommandPalette open={paletteOpen} setOpen={setPaletteOpen} onPick={(symbol) => setPickedScrip(symbol)} />
       <ScripSheet
         symbol={pickedScrip}
         onOpenChange={(open) => {

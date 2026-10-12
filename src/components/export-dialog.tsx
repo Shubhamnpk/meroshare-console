@@ -4,13 +4,7 @@ import { FileDown, FileJson, FileSpreadsheet, FileText } from "lucide-react";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { Button, type ButtonProps } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { isoDate } from "@/lib/format";
 
@@ -39,8 +33,26 @@ const DEFAULT_ICONS: Record<string, typeof FileJson> = {
 };
 
 /** Escape and join one CSV row. */
-export function csvRow(cells: (string | number | undefined)[]): string {
+export function csvRow(cells: (string | number | undefined | null)[]): string {
   return cells.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(",");
+}
+
+/** Build a whole CSV document: quoted header row plus quoted data rows. */
+export function buildCsv(head: (string | number)[] | null, rows: (string | number | undefined | null)[][]): string {
+  return [...(head ? [csvRow(head)] : []), ...rows.map((r) => csvRow(r))].join("\n");
+}
+
+/** Trigger a client-side file download. Callers add `\uFEFF` for Excel-friendly CSV. */
+export function downloadText(filename: string, content: string, mime: string): void {
+  const url = URL.createObjectURL(new Blob([content], { type: mime }));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+
+  window.setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
 const DISCLAIMER =
@@ -100,7 +112,7 @@ function savePdf(
   },
   logo: HTMLImageElement | null,
 ): boolean {
-  if (!table) return false;
+  if (!table || table.body.length === 0) return false;
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const width = doc.internal.pageSize.getWidth();
   const height = doc.internal.pageSize.getHeight();
@@ -222,17 +234,11 @@ export function ExportButton({
       }
     } else {
       const content = format.extension === "csv" ? `\uFEFF${format.build()}` : format.build();
-      const blob = new Blob([content], {
-        type:
-          format.mime ??
-          (format.extension === "json" ? "application/json" : "text/csv;charset=utf-8"),
-      });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `${name}.${format.extension}`;
-      anchor.click();
-      URL.revokeObjectURL(url);
+      downloadText(
+        `${name}.${format.extension}`,
+        content,
+        format.mime ?? (format.extension === "json" ? "application/json" : "text/csv;charset=utf-8"),
+      );
     }
     toast.success(`Exported as ${format.title.toUpperCase()}`);
     setOpen(false);
@@ -240,22 +246,14 @@ export function ExportButton({
 
   return (
     <>
-      <Button
-        variant={variant}
-        size={size}
-        className={className}
-        disabled={disabled}
-        onClick={() => setOpen(true)}
-      >
+      <Button variant={variant} size={size} className={className} disabled={disabled} onClick={() => setOpen(true)}>
         <FileDown /> {label}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Export data</DialogTitle>
-            <DialogDescription>
-              Pick a file format. Your current view and filters are included.
-            </DialogDescription>
+            <DialogDescription>Pick a file format. Your current view and filters are included.</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-3 gap-2">
             {formats.map((format) => {

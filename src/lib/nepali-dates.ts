@@ -142,20 +142,7 @@ export const BS_MONTHS_NE = [
   "चैत्र",
 ];
 
-export const BS_MONTHS_SHORT_NE = [
-  "बै",
-  "जे",
-  "अ",
-  "श्रा",
-  "भा",
-  "आ",
-  "का",
-  "मं",
-  "पौ",
-  "मा",
-  "फा",
-  "चै",
-];
+export const BS_MONTHS_SHORT_NE = ["बै", "जे", "अ", "श्रा", "भा", "आ", "का", "मं", "पौ", "मा", "फा", "चै"];
 
 /** Weeks in Nepal start on Sunday (shared with the AD week). */
 export const WEEKDAYS_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];

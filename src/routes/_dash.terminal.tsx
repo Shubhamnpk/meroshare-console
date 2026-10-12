@@ -4,10 +4,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   Camera,
+  ChartCandlestick,
+  ChevronDown,
+  Copy,
+  GitCompareArrows,
   Loader2,
   Maximize2,
   Minimize2,
   RefreshCw,
+  Repeat,
   Search,
   SlidersHorizontal,
   Star,
@@ -18,9 +23,10 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DeltaPill } from "@/components/stat-card";
+import { ChipRow, StatChip } from "@/components/stat-chip";
 import { PositionPnlCard } from "@/components/market/position-pnl-card";
 import {
-  DEFAULT_INDICATORS,
+  COMPARE_COLORS,
   TerminalChart,
   type ChartStyle,
   type HoverInfo,
@@ -30,7 +36,19 @@ import { normalise, type LinePoint } from "@/lib/nepse/indicators";
 import { chartDayLabel, chartTimeLabel } from "@/components/market/chart-modal";
 import { PointBreakdown } from "@/components/portfolio/history-panel";
 import { WatchlistPanel } from "@/components/market/watchlist-panel";
+import { WatchlistFloat } from "@/components/market/watchlist-float";
+import { CompareModal } from "@/components/market/compare-modal";
+import { CompareFundamentalsTable } from "@/components/market/compare-fundamentals";
 import { OrderTicket } from "@/components/brokers/order-ticket";
+import {
+  BarAggSelect,
+  ChartExpandButton,
+  ChartIndicatorsPopover,
+  ChartStyleSwitch,
+} from "@/components/market/chart-controls";
+import { GlobalTerminalCard } from "@/components/market/global-terminal-card";
+import { deriveHoldings, useGlobalTxns } from "@/lib/world/store";
+import { normalizeWorldSymbol } from "@/lib/world/symbols";
 import { PriceAlertDialog } from "@/components/brokers/price-alert-dialog";
 import {
   brokerAmoListQuery,
@@ -44,38 +62,42 @@ import {
   indexGraphQuery,
   investmentSummaryQuery,
   marketSnapshotQuery,
+  mfSchemesQuery,
   portfolioHistoryQuery,
   portfolioIntradayQuery,
+  scripDetailQuery,
+  scripFinancialsQuery,
   udfHistoryQuery,
+  worldSearchQuery,
 } from "@/lib/queries";
-import {
-  cancelBrokerAmo,
-  cancelBrokerOrder,
-  modifyBrokerOrder,
-  placeBrokerAmo,
-} from "@/lib/brokers/brokers.functions";
-import type { BrokerId } from "@/lib/brokers/types";
+import { cancelBrokerAmo, cancelBrokerOrder, modifyBrokerOrder, placeBrokerAmo } from "@/lib/brokers/brokers.functions";
+import type { BrokerId, BrokerOrder } from "@/lib/brokers/types";
 import { TmsReauthModal } from "@/components/brokers/tms-reauth-modal";
 import { useTmsReauth } from "@/hooks/use-tms-reauth";
 import { useBrokerMarketWs } from "@/hooks/use-broker-ws";
 import type { ChartBar, ChartRange, PortfolioHistoryPoint, PricePoint } from "@/lib/nepse/types";
-import { errorMessage, formatNpr, formatPercent } from "@/lib/format";
-import { cn } from "@/lib/utils";
-import { useIsMobile } from "@/hooks/use-mobile";
+import { errorMessage, formatNpr, formatNumber, formatPercent } from "@/lib/format";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  ORDER_PAGE_SIZE,
+  amoIsActiveRow,
+  canActOnOrder,
+  isLiveOrder,
+  isLiveStatus,
+  orderBand,
+  orderOutcome,
+  orderStampMs,
+} from "@/lib/orders";
+import { cn } from "@/lib/utils";
+import { aggregateBars, type BarAgg } from "@/lib/charts/aggregate";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSettings, useWatchlist, type TerminalState } from "@/lib/prefs";
 import { ogImage, canonicalLink } from "@/lib/seo";
 
 export const Route = createFileRoute("/_dash/terminal")({
   validateSearch: (search: Record<string, unknown>): { symbol?: string | undefined } => {
     const raw = typeof search["symbol"] === "string" ? search["symbol"].toUpperCase() : "";
-    const symbol = raw.replace(/[^A-Z0-9]/g, "").slice(0, 24);
+    const symbol = raw.replace(/[^A-Z0-9.\-=^]/g, "").slice(0, 24);
     return symbol ? { symbol } : {};
   },
   head: () => ({
@@ -90,7 +112,7 @@ export const Route = createFileRoute("/_dash/terminal")({
       {
         property: "og:description",
         content:
-          "Candlestick charts, technical indicators and portfolio net-worth tracking for every NEPSE-listed scrip.",
+          "Candlestick charts, technical indicators and portfolio net-worth tracking for every NEPSE-listed stock.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -102,23 +124,9 @@ export const Route = createFileRoute("/_dash/terminal")({
 });
 
 const RANGES: ChartRange[] = ["1D", "1W", "1M", "3M", "6M", "1Y", "3Y", "5Y", "MAX"];
+/** Max overlay lines in the compare picker. Two fixed query slots below. */
+const MAX_COMPARE = 2;
 const INDEX_SYMBOLS = ["NEPSE", "SENSITIVE", "FLOAT", "SENFLOAT"] as const;
-
-const STYLES: { key: ChartStyle; label: string }[] = [
-  { key: "candles", label: "Candles" },
-  { key: "line", label: "Line" },
-  { key: "area", label: "Area" },
-];
-const INDICATOR_LABELS: { key: keyof IndicatorConfig; label: string; hint: string }[] = [
-  { key: "sma20", label: "SMA 20", hint: "20-day simple moving average" },
-  { key: "sma50", label: "SMA 50", hint: "50-day simple moving average" },
-  { key: "ema20", label: "EMA 20", hint: "20-day exponential moving average" },
-  { key: "bollinger", label: "Bollinger", hint: "20-day bands, 2σ" },
-  { key: "vwap", label: "VWAP", hint: "Volume-weighted average price" },
-  { key: "volume", label: "Volume", hint: "Traded quantity pane" },
-  { key: "rsi", label: "RSI 14", hint: "Relative strength index pane" },
-  { key: "macd", label: "MACD", hint: "12/26/9 momentum pane" },
-];
 
 const STORE_KEY = "meroshare.terminal.v1";
 const DEFAULT_SYMBOL = "NABIL";
@@ -126,50 +134,6 @@ const DEFAULT_SYMBOL = "NABIL";
 /** Shared stable empty arrays (see note at activeBars/intraday). */
 const NO_BARS: ChartBar[] = [];
 const NO_POINTS: PricePoint[] = [];
-
-type BarAgg = "day" | "week" | "month" | "year";
-
-/** Sunday (week-start) key for a "YYYY-MM-DD" trading date. */
-function sundayKey(date: string): string {
-  const d = new Date(`${date}T00:00:00Z`);
-  if (Number.isNaN(d.getTime())) return date;
-  d.setUTCDate(d.getUTCDate() - d.getUTCDay());
-  return d.toISOString().slice(0, 10);
-}
-
-/**
- * Bucket daily candles into weekly/monthly/yearly candles: open = first open,
- * high/low = extremes, close = last close, volume = summed. Buckets keep
- * chronological order; weekly buckets are keyed by their Sunday.
- */
-function aggregateBars(bars: ChartBar[], agg: BarAgg): ChartBar[] {
-  if (agg === "day" || bars.length === 0) return bars;
-  const buckets = new Map<string, ChartBar[]>();
-  for (const b of bars) {
-    const key =
-      agg === "week"
-        ? sundayKey(b.date)
-        : agg === "month"
-          ? b.date.slice(0, 7)
-          : b.date.slice(0, 4);
-    const arr = buckets.get(key);
-    if (arr) arr.push(b);
-    else buckets.set(key, [b]);
-  }
-  return [...buckets.values()].map((group) => {
-    const firstBar = group[0]!;
-    const lastBar = group[group.length - 1]!;
-    return {
-      date: firstBar.date,
-      open: firstBar.open,
-      high: Math.max(...group.map((g) => g.high)),
-      low: Math.min(...group.map((g) => g.low)),
-      close: lastBar.close,
-      volume: group.reduce((sum, g) => sum + g.volume, 0),
-      synthetic: false,
-    };
-  });
-}
 
 interface Stored {
   symbol: string;
@@ -188,15 +152,138 @@ function num(value: number | null | undefined, digits = 2) {
   return typeof value === "number" && Number.isFinite(value) ? value.toFixed(digits) : "-";
 }
 
+/** Short human tag for a world-search hit (Crypto, Futures, ETF…). */
+function worldBadge(h: { type: string; exchange: string }): string {
+  const t = h.type.toUpperCase();
+  if (t.includes("CRYPTO")) return "Crypto";
+  if (t.includes("FUTURE")) return "Futures";
+  if (t.includes("ETF")) return "ETF";
+  if (t.includes("INDEX")) return "Index";
+  if (t.includes("CURRENCY") || t === "FX" || t.includes("FOREX")) return "FX";
+  if (t.includes("MUTUAL")) return "Fund";
+  if (t.includes("EQUITY")) return h.exchange || "Stock";
+  return h.exchange || h.type || "Global";
+}
+
+/** Stable empty for the chart-lines memo (no rebuilds from fresh `[]`). */
+const NO_ORDER_LINES: { price: number; side: "BUY" | "SELL"; qty: number; amo: boolean }[] = [];
+
+function copyText(text: string, label: string): void {
+  try {
+    const pending = navigator.clipboard?.writeText(text);
+    if (!pending) {
+      toast.error("Copy failed on this browser");
+      return;
+    }
+    pending.then(
+      () => toast.success(`${label} copied`),
+      () => toast.error("Copy failed"),
+    );
+  } catch {
+    toast.error("Copy failed");
+  }
+}
+
+function DetailField({
+  label,
+  value,
+  onCopy,
+  wide = false,
+}: {
+  label: string;
+  value: string;
+  onCopy?: () => void;
+  wide?: boolean;
+}) {
+  return (
+    <div className={wide ? "col-span-2" : undefined}>
+      <p className="text-[0.65rem] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="num mt-0.5 flex items-center gap-1.5 text-xs font-medium">
+        <span className="min-w-0 flex-1 break-all">{value}</span>
+        {onCopy ? (
+          <button
+            type="button"
+            onClick={onCopy}
+            aria-label={`Copy ${label}`}
+            title={`Copy ${label}`}
+            className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <Copy className="size-3.5" />
+          </button>
+        ) : null}
+      </p>
+    </div>
+  );
+}
+
+function TmsOrderDetails({ o, onReuse }: { o: BrokerOrder; onReuse?: () => void }) {
+  return (
+    <div className="mt-2 grid grid-cols-2 gap-2 border-t border-border/60 pt-2">
+      <DetailField label="Status" value={o.status} />
+      {o.orderStatus && o.orderStatus.toUpperCase() !== o.status.toUpperCase() ? (
+        <DetailField label="Broker status" value={o.orderStatus} />
+      ) : null}
+      <DetailField label="Type" value={`${o.orderType} · ${o.validity}`} />
+      <DetailField label="Date" value={o.date || "—"} />
+      <DetailField label="Time" value={o.time || "—"} />
+      <DetailField
+        label="Filled"
+        value={`${(o.tradedQty ?? 0).toLocaleString("en-NP")} / ${o.quantity.toLocaleString("en-NP")}`}
+      />
+      <DetailField label="Exch. order no." value={o.exchangeOrderNo || "—"} />
+      {o.orderId ? (
+        <DetailField label="Order ID" value={o.orderId} wide onCopy={() => copyText(o.orderId, "Order ID")} />
+      ) : null}
+      {o.tranId ? (
+        <DetailField label="Tran ID" value={o.tranId} wide onCopy={() => copyText(o.tranId, "Tran ID")} />
+      ) : null}
+      {onReuse ? (
+        <div className="col-span-2 pt-1">
+          <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs" onClick={onReuse}>
+            <Repeat className="size-3.5" /> Reuse order
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function AmoOrderDetails({
+  a,
+  onReuse,
+}: {
+  a: {
+    triggerPrice: number | null;
+    validTill: string | null;
+    status: string | null;
+    alertName: string | null;
+  };
+  onReuse?: () => void;
+}) {
+  const alert = a.alertName;
+  return (
+    <div className="mt-2 grid grid-cols-2 gap-2 border-t border-border/60 pt-2">
+      <DetailField label="Trigger" value={a.triggerPrice != null ? formatNpr(a.triggerPrice) : "—"} />
+      <DetailField label="Valid till" value={a.validTill ?? "—"} />
+      <DetailField label="Status" value={a.status ?? "Active"} />
+      {alert ? <DetailField label="Alert" value={alert} onCopy={() => copyText(alert, "Alert name")} /> : null}
+      {onReuse ? (
+        <div className="col-span-2 pt-1">
+          <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs" onClick={onReuse}>
+            <Repeat className="size-3.5" /> Reuse order
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function TerminalPage() {
-  const { theme, terminal, setTerminal } = useSettings();
+  const { theme, terminal, setTerminal, chart, setChart } = useSettings();
   const [light, setLight] = useState(false);
   useEffect(() => {
     const resolve = () =>
-      setLight(
-        theme === "light" ||
-          (theme === "system" && window.matchMedia("(prefers-color-scheme: light)").matches),
-      );
+      setLight(theme === "light" || (theme === "system" && window.matchMedia("(prefers-color-scheme: light)").matches));
     resolve();
     const mq = window.matchMedia("(prefers-color-scheme: light)");
     mq.addEventListener("change", resolve);
@@ -204,13 +291,22 @@ function TerminalPage() {
   }, [theme]);
 
   const [hydrated, setHydrated] = useState(false);
-  const [state, setState] = useState<Stored>(() => loadStored({ terminal }));
+  // Charts always open on 1D (the auto-fallback below drops to 1W when no
+  // intraday source exists); the saved range is never restored.
+  const [state, setState] = useState<Stored>(() => ({
+    ...loadStored({ terminal }),
+    range: "1D",
+  }));
   const [watchlistOpen, setWatchlistOpen] = useState(false);
   const watchlist = useWatchlist();
   // Deep link (e.g. from Market): ?symbol=XYZ overrides the remembered symbol.
   const linkedSymbol = Route.useSearch({ select: (s) => s.symbol });
   useEffect(() => {
-    setState({ ...loadStored({ terminal }), ...(linkedSymbol ? { symbol: linkedSymbol } : {}) });
+    setState({
+      ...loadStored({ terminal }),
+      range: "1D",
+      ...(linkedSymbol ? { symbol: linkedSymbol } : {}),
+    });
     setHydrated(true);
   }, [linkedSymbol]);
   // Persist local chart state back to prefs. setTerminal identity changes on
@@ -227,16 +323,40 @@ function TerminalPage() {
 
   const [mode, setMode] = useState<"scrip" | "portfolio">("scrip");
   const [basis, setBasis] = useState<"value" | "profit">("value");
-  // Per-point resolution for daily candles (1M+ ranges): each candle covers
-  // one day, one week, one calendar month or one calendar year.
-  const [barAgg, setBarAgg] = useState<BarAgg>("day");
+  // Chart look (style/indicators/log scale/aggregation) lives in the shared
+  // chart store now — one change applies to every terminal. BarAggSelect
+  // reuses the same value so both terminals aggregate identically.
+  const barAgg = chart.barAgg;
+  const setBarAgg = (v: BarAgg) => setChart({ barAgg: v });
   const [query, setQuery] = useState("");
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const [ticketPrice, setTicketPrice] = useState<{
     price: number;
     side?: "BUY" | "SELL";
     nonce: number;
+    qty?: number;
   } | null>(null);
+  // Reload a dead order into the ticket as a fresh draft (never placed
+  // automatically). Symbol switch remounts the ticket, which then consumes
+  // the draft by nonce.
+  const reuseOrder = (draft: {
+    symbol: string;
+    side: "BUY" | "SELL" | undefined;
+    price: number | null;
+    qty: number;
+  }) => {
+    setState((prev) => ({ ...prev, symbol: draft.symbol }));
+    setTicketPrice({
+      price: draft.price ?? 0,
+      ...(draft.side ? { side: draft.side } : {}),
+      qty: draft.qty,
+      nonce: Date.now(),
+    });
+    toast.success("Ticket filled from order — review and place");
+    requestAnimationFrame(() =>
+      document.getElementById("order-ticket")?.scrollIntoView({ behavior: "smooth", block: "start" }),
+    );
+  };
   const [alertAt, setAlertAt] = useState<number | null>(null);
   const brokerConns = useQuery(brokerConnectionsQuery());
   const brokerLinked = (brokerConns.data?.length ?? 0) > 0;
@@ -251,7 +371,12 @@ function TerminalPage() {
   /** Pinned session point in intraday mode (click): shows price + time below. */
   const [pinnedPoint, setPinnedPoint] = useState<PricePoint | null>(null);
   const [expanded, setExpanded] = useState(false);
-  const [compareSymbol, setCompareSymbol] = useState("");
+  const [compareSymbols, setCompareSymbols] = useState<string[]>([]);
+  const [compareOpen, setCompareOpen] = useState(false);
+  const toggleCompareSymbol = (s: string) =>
+    setCompareSymbols((prev) =>
+      prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s].slice(0, MAX_COMPARE),
+    );
   /** Pinned net-worth date (portfolio mode): shows that day's per-scrip prices below. */
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   useEffect(() => {
@@ -264,14 +389,28 @@ function TerminalPage() {
   const snapshot = useQuery(marketSnapshotQuery());
   const portfolio = useQuery(enrichedPortfolioQuery());
   const investment = useQuery({ ...investmentSummaryQuery(), enabled: mode === "portfolio" });
+  // Open-end mutual funds can't be traded on NEPSE — their symbol-scoped
+  // trading UI (chart click-to-order, ticket, Limit button) stays hidden even
+  // when a broker is connected. Shared ["mf-schemes"] key, usually cached.
+  const schemesQ = useQuery(mfSchemesQuery());
+  const isOpenEndFund =
+    mode === "scrip" &&
+    !isIndexEarly &&
+    (schemesQ.data ?? []).some(
+      (s) => s.symbol.toUpperCase() === state.symbol.toUpperCase() && s.fundType === "open_end",
+    );
   const todayStr = new Date().toISOString().slice(0, 10);
   const todayOrders = useQuery({
     ...brokerOrderBookQuery(termBrokerId, { fromDate: todayStr, toDate: todayStr }),
     enabled: brokerLinked && mode === "scrip",
+    // Orders can change at the broker any moment (external cancels, GTC
+    // expiry, TMS tabs) — keep the list honest while it's on screen.
+    refetchInterval: 30_000,
   });
   const termAmos = useQuery({
     ...brokerAmoListQuery(termBrokerId),
     enabled: brokerLinked && mode === "scrip",
+    refetchInterval: 30_000,
   });
 
   // Watch for TMS session expiry on broker queries.
@@ -295,21 +434,26 @@ function TerminalPage() {
     }) => cancelBrokerOrder({ data: { brokerId: termBrokerId!, ...o, confirmed: true as const } }),
     onSuccess: (r) => {
       setArmedOrder(null);
+      // Resync on every outcome — a rejection ("already cancelled") means
+      // our copy was stale, so the dead row must lose its buttons now.
+      void queryClient.invalidateQueries({ queryKey: ["broker-order-book"] });
       if (r.ok) {
         toast.success(r.message);
-        void queryClient.invalidateQueries({ queryKey: ["broker-order-book"] });
       } else {
-        toast.error(r.message);
+        toast.error(`${r.message} — order list refreshed.`);
       }
     },
     onError: (err) => {
       setArmedOrder(null);
+      void queryClient.invalidateQueries({ queryKey: ["broker-order-book"] });
       toast.error(errorMessage(err, "Cancel failed."));
     },
   });
 
   // Quick modify for day orders + full AMO quick-manage (cancel / replace).
   const [modKey, setModKey] = useState<string | null>(null);
+  const [detailsKey, setDetailsKey] = useState<string | null>(null);
+  const [ordersAll, setOrdersAll] = useState(false);
   const [mqty, setMqty] = useState("");
   const [mprice, setMprice] = useState("");
   const [amoArmed, setAmoArmed] = useState<string | null>(null);
@@ -339,29 +483,61 @@ function TerminalPage() {
         },
       }),
     onSuccess: (r) => {
+      // Same resync rule as cancel: any outcome refreshes the book.
+      void queryClient.invalidateQueries({ queryKey: ["broker-order-book"] });
       if (r.ok) {
         toast.success(r.message);
         setModKey(null);
-        void queryClient.invalidateQueries({ queryKey: ["broker-order-book"] });
       } else {
-        toast.error(r.message);
+        toast.error(`${r.message} — order list refreshed.`);
       }
     },
-    onError: (err) => toast.error(errorMessage(err, "Modify failed.")),
+    onError: (err) => {
+      void queryClient.invalidateQueries({ queryKey: ["broker-order-book"] });
+      toast.error(errorMessage(err, "Modify failed."));
+    },
   });
 
   const amoRows = termAmos.data ?? [];
   const amoKeyOf = (o: (typeof amoRows)[number], i: number) =>
     o.alertName || `${o.scrip}-${o.side}-${o.price}-${o.quantity}-${i}`;
-  const amoIsActive = (a: (typeof amoRows)[number]) =>
-    (a.side === "BUY" || a.side === "SELL") &&
-    (!a.status ||
-      !/DISABLE|INACTIVE|EXPIRED|CANCEL|REJECT|EXECUTED|COMPLETE|FILLED|CLOSED|DONE|FALSE/i.test(
-        a.status,
-      ));
-  const amoIndexed = amoRows.map((a, i) => ({ a, i }));
-  const amoActiveList = amoIndexed.filter(({ a }) => amoIsActive(a));
-  const amoDisabledList = amoIndexed.filter(({ a }) => !amoIsActive(a));
+  const amoIndexed = useMemo(() => (termAmos.data ?? []).map((a, i) => ({ a, i })), [termAmos.data]);
+  const amoActiveList = useMemo(() => amoIndexed.filter(({ a }) => amoIsActiveRow(a)), [amoIndexed]);
+  const amoDisabledList = useMemo(() => amoIndexed.filter(({ a }) => !amoIsActiveRow(a)), [amoIndexed]);
+  const amoBuyCount = amoActiveList.filter(({ a }) => a.side === "BUY").length;
+  const amoSellCount = amoActiveList.filter(({ a }) => a.side === "SELL").length;
+  // Live orders always on top; everything settled (filled / rejected /
+  // cancelled / expired) below, latest first. AMO rows carry no timestamps,
+  // so they keep broker order inside their active/disabled groups.
+  const sortedTodayOrders = useMemo(() => {
+    const rows = todayOrders.data ?? [];
+    return rows
+      .map((o, i) => ({ o, i }))
+      .sort((a, b) => {
+        const liveGap = Number(!isLiveOrder(a.o)) - Number(!isLiveOrder(b.o));
+        if (liveGap !== 0) return liveGap;
+        const timeGap = orderStampMs(b.o) - orderStampMs(a.o);
+        if (timeGap !== 0) return timeGap;
+        return a.i - b.i;
+      })
+      .map(({ o }) => o);
+  }, [todayOrders.data]);
+
+  // One list for every order: live day orders (latest first), live AMOs,
+  // fills (latest first — real money first), other settled rows (latest
+  // first), disabled AMOs. The AMO badge is the only visual difference —
+  // the broker sends no AMO timestamps, so broker order stands in for time
+  // inside the AMO bands.
+  const unifiedRows = useMemo(
+    () => [
+      ...sortedTodayOrders.filter((o) => orderBand(o) === 0).map((o) => ({ kind: "tms" as const, o })),
+      ...amoActiveList.map(({ a, i }) => ({ kind: "amo" as const, a, i, active: true })),
+      ...sortedTodayOrders.filter((o) => orderBand(o) === 1).map((o) => ({ kind: "tms" as const, o })),
+      ...sortedTodayOrders.filter((o) => orderBand(o) === 2).map((o) => ({ kind: "tms" as const, o })),
+      ...amoDisabledList.map(({ a, i }) => ({ kind: "amo" as const, a, i, active: false })),
+    ],
+    [sortedTodayOrders, amoActiveList, amoDisabledList],
+  );
   const amoEditing = amoRows.find((r, i) => amoKeyOf(r, i) === amoEditKey) ?? null;
   const amoEditQuote = useQuery({
     ...brokerQuoteQuery(termBrokerId, amoEditing?.scrip ?? ""),
@@ -380,15 +556,16 @@ function TerminalPage() {
     }) => cancelBrokerAmo({ data: { brokerId: termBrokerId!, ...o, confirmed: true as const } }),
     onSuccess: (r) => {
       setAmoArmed(null);
+      void queryClient.invalidateQueries({ queryKey: ["broker-amo-list"] });
       if (r.ok) {
         toast.success(r.message);
-        void queryClient.invalidateQueries({ queryKey: ["broker-amo-list"] });
       } else {
-        toast.error(r.message);
+        toast.error(`${r.message} — AMO list refreshed.`);
       }
     },
     onError: (err) => {
       setAmoArmed(null);
+      void queryClient.invalidateQueries({ queryKey: ["broker-amo-list"] });
       toast.error(errorMessage(err, "AMO cancel failed."));
     },
   });
@@ -437,17 +614,30 @@ function TerminalPage() {
       setAmoEditKey(null);
       void queryClient.invalidateQueries({ queryKey: ["broker-amo-list"] });
     },
-    onError: (err) => toast.error(errorMessage(err, "Replace failed.")),
+    onError: (err) => {
+      // Replace is cancel-then-place: a mid-way failure already changed the
+      // list, so resync even though the mutation threw.
+      void queryClient.invalidateQueries({ queryKey: ["broker-amo-list"] });
+      toast.error(errorMessage(err, "Replace failed."));
+    },
   });
 
   const prices = useMemo(() => snapshot.data?.prices ?? [], [snapshot.data?.prices]);
   const quote = prices.find((p) => p.symbol === state.symbol);
   const holdings = useMemo(() => portfolio.data?.holdings ?? [], [portfolio.data?.holdings]);
   const position = holdings.find((h) => h.scrip === state.symbol);
+  // Global mode: symbol unknown to NEPSE but valid upstream (AAPL, BTC-USD,
+  // GC=F…). Guarded on a settled snapshot so a down NEPSE feed never
+  // misroutes NEPSE symbols into the world feed.
+  const nepseKnown =
+    !snapshot.isPending &&
+    prices.length > 0 &&
+    prices.some((p) => p.symbol.toUpperCase() === state.symbol.toUpperCase());
+  const isGlobal = mode === "scrip" && !isIndexEarly && !nepseKnown && normalizeWorldSymbol(state.symbol) !== null;
 
   const series = useQuery({
     ...chartSeriesQuery(state.symbol, state.range),
-    enabled: mode === "scrip" && Boolean(state.symbol),
+    enabled: mode === "scrip" && Boolean(state.symbol) && !isGlobal,
   });
   const [intradayRes, setIntradayRes] = useState<import("@/lib/charts/udf").UdfResolution>("1");
   const udf = useQuery({
@@ -456,48 +646,62 @@ function TerminalPage() {
       state.range as import("@/lib/charts/udf").ChartRange,
       state.range === "1D" ? intradayRes : null,
     ),
-    enabled: mode === "scrip" && Boolean(state.symbol) && state.range === "1D" && !isIndexEarly,
+    enabled: mode === "scrip" && Boolean(state.symbol) && state.range === "1D" && !isIndexEarly && !isGlobal,
   });
   const indexHistory = useQuery({
     ...indexGraphQuery(state.symbol),
     enabled: mode === "scrip" && isIndexEarly,
   });
-  // Daily index candles from the YONEPSE archive for 1M+ ranges (the session
+  const scrip1DProbe = useQuery({
+    ...chartSeriesQuery(state.symbol, "1D"),
+    enabled: mode === "scrip" && Boolean(state.symbol) && !isIndexEarly && state.range !== "1D" && !isGlobal,
+  });
+  const udf1DProbe = useQuery({
+    ...udfHistoryQuery(state.symbol, "1D", intradayRes),
+    refetchInterval: false,
+    refetchIntervalInBackground: false,
+    enabled: mode === "scrip" && Boolean(state.symbol) && !isIndexEarly && state.range !== "1D" && !isGlobal,
+  });
+  // Daily index candles from the YONEPSE archive for 1W+ ranges (the session
   // feed above only covers today). MAX (0) means the whole archive, uncapped.
   const indexRangeDays =
-    state.range === "1M"
-      ? 31
-      : state.range === "3M"
-        ? 93
-        : state.range === "6M"
-          ? 186
-          : state.range === "1Y"
-            ? 366
-            : state.range === "3Y"
-              ? 1098
+    state.range === "1W"
+      ? 10
+      : state.range === "1M"
+        ? 31
+        : state.range === "3M"
+          ? 93
+          : state.range === "6M"
+            ? 186
+            : state.range === "1Y"
+              ? 366
               : state.range === "5Y"
                 ? 1826
                 : 0;
   const indexDaily = useQuery({
     ...indexDailyQuery(state.symbol, indexRangeDays),
-    enabled: mode === "scrip" && isIndexEarly && state.range !== "1D" && state.range !== "1W",
+    enabled: mode === "scrip" && isIndexEarly && state.range !== "1D",
   });
   // Live tick for crazy 1m: when broker linked, poll broker quote every 5s and patch last candle
   const liveTick = useQuery({
-    ...brokerQuoteQuery(termBrokerId, state.range === "1D" && !isIndexEarly ? state.symbol : null),
+    ...brokerQuoteQuery(termBrokerId, state.range === "1D" && !isIndexEarly && !isGlobal ? state.symbol : null),
     enabled:
-      brokerLinked &&
-      mode === "scrip" &&
-      state.range === "1D" &&
-      Boolean(state.symbol) &&
-      !isIndexEarly,
-    refetchInterval: brokerLinked && state.range === "1D" && !isIndexEarly ? 5000 : false,
+      brokerLinked && mode === "scrip" && state.range === "1D" && Boolean(state.symbol) && !isIndexEarly && !isGlobal,
+    refetchInterval: brokerLinked && state.range === "1D" && !isIndexEarly && !isGlobal ? 5000 : false,
     refetchIntervalInBackground: true,
     staleTime: 3000,
   } as never);
-  const compare = useQuery({
-    ...chartSeriesQuery(compareSymbol, state.range),
-    enabled: mode === "scrip" && compareSymbol.length > 0,
+  // Two fixed query slots (never an inline array): references stay stable
+  // across renders so the chart only rebuilds when compare data changes.
+  const compareASymbol = compareSymbols[0] ?? "";
+  const compareBSymbol = compareSymbols[1] ?? "";
+  const compareA = useQuery({
+    ...chartSeriesQuery(compareASymbol, state.range),
+    enabled: mode === "scrip" && compareASymbol.length > 0 && !isGlobal,
+  });
+  const compareB = useQuery({
+    ...chartSeriesQuery(compareBSymbol, state.range),
+    enabled: mode === "scrip" && compareBSymbol.length > 0 && !isGlobal,
   });
 
   const historyMonths =
@@ -505,17 +709,15 @@ function TerminalPage() {
       ? 120
       : state.range === "5Y"
         ? 60
-        : state.range === "3Y"
-          ? 36
-          : state.range === "1Y"
-            ? 13
-            : state.range === "6M"
-              ? 7
-              : state.range === "3M"
-                ? 4
-                : state.range === "1M"
-                  ? 2
-                  : 1;
+        : state.range === "1Y"
+          ? 13
+          : state.range === "6M"
+            ? 7
+            : state.range === "3M"
+              ? 4
+              : state.range === "1M"
+                ? 2
+                : 1;
   const netWorth = useQuery(
     portfolioHistoryQuery(
       holdings.map((h) => ({ scrip: h.scrip, units: h.units })),
@@ -532,19 +734,76 @@ function TerminalPage() {
     ),
   );
 
+  // Debounced world search (Yahoo): NEPSE matches first, global
+  // stocks/crypto/gold after — each tagged so intent is obvious.
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query), 250);
+    return () => clearTimeout(t);
+  }, [query]);
+  const worldQ = useQuery({
+    ...worldSearchQuery(mode === "scrip" ? debouncedQuery : ""),
+  });
+
   const results = useMemo(() => {
     const term = query.trim().toLowerCase();
     if (!term) return [];
-    return prices
+    const nepse = prices
       .filter((p) => p.symbol.toLowerCase().includes(term) || p.name.toLowerCase().includes(term))
-      .slice(0, 8);
-  }, [prices, query]);
+      .slice(0, 8)
+      .map((p) => ({
+        kind: "nepse" as const,
+        symbol: p.symbol,
+        name: p.name,
+        pct: p.percentChange,
+        badge: "",
+      }));
+    const seen = new Set(nepse.map((n) => n.symbol.toUpperCase()));
+    const world = (worldQ.data?.hits ?? [])
+      .filter((h) => h.symbol && !seen.has(h.symbol.toUpperCase()))
+      .slice(0, 5)
+      .map((h) => ({
+        kind: "world" as const,
+        symbol: h.symbol,
+        name: h.name,
+        pct: 0,
+        badge: worldBadge(h),
+      }));
+    return [...nepse, ...world].slice(0, 10);
+  }, [prices, query, worldQ.data]);
 
+  const gTxns = useGlobalTxns();
+  const gSyms = useMemo(() => deriveHoldings(gTxns).map((h) => h.symbol), [gTxns]);
   const quickSymbols = useMemo(() => {
     const owned = holdings.map((h) => h.scrip);
-    return [...new Set(["NEPSE", ...owned, ...watchSymbols])].slice(0, 12);
-  }, [holdings, watchSymbols]);
+    return [...new Set(["NEPSE", ...owned, ...watchSymbols, ...gSyms])].slice(0, 12);
+  }, [holdings, watchSymbols, gSyms]);
   const isIndex = isIndexEarly;
+  // Fundamentals strip (same labels as the stock sheet): company facts +
+  // latest financial report. Auxiliary only — the section hides when empty
+  // so it can never break the terminal.
+  const fundDetailQ = useQuery({
+    ...scripDetailQuery(mode === "scrip" && !isIndexEarly && !isGlobal ? state.symbol : null),
+  });
+  const fundFinQ = useQuery({
+    ...scripFinancialsQuery(mode === "scrip" && !isIndexEarly && !isGlobal ? state.symbol : null),
+  });
+  const fundOv = fundDetailQ.data?.overview ?? null;
+  const fundRep = fundFinQ.data?.reports?.[0] ?? null;
+  const fundMcap = fundOv?.marketCapitalization ?? 0;
+  const fundPe = fundRep?.pe ?? null;
+  const fundEps = fundRep?.eps ?? null;
+  const fundNwps = fundRep?.netWorthPerShare ?? null;
+  const fundFace = fundOv?.faceValue ?? 0;
+  const fundSector = fundOv?.sector ?? null;
+  const fundPeriod = [
+    fundRep?.quarter ?? null,
+    fundRep?.fy ? `${fundRep.fy}${fundRep.fyNepali ? ` (${fundRep.fyNepali})` : ""}` : null,
+  ]
+    .filter((x): x is string => !!x)
+    .join(" · ");
+  const showFundamentals = mode === "scrip" && !isIndex && Boolean(fundOv || fundRep);
+  const watched = mode === "scrip" && !isIndex && watchlist.has(state.symbol);
 
   // Cost basis for profit mode, mirroring the portfolio investment summary:
   // CDSC-calculated WACC where present, pending rows estimated from qty x
@@ -664,9 +923,7 @@ function TerminalPage() {
   const selectedPoint = useMemo(() => {
     if (mode !== "portfolio" || !selectedDate) return null;
     const points = netWorth.data?.points ?? [];
-    const exact =
-      points.find((p) => new Date(p.time * 1000).toISOString().slice(0, 10) === selectedDate) ??
-      null;
+    const exact = points.find((p) => new Date(p.time * 1000).toISOString().slice(0, 10) === selectedDate) ?? null;
     if (exact) return exact;
     // Fall back to the nearest point (within 3 days) so a pinned date
     // can never silently resolve to nothing.
@@ -705,20 +962,113 @@ function TerminalPage() {
     return { time: t, value: breakdown.reduce((sum, b) => sum + b.value, 0), breakdown };
   }, [mode, pinnedPoint, worthIntraday.data, holdings]);
 
-  const compareLine: LinePoint[] | undefined = useMemo(() => {
-    const bars = compare.data?.bars ?? [];
-    const compareIntraday = compare.data?.intraday ?? [];
-    // Use intraday for 1D range, daily bars for longer ranges
-    if (bars.length > 0) {
-      const source = bars.map((b) => ({ date: b.date, value: b.close }));
-      return source.length >= 2 ? normalise(source) : undefined;
+  // Indexed % overlay lines for the picked symbols (skips the main symbol).
+  // Each line anchors to its own first point, like the original single
+  // compare did. Memoized on query data only: a stable reference, so
+  // hovering the chart never rebuilds it.
+  const compareLines = useMemo(() => {
+    const toLine = (
+      data: { bars?: { date: string; close: number }[]; intraday?: { time: number; value: number }[] } | undefined,
+    ): LinePoint[] | undefined => {
+      const bars = data?.bars ?? [];
+      const compareIntraday = data?.intraday ?? [];
+      // Same resolution as the main series: intraday ticks on 1D, daily bars
+      // otherwise (each with the other as fallback when dry).
+      const norm = (pts: LinePoint[]) => (pts.length >= 2 ? normalise(pts) : undefined);
+      if (state.range === "1D") {
+        return (
+          norm(compareIntraday.map((p) => ({ date: p.time, value: p.value }))) ??
+          norm(bars.map((b) => ({ date: b.date, value: b.close })))
+        );
+      }
+      return (
+        norm(bars.map((b) => ({ date: b.date, value: b.close }))) ??
+        norm(compareIntraday.map((p) => ({ date: p.time, value: p.value })))
+      );
+    };
+    const out: { label: string; points: LinePoint[] }[] = [];
+    for (const [label, data] of [
+      [compareASymbol, compareA.data],
+      [compareBSymbol, compareB.data],
+    ] as const) {
+      if (!label || label === state.symbol) continue;
+      const points = toLine(data);
+      if (points) out.push({ label, points });
     }
-    if (compareIntraday.length > 1) {
-      const source = compareIntraday.map((p) => ({ date: p.time, value: p.value }));
-      return normalise(source);
+    return out;
+  }, [compareA.data, compareB.data, compareASymbol, compareBSymbol, state.symbol]);
+
+  // Main symbol first, then overlays — stable reference for the table below.
+  const compareFundSymbols = useMemo(
+    () => [state.symbol, ...compareSymbols],
+    [state.symbol, compareSymbols],
+  );
+
+  // Raw overlay closes for the header readout: hovered point when hovering,
+  // else the last close. Bars match by date; intraday ticks by nearest time.
+  const compareRawByLabel = useMemo(() => {
+    const m = new Map<string, { bars: Map<string, number> | null; lastBar: number; ticks: { t: number; v: number }[] }>();
+    const slots: [string, typeof compareA.data][] = [
+      [compareASymbol, compareA.data],
+      [compareBSymbol, compareB.data],
+    ];
+    for (const [label, data] of slots) {
+      if (!label || label === state.symbol || m.has(label)) continue;
+      const bars = data?.bars ?? [];
+      if (bars.length > 0) {
+        const closes = bars.map((b) => b.close).filter((c) => c > 0);
+        m.set(label, {
+          bars: new Map(bars.map((b) => [b.date, b.close])),
+          lastBar: closes[closes.length - 1] ?? 0,
+          ticks: [],
+        });
+        continue;
+      }
+      const ticks = (data?.intraday ?? [])
+        .map((p) => ({ t: Number(p.time), v: Number(p.value) }))
+        .filter((p) => Number.isFinite(p.t) && p.v > 0)
+        .sort((a, b) => a.t - b.t);
+      m.set(label, { bars: null, lastBar: 0, ticks });
     }
-    return undefined;
-  }, [compare.data?.bars, compare.data?.intraday]);
+    return m;
+  }, [compareA.data, compareB.data, compareASymbol, compareBSymbol, state.symbol]);
+
+  // Overlay readout rows: raw price + indexed % at the hovered point, else
+  // the last close / full-window return. Mirrors the main readout above it.
+  const overlayPrices = useMemo(() => {
+    const nearestIntraday = (ticks: { t: number; v: number }[], target: number) => {
+      let best = ticks[0]!;
+      for (const t of ticks) {
+        if (Math.abs(t.t - target) < Math.abs(best.t - target)) best = t;
+      }
+      return best;
+    };
+    return compareLines.map((c, i) => {
+      const raw = compareRawByLabel.get(c.label);
+      let price = 0;
+      let pct = c.points[c.points.length - 1]?.value ?? 0;
+      if (raw?.bars) {
+        const d = hover && !hover.date.includes("T") ? hover.date.slice(0, 10) : "";
+        price = (d ? (raw.bars.get(d) ?? 0) : 0) || raw.lastBar;
+        if (d) {
+          const hit = c.points.find((p) => String(p.date).slice(0, 10) === d);
+          if (hit) pct = hit.value;
+        }
+      } else if (raw && raw.ticks.length > 0) {
+        if (hover && hover.date.includes("T")) {
+          const target = Date.parse(`${hover.date}+05:45`) / 1000;
+          price = nearestIntraday(raw.ticks, target).v;
+          const normTicks = c.points
+            .map((p) => ({ t: Number(p.date), v: p.value }))
+            .filter((p) => Number.isFinite(p.t));
+          if (normTicks.length > 0) pct = nearestIntraday(normTicks, target).v;
+        } else {
+          price = raw.ticks[raw.ticks.length - 1]!.v;
+        }
+      }
+      return { label: c.label, price, pct, color: COMPARE_COLORS[i % COMPARE_COLORS.length]! };
+    });
+  }, [compareLines, compareRawByLabel, hover]);
 
   // Hover readout: pinned candle first, then pinned session point, then live hover.
   // Resolved below (after intradayFirst) so a pinned point can show session change.
@@ -727,11 +1077,20 @@ function TerminalPage() {
   // Live 1m patch: broker LTP ticks (5s poll) update the last 1m candle crazy-fast.
   const udfIntradayRaw = useMemo(() => {
     const pts = udf.data?.points ?? [];
-    return pts.map((p) => ({
-      time: p.time,
-      value: p.value,
-    }));
-  }, [udf.data?.points]);
+    const bars = udf.data?.bars ?? [];
+    const barByTime = new Map(bars.map((b) => [b.time, b]));
+    return pts.map((p) => {
+      const b = barByTime.get(p.time);
+      return {
+        time: p.time,
+        value: p.value,
+        volume: p.volume ?? 0,
+        open: b?.open,
+        high: b?.high,
+        low: b?.low,
+      };
+    });
+  }, [udf.data?.points, udf.data?.bars]);
   const udfBarsRaw = useMemo(() => {
     const bars = udf.data?.bars ?? [];
     return bars.map((b) => ({
@@ -768,10 +1127,12 @@ function TerminalPage() {
   const costMissing = showProfit && !investment.isPending && costByScrip.size === 0;
   const effectiveProfit = showProfit && !costMissing;
   const indexBars: ChartBar[] = useMemo(() => {
-    const pts = (indexHistory.data ?? []) as import("@/lib/nepse/types").PricePoint[];
-    if (!isIndexEarly || pts.length === 0) return NO_BARS;
-  
-    if (state.range === "1D" || state.range === "1W") return NO_BARS;
+    if (!isIndexEarly) return NO_BARS;
+    if (state.range === "1D") return NO_BARS;
+
+    // YONEPSE daily candles first: long ranges must render even when the
+    // session feed is down (previously an empty session feed blanked every
+    // range because of the early return below).
     const daily = (indexDaily.data ?? []) as unknown as Record<string, unknown>[];
     const mapped = daily.map((b) => ({
       date: String(b["date"] ?? ""),
@@ -782,7 +1143,17 @@ function TerminalPage() {
       volume: Number(b["volume"] ?? 0),
       synthetic: Boolean(b["synthetic"]),
     })) as ChartBar[];
-    if (mapped.length > 0) return [...mapped].sort((a, b) => a.date.localeCompare(b.date));
+    if (mapped.length > 0) {
+      // Every range ≥1W draws daily candles; the session line is 1D-only so
+      // 1W can't show today's intraday dates under a "1W" label. The archive
+      // fetch pulls whole tail months, so 1W keeps just the last trading
+      // week (~5 sessions — robust to weekends/holiday holes); longer ranges
+      // keep everything the fetch returned.
+      const sorted = [...mapped].sort((a, b) => a.date.localeCompare(b.date));
+      return state.range === "1W" ? sorted.slice(-5) : sorted;
+    }
+    const pts = (indexHistory.data ?? []) as import("@/lib/nepse/types").PricePoint[];
+    if (pts.length === 0) return NO_BARS;
     const windowDays =
       state.range === "1M"
         ? 31
@@ -812,14 +1183,20 @@ function TerminalPage() {
         synthetic: true,
       }));
   }, [indexDaily.data, indexHistory.data, isIndexEarly, state.range]);
-  const indexIntraday = useMemo(() => {
-    if (!isIndexEarly || (state.range !== "1D" && state.range !== "1W")) return NO_POINTS;
+  // Session-feed points independent of the selected range: drives the 1D
+  // availability (button disabled + redirect below) as well as the 1D/1W line.
+  const indexSessionPoints: PricePoint[] = useMemo(() => {
+    if (!isIndexEarly) return NO_POINTS;
     const pts = ((indexHistory.data ?? []) as PricePoint[]).filter(
       (p) => Number.isFinite(p.value) && p.value > 0 && Number.isFinite(Number(p.time)),
     );
     if (pts.length === 0) return NO_POINTS;
     return [...pts].sort((a, b) => Number(a.time) - Number(b.time));
-  }, [indexHistory.data, isIndexEarly, state.range]);
+  }, [indexHistory.data, isIndexEarly]);
+  const indexIntraday = useMemo(() => {
+    if (!isIndexEarly || state.range !== "1D") return NO_POINTS;
+    return indexSessionPoints;
+  }, [indexSessionPoints, isIndexEarly, state.range]);
   const portfolioIntraday = useMemo(() => {
     if (mode !== "portfolio" || state.range !== "1D") return NO_POINTS;
     const pts = ((worthIntraday.data?.points ?? []) as PricePoint[]).filter(
@@ -872,24 +1249,121 @@ function TerminalPage() {
     [showAgg, activeBars, barAgg],
   );
   const isIntraday = drawnBars.length === 0 && intraday.length > 0;
+  // Executed buy/sell arrows on the candles, like the cost line. Daily axis
+  // only (intraday runs on timestamps); a marker lands only on a drawn
+  // candle, so odd broker date formats degrade to no marker, never a crash.
+  const tradeMarkers = useMemo(() => {
+    if (mode !== "scrip" || isIndexEarly || isIntraday || drawnBars.length === 0) return [];
+    const barDates = new Set(drawnBars.map((b) => b.date));
+    const toBarDate = (raw: unknown): string | null => {
+      const s = String(raw ?? "");
+      if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+      const t = Date.parse(s);
+      if (!Number.isNaN(t)) {
+        const d = new Date(t);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      }
+      return null;
+    };
+    const out: { time: string; side: "BUY" | "SELL"; qty: number }[] = [];
+    for (const o of todayOrders.data ?? []) {
+      if (o.symbol !== state.symbol) continue;
+      if (o.side !== "BUY" && o.side !== "SELL") continue;
+      if (/CANCEL|REJECT|EXPIRE|FAIL/.test(o.status.toUpperCase())) continue;
+      const date = toBarDate(o.date);
+      if (!date || !barDates.has(date)) continue;
+      out.push({ time: date, side: o.side, qty: Math.max(0, Math.floor(o.quantity)) });
+    }
+    return out.sort((a, b) => a.time.localeCompare(b.time));
+  }, [mode, isIndexEarly, isIntraday, drawnBars, todayOrders.data, state.symbol]);
+  // Open-order price lines for this symbol: pending day orders + live AMO
+  // queue. Price lines need no candle date (unlike trade arrows), so they
+  // also work on intraday. MKT rows carry no price and are skipped.
+  const orderLines = useMemo(() => {
+    if (mode !== "scrip" || isIndexEarly) return NO_ORDER_LINES;
+    const out: { price: number; side: "BUY" | "SELL"; qty: number; amo: boolean }[] = [];
+    for (const o of todayOrders.data ?? []) {
+      if (o.symbol !== state.symbol) continue;
+      if (o.side !== "BUY" && o.side !== "SELL") continue;
+      if (!isLiveStatus(o.status)) continue;
+      if (o.price === null || !(o.price > 0)) continue;
+      out.push({
+        price: o.price,
+        side: o.side,
+        qty: Math.max(0, Math.floor(o.quantity)),
+        amo: false,
+      });
+    }
+    for (const { a } of amoActiveList) {
+      if (a.scrip !== state.symbol) continue;
+      if (a.side !== "BUY" && a.side !== "SELL") continue;
+      if (a.price === null || !(a.price > 0)) continue;
+      out.push({
+        price: a.price,
+        side: a.side,
+        qty: Math.max(0, Math.floor(a.quantity)),
+        amo: true,
+      });
+    }
+    return out.slice(0, 25);
+  }, [mode, isIndexEarly, todayOrders.data, amoActiveList, state.symbol]);
+  // Session feed resolved with nothing chartable (e.g. mirror 502): 1W must
+  // keep waiting for the YONEPSE daily fallback instead of flashing empty,
+  // and the 1D button below is disabled.
+  const indexSessionEmpty = !indexHistory.isPending && indexSessionPoints.length < 2;
+  // 1D availability for a normal symbol: a real intraday source — mirror
+  // ticks or the UDF fallback. Trailing daily bars don't count: without
+  // intraday the 1D button disables and the chart parks on 1W. Reads the
+  // live 1D view queries while parked on 1D, the probes otherwise.
+  const oneDProbeIntraday = state.range === "1D" ? mirrorIntraday : (scrip1DProbe.data?.intraday ?? NO_POINTS);
+  const oneDProbeUdf = state.range === "1D" ? udf.data : udf1DProbe.data;
+  const oneDProbeSettled =
+    state.range === "1D" ? !series.isPending && !udf.isPending : !scrip1DProbe.isPending && !udf1DProbe.isPending;
+  const scrip1DEmpty =
+    mode === "scrip" &&
+    !isIndexEarly &&
+    oneDProbeSettled &&
+    oneDProbeIntraday.length === 0 &&
+    (oneDProbeUdf?.bars ?? []).length === 0 &&
+    (oneDProbeUdf?.points ?? []).length === 0;
+  // Either flavor of "no 1D": dry index session feed, or every 1D source dry
+  // for a normal symbol.
+  const oneDUnavailable = mode === "scrip" && (isIndexEarly ? indexSessionEmpty : scrip1DEmpty);
   const loading =
     mode === "portfolio"
       ? netWorth.isPending || worthIntraday.isPending
       : isIndexEarly
-        ? state.range === "1D" || state.range === "1W"
+        ? state.range === "1D"
           ? indexHistory.isPending
-          : indexDaily.isPending
-        : series.isPending ||
-          (useUdf ? false : udf.isPending && state.range === "1D" && !hasMirrorIntraday);
+          : state.range === "1W"
+            ? indexDaily.isPending || ((indexDaily.data ?? []).length === 0 && indexHistory.isPending)
+            : indexDaily.isPending
+        : series.isPending || (useUdf ? false : udf.isPending && state.range === "1D" && !hasMirrorIntraday);
+  // 1D preference on every chart open: picking another symbol (watchlist,
+  // search, orders, holdings, deep link) restarts at 1D; the effect below
+  // parks it on 1W if that symbol has no intraday source.
+  const prevSymbolRef = useRef(state.symbol);
+  useEffect(() => {
+    if (prevSymbolRef.current === state.symbol) return;
+    prevSymbolRef.current = state.symbol;
+    setState((prev) => (prev.range === "1D" ? prev : { ...prev, range: "1D" }));
+  }, [state.symbol]);
+  // 1D needs an intraday source: when it settles dry (index session feed, or
+  // every 1D source for a normal symbol), park the chart on 1W instead of
+  // the empty state. Never switches back on its own — the 1D button
+  // re-enables when a source recovers and the user can switch back manually.
+  useEffect(() => {
+    if (mode === "scrip" && state.range === "1D" && oneDUnavailable) {
+      setState((prev) => (prev.range === "1D" ? { ...prev, range: "1W" } : prev));
+    }
+  }, [mode, state.range, oneDUnavailable]);
   const udfBadge = useUdf ? " · UDF" : "";
   const isMobile = useIsMobile();
   const chartHeight = expanded ? 640 : isMobile ? 320 : 400;
   const indicators: IndicatorConfig = useMemo(
     () =>
-      mode === "portfolio"
-        ? { ...state.indicators, volume: false, vwap: false, bollinger: false }
-        : state.indicators,
-    [mode, state.indicators],
+      mode === "portfolio" ? { ...chart.indicators, volume: false, vwap: false, bollinger: false } : chart.indicators,
+    [mode, chart.indicators],
   );
 
   const first = drawnBars[0]?.close ?? 0;
@@ -915,20 +1389,22 @@ function TerminalPage() {
           low: pinnedPoint.value,
           close: pinnedPoint.value,
           volume: 0,
-          changePercent: intradayFirst
-            ? ((pinnedPoint.value - intradayFirst) / intradayFirst) * 100
-            : 0,
+          changePercent: intradayFirst ? ((pinnedPoint.value - intradayFirst) / intradayFirst) * 100 : 0,
           pinned: true,
         }
       : hover;
   const costNow = investment.data?.totalInvestment ?? 0;
+  // Day move anchors on the previous close, never the opening tick — same
+  // convention as every pill in the app.
+  const dayBase =
+    mode === "scrip" && !isIndexEarly && (quote?.previousClose ?? 0) > 0 ? quote!.previousClose : intradayFirst;
   const rangeReturn = isIntraday
     ? effectiveProfit
       ? costNow > 0
         ? ((intradayLast - intradayFirst) / costNow) * 100
         : 0
-      : intradayFirst > 0
-        ? ((intradayLast - intradayFirst) / intradayFirst) * 100
+      : dayBase > 0
+        ? ((intradayLast - dayBase) / dayBase) * 100
         : 0
     : effectiveProfit
       ? costNow > 0
@@ -939,7 +1415,7 @@ function TerminalPage() {
         : 0;
 
   const setIndicator = (key: keyof IndicatorConfig, value: boolean) =>
-    setState((prev) => ({ ...prev, indicators: { ...prev.indicators, [key]: value } }));
+    setChart({ indicators: { ...chart.indicators, [key]: value } });
 
   const snapshotPng = () => {
     try {
@@ -972,7 +1448,7 @@ function TerminalPage() {
                 mode === m ? "bg-primary/15 text-primary" : "text-muted-foreground",
               )}
             >
-              {m === "scrip" ? "Scrip" : "My net worth"}
+              {m === "scrip" ? "Stock" : "My net worth"}
             </button>
           ))}
         </div>
@@ -991,7 +1467,7 @@ function TerminalPage() {
                   setQuery("");
                 }
               }}
-              placeholder="Search any listed scrip, e.g. NABIL, SHIVM, NRIC…"
+              placeholder="Search stocks, crypto or gold — NABIL, BTC-USD, GC=F…"
               className="h-10 rounded-xl pl-9"
             />
             {results.length > 0 && (
@@ -1010,7 +1486,13 @@ function TerminalPage() {
                       <span className="font-semibold">{p.symbol}</span>{" "}
                       <span className="text-xs text-muted-foreground">{p.name}</span>
                     </span>
-                    <DeltaPill value={p.percentChange}>{formatPercent(p.percentChange)}</DeltaPill>
+                    {p.kind === "world" ? (
+                      <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[0.68rem] font-semibold text-primary">
+                        {p.badge}
+                      </span>
+                    ) : (
+                      <DeltaPill value={p.pct}>{formatPercent(p.pct)}</DeltaPill>
+                    )}
                   </button>
                 ))}
               </div>
@@ -1019,446 +1501,493 @@ function TerminalPage() {
 
           {quickSymbols.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
-              {quickSymbols.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setState((prev) => ({ ...prev, symbol: s }))}
-                  className={cn(
-                    "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-                    state.symbol === s
-                      ? "border-primary/50 bg-primary/15 text-primary"
-                      : "border-border/60 bg-surface text-muted-foreground hover:border-primary/30",
-                  )}
-                >
-                  {s}
-                </button>
-              ))}
+              {quickSymbols.map((s) => {
+                const inList = s !== "NEPSE" && watchlist.has(s);
+                return (
+                  <span key={s} className="group relative inline-flex">
+                    <button
+                      type="button"
+                      onClick={() => setState((prev) => ({ ...prev, symbol: s }))}
+                      className={cn(
+                        "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                        state.symbol === s
+                          ? "border-primary/50 bg-primary/15 text-primary"
+                          : "border-border/60 bg-surface text-muted-foreground hover:border-primary/30",
+                      )}
+                    >
+                      {s}
+                    </button>
+                    {s !== "NEPSE" ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          watchlist.toggle(s);
+                          toast.success(inList ? "Removed from watchlist" : "Added to watchlist");
+                        }}
+                        aria-label={inList ? `Remove ${s} from watchlist` : `Add ${s} to watchlist`}
+                        title={inList ? `Remove ${s} from watchlist` : `Add ${s} to watchlist`}
+                        className={cn(
+                          "absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full border bg-card shadow-sm transition-all",
+                          "sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100",
+                          inList
+                            ? "border-amber-500/50 text-amber-600 dark:text-amber-400"
+                            : "border-border/70 text-muted-foreground hover:border-primary/40 hover:text-primary",
+                        )}
+                      >
+                        <Star className={cn("size-3", inList && "fill-warning text-warning")} />
+                      </button>
+                    ) : null}
+                  </span>
+                );
+              })}
             </div>
           )}
         </div>
       )}
 
-      <div className="rounded-2xl border border-border/60 bg-surface">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-3 py-3">
-          <div>
-            <p className="font-display text-lg font-semibold">
-              {mode === "portfolio"
-                ? effectiveProfit
-                  ? "Portfolio profit (est.)"
-                  : "Portfolio net worth"
-                : state.symbol}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {mode === "portfolio"
-                ? effectiveProfit
-                  ? "Value minus invested cost at each close · today's WACC rate"
-                  : `${holdings.length} holdings valued at each historical close`
-                : (quote?.name ?? series.data?.name ?? "NEPSE listed scrip")}
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="num text-lg font-semibold">
-              {formatNpr(
-                hover?.close ??
-                  (mode === "portfolio"
-                    ? isIntraday
-                      ? intradayLast
-                      : last
-                    : (quote?.ltp ?? (isIntraday ? intradayLast : last))),
-              )}
-            </p>
-            <DeltaPill value={hover?.changePercent ?? rangeReturn}>
-              {formatPercent(hover?.changePercent ?? rangeReturn)}{" "}
-              <span className="opacity-70">{hover ? "day" : state.range}</span>
-            </DeltaPill>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 border-b border-border/60 px-3 py-2">
-          <div className="flex flex-wrap gap-1">
-            {RANGES.map((r) => (
-              <button
-                key={r}
-                type="button"
-                onClick={() => setState((prev) => ({ ...prev, range: r }))}
-                className={cn(
-                  "rounded-lg px-2 py-1 text-xs font-medium transition-colors",
-                  state.range === r
-                    ? "bg-primary/15 text-primary"
-                    : "text-muted-foreground hover:bg-muted/60",
+      {isGlobal ? (
+        <GlobalTerminalCard symbol={state.symbol} light={light} onOpenWatchlist={() => setWatchlistOpen(true)} />
+      ) : (
+        <div className="rounded-2xl border border-border/60 bg-surface">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-3 py-3">
+            <div>
+              <p className="font-display text-lg font-semibold">
+                {mode === "portfolio" ? (
+                  effectiveProfit ? (
+                    "Portfolio profit (est.)"
+                  ) : (
+                    "Portfolio net worth"
+                  )
+                ) : (
+                  <span className="inline-flex items-center gap-2">
+                    {state.symbol}
+                    {mode === "scrip" && compareSymbols.length > 0 ? (
+                      <span className="text-sm font-medium text-muted-foreground">
+                        vs {compareSymbols.join(" vs ")}
+                      </span>
+                    ) : null}
+                    {!isIndex ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          watchlist.toggle(state.symbol);
+                          toast.success(watched ? "Removed from watchlist" : "Added to watchlist");
+                        }}
+                        aria-label={watched ? "Remove from watchlist" : "Add to watchlist"}
+                        title={watched ? "Remove from watchlist" : "Add to watchlist"}
+                        className={cn(
+                          "inline-flex size-7 shrink-0 items-center justify-center rounded-lg border transition-colors",
+                          watched
+                            ? "border-amber-500/50 bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                            : "border-border/70 text-muted-foreground hover:border-primary/40 hover:text-primary",
+                        )}
+                      >
+                        {watched ? (
+                          <Star className="size-3.5 fill-warning text-warning" />
+                        ) : (
+                          <Star className="size-3.5" />
+                        )}
+                      </button>
+                    ) : null}
+                  </span>
                 )}
-              >
-                {r}
-              </button>
-            ))}
-          </div>
-          {showAgg ? (
-            <>
-              <span className="hidden h-4 w-px bg-border sm:block" />
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-muted-foreground">Per point</span>
-                <Select value={barAgg} onValueChange={(v) => setBarAgg(v as BarAgg)}>
-                  <SelectTrigger className="h-7 w-28 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="day">Daily</SelectItem>
-                    <SelectItem value="week">Weekly</SelectItem>
-                    <SelectItem value="month">Monthly</SelectItem>
-                    <SelectItem value="year">Yearly</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </>
-          ) : null}
-          {state.range === "1D" && mode === "scrip" && !isIndex ? (
-            <>
-              <span className="hidden h-4 w-px bg-border sm:block" />
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-muted-foreground">Interval</span>
-                <Select
-                  value={intradayRes}
-                  onValueChange={(v) =>
-                    setIntradayRes(v as import("@/lib/charts/udf").UdfResolution)
-                  }
-                >
-                  <SelectTrigger className="h-7 w-24 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">1m</SelectItem>
-                    <SelectItem value="5">5m</SelectItem>
-                    <SelectItem value="15">15m</SelectItem>
-                    <SelectItem value="60">1h</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </>
-          ) : null}
-
-          <span className="hidden h-4 w-px bg-border sm:block" />
-
-          <div className="flex gap-1">
-            {STYLES.map((s) => (
-              <button
-                key={s.key}
-                type="button"
-                onClick={() => setState((prev) => ({ ...prev, style: s.key }))}
-                className={cn(
-                  "rounded-lg px-2 py-1 text-xs font-medium transition-colors",
-                  state.style === s.key
-                    ? "bg-primary/15 text-primary"
-                    : "text-muted-foreground hover:bg-muted/60",
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {mode === "portfolio"
+                  ? effectiveProfit
+                    ? "Value minus invested cost at each close · today's WACC rate"
+                    : `${holdings.length} holdings valued at each historical close`
+                  : (quote?.name ?? series.data?.name ?? "NEPSE listed stock")}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="num text-lg font-semibold">
+                {formatNpr(
+                  hover?.close ??
+                    (mode === "portfolio"
+                      ? isIntraday
+                        ? intradayLast
+                        : last
+                      : (quote?.ltp ?? (isIntraday ? intradayLast : last))),
                 )}
-              >
-                {s.label}
-              </button>
-            ))}
+              </p>
+              <DeltaPill value={hover?.changePercent ?? rangeReturn}>
+                {formatPercent(hover?.changePercent ?? rangeReturn)}{" "}
+                <span className="opacity-70">{hover ? "day" : state.range}</span>
+              </DeltaPill>
+            </div>
           </div>
 
-          {mode === "portfolio" ? (
-            <>
-              <span className="hidden h-4 w-px bg-border sm:block" />
-              <div className="flex gap-1 rounded-lg bg-muted/50 p-0.5">
-                {(["value", "profit"] as const).map((b) => (
+          <div className="flex flex-wrap items-center gap-2 border-b border-border/60 px-3 py-2">
+            <div className="flex flex-wrap gap-1">
+              {RANGES.map((r) => {
+                // 1D needs an intraday source (index session feed, or mirror /
+                // UDF for a normal symbol). When it settles dry the button is
+                // disabled — the effect below parks the chart on 1W instead.
+                const unavailable = r === "1D" && oneDUnavailable;
+                return (
                   <button
-                    key={b}
+                    key={r}
                     type="button"
-                    onClick={() => setBasis(b)}
-                    title={
-                      b === "profit"
-                        ? "Investment excluded: value minus est. cost at each close"
-                        : "Full portfolio value at each close"
-                    }
+                    disabled={unavailable}
+                    title={unavailable ? "1D unavailable — showing 1W" : undefined}
+                    onClick={() => setState((prev) => ({ ...prev, range: r }))}
                     className={cn(
-                      "rounded-md px-2 py-1 text-xs font-medium transition-colors",
-                      basis === b
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground",
+                      "rounded-lg px-2 py-1 text-xs font-medium transition-colors",
+                      state.range === r ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-muted/60",
+                      unavailable && "cursor-not-allowed opacity-40 hover:bg-transparent",
                     )}
                   >
-                    {b === "value" ? "Value" : "Profit"}
+                    {r}
                   </button>
-                ))}
-              </div>
-            </>
-          ) : null}
-
-          <div className="ml-auto flex items-center gap-1">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 gap-1.5 text-xs"
-              onClick={() => setWatchlistOpen(true)}
-              aria-label="Open watchlist"
-            >
-              <Star
-                className={
-                  watchlist.symbols.length > 0 ? "size-3.5 fill-warning text-warning" : "size-3.5"
-                }
-              />
-              {watchlist.symbols.length > 0 ? (
-                <span className="num">{watchlist.symbols.length}</span>
-              ) : null}
-              <span className="hidden sm:inline">Watchlist</span>
-            </Button>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
-                  <SlidersHorizontal className="size-3.5" /> Indicators
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent align="end" className="w-64 space-y-3">
-                {INDICATOR_LABELS.map((item) => (
-                  <div key={item.key} className="flex items-center justify-between gap-3">
-                    <Label htmlFor={item.key} className="cursor-pointer">
-                      <span className="text-sm font-medium">{item.label}</span>
-                      <span className="block text-[11px] font-normal text-muted-foreground">
-                        {item.hint}
-                      </span>
-                    </Label>
-                    <Switch
-                      id={item.key}
-                      checked={state.indicators[item.key]}
-                      onCheckedChange={(v) => setIndicator(item.key, v)}
-                    />
-                  </div>
-                ))}
-                <div className="flex items-center justify-between gap-3 border-t border-border/60 pt-3">
-                  <Label htmlFor="logscale" className="cursor-pointer text-sm font-medium">
-                    Log scale
-                  </Label>
-                  <Switch
-                    id="logscale"
-                    checked={state.logScale}
-                    onCheckedChange={(v) => setState((prev) => ({ ...prev, logScale: v }))}
-                  />
-                </div>
-              </PopoverContent>
-            </Popover>
-
-            <Button
-              variant="outline"
-              size="icon"
-              className="size-8"
-              onClick={() => setExpanded((v) => !v)}
-              aria-label={expanded ? "Shrink chart" : "Expand chart"}
-            >
-              {expanded ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              className="size-8"
-              onClick={snapshotPng}
-              aria-label="Download chart snapshot"
-            >
-              <Camera className="size-3.5" />
-            </Button>
-          </div>
-        </div>
-
-        {costMissing ? (
-          <p className="border-b border-border/60 bg-warning/10 px-3 py-2 text-[11px] text-muted-foreground">
-            Profit needs your WACC cost basis, which is not available yet. Finish the purchase
-            source calculation on the WACC page, then switch back. Showing full value meanwhile.
-          </p>
-        ) : null}
-
-        {effectiveProfit && (profitInfo.excluded.length > 0 || profitInfo.estimated.length > 0) ? (
-          <p className="border-b border-border/60 px-3 py-1.5 text-[11px] text-muted-foreground">
-            {profitInfo.estimated.length > 0 ? (
-              <>
-                Est. cost for pending WACC ({profitInfo.estimated.slice(0, 4).join(", ")}
-                {profitInfo.estimated.length > 4 ? ` +${profitInfo.estimated.length - 4} more` : ""}
-                ){profitInfo.excluded.length > 0 ? " · " : "."}
-              </>
-            ) : null}
-            {profitInfo.excluded.length > 0 ? (
-              <>
-                Excludes {profitInfo.excluded.length} scrip
-                {profitInfo.excluded.length === 1 ? "" : "s"} with no cost data (
-                {profitInfo.excluded.slice(0, 4).join(", ")}
-                {profitInfo.excluded.length > 4 ? ` +${profitInfo.excluded.length - 4} more` : ""}).
-              </>
-            ) : null}
-          </p>
-        ) : null}
-
-        {mode === "scrip" && quickSymbols.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2 border-b border-border/60 px-3 py-2 text-xs">
-            <span className="text-muted-foreground">Compare</span>
-            <select
-              value={compareSymbol}
-              onChange={(e) => setCompareSymbol(e.target.value)}
-              className="h-7 rounded-lg border border-border/60 bg-background px-2 text-xs"
-            >
-              <option value="">None</option>
-              {quickSymbols
-                .filter((s) => s !== state.symbol)
-                .map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-            </select>
-            {compareSymbol && (
-              <span className="text-muted-foreground">
-                shown as an indexed % line against {state.symbol}
-              </span>
-            )}
-            {udfBadge ? (
-              <span className="ml-auto rounded-full bg-primary/10 px-2 py-0.5 text-[0.68rem] font-semibold text-primary">
-                Source: UDF · NEPSE
-              </span>
-            ) : null}
-          </div>
-        )}
-
-        <div id="terminal-chart" className="relative px-1 py-2">
-          {loading ? (
-            <div
-              className="flex items-center justify-center text-sm text-muted-foreground"
-              style={{ height: chartHeight }}
-            >
-              <Loader2 className="mr-2 size-4 animate-spin" /> Loading chart…
-            </div>
-          ) : drawnBars.length === 0 && intraday.length === 0 ? (
-            <div
-              className="flex flex-col items-center justify-center gap-2 px-4 text-center text-sm text-muted-foreground"
-              style={{ height: chartHeight }}
-            >
-              <p>
-                {mode === "portfolio"
-                  ? "No historical price coverage for your holdings yet."
-                  : isIndex
-                    ? state.range === "1D" || state.range === "1W"
-                      ? "No session data for this index right now."
-                      : "Index history is unavailable right now."
-                    : "No chart data available for this scrip."}
-              </p>
-              {(() => {
-                const err = mode === "portfolio" ? netWorth.error : series.error;
-                if (!err) return null;
-                return (
-                  <p className="max-w-md text-xs">
-                    {err instanceof Error ? err.message : "Feed request failed."}
-                  </p>
                 );
-              })()}
+              })}
+            </div>
+            {showAgg ? (
+              <>
+                <span className="hidden h-4 w-px bg-border sm:block" />
+                <BarAggSelect value={barAgg} onChange={setBarAgg} />
+              </>
+            ) : null}
+            {state.range === "1D" && mode === "scrip" && !isIndex ? (
+              <>
+                <span className="hidden h-4 w-px bg-border sm:block" />
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground">Interval</span>
+                  <Select
+                    value={intradayRes}
+                    onValueChange={(v) => setIntradayRes(v as import("@/lib/charts/udf").UdfResolution)}
+                  >
+                    <SelectTrigger className="h-7 w-24 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">1m</SelectItem>
+                      <SelectItem value="5">5m</SelectItem>
+                      <SelectItem value="15">15m</SelectItem>
+                      <SelectItem value="60">1h</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            ) : null}
+
+            <span className="hidden h-4 w-px bg-border sm:block" />
+
+            <ChartStyleSwitch
+              value={chart.style}
+              onChange={(s) => setChart({ style: s })}
+              disabledKeys={
+                isIntraday && !intraday.some((p) => p.open != null && p.high != null && p.low != null)
+                  ? ["candles"]
+                  : undefined
+              }
+            />
+
+            {mode === "portfolio" ? (
+              <>
+                <span className="hidden h-4 w-px bg-border sm:block" />
+                <div className="flex gap-1 rounded-lg bg-muted/50 p-0.5">
+                  {(["value", "profit"] as const).map((b) => (
+                    <button
+                      key={b}
+                      type="button"
+                      onClick={() => setBasis(b)}
+                      title={
+                        b === "profit"
+                          ? "Investment excluded: value minus est. cost at each close"
+                          : "Full portfolio value at each close"
+                      }
+                      className={cn(
+                        "rounded-md px-2 py-1 text-xs font-medium transition-colors",
+                        basis === b
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {b === "value" ? "Value" : "Profit"}
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : null}
+
+            <div className="ml-auto flex items-center gap-1">
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  if (mode === "portfolio") {
-                    void netWorth.refetch();
-                    void worthIntraday.refetch();
-                  } else if (isIndex) {
-                    void indexHistory.refetch();
-                    void indexDaily.refetch();
-                  } else void series.refetch();
-                }}
+                className="h-8 gap-1.5 text-xs lg:hidden"
+                onClick={() => setWatchlistOpen(true)}
+                aria-label="Open watchlist"
               >
-                <RefreshCw className="size-3.5" /> Retry
+                <Star className={watchlist.symbols.length > 0 ? "size-3.5 fill-warning text-warning" : "size-3.5"} />
+                {watchlist.symbols.length > 0 ? <span className="num">{watchlist.symbols.length}</span> : null}
+                <span className="hidden sm:inline">Watchlist</span>
+              </Button>
+              {mode === "scrip" && !isGlobal ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1.5 text-xs"
+                  onClick={() => setCompareOpen(true)}
+                  aria-label="Compare with other companies"
+                >
+                  <GitCompareArrows className="size-3.5" />
+                  <span className="hidden sm:inline">Compare</span>
+                  {compareSymbols.length > 0 ? (
+                    <span className="num rounded-full bg-primary/15 px-1.5 py-0.5 text-[0.68rem] font-semibold text-primary">
+                      {compareSymbols.length}
+                    </span>
+                  ) : null}
+                </Button>
+              ) : null}
+              <ChartIndicatorsPopover
+                value={chart.indicators}
+                onToggle={setIndicator}
+                logScale={chart.logScale}
+                onLogScale={(v) => setChart({ logScale: v })}
+              />
+              <ChartExpandButton expanded={expanded} onToggle={() => setExpanded((v) => !v)} />
+              <Button
+                variant="outline"
+                size="icon"
+                className="size-8"
+                onClick={snapshotPng}
+                aria-label="Download chart snapshot"
+              >
+                <Camera className="size-3.5" />
               </Button>
             </div>
-          ) : (
-            <TerminalChart
-              key={`${mode}-${state.symbol}-${state.range}-${state.style}-${light}-${expanded}-${costByScrip.get(state.symbol.toUpperCase())?.rate ?? "na"}` }
-              bars={drawnBars}
-              intraday={intraday}
-              style={state.style}
-              indicators={indicators}
-              compare={compareLine}
-              compareLabel={compareSymbol}
-              logScale={state.logScale}
-              light={light}
-              height={chartHeight}
-              wacc={
-                mode === "scrip" && !isIndex
-                  ? (costByScrip.get(state.symbol.toUpperCase())?.rate ?? null)
-                  : null
-              }
-              includeWaccDomain={state.range === "MAX"}
-              onHover={setHover}
-              onCreateOrder={
-                mode === "scrip" && brokerLinked
-                  ? ({ price, side }) => {
-                      setTicketPrice({ price, side, nonce: Date.now() });
-                      requestAnimationFrame(() =>
-                        document
-                          .getElementById("order-ticket")
-                          ?.scrollIntoView({ behavior: "smooth", block: "start" }),
-                      );
-                    }
-                  : undefined
-              }
-              onCreateAlert={
-                mode === "scrip" && !isIndex ? (price) => setAlertAt(price) : undefined
-              }
-              onSelectBar={
-                mode === "portfolio"
-                  ? (d) => setSelectedDate((cur) => (cur === d ? null : d))
-                  : (d) => {
-                      if (!d) {
-                        setPinned(null);
-                        return;
-                      }
-                      const bar = (series.data?.bars ?? []).find((b) => b.date === d) ?? null;
-                      setPinned((cur) => (cur && bar && cur.date === bar.date ? null : bar));
-                    }
-              }
-              onSelectPoint={(p) =>
-                setPinnedPoint((cur) => (cur && p && cur.time === p.time ? null : p))
-              }
-            />
-          )}
-        </div>
+          </div>
 
-        {(hover || pinned || pinnedPoint) && (
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border/60 px-3 py-2 text-xs num text-muted-foreground">
-            <span>{spot!.date.length > 10 ? spot!.date : spot!.date.slice(0, 10)}</span>
-            <span>O {num(spot!.open)}</span>
-            <span>H {num(spot!.high)}</span>
-            <span>L {num(spot!.low)}</span>
-            <span className="font-semibold text-foreground">C {num(spot!.close)}</span>
-            {spot!.volume > 0 && <span>Vol {spot!.volume.toLocaleString("en-NP")}</span>}
-            {spot!.pinned ? (
-              <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[0.68rem] font-semibold text-primary">
-                Pinned · click again to release
+          {costMissing ? (
+            <p className="border-b border-border/60 bg-warning/10 px-3 py-2 text-[11px] text-muted-foreground">
+              Profit needs your WACC cost basis, which is not available yet. Finish the purchase source calculation on
+              the WACC page, then switch back. Showing full value meanwhile.
+            </p>
+          ) : null}
+
+          {effectiveProfit && (profitInfo.excluded.length > 0 || profitInfo.estimated.length > 0) ? (
+            <p className="border-b border-border/60 px-3 py-1.5 text-[11px] text-muted-foreground">
+              {profitInfo.estimated.length > 0 ? (
+                <>
+                  Est. cost for pending WACC ({profitInfo.estimated.slice(0, 4).join(", ")}
+                  {profitInfo.estimated.length > 4 ? ` +${profitInfo.estimated.length - 4} more` : ""})
+                  {profitInfo.excluded.length > 0 ? " · " : "."}
+                </>
+              ) : null}
+              {profitInfo.excluded.length > 0 ? (
+                <>
+                  Excludes {profitInfo.excluded.length} stock
+                  {profitInfo.excluded.length === 1 ? "" : "s"} with no cost data (
+                  {profitInfo.excluded.slice(0, 4).join(", ")}
+                  {profitInfo.excluded.length > 4 ? ` +${profitInfo.excluded.length - 4} more` : ""}).
+                </>
+              ) : null}
+            </p>
+          ) : null}
+
+          {mode === "scrip" && udfBadge ? (
+            <div className="flex flex-wrap items-center gap-2 border-b border-border/60 px-3 py-2 text-xs">
+              <span className="ml-auto rounded-full bg-primary/10 px-2 py-0.5 text-[0.68rem] font-semibold text-primary">
+                Source: UDF · NEPSE
               </span>
-            ) : null}
-            {mode === "scrip" && !isIndex && spot!.close > 0 ? (
-              <span className="ml-auto inline-flex items-center gap-1.5">
-                {brokerLinked ? (
+            </div>
+          ) : null}
+
+          {mode === "scrip" && !isGlobal && compareSymbols.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 pt-2 text-xs">
+              <span className="flex items-center gap-1.5">
+                <span className="size-2 rounded-full" style={{ background: "#2563eb" }} aria-hidden />
+                <span className="font-semibold">{state.symbol}</span>
+                <span className="num text-muted-foreground">
+                  {formatNpr(hover?.close ?? (quote?.ltp ?? (isIntraday ? intradayLast : last)))}
+                </span>
+                <span className={cn("num font-medium", (hover?.changePercent ?? rangeReturn) >= 0 ? "text-gain" : "text-loss")}>
+                  {formatPercent(hover?.changePercent ?? rangeReturn)}
+                </span>
+              </span>
+              {overlayPrices.map((o) => (
+                <span key={o.label} className="flex items-center gap-1.5">
+                  <span className="size-2 rounded-full" style={{ background: o.color }} aria-hidden />
+                  <span className="font-semibold">{o.label}</span>
+                  <span className="num text-muted-foreground">
+                    {o.price > 0 ? formatNpr(o.price) : "—"}
+                  </span>
+                  <span className={cn("num font-medium", o.pct >= 0 ? "text-gain" : "text-loss")}>
+                    {formatPercent(o.pct)}
+                  </span>
+                </span>
+              ))}
+            </div>
+          ) : null}
+
+          <div id="terminal-chart" className="relative px-1 py-2">
+            {loading ? (
+              <div
+                className="flex items-center justify-center text-sm text-muted-foreground"
+                style={{ height: chartHeight }}
+              >
+                <Loader2 className="mr-2 size-4 animate-spin" /> Loading chart…
+              </div>
+            ) : drawnBars.length === 0 && intraday.length === 0 ? (
+              <div
+                className="flex flex-col items-center justify-center gap-2 px-4 text-center text-sm text-muted-foreground"
+                style={{ height: chartHeight }}
+              >
+                <p>
+                  {mode === "portfolio"
+                    ? "No historical price coverage for your holdings yet."
+                    : isIndex
+                      ? state.range === "1D"
+                        ? "No session data for this index right now."
+                        : "Index history is unavailable right now."
+                      : "No chart data available for this stock."}
+                </p>
+                {(() => {
+                  // Index errors need their own sources: series is the scrip
+                  // query and stays silent here, which hid feed failures
+                  // behind the generic "unavailable" line. A full HTML error
+                  // page as the message means the server-function request
+                  // crashed platform-side — dump a one-liner, not markup.
+                  const err =
+                    mode === "portfolio"
+                      ? netWorth.error
+                      : isIndex
+                        ? (indexDaily.error ?? indexHistory.error ?? series.error)
+                        : series.error;
+                  if (!err) return null;
+                  const raw = err instanceof Error ? err.message : "Feed request failed.";
+                  return (
+                    <p className="max-w-md text-xs">
+                      {/^\s*<!doctype html/i.test(raw) ? "Server request crashed — reload the app and try again." : raw}
+                    </p>
+                  );
+                })()}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (mode === "portfolio") {
+                      void netWorth.refetch();
+                      void worthIntraday.refetch();
+                    } else if (isIndex) {
+                      void indexHistory.refetch();
+                      void indexDaily.refetch();
+                    } else void series.refetch();
+                  }}
+                >
+                  <RefreshCw className="size-3.5" /> Retry
+                </Button>
+              </div>
+            ) : (
+              <TerminalChart
+                key={`${mode}-${state.symbol}-${state.range}-${chart.style}-${light}-${expanded}-${costByScrip.get(state.symbol.toUpperCase())?.rate ?? "na"}`}
+                bars={drawnBars}
+                intraday={intraday}
+                style={chart.style}
+                indicators={indicators}
+                compares={compareLines}
+                logScale={chart.logScale}
+                light={light}
+                height={chartHeight}
+                wacc={mode === "scrip" && !isIndex ? (costByScrip.get(state.symbol.toUpperCase())?.rate ?? null) : null}
+                includeWaccDomain={state.range === "MAX"}
+                onHover={setHover}
+                tradeMarkers={tradeMarkers}
+                dayBase={mode === "scrip" && !isIndexEarly ? (quote?.previousClose ?? null) : null}
+                orderLines={orderLines}
+                onCreateOrder={
+                  mode === "scrip" && brokerLinked && !isOpenEndFund
+                    ? ({ price, side }) => {
+                        setTicketPrice({ price, side, nonce: Date.now() });
+                        requestAnimationFrame(() =>
+                          document
+                            .getElementById("order-ticket")
+                            ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+                        );
+                      }
+                    : undefined
+                }
+                onCreateAlert={mode === "scrip" && !isIndex ? (price) => setAlertAt(price) : undefined}
+                onSelectBar={
+                  mode === "portfolio"
+                    ? (d) => setSelectedDate((cur) => (cur === d ? null : d))
+                    : (d) => {
+                        if (!d) {
+                          setPinned(null);
+                          return;
+                        }
+                        const bar = (series.data?.bars ?? []).find((b) => b.date === d) ?? null;
+                        setPinned((cur) => (cur && bar && cur.date === bar.date ? null : bar));
+                      }
+                }
+                onSelectPoint={(p) => setPinnedPoint((cur) => (cur && p && cur.time === p.time ? null : p))}
+              />
+            )}
+          </div>
+
+          {(hover || pinned || pinnedPoint) && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border/60 px-3 py-2 text-xs num text-muted-foreground">
+              <span>{spot!.date.length > 10 ? spot!.date : spot!.date.slice(0, 10)}</span>
+              <span>O {num(spot!.open)}</span>
+              <span>H {num(spot!.high)}</span>
+              <span>L {num(spot!.low)}</span>
+              <span className="font-semibold text-foreground">C {num(spot!.close)}</span>
+              {spot!.volume > 0 && <span>Vol {spot!.volume.toLocaleString("en-NP")}</span>}
+              {spot!.pinned ? (
+                <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[0.68rem] font-semibold text-primary">
+                  Pinned · click again to release
+                </span>
+              ) : null}
+              {mode === "scrip" && !isIndex && spot!.close > 0 ? (
+                <span className="ml-auto inline-flex items-center gap-1.5">
+                  {brokerLinked && !isOpenEndFund ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTicketPrice({ price: spot!.close, nonce: Date.now() });
+                        requestAnimationFrame(() =>
+                          document
+                            .getElementById("order-ticket")
+                            ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+                        );
+                      }}
+                      className="inline-flex items-center gap-1 rounded-lg bg-primary/15 px-2 py-1 font-semibold text-primary transition-colors hover:bg-primary/25"
+                    >
+                      Limit @ {num(spot!.close)}
+                    </button>
+                  ) : null}
                   <button
                     type="button"
-                    onClick={() => {
-                      setTicketPrice({ price: spot!.close, nonce: Date.now() });
-                      requestAnimationFrame(() =>
-                        document
-                          .getElementById("order-ticket")
-                          ?.scrollIntoView({ behavior: "smooth", block: "start" }),
-                      );
-                    }}
-                    className="inline-flex items-center gap-1 rounded-lg bg-primary/15 px-2 py-1 font-semibold text-primary transition-colors hover:bg-primary/25"
+                    onClick={() => setAlertAt(spot!.close)}
+                    className="inline-flex items-center gap-1 rounded-lg bg-amber-500/15 px-2 py-1 font-semibold text-amber-600 transition-colors hover:bg-amber-500/25 dark:text-amber-400"
                   >
-                    Limit @ {num(spot!.close)}
+                    Alert @ {num(spot!.close)}
                   </button>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => setAlertAt(spot!.close)}
-                  className="inline-flex items-center gap-1 rounded-lg bg-amber-500/15 px-2 py-1 font-semibold text-amber-600 transition-colors hover:bg-amber-500/25 dark:text-amber-400"
-                >
-                  Alert @ {num(spot!.close)}
-                </button>
-              </span>
-            ) : null}
+                </span>
+              ) : null}
+            </div>
+          )}
+        </div>
+      )}
+
+      {showFundamentals ? (
+        <section aria-label="Fundamentals">
+          <div className="mb-2 flex items-baseline justify-between gap-2 px-1">
+            <h2 className="font-display text-sm font-semibold">Fundamentals</h2>
+            {fundPeriod ? <p className="text-[0.68rem] text-muted-foreground">{fundPeriod}</p> : null}
           </div>
-        )}
-      </div>
+          <ChipRow>
+            {fundSector ? <StatChip label="Sector" value={fundSector} /> : null}
+            {fundMcap > 0 ? <StatChip label="Market cap" value={formatNpr(fundMcap, { compact: true })} /> : null}
+            {fundPe != null ? <StatChip label="P/E" value={formatNumber(fundPe)} /> : null}
+            {fundEps != null ? <StatChip label="EPS" value={formatNpr(fundEps)} /> : null}
+            {fundNwps != null ? <StatChip label="Net worth / share" value={formatNpr(fundNwps)} /> : null}
+            {fundFace > 0 ? <StatChip label="Face value" value={formatNpr(fundFace)} /> : null}
+          </ChipRow>
+        </section>
+      ) : null}
 
       {mode === "portfolio" && (selectedPoint ?? pinnedIntradayPoint) && (
         <PointBreakdown
@@ -1481,6 +2010,10 @@ function TerminalPage() {
         />
       )}
 
+      {mode === "scrip" && !isGlobal && compareSymbols.length > 0 ? (
+        <CompareFundamentalsTable symbols={compareFundSymbols} />
+      ) : null}
+
       {mode === "scrip" && position && (
         <div className="grid grid-cols-2 gap-3 rounded-2xl border border-border/60 bg-surface p-3 sm:grid-cols-4">
           <div>
@@ -1502,24 +2035,11 @@ function TerminalPage() {
         </div>
       )}
 
-      {mode === "scrip" && !isIndex && (
+      {mode === "scrip" && !isIndex && !isOpenEndFund && !isGlobal && (
         <OrderTicket key={state.symbol} symbol={state.symbol} limitPrice={ticketPrice} />
       )}
 
-      {mode === "scrip" && !isIndex && position && costByScrip.get(state.symbol.toUpperCase()) && quote?.ltp ? (
-        <PositionPnlCard
-          symbol={state.symbol}
-          units={position.units}
-          avgCost={costByScrip.get(state.symbol.toUpperCase())!.rate}
-          ltp={quote.ltp}
-          waccStatus={
-            investment.data?.scrips.find((s) => s.scrip.toUpperCase() === state.symbol.toUpperCase())?.status ??
-            "pending"
-          }
-        />
-      ) : null}
-
-      {mode === "scrip" && !isIndex && state.symbol ? (
+      {mode === "scrip" && !isIndex && !isGlobal && state.symbol ? (
         <PriceAlertDialog
           symbol={state.symbol}
           defaultPrice={alertAt}
@@ -1530,126 +2050,409 @@ function TerminalPage() {
         />
       ) : null}
 
-      {mode === "scrip" && brokerLinked ? (
+      {mode === "scrip" && brokerLinked && !isGlobal ? (
         <div className="rounded-2xl border border-border/60 bg-surface">
           <div className="flex items-center justify-between px-4 py-3">
             <p className="text-sm font-semibold">
-              Today&apos;s orders · {(todayOrders.data ?? []).length}
-              {(termAmos.data ?? []).length > 0
-                ? ` + ${(termAmos.data ?? []).length} AMO`
-                : ""}
+              Orders · {(todayOrders.data ?? []).length + (termAmos.data ?? []).length}
             </p>
-            <Link to="/broker" className="text-xs font-medium text-primary hover:underline">
+            <Link to="/broker" search={{ tab: "orders" }} className="text-xs font-medium text-primary hover:underline">
               Full order book
             </Link>
           </div>
-          {(todayOrders.data ?? []).length === 0 && !todayOrders.isPending ? (
-            <p className="px-4 pb-2 text-xs text-muted-foreground">
-              Nothing placed today. Orders you place from the ticket land here.
+          {(termAmos.data ?? []).length > 0 ? (
+            <p className="px-4 pb-2 text-[0.7rem] text-muted-foreground">
+              Includes {(termAmos.data ?? []).length} AMO for next session · {amoBuyCount} buy · {amoSellCount} sell
+              {amoDisabledList.length > 0 ? ` · ${amoDisabledList.length} disabled` : ""}
             </p>
+          ) : null}
+          {(todayOrders.data ?? []).length === 0 &&
+          (termAmos.data ?? []).length === 0 &&
+          !todayOrders.isPending &&
+          !termAmos.isPending ? (
+            <p className="px-4 pb-3 text-xs text-muted-foreground">
+              Nothing here yet. Orders you place from the ticket land here — AMOs queue while the market is closed.
+            </p>
+          ) : unifiedRows.length === 0 && (todayOrders.isPending || termAmos.isPending) ? (
+            <p className="px-4 pb-2 text-xs text-muted-foreground">Loading orders…</p>
           ) : (
-            <ul className="space-y-1 px-2 pb-2">
-              {(todayOrders.data ?? []).map((o) => {
-                const key = o.id || `${o.symbol}-${o.side}-${o.price}-${o.quantity}`;
+            <ul
+              className="space-y-1 px-2 pb-2"
+              // Hide the empty list instead of leaving its padding behind.
+              style={unifiedRows.length === 0 ? { display: "none" } : undefined}
+            >
+              {(ordersAll ? unifiedRows : unifiedRows.slice(0, ORDER_PAGE_SIZE)).map((row) => {
+                if (row.kind === "amo") {
+                  const { a, i } = row;
+                  const key = `amo-${amoKeyOf(a, i)}`;
+                  if (!row.active) {
+                    const expanded = detailsKey === key;
+                    const amoMeta = [a.validTill ? `till ${a.validTill}` : null, a.alertName]
+                      .filter(Boolean)
+                      .join(" · ");
+                    return (
+                      <li key={key} className="rounded-xl px-2 py-2 opacity-60">
+                        <div className="flex items-center justify-between gap-3">
+                          <button
+                            type="button"
+                            onClick={() => setDetailsKey((cur) => (cur === key ? null : key))}
+                            className="min-w-0 flex-1 text-left"
+                            title="Show order details"
+                            aria-expanded={expanded}
+                          >
+                            <span className="text-sm">
+                              <span className="font-bold text-muted-foreground">{a.side}</span>{" "}
+                              <span className="num font-semibold">{a.quantity.toLocaleString("en-NP")}</span>{" "}
+                              <span className="font-semibold">{a.scrip}</span>{" "}
+                              <span className="num text-muted-foreground">
+                                @ {a.price !== null ? a.price.toLocaleString("en-NP") : "-"}
+                              </span>{" "}
+                              <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[0.68rem] font-semibold text-warning">
+                                AMO
+                              </span>
+                            </span>
+                            {amoMeta ? (
+                              <span className="num mt-0.5 block text-[0.7rem] text-muted-foreground">{amoMeta}</span>
+                            ) : null}
+                          </button>
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setDetailsKey((cur) => (cur === key ? null : key))}
+                              aria-expanded={expanded}
+                              aria-label={expanded ? "Hide order details" : "Show order details"}
+                              title="Order details"
+                              className="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                            >
+                              <ChevronDown className={cn("size-4 transition-transform", expanded && "rotate-180")} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setState((prev) => ({ ...prev, symbol: a.scrip }))}
+                              aria-label={`Load ${a.scrip} on chart`}
+                              title={`Load ${a.scrip} on chart`}
+                              className="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                            >
+                              <ChartCandlestick className="size-4" />
+                            </button>
+                            <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[0.68rem] font-semibold text-muted-foreground">
+                              {a.status ?? "Disabled"}
+                            </span>
+                          </div>
+                        </div>
+                        {expanded ? (
+                          <AmoOrderDetails
+                            a={a}
+                            onReuse={() =>
+                              reuseOrder({
+                                symbol: a.scrip,
+                                side: a.side === "BUY" || a.side === "SELL" ? a.side : undefined,
+                                price: a.price,
+                                qty: Math.max(1, Math.floor(a.quantity)),
+                              })
+                            }
+                          />
+                        ) : null}
+                      </li>
+                    );
+                  }
+                  const armed = amoArmed === key;
+                  const editingThis = amoEditKey === key;
+                  const expanded = detailsKey === key;
+                  const amoMeta = [a.validTill ? `till ${a.validTill}` : null, a.alertName].filter(Boolean).join(" · ");
+                  return (
+                    <li key={key} className="rounded-xl px-2 py-2 hover:bg-muted/40">
+                      <div className="flex items-center justify-between gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setDetailsKey((cur) => (cur === key ? null : key))}
+                          className="min-w-0 flex-1 text-left"
+                          title="Show order details"
+                          aria-expanded={expanded}
+                        >
+                          <span className="text-sm">
+                            <span className={cn("font-bold", a.side === "BUY" ? "text-gain" : "text-destructive")}>
+                              {a.side}
+                            </span>{" "}
+                            <span className="num font-semibold">{a.quantity.toLocaleString("en-NP")}</span>{" "}
+                            <span className="font-semibold">{a.scrip}</span>{" "}
+                            <span className="num text-muted-foreground">
+                              @ {a.price !== null ? a.price.toLocaleString("en-NP") : "-"}
+                            </span>{" "}
+                            <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[0.68rem] font-semibold text-warning">
+                              AMO
+                            </span>
+                          </span>
+                          {amoMeta ? (
+                            <span className="num mt-0.5 block text-[0.7rem] text-muted-foreground">{amoMeta}</span>
+                          ) : null}
+                        </button>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setDetailsKey((cur) => (cur === key ? null : key))}
+                            aria-expanded={expanded}
+                            aria-label={expanded ? "Hide order details" : "Show order details"}
+                            title="Order details"
+                            className="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                          >
+                            <ChevronDown className={cn("size-4 transition-transform", expanded && "rotate-180")} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setState((prev) => ({ ...prev, symbol: a.scrip }))}
+                            aria-label={`Load ${a.scrip} on chart`}
+                            title={`Load ${a.scrip} on chart`}
+                            className="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                          >
+                            <ChartCandlestick className="size-4" />
+                          </button>
+                          <div className="flex gap-1.5">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs"
+                              onClick={() => {
+                                if (editingThis) {
+                                  setAmoEditKey(null);
+                                } else {
+                                  setAmoEditKey(key);
+                                  setAqty(String(a.quantity));
+                                  setAprice(a.price !== null ? String(a.price) : "");
+                                  setAmoArmed(null);
+                                }
+                              }}
+                            >
+                              {editingThis ? "Close" : "Modify"}
+                            </Button>
+                            <Button
+                              variant={armed ? "destructive" : "outline"}
+                              size="sm"
+                              disabled={cancelAmoQuick.isPending}
+                              className="h-7 text-xs"
+                              onClick={() => {
+                                if (!armed) {
+                                  setAmoArmed(key);
+                                  setTimeout(() => setAmoArmed((cur) => (cur === key ? null : cur)), 4000);
+                                  return;
+                                }
+                                cancelAmoQuick.mutate({
+                                  alertName: a.alertName,
+                                  scrip: a.scrip,
+                                  price: a.price,
+                                  triggerPrice: a.triggerPrice,
+                                  quantity: a.quantity,
+                                  side: a.side as "BUY" | "SELL",
+                                  validTill: a.validTill,
+                                });
+                              }}
+                            >
+                              {armed ? "Tap again" : "Cancel"}
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                      {expanded ? <AmoOrderDetails a={a} /> : null}
+                      {editingThis ? (
+                        <div className="mt-2 grid grid-cols-2 gap-2 border-t border-border/60 pt-2">
+                          <div className="space-y-1">
+                            <Label htmlFor={`tamo-qty-${key}`} className="text-[0.68rem]">
+                              Quantity
+                            </Label>
+                            <Input
+                              id={`tamo-qty-${key}`}
+                              inputMode="numeric"
+                              value={aqty}
+                              onChange={(e) => setAqty(e.target.value.replace(/[^0-9]/g, "").slice(0, 6))}
+                              className="h-7 text-xs"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label htmlFor={`tamo-price-${key}`} className="text-[0.68rem]">
+                              Price
+                            </Label>
+                            <Input
+                              id={`tamo-price-${key}`}
+                              inputMode="decimal"
+                              value={aprice}
+                              onChange={(e) => setAprice(e.target.value.replace(/[^0-9.]/g, "").slice(0, 12))}
+                              className="h-7 text-xs"
+                            />
+                          </div>
+                          <div className="col-span-2">
+                            <Button
+                              size="sm"
+                              disabled={replaceAmoQuick.isPending}
+                              className="h-7 text-xs"
+                              onClick={() => replaceAmoQuick.mutate()}
+                            >
+                              {replaceAmoQuick.isPending ? "Replacing…" : "Replace order"}
+                            </Button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </li>
+                  );
+                }
+                const o = row.o;
+                const key = `tms-${o.id || [o.symbol, o.side, o.price, o.quantity].join("-")}`;
                 const armed = armedOrder === key;
                 const modifying = modKey === key;
                 const canonicalId = o.orderId || o.tranId || o.id;
-                const cancellable = Boolean(
-                  canonicalId &&
-                    (o.remainingQty || o.quantity) > 0 &&
-                    /OPEN|PARTIALLY|ACCEPTED|QUEUED|PENDING/.test(o.status.toUpperCase()),
-                );
+                const cancellable = canActOnOrder(o);
                 const isMktRow = o.orderType === "MKT" || o.orderType === "MARKET";
+                // Dead orders look dead: dimmed row + status pill, same
+                // language as disabled AMOs. Unknown-but-inactive statuses
+                // dim as well (settled at the broker, vocab we don't know)
+                // but never get a pill — never mislabeled.
+                const terminalKind = orderOutcome(o.status, cancellable);
+                const expanded = detailsKey === key;
+                // Slim meta line: outcome lives in the pill, full detail behind the chevron.
+                const slimMeta =
+                  terminalKind === "filled"
+                    ? `Filled ${(o.tradedQty ?? o.quantity).toLocaleString("en-NP")}${o.date ? ` · ${o.date}` : ""}`
+                    : terminalKind
+                      ? o.date
+                      : `${o.orderType} · ${o.validity}${
+                          o.tradedQty != null && o.tradedQty > 0
+                            ? ` · filled ${o.tradedQty.toLocaleString("en-NP")}`
+                            : ""
+                        }`;
                 return (
                   <li
                     key={key}
-                    className="rounded-xl px-2 py-2 transition-colors hover:bg-muted/40"
+                    className={cn(
+                      "rounded-xl px-2 py-2 transition-colors hover:bg-muted/40",
+                      !isLiveStatus(o.status) && "opacity-60",
+                    )}
                   >
                     <div className="flex items-center justify-between gap-3">
                       <button
                         type="button"
-                        onClick={() => setState((prev) => ({ ...prev, symbol: o.symbol }))}
+                        onClick={() => setDetailsKey((cur) => (cur === key ? null : key))}
                         className="min-w-0 flex-1 text-left"
-                        title={`Load ${o.symbol} on the chart`}
+                        title="Show order details"
+                        aria-expanded={expanded}
                       >
                         <span className="text-sm">
-                          <span
-                            className={cn(
-                              "font-bold",
-                              o.side === "BUY" ? "text-gain" : "text-destructive",
-                            )}
-                          >
+                          <span className={cn("font-bold", o.side === "BUY" ? "text-gain" : "text-destructive")}>
                             {o.side}
                           </span>{" "}
-                          <span className="num font-semibold">
-                            {o.quantity.toLocaleString("en-NP")}
-                          </span>{" "}
+                          <span className="num font-semibold">{o.quantity.toLocaleString("en-NP")}</span>{" "}
                           <span className="font-semibold">{o.symbol}</span>{" "}
                           <span className="num text-muted-foreground">
                             @ {o.price !== null ? o.price.toLocaleString("en-NP") : "MKT"}
                           </span>
                         </span>
-                        <span className="num mt-0.5 block text-[0.7rem] text-muted-foreground">
-                          {o.status} · {o.orderType} · {o.validity}
-                          {o.tradedQty != null && o.tradedQty > 0
-                            ? ` · filled ${o.tradedQty.toLocaleString("en-NP")}`
-                            : ""}
-                          {o.date ? ` · ${o.date}` : ""}
-                          {o.time ? ` ${o.time}` : ""}
-                        </span>
+                        {slimMeta ? (
+                          <span className="num mt-0.5 block text-[0.7rem] text-muted-foreground">{slimMeta}</span>
+                        ) : null}
                       </button>
-                      {cancellable ? (
-                        <div className="flex shrink-0 gap-1.5">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            disabled={cancelTodayOrder.isPending || modifyDay.isPending}
-                            className="h-7 text-xs"
-                            onClick={() => {
-                              if (modifying) {
-                                setModKey(null);
-                              } else {
-                                setModKey(key);
-                                setMqty(String(Math.max(1, Math.floor(o.remainingQty || o.quantity))));
-                                setMprice(o.price !== null ? String(o.price) : "");
-                                setArmedOrder(null);
-                              }
-                            }}
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setDetailsKey((cur) => (cur === key ? null : key))}
+                          aria-expanded={expanded}
+                          aria-label={expanded ? "Hide order details" : "Show order details"}
+                          title="Order details"
+                          className="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        >
+                          <ChevronDown className={cn("size-4 transition-transform", expanded && "rotate-180")} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setState((prev) => ({ ...prev, symbol: o.symbol }))}
+                          aria-label={`Load ${o.symbol} on chart`}
+                          title={`Load ${o.symbol} on chart`}
+                          className="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        >
+                          <ChartCandlestick className="size-4" />
+                        </button>
+                        {cancellable ? (
+                          <div className="flex gap-1.5">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={cancelTodayOrder.isPending || modifyDay.isPending}
+                              className="h-7 text-xs"
+                              onClick={() => {
+                                if (modifying) {
+                                  setModKey(null);
+                                } else {
+                                  setModKey(key);
+                                  setMqty(String(Math.max(1, Math.floor(o.remainingQty || o.quantity))));
+                                  setMprice(o.price !== null ? String(o.price) : "");
+                                  setArmedOrder(null);
+                                }
+                              }}
+                            >
+                              {modifying ? "Close" : "Modify"}
+                            </Button>
+                            <Button
+                              variant={armed ? "destructive" : "outline"}
+                              size="sm"
+                              disabled={cancelTodayOrder.isPending || modifyDay.isPending}
+                              className="h-7 shrink-0 text-xs"
+                              onClick={() => {
+                                if (!armed) {
+                                  setArmedOrder(key);
+                                  setTimeout(() => setArmedOrder((cur) => (cur === key ? null : cur)), 4000);
+                                  return;
+                                }
+                                cancelTodayOrder.mutate({
+                                  orderId: o.orderId || canonicalId,
+                                  tranId: o.tranId || canonicalId,
+                                  orderStatus: o.orderStatus || o.status,
+                                  buySellType: o.side === "SELL" ? "Sell" : "Buy",
+                                  deliveryFlag: o.deliveryFlag,
+                                  orderTerms: o.validity,
+                                  price: o.price !== null ? String(o.price) : "0",
+                                  quantity: Math.max(1, Math.floor(o.remainingQty || o.quantity)),
+                                  symbol: o.symbol,
+                                });
+                              }}
+                            >
+                              {armed ? "Tap again" : "Cancel"}
+                            </Button>
+                          </div>
+                        ) : terminalKind ? (
+                          <span
+                            className={cn(
+                              "shrink-0 rounded-full px-2 py-0.5 text-[0.68rem] font-semibold",
+                              terminalKind === "rejected"
+                                ? "bg-destructive/15 text-destructive"
+                                : terminalKind === "filled"
+                                  ? "bg-gain/15 text-gain"
+                                  : "bg-muted text-muted-foreground",
+                            )}
                           >
-                            {modifying ? "Close" : "Modify"}
-                          </Button>
-                          <Button
-                            variant={armed ? "destructive" : "outline"}
-                            size="sm"
-                            disabled={cancelTodayOrder.isPending || modifyDay.isPending}
-                            className="h-7 shrink-0 text-xs"
-                            onClick={() => {
-                              if (!armed) {
-                                setArmedOrder(key);
-                                setTimeout(
-                                  () => setArmedOrder((cur) => (cur === key ? null : cur)),
-                                  4000,
-                                );
-                                return;
-                              }
-                              cancelTodayOrder.mutate({
-                                orderId: o.orderId || canonicalId,
-                                tranId: o.tranId || canonicalId,
-                                orderStatus: o.orderStatus || o.status,
-                                buySellType: o.side === "SELL" ? "Sell" : "Buy",
-                                deliveryFlag: o.deliveryFlag,
-                                orderTerms: o.validity,
-                                price: o.price !== null ? String(o.price) : "0",
-                                quantity: Math.max(1, Math.floor(o.remainingQty || o.quantity)),
-                                symbol: o.symbol,
-                              });
-                            }}
-                          >
-                            {armed ? "Tap again" : "Cancel"}
-                          </Button>
-                        </div>
-                      ) : null}
+                            {terminalKind === "rejected"
+                              ? "Rejected"
+                              : terminalKind === "cancelled"
+                                ? "Cancelled"
+                                : terminalKind === "filled"
+                                  ? "Filled"
+                                  : "Expired"}
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
+                    {expanded ? (
+                      <TmsOrderDetails
+                        o={o}
+                        {...(terminalKind
+                          ? {
+                              onReuse: () =>
+                                reuseOrder({
+                                  symbol: o.symbol,
+                                  side: o.side === "BUY" || o.side === "SELL" ? o.side : undefined,
+                                  price: o.price,
+                                  qty: Math.max(1, Math.floor(o.remainingQty || o.quantity)),
+                                }),
+                            }
+                          : {})}
+                      />
+                    ) : null}
                     {modifying && cancellable && (o.side === "BUY" || o.side === "SELL") ? (
                       <div className="mt-2 grid grid-cols-2 gap-2 border-t border-border/60 pt-2">
                         <div className="space-y-1">
@@ -1660,9 +2463,7 @@ function TerminalPage() {
                             id={`tmod-qty-${key}`}
                             inputMode="numeric"
                             value={mqty}
-                            onChange={(e) =>
-                              setMqty(e.target.value.replace(/[^0-9]/g, "").slice(0, 6))
-                            }
+                            onChange={(e) => setMqty(e.target.value.replace(/[^0-9]/g, "").slice(0, 6))}
                             className="h-7 text-xs"
                           />
                         </div>
@@ -1675,9 +2476,7 @@ function TerminalPage() {
                             inputMode="decimal"
                             value={mprice}
                             disabled={isMktRow}
-                            onChange={(e) =>
-                              setMprice(e.target.value.replace(/[^0-9.]/g, "").slice(0, 12))
-                            }
+                            onChange={(e) => setMprice(e.target.value.replace(/[^0-9.]/g, "").slice(0, 12))}
                             className="h-7 text-xs"
                           />
                         </div>
@@ -1714,221 +2513,50 @@ function TerminalPage() {
               })}
             </ul>
           )}
-          <div className="mx-4 border-t border-border/60 py-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-sm font-semibold">
-                Queued AMO orders · {(termAmos.data ?? []).length}
-              </p>
-              {(termAmos.data ?? []).length > 0 ? (
-                <p className="text-[0.7rem] text-muted-foreground">
-                  {amoActiveList.filter(({ a }) => a.side === "BUY").length} buy ·{" "}
-                  {amoActiveList.filter(({ a }) => a.side === "SELL").length} sell
-                  {amoDisabledList.length > 0 ? ` · ${amoDisabledList.length} disabled` : ""}
-                </p>
-              ) : null}
-            </div>
-            {termAmos.isPending ? (
-              <p className="mt-1 text-xs text-muted-foreground">Loading AMO…</p>
-            ) : termAmos.isError ? (
-              <p className="mt-1 text-xs text-destructive">
-                {errorMessage(termAmos.error, "Could not load AMO orders.")}
-              </p>
-            ) : (termAmos.data ?? []).length === 0 ? (
-              <p className="mt-1 text-xs text-muted-foreground">
-                No AMO queued. Place one from the ticket while the market is closed.
-              </p>
-            ) : (
-              <>
-              <ul className="mt-2 space-y-1">
-                {amoActiveList.map(({ a, i }) => {
-                  const key = amoKeyOf(a, i);
-                  const armed = amoArmed === key;
-                  const editingThis = amoEditKey === key;
-                  const active = true;
-                  return (
-                    <li key={key} className="rounded-xl px-2 py-2 hover:bg-muted/40">
-                      <div className="flex items-center justify-between gap-3">
-                        <button
-                          type="button"
-                          onClick={() => setState((prev) => ({ ...prev, symbol: a.scrip }))}
-                          className="min-w-0 flex-1 text-left"
-                          title={`Load ${a.scrip} on the chart`}
-                        >
-                          <span className="text-sm">
-                            <span
-                              className={cn(
-                                "font-bold",
-                                a.side === "BUY" ? "text-gain" : "text-destructive",
-                              )}
-                            >
-                              {a.side}
-                            </span>{" "}
-                            <span className="num font-semibold">
-                              {a.quantity.toLocaleString("en-NP")}
-                            </span>{" "}
-                            <span className="font-semibold">{a.scrip}</span>{" "}
-                            <span className="num text-muted-foreground">
-                              @ {a.price !== null ? a.price.toLocaleString("en-NP") : "-"}
-                            </span>
-                          </span>
-                          <span className="num mt-0.5 block text-[0.7rem] text-muted-foreground">
-                            AMO · till {a.validTill ?? "-"}
-                            {a.status ? ` · ${a.status}` : ""}
-                            {a.alertName ? ` · ${a.alertName}` : ""}
-                          </span>
-                        </button>
-                        {!active && a.status ? (
-                          <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[0.68rem] font-semibold text-muted-foreground">
-                            {a.status}
-                          </span>
-                        ) : null}
-                        {active ? (
-                          <div className="flex shrink-0 gap-1.5">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 text-xs"
-                              onClick={() => {
-                                if (editingThis) {
-                                  setAmoEditKey(null);
-                                } else {
-                                  setAmoEditKey(key);
-                                  setAqty(String(a.quantity));
-                                  setAprice(a.price !== null ? String(a.price) : "");
-                                  setAmoArmed(null);
-                                }
-                              }}
-                            >
-                              {editingThis ? "Close" : "Modify"}
-                            </Button>
-                            <Button
-                              variant={armed ? "destructive" : "outline"}
-                              size="sm"
-                              disabled={cancelAmoQuick.isPending}
-                              className="h-7 text-xs"
-                              onClick={() => {
-                                if (!armed) {
-                                  setAmoArmed(key);
-                                  setTimeout(
-                                    () => setAmoArmed((cur) => (cur === key ? null : cur)),
-                                    4000,
-                                  );
-                                  return;
-                                }
-                                cancelAmoQuick.mutate({
-                                  alertName: a.alertName,
-                                  scrip: a.scrip,
-                                  price: a.price,
-                                  triggerPrice: a.triggerPrice,
-                                  quantity: a.quantity,
-                                  side: a.side as "BUY" | "SELL",
-                                  validTill: a.validTill,
-                                });
-                              }}
-                            >
-                              {armed ? "Tap again" : "Cancel"}
-                            </Button>
-                          </div>
-                        ) : null}
-                      </div>
-                      {editingThis ? (
-                        <div className="mt-2 grid grid-cols-2 gap-2 border-t border-border/60 pt-2">
-                          <div className="space-y-1">
-                            <Label htmlFor={`tamo-qty-${key}`} className="text-[0.68rem]">
-                              Quantity
-                            </Label>
-                            <Input
-                              id={`tamo-qty-${key}`}
-                              inputMode="numeric"
-                              value={aqty}
-                              onChange={(e) =>
-                                setAqty(e.target.value.replace(/[^0-9]/g, "").slice(0, 6))
-                              }
-                              className="h-7 text-xs"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label htmlFor={`tamo-price-${key}`} className="text-[0.68rem]">
-                              Price
-                            </Label>
-                            <Input
-                              id={`tamo-price-${key}`}
-                              inputMode="decimal"
-                              value={aprice}
-                              onChange={(e) =>
-                                setAprice(e.target.value.replace(/[^0-9.]/g, "").slice(0, 12))
-                              }
-                              className="h-7 text-xs"
-                            />
-                          </div>
-                          <div className="col-span-2">
-                            <Button
-                              size="sm"
-                              disabled={replaceAmoQuick.isPending}
-                              className="h-7 text-xs"
-                              onClick={() => replaceAmoQuick.mutate()}
-                            >
-                              {replaceAmoQuick.isPending ? "Replacing…" : "Replace order"}
-                            </Button>
-                          </div>
-                        </div>
-                      ) : null}
-                    </li>
-                  );
-                })}
-              </ul>
-              {amoDisabledList.length > 0 ? (
-                <div className="mt-2 border-t border-border/60 pt-2">
-                  <p className="px-2 text-[0.7rem] font-semibold text-muted-foreground">
-                    Disabled · {amoDisabledList.length}
-                  </p>
-                  <ul className="mt-1 space-y-1 opacity-60">
-                    {amoDisabledList.map(({ a, i }) => {
-                      const key = amoKeyOf(a, i);
-                      return (
-                        <li
-                          key={key}
-                          className="flex items-center justify-between gap-3 rounded-xl px-2 py-2"
-                        >
-                          <button
-                            type="button"
-                            onClick={() => setState((prev) => ({ ...prev, symbol: a.scrip }))}
-                            className="min-w-0 flex-1 text-left"
-                            title={`Load ${a.scrip} on the chart`}
-                          >
-                            <span className="text-sm">
-                              <span className="font-bold text-muted-foreground">{a.side}</span>{" "}
-                              <span className="num font-semibold">
-                                {a.quantity.toLocaleString("en-NP")}
-                              </span>{" "}
-                              <span className="font-semibold">{a.scrip}</span>{" "}
-                              <span className="num text-muted-foreground">
-                                @ {a.price !== null ? a.price.toLocaleString("en-NP") : "-"}
-                              </span>
-                            </span>
-                            <span className="num mt-0.5 block text-[0.7rem] text-muted-foreground">
-                              AMO · till {a.validTill ?? "-"}
-                              {a.alertName ? ` · ${a.alertName}` : ""}
-                            </span>
-                          </button>
-                          <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[0.68rem] font-semibold text-muted-foreground">
-                            {a.status ?? "Disabled"}
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              ) : null}
-              </>
-            )}
-          </div>
+          {unifiedRows.length > ORDER_PAGE_SIZE ? (
+            <button
+              type="button"
+              onClick={() => setOrdersAll((v) => !v)}
+              className="w-full rounded-xl px-4 py-2.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+            >
+              {ordersAll ? "Show less" : `Show all ${unifiedRows.length} orders`}
+            </button>
+          ) : null}
+          {termAmos.isPending && unifiedRows.length > 0 ? (
+            <p className="px-4 pb-2 text-xs text-muted-foreground">Loading AMO…</p>
+          ) : null}
+          {termAmos.isError ? (
+            <p className="px-4 pb-2 text-xs text-destructive">
+              {errorMessage(termAmos.error, "Could not load AMO orders.")}
+            </p>
+          ) : null}
+          {!termAmos.isPending &&
+          !termAmos.isError &&
+          (termAmos.data ?? []).length === 0 &&
+          (todayOrders.data ?? []).length > 0 ? (
+            <p className="px-4 pb-2 text-xs text-muted-foreground">
+              No AMO queued. Place one from the ticket while the market is closed.
+            </p>
+          ) : null}
         </div>
+      ) : null}
+
+      {mode === "scrip" && !isIndex && position && costByScrip.get(state.symbol.toUpperCase()) && quote?.ltp ? (
+        <PositionPnlCard
+          symbol={state.symbol}
+          units={position.units}
+          avgCost={costByScrip.get(state.symbol.toUpperCase())!.rate}
+          ltp={quote.ltp}
+          waccStatus={
+            investment.data?.scrips.find((s) => s.scrip.toUpperCase() === state.symbol.toUpperCase())?.status ??
+            "pending"
+          }
+        />
       ) : null}
 
       <p className="text-xs text-muted-foreground">
         {mode === "portfolio"
-          ? "Net worth is your current unit counts valued at each historical close; it does not reflect past buys and sells. Click any point to pin its per-scrip prices below."
+          ? "Net worth is your current unit counts valued at each historical close; it does not reflect past buys and sells. Click any point to pin its per-stock prices below."
           : series.data?.hasSynthetic
             ? "Long ranges use archived daily closes where high/low were never published, so those candle bodies are derived from the previous close."
             : "Daily OHLC from public NEPSE mirrors."}{" "}
@@ -1943,6 +2571,17 @@ function TerminalPage() {
           setMode("scrip");
           setState((prev) => ({ ...prev, symbol }));
         }}
+      />
+      <WatchlistFloat count={watchlist.symbols.length} onOpen={() => setWatchlistOpen(true)} />
+
+      <CompareModal
+        open={compareOpen}
+        onOpenChange={setCompareOpen}
+        options={prices.map((p) => ({ symbol: p.symbol, name: p.name, pct: p.percentChange }))}
+        selected={compareSymbols}
+        onToggle={toggleCompareSymbol}
+        max={MAX_COMPARE}
+        current={state.symbol}
       />
 
       <TmsReauthModal open={reauthOpen} onOpenChange={setReauthOpen} />

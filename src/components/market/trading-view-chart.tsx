@@ -53,11 +53,5 @@ export function TradingViewChart({
     };
   }, [symbol, interval, theme]);
 
-  return (
-    <div
-      ref={containerRef}
-      className={cn("tradingview-widget-container w-full", className)}
-      style={{ height }}
-    />
-  );
+  return <div ref={containerRef} className={cn("tradingview-widget-container w-full", className)} style={{ height }} />;
 }

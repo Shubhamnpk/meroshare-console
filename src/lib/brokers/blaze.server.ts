@@ -58,16 +58,10 @@ export interface BlazeIdentity {
 async function blazeIdentity(session: NaasaSession): Promise<BlazeIdentity> {
   const tokens = await getNaasaTokens(session);
   if (!tokens.accessToken) {
-    throw new BrokerLoginError(
-      "Direct trading identity unavailable.",
-      "Retest the broker connection, then try again.",
-    );
+    throw new BrokerLoginError("Direct trading identity unavailable.", "Retest the broker connection, then try again.");
   }
   if (!session.sessionNo || !session.clientCode) {
-    throw new BrokerLoginError(
-      "Direct trading session missing.",
-      "Retest the broker connection, then try again.",
-    );
+    throw new BrokerLoginError("Direct trading session missing.", "Retest the broker connection, then try again.");
   }
   return {
     bearer: tokens.accessToken,
@@ -105,11 +99,7 @@ export async function blazeLogin(kcAccessToken: string): Promise<{ ok: boolean; 
   }
 }
 
-async function blazePost<T>(
-  id: BlazeIdentity,
-  path: string,
-  body: Record<string, unknown>,
-): Promise<T> {
+async function blazePost<T>(id: BlazeIdentity, path: string, body: Record<string, unknown>): Promise<T> {
   const { done, signal } = withTimeout(TIMEOUT_MS);
   try {
     const res = await fetch(`${BLAZE}${path}`, {
@@ -126,10 +116,7 @@ async function blazePost<T>(
       body: JSON.stringify({ payload: encryptBlazeBody(body) }),
     });
     if (res.status === 401) {
-      throw new BrokerLoginError(
-        "Direct trading session expired.",
-        "Retest the broker connection, then try again.",
-      );
+      throw new BrokerLoginError("Direct trading session expired.", "Retest the broker connection, then try again.");
     }
     const raw = (await res.json().catch(() => ({}))) as unknown;
     return decodeBlaze<T>(raw);
@@ -190,12 +177,9 @@ export interface BlazeOrderInput {
   validity: "DAY" | "GTD" | "GTC" | "IOC" | "FOK";
 }
 
-function blazeBaseBody(
-  id: BlazeIdentity,
-  input: BlazeOrderInput,
-): { sym: string; body: Record<string, unknown> } {
+function blazeBaseBody(id: BlazeIdentity, input: BlazeOrderInput): { sym: string; body: Record<string, unknown> } {
   const sym = input.symbol.trim().toUpperCase();
-  if (!/^[A-Z0-9]{3,24}$/.test(sym)) throw new Error("Invalid scrip symbol.");
+  if (!/^[A-Z0-9]{3,24}$/.test(sym)) throw new Error("Invalid stock symbol.");
   if (!Number.isInteger(input.quantity) || input.quantity < 1 || input.quantity > 100000) {
     throw new Error("Quantity must be 1–100000.");
   }
@@ -250,8 +234,7 @@ export async function placeBlazeOrder(
   const r = blazeResult(json, "Order rejected by broker.");
   return {
     ...r,
-    message:
-      r.ok && r.message === "Order rejected by broker." ? `Order placed for ${sym}.` : r.message,
+    message: r.ok && r.message === "Order rejected by broker." ? `Order placed for ${sym}.` : r.message,
   };
 }
 
@@ -266,8 +249,7 @@ export async function modifyBlazeOrder(
   session: NaasaSession,
   input: BlazeModifyInput,
 ): Promise<{ ok: boolean; message: string; tranId: string | null }> {
-  if (!input.tranId || !input.orderId)
-    throw new Error("Order identity missing — refresh the book.");
+  if (!input.tranId || !input.orderId) throw new Error("Order identity missing — refresh the book.");
   if (!Number.isFinite(input.remainingQty) || input.remainingQty < 1) {
     throw new Error("Nothing left to modify on this order.");
   }
@@ -373,7 +355,7 @@ export async function placeBlazeTrigger(
 ): Promise<{ ok: boolean; message: string; tranId: string | null }> {
   const id = await blazeIdentity(session);
   const sym = input.symbol.trim().toUpperCase();
-  if (!/^[A-Z0-9]{3,24}$/.test(sym)) throw new Error("Invalid scrip symbol.");
+  if (!/^[A-Z0-9]{3,24}$/.test(sym)) throw new Error("Invalid stock symbol.");
   const json = await blazePost<Record<string, unknown>>(id, "/api/TriggerOrder/Order", {
     ClientCode: id.clientCode,
     SessionNo: id.sessionNo,
@@ -409,16 +391,10 @@ export async function getBlazeTriggers(session: NaasaSession): Promise<Record<st
 }
 
 /** Direct quote snapshot. Read-only; needs the charts-backend bearer. */
-export async function getBlazeQuote(
-  bearer: string,
-  symbol: string,
-): Promise<Record<string, unknown> | null> {
+export async function getBlazeQuote(bearer: string, symbol: string): Promise<Record<string, unknown> | null> {
   const sym = symbol.trim().toUpperCase();
   const q = new URLSearchParams({ ticker: sym, columns: "LTP,Instrument" });
-  const json = await blazeGet<Record<string, unknown>>(
-    bearer,
-    `/api/MarketWatch/GetSpecifiedQuote?${q}`,
-  );
+  const json = await blazeGet<Record<string, unknown>>(bearer, `/api/MarketWatch/GetSpecifiedQuote?${q}`);
   if (String(json["statusCode"] ?? "") !== "200") return null;
   const table = json["reportTable"];
   const rows = Array.isArray(table) ? (table as Record<string, unknown>[]) : [];

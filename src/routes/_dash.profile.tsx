@@ -38,8 +38,7 @@ export const Route = createFileRoute("/_dash/profile")({
       { property: "og:title", content: "My Account | MeroShare Investor Console" },
       {
         property: "og:description",
-        content:
-          "Complete MeroShare account record: identity, citizenship, contact, demat, DP and linked ASBA banks.",
+        content: "Complete MeroShare account record: identity, citizenship, contact, demat, DP and linked ASBA banks.",
       },
       ogImage(),
     ],
@@ -126,10 +125,7 @@ function Section({
 }) {
   if (items.length === 0) return null;
   return (
-    <section
-      id={id}
-      className="scroll-mt-24 overflow-hidden rounded-2xl border border-border/70 bg-card"
-    >
+    <section id={id} className="scroll-mt-24 overflow-hidden rounded-2xl border border-border/70 bg-card">
       <header className="flex items-center gap-2 border-b border-border/70 px-4 py-3">
         <Icon className="size-4 text-muted-foreground" />
         <h2 className="text-sm font-semibold">{title}</h2>
@@ -173,13 +169,9 @@ function BankCard({ bank, reveal }: { bank: AccountBank; reveal: boolean }) {
         <dl className="grid gap-px bg-border/70 sm:grid-cols-2">
           {items.map((row) => (
             <div key={row.label} className="bg-card px-4 py-3">
-              <dt className="text-xs uppercase tracking-wider text-muted-foreground">
-                {row.label}
-              </dt>
+              <dt className="text-xs uppercase tracking-wider text-muted-foreground">{row.label}</dt>
               <dd className="mt-0.5 flex items-start break-words text-sm font-medium">
-                <span className="num">
-                  {row.sensitive && !reveal ? mask(row.value) : row.value}
-                </span>
+                <span className="num">{row.sensitive && !reveal ? mask(row.value) : row.value}</span>
                 {row.copy ? <CopyButton value={row.value} label={row.label} /> : null}
               </dd>
             </div>
@@ -285,10 +277,7 @@ function ProfilePage() {
       ["Password changed", first(src, ["passwordChangeDateStr"])],
       ["Password expires", first(src, ["passwordExpiryDateStr"])],
       ["KYC status", first(src, ["kycStatus", "kycStatusName", "isKycApproved"])],
-      [
-        "Session expires",
-        data.session.expiresAt ? new Date(data.session.expiresAt).toLocaleString() : undefined,
-      ],
+      ["Session expires", data.session.expiresAt ? new Date(data.session.expiresAt).toLocaleString() : undefined],
     ]);
 
     return [
@@ -332,8 +321,7 @@ function ProfilePage() {
       description: "Raw API response: banks and all detail records",
       filename: `meroshare-account-${data.session.demat || "profile"}`,
       extension: "json",
-      build: () =>
-        JSON.stringify({ own: data.own, detail: data.detail, banks: data.banks }, null, 2),
+      build: () => JSON.stringify({ own: data.own, detail: data.detail, banks: data.banks }, null, 2),
     },
     {
       title: "PDF",
@@ -346,11 +334,7 @@ function ProfilePage() {
         head: ["Section", "Field", "Value"],
         body: [
           ...sections.flatMap((s) =>
-            s.items.map((row) => [
-              s.title,
-              row.label,
-              row.sensitive && !reveal ? mask(row.value) : row.value,
-            ]),
+            s.items.map((row) => [s.title, row.label, row.sensitive && !reveal ? mask(row.value) : row.value]),
           ),
           ...data.banks.flatMap((bank) => [
             ["Bank", "Name", bank.name],
@@ -394,11 +378,7 @@ function ProfilePage() {
 
       <div className="relative flex flex-wrap items-center gap-4 rounded-2xl border border-border/70 bg-card p-5">
         {avatarUrl ? (
-          <img
-            src={avatarUrl}
-            alt={`${name} profile photo`}
-            className="size-14 shrink-0 rounded-2xl object-cover"
-          />
+          <img src={avatarUrl} alt={`${name} profile photo`} className="size-14 shrink-0 rounded-2xl object-cover" />
         ) : (
           <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-info font-display text-lg font-bold text-primary-foreground">
             {initials(name)}
@@ -476,18 +456,13 @@ function ProfilePage() {
           ) : (
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {brokerHoldings.data.map((h) => (
-                <div
-                  key={h.symbol}
-                  className="rounded-xl border border-border/60 bg-card px-3 py-2.5"
-                >
+                <div key={h.symbol} className="rounded-xl border border-border/60 bg-card px-3 py-2.5">
                   <p className="truncate text-sm font-semibold">{h.symbol}</p>
                   <p className="mt-1 flex items-center justify-between text-xs">
                     <span className="text-muted-foreground">{formatQty(h.availableQty)} units</span>
                     <span className="num font-medium">{formatNpr(h.closePrice)}</span>
                   </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Value {formatNpr(h.marketValue)}
-                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">Value {formatNpr(h.marketValue)}</p>
                 </div>
               ))}
             </div>

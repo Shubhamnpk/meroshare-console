@@ -42,10 +42,7 @@ export function usePreviewZoomPan(
 
   const scaleOf = useCallback((z: number) => z / renderScale, [renderScale]);
 
-  const getContainerRect = useCallback(
-    () => containerRef.current?.getBoundingClientRect() ?? null,
-    [containerRef],
-  );
+  const getContainerRect = useCallback(() => containerRef.current?.getBoundingClientRect() ?? null, [containerRef]);
 
   const centerPan = useCallback(
     (z: number, cs: ContentSize | null) => {
@@ -133,11 +130,7 @@ export function usePreviewZoomPan(
         zoomAt(stateRef.current.zoom * factor, e.clientX - rect.left, e.clientY - rect.top);
       } else {
         setState((s) => {
-          const p = clampPan(
-            { panX: s.panX - e.deltaX, panY: s.panY - e.deltaY },
-            s.zoom,
-            contentSizeRef.current,
-          );
+          const p = clampPan({ panX: s.panX - e.deltaX, panY: s.panY - e.deltaY }, s.zoom, contentSizeRef.current);
           return { ...s, panX: p.panX, panY: p.panY };
         });
       }
@@ -255,11 +248,7 @@ export function usePreviewZoomPan(
         const dx = e.touches[0]!.clientX - lastMid.x;
         const dy = e.touches[0]!.clientY - lastMid.y;
         setState((s) => {
-          const p = clampPan(
-            { panX: lastPanX + dx, panY: lastPanY + dy },
-            s.zoom,
-            contentSizeRef.current,
-          );
+          const p = clampPan({ panX: lastPanX + dx, panY: lastPanY + dy }, s.zoom, contentSizeRef.current);
           return { ...s, panX: p.panX, panY: p.panY };
         });
       }

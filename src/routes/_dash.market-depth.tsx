@@ -1,15 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Globe, RefreshCw } from "lucide-react";
+import { ArrowLeft, Globe, RefreshCw, RotateCcw, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSettings } from "@/lib/settings";
 import { cn } from "@/lib/utils";
-import {
-  screenerDataQuery,
-  marketSectorsQuery,
-  marketSnapshotQuery,
-  indexGraphQuery,
-} from "@/lib/queries";
+import { screenerDataQuery, marketSectorsQuery, marketSnapshotQuery, indexGraphQuery } from "@/lib/queries";
 import { MarketOverview } from "@/components/tools/market-overview";
 import { ErrorBlock, LoadingBlock } from "@/components/states";
 import { canonicalLink, ogImage } from "@/lib/seo";
@@ -96,11 +91,7 @@ function MarketDepthPage() {
           <Globe className="size-5" />
         </span>
         <div className="min-w-0 flex-1">
-          <h1 className="font-display text-xl font-semibold sm:text-3xl">Market Depth &amp; Heatmap</h1>
-          <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground sm:line-clamp-none">
-            Live ticker tape, benchmarks with all-time history, market breadth, and sector depth
-            matrix.
-          </p>
+          <h1 className="font-display text-xl font-semibold sm:text-3xl">Market Depth</h1>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <span

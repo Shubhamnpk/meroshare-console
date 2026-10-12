@@ -5,21 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Heatmap, type HeatTile } from "@/components/market/heatmap";
-import {
-  CategoryDropdown,
-  HeatSearch,
-  ModeSwitch,
-} from "@/components/market/heatmap-controls";
-import {
-  LayoutGrid,
-  X,
-  Info,
-  Filter,
-  PieChart,
-  Eye,
-  Activity,
-  ArrowUpRight,
-} from "lucide-react";
+import { CategoryDropdown, HeatSearch, ModeSwitch } from "@/components/market/heatmap-controls";
+import { LayoutGrid, X, Info, Filter, PieChart, Eye, Activity, ArrowUpRight } from "lucide-react";
 import { formatNpr, formatPercent, formatQty } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -41,13 +28,7 @@ type SizeMode = "size" | "units";
 type ColorMode = "day" | "discount";
 type TypeFilter = "all" | "open" | "close";
 
-export function FundHeatmap({
-  rows,
-  onPick,
-}: {
-  rows: HeatRow[];
-  onPick: (symbol: string) => void;
-}) {
+export function FundHeatmap({ rows, onPick }: { rows: HeatRow[]; onPick: (symbol: string) => void }) {
   const [sizeMode, setSizeMode] = useState<SizeMode>("size");
   const [colorMode, setColorMode] = useState<ColorMode>("discount");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
@@ -92,9 +73,7 @@ export function FundHeatmap({
     if (!q) return undefined;
     return new Set(
       heatMapItems
-        .filter(
-          (r) => r.symbol.toLowerCase().includes(q) || r.name.toLowerCase().includes(q),
-        )
+        .filter((r) => r.symbol.toLowerCase().includes(q) || r.name.toLowerCase().includes(q))
         .map((r) => r.symbol),
     );
   }, [heatMapItems, searchQuery]);
@@ -114,45 +93,31 @@ export function FundHeatmap({
               {row.fundType === "open_end" ? "Open-end" : "Close-end"}
             </Badge>
           </div>
-          <span className="truncate text-[9px] font-medium text-muted-foreground">
-            {row.name}
-          </span>
+          <span className="truncate text-[9px] font-medium text-muted-foreground">{row.name}</span>
         </div>
         <div className="space-y-1.5 text-[11px] font-semibold text-muted-foreground">
           <div className="flex justify-between gap-6">
             <span>Fund size:</span>
-            <span className="font-bold text-foreground">
-              {formatNpr(row.size, { compact: true })}
-            </span>
+            <span className="font-bold text-foreground">{formatNpr(row.size, { compact: true })}</span>
           </div>
           <div className="flex justify-between gap-6">
             <span>Units:</span>
-            <span className="font-bold text-foreground">
-              {row.units != null ? formatQty(row.units) : "-"}
-            </span>
+            <span className="font-bold text-foreground">{row.units != null ? formatQty(row.units) : "-"}</span>
           </div>
           <div className="flex justify-between gap-6">
             <span>NAV:</span>
-            <span className="font-bold text-foreground">
-              {row.nav != null ? formatNpr(row.nav) : "-"}
-            </span>
+            <span className="font-bold text-foreground">{row.nav != null ? formatNpr(row.nav) : "-"}</span>
           </div>
           <div className="flex justify-between gap-6 border-t border-border/20 pt-1">
             <span>LTP:</span>
-            <span className="font-bold text-foreground">
-              {row.ltp != null ? formatNpr(row.ltp) : "-"}
-            </span>
+            <span className="font-bold text-foreground">{row.ltp != null ? formatNpr(row.ltp) : "-"}</span>
           </div>
           <div className="flex justify-between gap-6">
             <span>Discount:</span>
             <span
               className={cn(
                 "font-bold",
-                row.discount == null
-                  ? "text-muted-foreground/60"
-                  : row.discount < 0
-                    ? "text-gain"
-                    : "text-loss",
+                row.discount == null ? "text-muted-foreground/60" : row.discount < 0 ? "text-gain" : "text-loss",
               )}
             >
               {row.discount != null ? formatPercent(row.discount) : "-"}
@@ -163,11 +128,7 @@ export function FundHeatmap({
             <span
               className={cn(
                 "font-bold",
-                row.dayChange == null
-                  ? "text-muted-foreground/60"
-                  : row.dayChange >= 0
-                    ? "text-gain"
-                    : "text-loss",
+                row.dayChange == null ? "text-muted-foreground/60" : row.dayChange >= 0 ? "text-gain" : "text-loss",
               )}
             >
               {row.dayChange != null ? formatPercent(row.dayChange) : "-"}
@@ -201,11 +162,7 @@ export function FundHeatmap({
   return (
     <div className="space-y-3">
       <div className="flex flex-col gap-2 sm:flex-row">
-        <HeatSearch
-          value={searchQuery}
-          onChange={setSearchQuery}
-          placeholder="Search schemes…"
-        />
+        <HeatSearch value={searchQuery} onChange={setSearchQuery} placeholder="Search schemes…" />
         <CategoryDropdown
           value={typeFilter}
           options={[
@@ -236,40 +193,40 @@ export function FundHeatmap({
               </CardTitle>
             </div>
             <div className="flex flex-wrap items-center gap-1.5 border-t border-border/5 pt-2">
-            <ModeSwitch
-              label="Size"
-              options={
-                [
-                  { key: "size", label: "Fund size" },
-                  { key: "units", label: "Units" },
-                ] as const
-              }
-              value={sizeMode}
-              onChange={setSizeMode}
-            />
-            <ModeSwitch
-              label="Color"
-              options={
-                [
-                  { key: "day", label: "Day %" },
-                  { key: "discount", label: "Discount %" },
-                ] as const
-              }
-              value={colorMode}
-              onChange={setColorMode}
-            />
-            <ModeSwitch
-              label="Layout"
-              options={
-                [
-                  { key: "grouped", label: "Grouped" },
-                  { key: "mixed", label: "All mixed" },
-                ] as const
-              }
-              value={grouped ? "grouped" : "mixed"}
-              onChange={(v) => setGrouped(v === "grouped")}
-            />
-          </div>
+              <ModeSwitch
+                label="Size"
+                options={
+                  [
+                    { key: "size", label: "Fund size" },
+                    { key: "units", label: "Units" },
+                  ] as const
+                }
+                value={sizeMode}
+                onChange={setSizeMode}
+              />
+              <ModeSwitch
+                label="Color"
+                options={
+                  [
+                    { key: "day", label: "Day %" },
+                    { key: "discount", label: "Discount %" },
+                  ] as const
+                }
+                value={colorMode}
+                onChange={setColorMode}
+              />
+              <ModeSwitch
+                label="Layout"
+                options={
+                  [
+                    { key: "grouped", label: "Grouped" },
+                    { key: "mixed", label: "All mixed" },
+                  ] as const
+                }
+                value={grouped ? "grouped" : "mixed"}
+                onChange={(v) => setGrouped(v === "grouped")}
+              />
+            </div>
             <Button
               variant="outline"
               size="icon"
@@ -294,8 +251,7 @@ export function FundHeatmap({
               <Heatmap
                 tiles={mapTiles}
                 onPick={(symbol) => {
-                  const next =
-                    selectedItem?.symbol === symbol ? null : (bySymbol.get(symbol) ?? null);
+                  const next = selectedItem?.symbol === symbol ? null : (bySymbol.get(symbol) ?? null);
                   setSelectedItem(next);
                   if (next) onPick(symbol);
                 }}
@@ -347,16 +303,12 @@ export function FundHeatmap({
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex flex-col gap-0.5">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-sm font-black text-foreground">
-                          {selectedItem.symbol}
-                        </span>
+                        <span className="text-sm font-black text-foreground">{selectedItem.symbol}</span>
                         <Badge className="h-4 border-0 bg-primary/10 px-1 text-[8px] font-extrabold uppercase tracking-wider text-primary">
                           {selectedItem.fundType === "open_end" ? "Open-end" : "Close-end"}
                         </Badge>
                       </div>
-                      <span className="text-[9px] font-medium text-muted-foreground">
-                        {selectedItem.name}
-                      </span>
+                      <span className="text-[9px] font-medium text-muted-foreground">{selectedItem.name}</span>
                     </div>
                     <Button
                       size="sm"
@@ -432,12 +384,12 @@ export function FundHeatmap({
                 </p>
                 <div className="space-y-1.5 pl-5 text-xs text-muted-foreground">
                   <p>
-                    <span className="font-semibold text-foreground">Fund size</span>, each tile's
-                    area represents its share of total fund size. Larger tiles = bigger schemes.
+                    <span className="font-semibold text-foreground">Fund size</span>, each tile's area represents its
+                    share of total fund size. Larger tiles = bigger schemes.
                   </p>
                   <p>
-                    <span className="font-semibold text-foreground">Units</span>, tile size reflects
-                    units outstanding, regardless of price.
+                    <span className="font-semibold text-foreground">Units</span>, tile size reflects units outstanding,
+                    regardless of price.
                   </p>
                 </div>
               </div>
@@ -448,12 +400,12 @@ export function FundHeatmap({
                 </p>
                 <div className="space-y-1.5 pl-5 text-xs text-muted-foreground">
                   <p>
-                    <span className="font-semibold text-foreground">Day %</span>, today's LTP move.
-                    Green = up, red = down. Intensity reflects how big the move was.
+                    <span className="font-semibold text-foreground">Day %</span>, today's LTP move. Green = up, red =
+                    down. Intensity reflects how big the move was.
                   </p>
                   <p>
-                    <span className="font-semibold text-foreground">Discount %</span>, LTP vs NAV.
-                    Green = bargain (below NAV), red = premium. Intensity reflects the gap size.
+                    <span className="font-semibold text-foreground">Discount %</span>, LTP vs NAV. Green = bargain
+                    (below NAV), red = premium. Intensity reflects the gap size.
                   </p>
                 </div>
               </div>
@@ -464,16 +416,14 @@ export function FundHeatmap({
                 </p>
                 <div className="space-y-1.5 pl-5 text-xs text-muted-foreground">
                   <p>
-                    <span className="font-semibold text-foreground">
-                      All / Open-end / Close-end
-                    </span>{" "}
-                    , narrow the map to one fund structure. With All, both share one map: each keeps
-                    its own labeled region, sized on the same scale.
+                    <span className="font-semibold text-foreground">All / Open-end / Close-end</span> , narrow the map
+                    to one fund structure. With All, both share one map: each keeps its own labeled region, sized on the
+                    same scale.
                   </p>
                   <p>
-                    <span className="font-semibold text-foreground">Grouped / All mixed</span>,
-                    grouped keeps each structure in its own region; all mixed throws every fund into
-                    one pool so the biggest overall stands out.
+                    <span className="font-semibold text-foreground">Grouped / All mixed</span>, grouped keeps each
+                    structure in its own region; all mixed throws every fund into one pool so the biggest overall stands
+                    out.
                   </p>
                 </div>
               </div>

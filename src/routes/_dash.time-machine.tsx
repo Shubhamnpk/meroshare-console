@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery, useQueries } from "@tanstack/react-query";
 import {
@@ -30,14 +30,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Panel } from "@/components/ui/panel";
 import { Switch } from "@/components/ui/switch";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AreaChart } from "@/components/market/area-chart";
 import { TimeMachineTerminalChart } from "@/components/tools/time-machine-terminal-chart";
 import { TimeMachineCompareChart } from "@/components/tools/time-machine-compare-chart";
@@ -77,22 +72,14 @@ type RangePreset = "1Y" | "3Y" | "5Y" | "max" | "custom";
 
 const AMOUNT_PRESETS = [2500, 5000, 10000, 25000, 50000, 100000];
 
-function isMutualFund(
-  symbol: string,
-  sector?: string | null,
-  schemes?: { symbol: string }[]
-): boolean {
+function isMutualFund(symbol: string, sector?: string | null, schemes?: { symbol: string }[]): boolean {
   const sym = symbol.toUpperCase();
   if (sector && /mutual fund/i.test(sector)) return true;
   if (schemes?.some((s) => s.symbol.toUpperCase() === sym)) return true;
   return false;
 }
 
-function faceOf(
-  sector: string | null | undefined,
-  symbol: string,
-  schemes?: { symbol: string }[]
-): number {
+function faceOf(sector: string | null | undefined, symbol: string, schemes?: { symbol: string }[]): number {
   const s = sector ?? sectorOf(symbol) ?? "";
   return isMutualFund(symbol, s, schemes) ? 10 : 100;
 }
@@ -239,339 +226,335 @@ export interface BacktestResult {
 }
 
 function runBacktest(args: BacktestArgs): BacktestResult | null {
-    const { symbol, amount, freq, from, to, reinvest, fdRate, history, dividends, liveLtp, face } = args;
-    if (!symbol || !history.length || amount <= 0) return null;
+  const { symbol, amount, freq, from, to, reinvest, fdRate, history, dividends, liveLtp, face } = args;
+  if (!symbol || !history.length || amount <= 0) return null;
 
-    const fromTs = new Date(from).getTime();
-    const toTs = new Date(to).getTime();
-    if (Number.isNaN(fromTs) || Number.isNaN(toTs) || fromTs >= toTs) return null;
+  const fromTs = new Date(from).getTime();
+  const toTs = new Date(to).getTime();
+  if (Number.isNaN(fromTs) || Number.isNaN(toTs) || fromTs >= toTs) return null;
 
-    // Filter and sort historical daily bars
-    const bars = history
-      .filter((b) => {
-        const t = new Date(b.date).getTime();
-        return t >= fromTs && t <= toTs;
-      })
-      .sort((a, b) => a.date.localeCompare(b.date));
+  // Filter and sort historical daily bars
+  const bars = history
+    .filter((b) => {
+      const t = new Date(b.date).getTime();
+      return t >= fromTs && t <= toTs;
+    })
+    .sort((a, b) => a.date.localeCompare(b.date));
 
-    if (bars.length === 0) return null;
+  if (bars.length === 0) return null;
 
-    // Generate schedule of buy dates
-    const buyScheduleDates = new Set<string>();
-    if (freq === "once") {
-      buyScheduleDates.add(from);
-    } else {
-      const cur = new Date(from);
-      const end = new Date(to);
-      while (cur <= end) {
-        buyScheduleDates.add(cur.toISOString().slice(0, 10));
-        if (freq === "monthly") cur.setMonth(cur.getMonth() + 1);
-        else if (freq === "quarterly") cur.setMonth(cur.getMonth() + 3);
-        else if (freq === "yearly") cur.setFullYear(cur.getFullYear() + 1);
-      }
+  // Generate schedule of buy dates
+  const buyScheduleDates = new Set<string>();
+  if (freq === "once") {
+    buyScheduleDates.add(from);
+  } else {
+    const cur = new Date(from);
+    const end = new Date(to);
+    while (cur <= end) {
+      buyScheduleDates.add(cur.toISOString().slice(0, 10));
+      if (freq === "monthly") cur.setMonth(cur.getMonth() + 1);
+      else if (freq === "quarterly") cur.setMonth(cur.getMonth() + 3);
+      else if (freq === "yearly") cur.setFullYear(cur.getFullYear() + 1);
     }
+  }
 
-    // Map schedule dates to actual market trading bar dates
-    const executedBuys: { date: string; price: number; targetDate: string }[] = [];
-    for (const d of Array.from(buyScheduleDates).sort()) {
-      const bar = bars.find((b) => b.date >= d) ?? bars[bars.length - 1];
-      if (bar) {
-        executedBuys.push({ date: bar.date, price: bar.close, targetDate: d });
-      }
+  // Map schedule dates to actual market trading bar dates
+  const executedBuys: { date: string; price: number; targetDate: string }[] = [];
+  for (const d of Array.from(buyScheduleDates).sort()) {
+    const bar = bars.find((b) => b.date >= d) ?? bars[bars.length - 1];
+    if (bar) {
+      executedBuys.push({ date: bar.date, price: bar.close, targetDate: d });
     }
+  }
 
-    // Prepare dividends for this symbol in range
-    const divs = dividends
-      .filter((d) => d.symbol.toUpperCase() === symbol.toUpperCase())
-      .map((d) => ({
-        date: d.bookCloseDate || d.announcementDate || "",
-        fiscalYear: d.fiscalYear ?? "-",
-        bonus: d.bonusShare,
-        cash: d.cashDividend,
-      }))
-      .filter((d) => d.date >= from && d.date <= to && d.date !== "")
-      .sort((a, b) => a.date.localeCompare(b.date));
+  // Prepare dividends for this symbol in range
+  const divs = dividends
+    .filter((d) => d.symbol.toUpperCase() === symbol.toUpperCase())
+    .map((d) => ({
+      date: d.bookCloseDate || d.announcementDate || "",
+      fiscalYear: d.fiscalYear ?? "-",
+      bonus: d.bonusShare,
+      cash: d.cashDividend,
+    }))
+    .filter((d) => d.date >= from && d.date <= to && d.date !== "")
+    .sort((a, b) => a.date.localeCompare(b.date));
 
-    // Deduplicate dividends by fiscal year and date
-    const uniqueDivs = divs.filter(
-      (d, idx, arr) =>
-        idx === arr.findIndex((t) => t.fiscalYear === d.fiscalYear && t.date === d.date)
-    );
+  // Deduplicate dividends by fiscal year and date
+  const uniqueDivs = divs.filter(
+    (d, idx, arr) => idx === arr.findIndex((t) => t.fiscalYear === d.fiscalYear && t.date === d.date),
+  );
 
-    // Track running portfolio state
-    let held = 0;
-    let invested = 0;
-    let cashPile = 0;
-    let bonusUnits = 0;
-    let cashReceived = 0;
-    let reinvestedUnits = 0;
-    let totalBought = 0;
-    let firstPrice: number | null = null;
-    let firstDate: string | null = null;
+  // Track running portfolio state
+  let held = 0;
+  let invested = 0;
+  let cashPile = 0;
+  let bonusUnits = 0;
+  let cashReceived = 0;
+  let reinvestedUnits = 0;
+  let totalBought = 0;
+  let firstPrice: number | null = null;
+  let firstDate: string | null = null;
 
-    const buyLedger: {
-      date: string;
-      price: number;
-      amount: number;
-      units: number;
-      cumulativeUnits: number;
-      cumulativeInvested: number;
-    }[] = [];
+  const buyLedger: {
+    date: string;
+    price: number;
+    amount: number;
+    units: number;
+    cumulativeUnits: number;
+    cumulativeInvested: number;
+  }[] = [];
 
-    const corporateActionsLedger: {
-      date: string;
-      fiscalYear: string;
-      bonusPct: number;
-      cashPct: number;
-      heldBefore: number;
-      bonusGot: number;
-      cashGot: number;
-      reinvestedShares: number;
-    }[] = [];
+  const corporateActionsLedger: {
+    date: string;
+    fiscalYear: string;
+    bonusPct: number;
+    cashPct: number;
+    heldBefore: number;
+    bonusGot: number;
+    cashGot: number;
+    reinvestedShares: number;
+  }[] = [];
 
-    // Cash flows for XIRR
-    const cashFlows: { date: string; amount: number }[] = [];
+  // Cash flows for XIRR
+  const cashFlows: { date: string; amount: number }[] = [];
 
-    // Map events by date
-    const buysByDate = new Map<string, { price: number; date: string }[]>();
-    for (const b of executedBuys) {
-      const arr = buysByDate.get(b.date) ?? [];
-      arr.push(b);
-      buysByDate.set(b.date, arr);
-    }
+  // Map events by date
+  const buysByDate = new Map<string, { price: number; date: string }[]>();
+  for (const b of executedBuys) {
+    const arr = buysByDate.get(b.date) ?? [];
+    arr.push(b);
+    buysByDate.set(b.date, arr);
+  }
 
-    const divsByDate = new Map<string, typeof uniqueDivs>();
-    for (const d of uniqueDivs) {
-      const arr = divsByDate.get(d.date) ?? [];
-      arr.push(d);
-      divsByDate.set(d.date, arr);
-    }
+  const divsByDate = new Map<string, typeof uniqueDivs>();
+  for (const d of uniqueDivs) {
+    const arr = divsByDate.get(d.date) ?? [];
+    arr.push(d);
+    divsByDate.set(d.date, arr);
+  }
 
-    // Continuous daily timeline points for AreaChart
-    const chartPoints: PricePoint[] = [];
-    const dayDetailsMap = new Map<number, DayDetail>();
+  // Continuous daily timeline points for AreaChart
+  const chartPoints: PricePoint[] = [];
+  const dayDetailsMap = new Map<number, DayDetail>();
 
-    // Walk through each market bar chronologically
-    for (const bar of bars) {
-      // 1. Check if there are buys on this date
-      const scheduledBuys = buysByDate.get(bar.date);
-      if (scheduledBuys) {
-        for (const b of scheduledBuys) {
-          const buyPrice = b.price > 0 ? b.price : bar.close;
-          const qty = buyPrice > 0 ? Math.floor(amount / buyPrice) : 0;
-          if (qty > 0) {
-            held += qty;
-            totalBought += qty;
-            invested += amount;
-            if (firstPrice === null) {
-              firstPrice = buyPrice;
-              firstDate = bar.date;
-            }
-            buyLedger.push({
-              date: bar.date,
-              price: buyPrice,
-              amount,
-              units: qty,
-              cumulativeUnits: held,
-              cumulativeInvested: invested,
-            });
-            cashFlows.push({ date: bar.date, amount: -amount });
+  // Walk through each market bar chronologically
+  for (const bar of bars) {
+    // 1. Check if there are buys on this date
+    const scheduledBuys = buysByDate.get(bar.date);
+    if (scheduledBuys) {
+      for (const b of scheduledBuys) {
+        const buyPrice = b.price > 0 ? b.price : bar.close;
+        const qty = buyPrice > 0 ? Math.floor(amount / buyPrice) : 0;
+        if (qty > 0) {
+          held += qty;
+          totalBought += qty;
+          invested += amount;
+          if (firstPrice === null) {
+            firstPrice = buyPrice;
+            firstDate = bar.date;
           }
+          buyLedger.push({
+            date: bar.date,
+            price: buyPrice,
+            amount,
+            units: qty,
+            cumulativeUnits: held,
+            cumulativeInvested: invested,
+          });
+          cashFlows.push({ date: bar.date, amount: -amount });
         }
       }
+    }
 
-      // 2. Check if there are dividend events on this date
-      const barDivs = divsByDate.get(bar.date);
-      let dayEvent: DayDetail["event"] | undefined;
+    // 2. Check if there are dividend events on this date
+    const barDivs = divsByDate.get(bar.date);
+    let dayEvent: DayDetail["event"] | undefined;
 
-      if (barDivs) {
-        for (const div of barDivs) {
-          const heldBefore = held;
-          const bUnits = Math.floor(heldBefore * (div.bonus / 100));
-          const cashDivAmount = heldBefore * (div.cash / 100) * face;
+    if (barDivs) {
+      for (const div of barDivs) {
+        const heldBefore = held;
+        const bUnits = Math.floor(heldBefore * (div.bonus / 100));
+        const cashDivAmount = heldBefore * (div.cash / 100) * face;
 
-          held += bUnits;
-          bonusUnits += bUnits;
-          cashReceived += cashDivAmount;
+        held += bUnits;
+        bonusUnits += bUnits;
+        cashReceived += cashDivAmount;
 
-          let addedFromReinvest = 0;
-          if (reinvest && cashDivAmount > 0 && bar.close > 0) {
-            addedFromReinvest = Math.floor(cashDivAmount / bar.close);
-            if (addedFromReinvest > 0) {
-              held += addedFromReinvest;
-              reinvestedUnits += addedFromReinvest;
-              cashPile += cashDivAmount - addedFromReinvest * bar.close;
-            } else {
-              cashPile += cashDivAmount;
-            }
+        let addedFromReinvest = 0;
+        if (reinvest && cashDivAmount > 0 && bar.close > 0) {
+          addedFromReinvest = Math.floor(cashDivAmount / bar.close);
+          if (addedFromReinvest > 0) {
+            held += addedFromReinvest;
+            reinvestedUnits += addedFromReinvest;
+            cashPile += cashDivAmount - addedFromReinvest * bar.close;
           } else {
             cashPile += cashDivAmount;
-            if (!reinvest && cashDivAmount > 0) {
-              cashFlows.push({ date: bar.date, amount: cashDivAmount });
-            }
           }
-
-          corporateActionsLedger.push({
-            date: bar.date,
-            fiscalYear: div.fiscalYear,
-            bonusPct: div.bonus,
-            cashPct: div.cash,
-            heldBefore,
-            bonusGot: bUnits,
-            cashGot: cashDivAmount,
-            reinvestedShares: addedFromReinvest,
-          });
-
-          dayEvent = {
-            bonusPct: div.bonus,
-            cashPct: div.cash,
-            bonusUnits: bUnits,
-            cashAmount: cashDivAmount,
-          };
+        } else {
+          cashPile += cashDivAmount;
+          if (!reinvest && cashDivAmount > 0) {
+            cashFlows.push({ date: bar.date, amount: cashDivAmount });
+          }
         }
+
+        corporateActionsLedger.push({
+          date: bar.date,
+          fiscalYear: div.fiscalYear,
+          bonusPct: div.bonus,
+          cashPct: div.cash,
+          heldBefore,
+          bonusGot: bUnits,
+          cashGot: cashDivAmount,
+          reinvestedShares: addedFromReinvest,
+        });
+
+        dayEvent = {
+          bonusPct: div.bonus,
+          cashPct: div.cash,
+          bonusUnits: bUnits,
+          cashAmount: cashDivAmount,
+        };
       }
-
-      // Current portfolio valuation for this trading day
-      const curValue = held * bar.close + cashPile;
-      const unixSec = Math.floor(new Date(bar.date).getTime() / 1000);
-
-      chartPoints.push({
-        time: unixSec,
-        value: curValue,
-      });
-
-      dayDetailsMap.set(unixSec, {
-        time: unixSec,
-        date: bar.date,
-        value: curValue,
-        invested,
-        price: bar.close,
-        units: held,
-        ...(dayEvent ? { event: dayEvent } : {}),
-      });
     }
 
-    // Final valuation
-    const lastBar = bars[bars.length - 1]!;
-    const lastPrice = liveLtp ?? lastBar.close;
-    const finalValue = held * lastPrice + cashPile;
-    const totalGain = finalValue - invested;
-    const totalGainPct = invested > 0 ? (totalGain / invested) * 100 : 0;
+    // Current portfolio valuation for this trading day
+    const curValue = held * bar.close + cashPile;
+    const unixSec = Math.floor(new Date(bar.date).getTime() / 1000);
 
-    // Push terminal cash flow for XIRR
-    cashFlows.push({ date: lastBar.date, amount: finalValue });
-    const xirr = calculateXirr(cashFlows);
-
-    // Calculate CAGR for duration
-    const totalYears =
-      (new Date(to).getTime() - new Date(from).getTime()) / (365.25 * 86400000);
-    const cagr =
-      totalYears >= 0.5 && invested > 0 && finalValue > 0
-        ? (Math.pow(finalValue / invested, 1 / totalYears) - 1) * 100
-        : null;
-
-    // Fixed Deposit (FD) Benchmark Comparison (compounded yearly at fdRate% p.a.)
-    const annualFdRate = Math.max(0.01, (fdRate || 7.5) / 100);
-    let totalFdValue = 0;
-    for (const b of executedBuys) {
-      const buyTs = new Date(b.date).getTime();
-      const yearsHeld = Math.max(0, (toTs - buyTs) / (365.25 * 86400000));
-      // Yearly compounding basis: A = P * (1 + r)^yearsHeld
-      totalFdValue += amount * Math.pow(1 + annualFdRate, yearsHeld);
-    }
-    const fdTotalGain = totalFdValue - invested;
-    const fdTotalGainPct = invested > 0 ? (fdTotalGain / invested) * 100 : 0;
-    const alpha = finalValue - totalFdValue;
-    const alphaPct = totalGainPct - fdTotalGainPct;
-
-    // Share Multiplier
-    const shareMultiplier = totalBought > 0 ? held / totalBought : 1;
-
-    // Average cost per share (WACC basis)
-    const avgCostPerShare = held > 0 ? invested / held : 0;
-
-    // Yearly Breakdown aggregation
-    const years = Array.from(new Set(bars.map((b) => b.date.slice(0, 4)))).sort();
-    const yearlyBreakdown = years.map((yr) => {
-      const yrBars = bars.filter((b) => b.date.startsWith(yr));
-      const yrLastBar = yrBars[yrBars.length - 1];
-      const yrEndPt = chartPoints.find(
-        (p) => p.time === Math.floor(new Date(yrLastBar?.date ?? "").getTime() / 1000)
-      );
-
-      const yrBuys = executedBuys.filter((b) => b.date.startsWith(yr));
-      const yrInvested = yrBuys.length * amount;
-
-      const yrDivs = uniqueDivs.filter((d) => d.date.startsWith(yr));
-      const bonusPctSum = yrDivs.reduce((s, d) => s + d.bonus, 0);
-      const cashPctSum = yrDivs.reduce((s, d) => s + d.cash, 0);
-
-      const yrCorp = corporateActionsLedger.filter((c) => c.date.startsWith(yr));
-      const bonusUnitsYear = yrCorp.reduce((s, c) => s + c.bonusGot, 0);
-      const cashAmountYear = yrCorp.reduce((s, c) => s + c.cashGot, 0);
-
-      const endDetail = yrEndPt ? dayDetailsMap.get(yrEndPt.time) : undefined;
-
-      return {
-        year: yr,
-        buysCount: yrBuys.length,
-        invested: yrInvested,
-        bonusPct: bonusPctSum,
-        cashPct: cashPctSum,
-        bonusUnits: bonusUnitsYear,
-        cashReceived: cashAmountYear,
-        yearEndUnits: endDetail?.units ?? 0,
-        yearEndPrice: yrLastBar?.close ?? 0,
-        yearEndValue: yrEndPt?.value ?? 0,
-      };
+    chartPoints.push({
+      time: unixSec,
+      value: curValue,
     });
 
-    const terminalPoints = bars.map((bar) => {
-      const unixSec = Math.floor(new Date(bar.date).getTime() / 1000);
-      const detail = dayDetailsMap.get(unixSec);
-      return {
-        date: bar.date,
-        value: detail?.value ?? 0,
-        invested: detail?.invested ?? 0,
-        price: bar.close,
-        units: detail?.units ?? 0,
-        ...(detail?.event ? { event: detail.event } : {}),
-      };
+    dayDetailsMap.set(unixSec, {
+      time: unixSec,
+      date: bar.date,
+      value: curValue,
+      invested,
+      price: bar.close,
+      units: held,
+      ...(dayEvent ? { event: dayEvent } : {}),
     });
+  }
+
+  // Final valuation
+  const lastBar = bars[bars.length - 1]!;
+  const lastPrice = liveLtp ?? lastBar.close;
+  const finalValue = held * lastPrice + cashPile;
+  const totalGain = finalValue - invested;
+  const totalGainPct = invested > 0 ? (totalGain / invested) * 100 : 0;
+
+  // Push terminal cash flow for XIRR
+  cashFlows.push({ date: lastBar.date, amount: finalValue });
+  const xirr = calculateXirr(cashFlows);
+
+  // Calculate CAGR for duration
+  const totalYears = (new Date(to).getTime() - new Date(from).getTime()) / (365.25 * 86400000);
+  const cagr =
+    totalYears >= 0.5 && invested > 0 && finalValue > 0
+      ? (Math.pow(finalValue / invested, 1 / totalYears) - 1) * 100
+      : null;
+
+  // Fixed Deposit (FD) Benchmark Comparison (compounded yearly at fdRate% p.a.)
+  const annualFdRate = Math.max(0.01, (fdRate || 7.5) / 100);
+  let totalFdValue = 0;
+  for (const b of executedBuys) {
+    const buyTs = new Date(b.date).getTime();
+    const yearsHeld = Math.max(0, (toTs - buyTs) / (365.25 * 86400000));
+    // Yearly compounding basis: A = P * (1 + r)^yearsHeld
+    totalFdValue += amount * Math.pow(1 + annualFdRate, yearsHeld);
+  }
+  const fdTotalGain = totalFdValue - invested;
+  const fdTotalGainPct = invested > 0 ? (fdTotalGain / invested) * 100 : 0;
+  const alpha = finalValue - totalFdValue;
+  const alphaPct = totalGainPct - fdTotalGainPct;
+
+  // Share Multiplier
+  const shareMultiplier = totalBought > 0 ? held / totalBought : 1;
+
+  // Average cost per share (WACC basis)
+  const avgCostPerShare = held > 0 ? invested / held : 0;
+
+  // Yearly Breakdown aggregation
+  const years = Array.from(new Set(bars.map((b) => b.date.slice(0, 4)))).sort();
+  const yearlyBreakdown = years.map((yr) => {
+    const yrBars = bars.filter((b) => b.date.startsWith(yr));
+    const yrLastBar = yrBars[yrBars.length - 1];
+    const yrEndPt = chartPoints.find((p) => p.time === Math.floor(new Date(yrLastBar?.date ?? "").getTime() / 1000));
+
+    const yrBuys = executedBuys.filter((b) => b.date.startsWith(yr));
+    const yrInvested = yrBuys.length * amount;
+
+    const yrDivs = uniqueDivs.filter((d) => d.date.startsWith(yr));
+    const bonusPctSum = yrDivs.reduce((s, d) => s + d.bonus, 0);
+    const cashPctSum = yrDivs.reduce((s, d) => s + d.cash, 0);
+
+    const yrCorp = corporateActionsLedger.filter((c) => c.date.startsWith(yr));
+    const bonusUnitsYear = yrCorp.reduce((s, c) => s + c.bonusGot, 0);
+    const cashAmountYear = yrCorp.reduce((s, c) => s + c.cashGot, 0);
+
+    const endDetail = yrEndPt ? dayDetailsMap.get(yrEndPt.time) : undefined;
 
     return {
-      held,
-      invested,
-      cashPile,
-      cashReceived,
-      bonusUnits,
-      reinvestedUnits,
-      totalBought,
-      firstPrice,
-      firstDate,
-      lastPrice,
-      finalValue,
-      totalGain,
-      totalGainPct,
-      xirr,
-      cagr,
-      annualizedReturn: xirr ?? cagr,
-      shareMultiplier,
-      avgCostPerShare,
-      chartPoints,
-      dayDetailsMap,
-      terminalPoints,
-      buyLedger,
-      corporateActionsLedger,
-      yearlyBreakdown,
-      totalFdValue,
-      fdTotalGain,
-      fdTotalGainPct,
-      alpha,
-      alphaPct,
-      from,
-      to,
+      year: yr,
+      buysCount: yrBuys.length,
+      invested: yrInvested,
+      bonusPct: bonusPctSum,
+      cashPct: cashPctSum,
+      bonusUnits: bonusUnitsYear,
+      cashReceived: cashAmountYear,
+      yearEndUnits: endDetail?.units ?? 0,
+      yearEndPrice: yrLastBar?.close ?? 0,
+      yearEndValue: yrEndPt?.value ?? 0,
     };
+  });
+
+  const terminalPoints = bars.map((bar) => {
+    const unixSec = Math.floor(new Date(bar.date).getTime() / 1000);
+    const detail = dayDetailsMap.get(unixSec);
+    return {
+      date: bar.date,
+      value: detail?.value ?? 0,
+      invested: detail?.invested ?? 0,
+      price: bar.close,
+      units: detail?.units ?? 0,
+      ...(detail?.event ? { event: detail.event } : {}),
+    };
+  });
+
+  return {
+    held,
+    invested,
+    cashPile,
+    cashReceived,
+    bonusUnits,
+    reinvestedUnits,
+    totalBought,
+    firstPrice,
+    firstDate,
+    lastPrice,
+    finalValue,
+    totalGain,
+    totalGainPct,
+    xirr,
+    cagr,
+    annualizedReturn: xirr ?? cagr,
+    shareMultiplier,
+    avgCostPerShare,
+    chartPoints,
+    dayDetailsMap,
+    terminalPoints,
+    buyLedger,
+    corporateActionsLedger,
+    yearlyBreakdown,
+    totalFdValue,
+    fdTotalGain,
+    fdTotalGainPct,
+    alpha,
+    alphaPct,
+    from,
+    to,
+  };
 }
 
 const COMPARE_COLORS = [
@@ -600,6 +583,11 @@ export interface UnifiedSearchAsset {
 }
 
 function TimeMachinePage() {
+  const navigate = useNavigate();
+  const goBackToTools = () => {
+    if (window.history.length > 1) window.history.back();
+    else void navigate({ to: "/tools" });
+  };
   const [mode, setMode] = useState<"single" | "compare">("single");
 
   // Single mode state
@@ -700,9 +688,7 @@ function TimeMachinePage() {
     return searchDatabase
       .filter(
         (p) =>
-          p.symbol.toLowerCase().includes(q) ||
-          p.name.toLowerCase().includes(q) ||
-          p.sector.toLowerCase().includes(q)
+          p.symbol.toLowerCase().includes(q) || p.name.toLowerCase().includes(q) || p.sector.toLowerCase().includes(q),
       )
       .slice(0, 35);
   }, [searchDatabase, searchQuery]);
@@ -711,15 +697,13 @@ function TimeMachinePage() {
   const compareSearchResults = useMemo(() => {
     const q = compareSearch.trim().toLowerCase();
     const available = searchDatabase.filter(
-      (a) => !compareSymbols.some((s) => s.toUpperCase() === a.symbol.toUpperCase())
+      (a) => !compareSymbols.some((s) => s.toUpperCase() === a.symbol.toUpperCase()),
     );
     if (!q) return available.slice(0, 15);
     return available
       .filter(
         (p) =>
-          p.symbol.toLowerCase().includes(q) ||
-          p.name.toLowerCase().includes(q) ||
-          p.sector.toLowerCase().includes(q)
+          p.symbol.toLowerCase().includes(q) || p.name.toLowerCase().includes(q) || p.sector.toLowerCase().includes(q),
       )
       .slice(0, 20);
   }, [searchDatabase, compareSearch, compareSymbols]);
@@ -733,9 +717,7 @@ function TimeMachinePage() {
     return available
       .filter(
         (p) =>
-          p.symbol.toLowerCase().includes(q) ||
-          p.name.toLowerCase().includes(q) ||
-          p.sector.toLowerCase().includes(q)
+          p.symbol.toLowerCase().includes(q) || p.name.toLowerCase().includes(q) || p.sector.toLowerCase().includes(q),
       )
       .slice(0, 16);
   }, [searchDatabase, singleCompareSearch, symbol]);
@@ -762,13 +744,7 @@ function TimeMachinePage() {
   const face = isMf ? 10 : 100;
   const sector =
     live?.sector ??
-    (isMf
-      ? mfScheme?.fundType === "open_end"
-        ? "Open-End MF"
-        : "Mutual Fund"
-      : symbol
-        ? sectorOf(symbol)
-        : null);
+    (isMf ? (mfScheme?.fundType === "open_end" ? "Open-End MF" : "Mutual Fund") : symbol ? sectorOf(symbol) : null);
 
   const scripBars = (historyQ.data ?? []).map((b) => ({ date: b.date, close: b.close }));
   const mfBars = (mfDetailQ.data?.nav ?? [])
@@ -822,11 +798,7 @@ function TimeMachinePage() {
       const name = liveItem?.name ?? scheme?.name ?? sym;
       const itemSector =
         liveItem?.sector ??
-        (isFund
-          ? scheme?.fundType === "open_end"
-            ? "Open-End MF"
-            : "Mutual Fund"
-          : sectorOf(sym) ?? "Equity");
+        (isFund ? (scheme?.fundType === "open_end" ? "Open-End MF" : "Mutual Fund") : (sectorOf(sym) ?? "Equity"));
 
       const res = runBacktest({
         symbol: sym,
@@ -879,9 +851,8 @@ function TimeMachinePage() {
   // Series format for lightweight-charts
   const compareSeries = useMemo(() => {
     return compareResults
-      .filter(
-        (c): c is typeof c & { result: NonNullable<typeof c.result> } =>
-          Boolean(c.result && c.result.terminalPoints.length > 0)
+      .filter((c): c is typeof c & { result: NonNullable<typeof c.result> } =>
+        Boolean(c.result && c.result.terminalPoints.length > 0),
       )
       .map((c) => ({
         symbol: c.symbol,
@@ -896,9 +867,7 @@ function TimeMachinePage() {
   // Ranked results for leaderboard
   const rankedCompareResults = useMemo(() => {
     return [...compareResults]
-      .filter(
-        (c): c is typeof c & { result: NonNullable<typeof c.result> } => Boolean(c.result)
-      )
+      .filter((c): c is typeof c & { result: NonNullable<typeof c.result> } => Boolean(c.result))
       .sort((a, b) => b.result.finalValue - a.result.finalValue);
   }, [compareResults]);
 
@@ -955,13 +924,15 @@ function TimeMachinePage() {
   };
 
   const handleApplyPreset = (symbols: string[]) => {
-    const next = symbols.map((s) => s.toUpperCase().trim()).filter(Boolean).slice(0, 5);
+    const next = symbols
+      .map((s) => s.toUpperCase().trim())
+      .filter(Boolean)
+      .slice(0, 5);
     setCompareSymbols(next);
     setCompareSearch("");
     setShowAddCompare(false);
     setCompareIsReady(next.length >= 2);
   };
-
 
   // Copy share story summary to clipboard for single backtest
   const handleCopyStory = () => {
@@ -1014,7 +985,7 @@ Backtested with MeroShare Console 🇳🇵`;
     rankedCompareResults.forEach((item, idx) => {
       const medal = idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `${idx + 1}.`;
       lines.push(
-        `${medal} ${item.symbol}: ${formatNpr(item.result.finalValue)} (${formatPercent(item.result.totalGainPct)}, ${item.result.annualizedReturn ? `${item.result.annualizedReturn.toFixed(1)}% p.a.` : "-"}) · Units: ${item.result.held.toLocaleString()} (+${item.result.bonusUnits} bonus)`
+        `${medal} ${item.symbol}: ${formatNpr(item.result.finalValue)} (${formatPercent(item.result.totalGainPct)}, ${item.result.annualizedReturn ? `${item.result.annualizedReturn.toFixed(1)}% p.a.` : "-"}) · Units: ${item.result.held.toLocaleString()} (+${item.result.bonusUnits} bonus)`,
       );
     });
 
@@ -1058,16 +1029,25 @@ Backtested with MeroShare Console 🇳🇵`;
         </div>
 
         {/* Header */}
+        <div className="flex justify-start">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8 shrink-0"
+            onClick={goBackToTools}
+            aria-label="Back to tools"
+          >
+            <ArrowLeft className="size-4" />
+          </Button>
+        </div>
         <div className="text-center space-y-2">
           <div className="mx-auto flex size-12 items-center justify-center rounded-2xl border border-primary/25 bg-primary/10 text-primary shadow-sm">
             <Clock className="size-6" />
           </div>
-          <h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl text-foreground">
-            Time Machine
-          </h1>
+          <h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl text-foreground">Time Machine</h1>
           <p className="text-sm text-muted-foreground max-w-md mx-auto">
-            What if you had invested then? Backtest historical SIP, bonus share compounding, and
-            dividends against any NEPSE stock or Mutual Fund.
+            What if you had invested then? Backtest historical SIP, bonus share compounding, and dividends against any
+            NEPSE stock or Mutual Fund.
           </p>
         </div>
 
@@ -1111,9 +1091,7 @@ Backtested with MeroShare Console 🇳🇵`;
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-sm text-foreground">
-                            {p.symbol}
-                          </span>
+                          <span className="font-mono font-bold text-sm text-foreground">{p.symbol}</span>
                           <span className="rounded bg-muted/60 px-1.5 py-0.5 text-[0.65rem] text-muted-foreground">
                             {p.sector}
                           </span>
@@ -1128,9 +1106,7 @@ Backtested with MeroShare Console 🇳🇵`;
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-muted-foreground truncate max-w-sm">
-                          {p.name}
-                        </p>
+                        <p className="text-xs text-muted-foreground truncate max-w-sm">{p.name}</p>
                       </div>
                     </div>
 
@@ -1139,12 +1115,7 @@ Backtested with MeroShare Console 🇳🇵`;
                         {p.ltp ? formatNpr(p.ltp) : `Face ${formatNpr(p.face)}`}
                       </p>
                       {p.changePct !== null && (
-                        <p
-                          className={cn(
-                            "text-[0.7rem] font-medium",
-                            p.changePct >= 0 ? "text-gain" : "text-loss"
-                          )}
-                        >
+                        <p className={cn("text-[0.7rem] font-medium", p.changePct >= 0 ? "text-gain" : "text-loss")}>
                           {formatPercent(p.changePct)}
                         </p>
                       )}
@@ -1251,7 +1222,8 @@ Backtested with MeroShare Console 🇳🇵`;
                 </span>
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Each asset receives the exact same {freq === "once" ? "lumpsum" : `${freq} installment`} of {formatNpr(amount)}.
+                Each asset receives the exact same {freq === "once" ? "lumpsum" : `${freq} installment`} of{" "}
+                {formatNpr(amount)}.
               </p>
             </div>
 
@@ -1278,10 +1250,7 @@ Backtested with MeroShare Console 🇳🇵`;
                 key={item.symbol}
                 className="flex items-center gap-2 rounded-xl border border-border/80 bg-surface px-3 py-1.5 shadow-sm text-xs font-mono"
               >
-                <span
-                  className="size-2.5 rounded-full shrink-0"
-                  style={{ backgroundColor: item.color }}
-                />
+                <span className="size-2.5 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
                 <span className="font-bold text-foreground">{item.symbol}</span>
                 <span className="text-[0.68rem] text-muted-foreground font-sans truncate max-w-[110px]">
                   {item.sector}
@@ -1354,9 +1323,7 @@ Backtested with MeroShare Console 🇳🇵`;
                 {showAddCompare && (
                   <div className="absolute left-0 top-10 z-50 w-80 max-h-72 overflow-y-auto rounded-xl border border-border/80 bg-popover shadow-xl p-1 divide-y divide-border/40 animate-in fade-in zoom-in-95 duration-150">
                     {compareSearchResults.length === 0 ? (
-                      <div className="py-4 text-center text-xs text-muted-foreground">
-                        No matches found.
-                      </div>
+                      <div className="py-4 text-center text-xs text-muted-foreground">No matches found.</div>
                     ) : (
                       compareSearchResults.map((asset) => (
                         <button
@@ -1379,9 +1346,7 @@ Backtested with MeroShare Console 🇳🇵`;
                                 </span>
                               )}
                             </div>
-                            <p className="text-[0.68rem] text-muted-foreground truncate max-w-[180px]">
-                              {asset.name}
-                            </p>
+                            <p className="text-[0.68rem] text-muted-foreground truncate max-w-[180px]">{asset.name}</p>
                           </div>
                           <span className="font-mono text-[0.72rem] text-muted-foreground">
                             {asset.ltp ? formatNpr(asset.ltp) : `Face ${formatNpr(asset.face)}`}
@@ -1401,7 +1366,10 @@ Backtested with MeroShare Console 🇳🇵`;
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {/* 1. Frequency Dropdown */}
             <div className="space-y-2">
-              <Label htmlFor="tm-compare-freq" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              <Label
+                htmlFor="tm-compare-freq"
+                className="text-xs font-semibold text-muted-foreground uppercase tracking-wider"
+              >
                 Frequency
               </Label>
               <Select value={freq} onValueChange={(v) => setFreq(v as Freq)}>
@@ -1423,12 +1391,13 @@ Backtested with MeroShare Console 🇳🇵`;
             {/* 2. Amount per buy */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label htmlFor="tm-compare-amount" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                <Label
+                  htmlFor="tm-compare-amount"
+                  className="text-xs font-semibold text-muted-foreground uppercase tracking-wider"
+                >
                   {freq === "once" ? "Lumpsum Amount" : "Installment Amount"}
                 </Label>
-                <span className="font-mono text-xs font-semibold text-primary">
-                  {formatNpr(amount)}
-                </span>
+                <span className="font-mono text-xs font-semibold text-primary">{formatNpr(amount)}</span>
               </div>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">
@@ -1439,9 +1408,7 @@ Backtested with MeroShare Console 🇳🇵`;
                   inputMode="numeric"
                   value={String(amount)}
                   onChange={(e) =>
-                    setAmount(
-                      Math.max(0, Number(e.target.value.replace(/[^0-9]/g, "").slice(0, 9)) || 0)
-                    )
+                    setAmount(Math.max(0, Number(e.target.value.replace(/[^0-9]/g, "").slice(0, 9)) || 0))
                   }
                   className="h-10 pl-8 font-mono font-medium rounded-xl"
                 />
@@ -1457,7 +1424,7 @@ Backtested with MeroShare Console 🇳🇵`;
                       "rounded-md px-1.5 py-0.5 text-[0.65rem] font-mono transition-all",
                       amount === amt
                         ? "bg-primary/20 text-primary font-bold"
-                        : "bg-muted/40 text-muted-foreground hover:bg-muted"
+                        : "bg-muted/40 text-muted-foreground hover:bg-muted",
                     )}
                   >
                     {amt >= 100000 ? `${amt / 100000}L` : `${amt / 1000}k`}
@@ -1486,12 +1453,13 @@ Backtested with MeroShare Console 🇳🇵`;
             {/* 4. Bank FD Rate */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label htmlFor="tm-compare-fd-rate" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                <Label
+                  htmlFor="tm-compare-fd-rate"
+                  className="text-xs font-semibold text-muted-foreground uppercase tracking-wider"
+                >
                   Bank FD Rate (% p.a.)
                 </Label>
-                <span className="font-mono text-xs font-semibold text-muted-foreground">
-                  Yearly basis
-                </span>
+                <span className="font-mono text-xs font-semibold text-muted-foreground">Yearly basis</span>
               </div>
               <div className="relative">
                 <Input
@@ -1572,7 +1540,10 @@ Backtested with MeroShare Console 🇳🇵`;
             {rangePreset === "custom" && (
               <div className="grid gap-3 sm:grid-cols-2 pt-3 border-t border-border/40 animate-in fade-in duration-200">
                 <div className="space-y-1.5">
-                  <Label htmlFor="tm-compare-from" className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                  <Label
+                    htmlFor="tm-compare-from"
+                    className="text-xs font-medium text-muted-foreground flex items-center gap-1.5"
+                  >
                     <Calendar className="size-3 text-primary" /> Start Date (From)
                   </Label>
                   <Input
@@ -1588,7 +1559,10 @@ Backtested with MeroShare Console 🇳🇵`;
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="tm-compare-to" className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                  <Label
+                    htmlFor="tm-compare-to"
+                    className="text-xs font-medium text-muted-foreground flex items-center gap-1.5"
+                  >
                     <Calendar className="size-3 text-primary" /> End Date (To)
                   </Label>
                   <Input
@@ -1620,9 +1594,7 @@ Backtested with MeroShare Console 🇳🇵`;
                 <h2 className="font-display flex items-center gap-2 text-sm font-bold text-foreground">
                   <TrendingUp className="size-4 text-primary" /> Wealth Growth Comparison
                 </h2>
-                <span className="text-xs font-mono text-muted-foreground">
-                  {compareSeries.length} assets plotted
-                </span>
+                <span className="text-xs font-mono text-muted-foreground">{compareSeries.length} assets plotted</span>
               </div>
               <TimeMachineCompareChart series={compareSeries} height={420} />
             </div>
@@ -1636,18 +1608,13 @@ Backtested with MeroShare Console 🇳🇵`;
                     <span className="rounded-full bg-amber-500/20 px-2.5 py-0.5 text-xs font-bold text-amber-500 flex items-center gap-1">
                       🥇 Rank #1 Winner
                     </span>
-                    <span className="text-xs font-mono font-bold text-muted-foreground">
-                      {winner.sector}
-                    </span>
+                    <span className="text-xs font-mono font-bold text-muted-foreground">{winner.sector}</span>
                   </div>
 
                   <div className="mt-3">
                     <h3 className="font-display text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
                       {winner.symbol}
-                      <span
-                        className="inline-block size-3 rounded-full"
-                        style={{ backgroundColor: winner.color }}
-                      />
+                      <span className="inline-block size-3 rounded-full" style={{ backgroundColor: winner.color }} />
                     </h3>
                     <p className="text-xs text-muted-foreground truncate">{winner.name}</p>
                   </div>
@@ -1655,9 +1622,7 @@ Backtested with MeroShare Console 🇳🇵`;
                   <div className="mt-4 space-y-1.5 border-t border-border/40 pt-3 font-mono text-xs">
                     <div className="flex justify-between items-baseline">
                       <span className="text-muted-foreground">Final Value:</span>
-                      <span className="text-lg font-bold text-foreground">
-                        {formatNpr(winner.result.finalValue)}
-                      </span>
+                      <span className="text-lg font-bold text-foreground">{formatNpr(winner.result.finalValue)}</span>
                     </div>
                     <div className="flex justify-between items-baseline">
                       <span className="text-muted-foreground">Total Return:</span>
@@ -1681,7 +1646,9 @@ Backtested with MeroShare Console 🇳🇵`;
 
                   {runnerUp && (
                     <div className="mt-4 rounded-xl bg-amber-500/10 p-2.5 text-xs text-amber-600 dark:text-amber-400 font-medium">
-                      Beat runner-up ({runnerUp.symbol}) by +{formatNpr(winner.result.finalValue - runnerUp.result.finalValue)} (+{(winner.result.totalGainPct - runnerUp.result.totalGainPct).toFixed(1)}% higher gain)
+                      Beat runner-up ({runnerUp.symbol}) by +
+                      {formatNpr(winner.result.finalValue - runnerUp.result.finalValue)} (+
+                      {(winner.result.totalGainPct - runnerUp.result.totalGainPct).toFixed(1)}% higher gain)
                     </div>
                   )}
                 </div>
@@ -1694,15 +1661,10 @@ Backtested with MeroShare Console 🇳🇵`;
                         <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
                           🥈 Rank #2 Runner Up
                         </span>
-                        <span
-                          className="size-2.5 rounded-full"
-                          style={{ backgroundColor: runnerUp.color }}
-                        />
+                        <span className="size-2.5 rounded-full" style={{ backgroundColor: runnerUp.color }} />
                       </div>
                       <div>
-                        <h4 className="font-display text-xl font-bold text-foreground">
-                          {runnerUp.symbol}
-                        </h4>
+                        <h4 className="font-display text-xl font-bold text-foreground">{runnerUp.symbol}</h4>
                         <p className="text-xs text-muted-foreground truncate">{runnerUp.name}</p>
                       </div>
                       <div className="space-y-1 font-mono text-xs border-t border-border/40 pt-2">
@@ -1716,7 +1678,9 @@ Backtested with MeroShare Console 🇳🇵`;
                         </div>
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">Annualized:</span>
-                          <span className="text-primary">{runnerUp.result.annualizedReturn ? `${runnerUp.result.annualizedReturn.toFixed(1)}%` : "-"}</span>
+                          <span className="text-primary">
+                            {runnerUp.result.annualizedReturn ? `${runnerUp.result.annualizedReturn.toFixed(1)}%` : "-"}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -1728,15 +1692,10 @@ Backtested with MeroShare Console 🇳🇵`;
                         <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
                           🥉 Rank #3
                         </span>
-                        <span
-                          className="size-2.5 rounded-full"
-                          style={{ backgroundColor: third.color }}
-                        />
+                        <span className="size-2.5 rounded-full" style={{ backgroundColor: third.color }} />
                       </div>
                       <div>
-                        <h4 className="font-display text-xl font-bold text-foreground">
-                          {third.symbol}
-                        </h4>
+                        <h4 className="font-display text-xl font-bold text-foreground">{third.symbol}</h4>
                         <p className="text-xs text-muted-foreground truncate">{third.name}</p>
                       </div>
                       <div className="space-y-1 font-mono text-xs border-t border-border/40 pt-2">
@@ -1750,7 +1709,9 @@ Backtested with MeroShare Console 🇳🇵`;
                         </div>
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">Annualized:</span>
-                          <span className="text-primary">{third.result.annualizedReturn ? `${third.result.annualizedReturn.toFixed(1)}%` : "-"}</span>
+                          <span className="text-primary">
+                            {third.result.annualizedReturn ? `${third.result.annualizedReturn.toFixed(1)}%` : "-"}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -1776,9 +1737,7 @@ Backtested with MeroShare Console 🇳🇵`;
                       </div>
                       <div>
                         <p className="text-muted-foreground text-[0.68rem]">Top Alpha Created</p>
-                        <p className="font-bold text-base text-gain mt-0.5">
-                          +{formatNpr(winner.result.alpha)}
-                        </p>
+                        <p className="font-bold text-base text-gain mt-0.5">+{formatNpr(winner.result.alpha)}</p>
                         <p className="text-[0.68rem] text-muted-foreground">
                           +{winner.result.alphaPct.toFixed(1)}% extra return above FD
                         </p>
@@ -1793,48 +1752,44 @@ Backtested with MeroShare Console 🇳🇵`;
             <Panel className="p-4 sm:p-6 border-border/70">
               <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <div>
-                  <h3 className="font-display text-base font-bold text-foreground">
-                    Side-by-Side Performance Matrix
-                  </h3>
+                  <h3 className="font-display text-base font-bold text-foreground">Side-by-Side Performance Matrix</h3>
                   <p className="text-xs text-muted-foreground">
                     Direct comparison of capital invested, final value, returns, corporate actions, and alpha
                   </p>
                 </div>
               </div>
 
-              <div className="overflow-x-auto rounded-xl border border-border/60">
-                <table className="w-full text-xs">
-                  <thead className="bg-muted/20 text-muted-foreground border-b border-border/60">
-                    <tr>
-                      <th className="py-2.5 px-3 text-left font-semibold">Rank</th>
-                      <th className="py-2.5 px-3 text-left font-semibold">Asset</th>
-                      <th className="py-2.5 px-3 text-right font-semibold">Invested</th>
-                      <th className="py-2.5 px-3 text-right font-semibold">Final Value</th>
-                      <th className="py-2.5 px-3 text-right font-semibold">Total Gain</th>
-                      <th className="py-2.5 px-3 text-right font-semibold">Annualized (XIRR)</th>
-                      <th className="py-2.5 px-3 text-right font-semibold">Units Held</th>
-                      <th className="py-2.5 px-3 text-right font-semibold">Cash Div</th>
-                      <th className="py-2.5 px-3 text-right font-semibold">vs Bank FD</th>
-                      <th className="py-2.5 px-3 text-center font-semibold">Deep Dive</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/40 font-mono">
+              <div className="overflow-x-auto rounded-xl border border-border/60 xl:overflow-x-clip">
+                <Table className="text-xs">
+                  <TableHeader className="bg-muted/20 text-muted-foreground">
+                    <TableRow className="bg-muted/40 hover:bg-muted/40">
+                      <TableHead className="py-2.5 px-3 text-left font-semibold">Rank</TableHead>
+                      <TableHead className="py-2.5 px-3 text-left font-semibold">Asset</TableHead>
+                      <TableHead className="py-2.5 px-3 text-right font-semibold">Invested</TableHead>
+                      <TableHead className="py-2.5 px-3 text-right font-semibold">Final Value</TableHead>
+                      <TableHead className="py-2.5 px-3 text-right font-semibold">Total Gain</TableHead>
+                      <TableHead className="py-2.5 px-3 text-right font-semibold">Annualized (XIRR)</TableHead>
+                      <TableHead className="py-2.5 px-3 text-right font-semibold">Units Held</TableHead>
+                      <TableHead className="py-2.5 px-3 text-right font-semibold">Cash Div</TableHead>
+                      <TableHead className="py-2.5 px-3 text-right font-semibold">vs Bank FD</TableHead>
+                      <TableHead className="py-2.5 px-3 text-center font-semibold">Deep Dive</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody className="divide-y divide-border/40 font-mono">
                     {rankedCompareResults.map((item, idx) => {
                       const medal = idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `#${idx + 1}`;
                       const isTop = idx === 0;
 
                       return (
-                        <tr
+                        <TableRow
                           key={item.symbol}
                           className={cn(
                             "hover:bg-muted/20 transition-colors",
-                            isTop ? "bg-amber-500/5 font-medium" : ""
+                            isTop ? "bg-amber-500/5 font-medium" : "",
                           )}
                         >
-                          <td className="py-3 px-3 font-bold text-foreground text-sm">
-                            {medal}
-                          </td>
-                          <td className="py-3 px-3 font-sans">
+                          <TableCell className="py-3 px-3 font-bold text-foreground text-sm">{medal}</TableCell>
+                          <TableCell className="py-3 px-3 font-sans">
                             <div className="flex items-center gap-2">
                               <span
                                 className="size-2.5 rounded-full shrink-0"
@@ -1842,9 +1797,7 @@ Backtested with MeroShare Console 🇳🇵`;
                               />
                               <div>
                                 <div className="flex items-center gap-1.5">
-                                  <span className="font-mono font-bold text-foreground">
-                                    {item.symbol}
-                                  </span>
+                                  <span className="font-mono font-bold text-foreground">{item.symbol}</span>
                                   <span className="rounded bg-muted/60 px-1 py-0.2 text-[0.62rem] text-muted-foreground font-sans">
                                     {item.sector}
                                   </span>
@@ -1854,19 +1807,16 @@ Backtested with MeroShare Console 🇳🇵`;
                                 </p>
                               </div>
                             </div>
-                          </td>
-                          <td className="py-3 px-3 text-right text-muted-foreground">
+                          </TableCell>
+                          <TableCell className="py-3 px-3 text-right text-muted-foreground">
                             {formatNpr(item.result.invested)}
-                          </td>
-                          <td className="py-3 px-3 text-right font-bold text-foreground text-sm">
+                          </TableCell>
+                          <TableCell className="py-3 px-3 text-right font-bold text-foreground text-sm">
                             {formatNpr(item.result.finalValue)}
-                          </td>
-                          <td className="py-3 px-3 text-right">
+                          </TableCell>
+                          <TableCell className="py-3 px-3 text-right">
                             <span
-                              className={cn(
-                                "font-semibold",
-                                item.result.totalGain >= 0 ? "text-gain" : "text-loss"
-                              )}
+                              className={cn("font-semibold", item.result.totalGain >= 0 ? "text-gain" : "text-loss")}
                             >
                               {formatPercent(item.result.totalGainPct)}
                             </span>
@@ -1874,28 +1824,23 @@ Backtested with MeroShare Console 🇳🇵`;
                               {item.result.totalGain >= 0 ? "+" : ""}
                               {formatNpr(item.result.totalGain)}
                             </div>
-                          </td>
-                          <td className="py-3 px-3 text-right text-primary font-semibold">
+                          </TableCell>
+                          <TableCell className="py-3 px-3 text-right text-primary font-semibold">
                             {item.result.annualizedReturn !== null
                               ? `${item.result.annualizedReturn.toFixed(1)}%`
                               : "-"}
-                          </td>
-                          <td className="py-3 px-3 text-right">
+                          </TableCell>
+                          <TableCell className="py-3 px-3 text-right">
                             <span>{item.result.held.toLocaleString()}</span>
                             <div className="text-[0.68rem] text-gain">
                               {item.result.shareMultiplier.toFixed(2)}x (+{item.result.bonusUnits} bonus)
                             </div>
-                          </td>
-                          <td className="py-3 px-3 text-right text-muted-foreground">
+                          </TableCell>
+                          <TableCell className="py-3 px-3 text-right text-muted-foreground">
                             {formatNpr(item.result.cashReceived)}
-                          </td>
-                          <td className="py-3 px-3 text-right">
-                            <span
-                              className={cn(
-                                "font-semibold",
-                                item.result.alpha >= 0 ? "text-gain" : "text-loss"
-                              )}
-                            >
+                          </TableCell>
+                          <TableCell className="py-3 px-3 text-right">
+                            <span className={cn("font-semibold", item.result.alpha >= 0 ? "text-gain" : "text-loss")}>
                               {item.result.alpha >= 0 ? "+" : ""}
                               {formatNpr(item.result.alpha)}
                             </span>
@@ -1903,8 +1848,8 @@ Backtested with MeroShare Console 🇳🇵`;
                               {item.result.alphaPct >= 0 ? "+" : ""}
                               {item.result.alphaPct.toFixed(1)}%
                             </div>
-                          </td>
-                          <td className="py-3 px-3 text-center">
+                          </TableCell>
+                          <TableCell className="py-3 px-3 text-center">
                             <Button
                               variant="ghost"
                               size="sm"
@@ -1917,12 +1862,12 @@ Backtested with MeroShare Console 🇳🇵`;
                               <span>Inspect</span>
                               <ExternalLink className="size-3" />
                             </Button>
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       );
                     })}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
             </Panel>
           </>
@@ -1939,6 +1884,15 @@ Backtested with MeroShare Console 🇳🇵`;
       {/* Top Navigation & Profile Bar */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8 shrink-0"
+            onClick={goBackToTools}
+            aria-label="Back to tools"
+          >
+            <ArrowLeft className="size-4" />
+          </Button>
           <Button
             variant="ghost"
             size="sm"
@@ -1977,12 +1931,8 @@ Backtested with MeroShare Console 🇳🇵`;
           <div className="h-4 w-px bg-border/60" />
 
           <div className="flex items-center gap-2">
-            <h1 className="font-display text-xl sm:text-2xl font-bold tracking-tight text-foreground">
-              {symbol}
-            </h1>
-            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-              Backtest
-            </span>
+            <h1 className="font-display text-xl sm:text-2xl font-bold tracking-tight text-foreground">{symbol}</h1>
+            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">Backtest</span>
             {isMf && (
               <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary">
                 Mutual Fund (Face 10)
@@ -2032,9 +1982,7 @@ Backtested with MeroShare Console 🇳🇵`;
 
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="font-display text-xl font-bold tracking-tight text-foreground">
-                  {symbol}
-                </h2>
+                <h2 className="font-display text-xl font-bold tracking-tight text-foreground">{symbol}</h2>
                 <span className="rounded-full bg-muted/60 px-2 py-0.5 text-[0.68rem] font-medium text-muted-foreground">
                   {sector ?? "Equities"}
                 </span>
@@ -2047,14 +1995,12 @@ Backtested with MeroShare Console 🇳🇵`;
               </p>
               <div className="mt-1 flex items-center gap-2 text-xs">
                 <span className="text-muted-foreground">Live LTP:</span>
-                <span className="font-mono font-semibold text-foreground">
-                  {liveLtp ? formatNpr(liveLtp) : "-"}
-                </span>
+                <span className="font-mono font-semibold text-foreground">{liveLtp ? formatNpr(liveLtp) : "-"}</span>
                 {live && live.percentChange !== 0 && (
                   <span
                     className={cn(
                       "font-mono font-medium text-[0.72rem]",
-                      live.percentChange > 0 ? "text-gain" : "text-loss"
+                      live.percentChange > 0 ? "text-gain" : "text-loss",
                     )}
                   >
                     ({formatPercent(live.percentChange)})
@@ -2140,9 +2086,7 @@ Backtested with MeroShare Console 🇳🇵`;
                               </span>
                             )}
                           </div>
-                          <p className="text-[0.68rem] text-muted-foreground truncate max-w-[180px]">
-                            {asset.name}
-                          </p>
+                          <p className="text-[0.68rem] text-muted-foreground truncate max-w-[180px]">{asset.name}</p>
                         </div>
                         <span className="font-mono text-[0.72rem] text-muted-foreground">
                           {asset.ltp ? formatNpr(asset.ltp) : `Face ${formatNpr(asset.face)}`}
@@ -2192,12 +2136,13 @@ Backtested with MeroShare Console 🇳🇵`;
           {/* 2. Amount per buy */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label htmlFor="tm-amount" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              <Label
+                htmlFor="tm-amount"
+                className="text-xs font-semibold text-muted-foreground uppercase tracking-wider"
+              >
                 {freq === "once" ? "Lumpsum Amount" : "Installment Amount"}
               </Label>
-              <span className="font-mono text-xs font-semibold text-primary">
-                {formatNpr(amount)}
-              </span>
+              <span className="font-mono text-xs font-semibold text-primary">{formatNpr(amount)}</span>
             </div>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">
@@ -2207,11 +2152,7 @@ Backtested with MeroShare Console 🇳🇵`;
                 id="tm-amount"
                 inputMode="numeric"
                 value={String(amount)}
-                onChange={(e) =>
-                  setAmount(
-                    Math.max(0, Number(e.target.value.replace(/[^0-9]/g, "").slice(0, 9)) || 0)
-                  )
-                }
+                onChange={(e) => setAmount(Math.max(0, Number(e.target.value.replace(/[^0-9]/g, "").slice(0, 9)) || 0))}
                 className="h-10 pl-8 font-mono font-medium rounded-xl"
               />
             </div>
@@ -2226,7 +2167,7 @@ Backtested with MeroShare Console 🇳🇵`;
                     "rounded-md px-1.5 py-0.5 text-[0.65rem] font-mono transition-all",
                     amount === amt
                       ? "bg-primary/20 text-primary font-bold"
-                      : "bg-muted/40 text-muted-foreground hover:bg-muted"
+                      : "bg-muted/40 text-muted-foreground hover:bg-muted",
                   )}
                 >
                   {amt >= 100000 ? `${amt / 100000}L` : `${amt / 1000}k`}
@@ -2255,12 +2196,13 @@ Backtested with MeroShare Console 🇳🇵`;
           {/* 4. Bank FD Rate (Adjustable & Yearly) */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label htmlFor="tm-fd-rate" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              <Label
+                htmlFor="tm-fd-rate"
+                className="text-xs font-semibold text-muted-foreground uppercase tracking-wider"
+              >
                 Bank FD Rate (% p.a.)
               </Label>
-              <span className="font-mono text-xs font-semibold text-muted-foreground">
-                Yearly basis
-              </span>
+              <span className="font-mono text-xs font-semibold text-muted-foreground">Yearly basis</span>
             </div>
             <div className="relative">
               <Input
@@ -2286,9 +2228,7 @@ Backtested with MeroShare Console 🇳🇵`;
         {/* Date Presets (Custom Range hidden by default unless clicked) */}
         <div className="space-y-3 pt-2 border-t border-border/40">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Time Horizon
-            </Label>
+            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Time Horizon</Label>
             <span className="text-[0.72rem] text-muted-foreground font-mono">
               {formatDate(from)} to {formatDate(to)}
             </span>
@@ -2341,7 +2281,10 @@ Backtested with MeroShare Console 🇳🇵`;
           {rangePreset === "custom" && (
             <div className="grid gap-3 sm:grid-cols-2 pt-3 border-t border-border/40 animate-in fade-in duration-200">
               <div className="space-y-1.5">
-                <Label htmlFor="tm-from" className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                <Label
+                  htmlFor="tm-from"
+                  className="text-xs font-medium text-muted-foreground flex items-center gap-1.5"
+                >
                   <Calendar className="size-3 text-primary" /> Start Date (From)
                 </Label>
                 <Input
@@ -2384,9 +2327,7 @@ Backtested with MeroShare Console 🇳🇵`;
             {/* 1. Total Invested */}
             <div className="rounded-2xl border border-border/70 bg-card p-4 sm:p-5 shadow-sm">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Total Invested
-                </p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Total Invested</p>
                 <span className="rounded-lg bg-muted/60 p-1.5 text-muted-foreground">
                   <Calculator className="size-4" />
                 </span>
@@ -2396,9 +2337,7 @@ Backtested with MeroShare Console 🇳🇵`;
               </p>
               <div className="mt-2 text-xs text-muted-foreground space-y-0.5">
                 <p>
-                  {freq === "once"
-                    ? "Single lumpsum purchase"
-                    : `${result.buyLedger.length} scheduled installments`}
+                  {freq === "once" ? "Single lumpsum purchase" : `${result.buyLedger.length} scheduled installments`}
                 </p>
                 <p className="num font-mono text-[0.72rem]">
                   Purchased {formatQty(result.totalBought)} base units
@@ -2413,20 +2352,13 @@ Backtested with MeroShare Console 🇳🇵`;
                 <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Current Portfolio Value
                 </p>
-                <DeltaPill value={result.totalGainPct}>
-                  {formatPercent(result.totalGainPct)}
-                </DeltaPill>
+                <DeltaPill value={result.totalGainPct}>{formatPercent(result.totalGainPct)}</DeltaPill>
               </div>
               <p className="num mt-2 font-mono text-2xl sm:text-3xl font-bold text-foreground">
                 {formatNpr(result.finalValue)}
               </p>
               <div className="mt-2 text-xs text-muted-foreground">
-                <p
-                  className={cn(
-                    "num font-semibold text-sm",
-                    result.totalGain >= 0 ? "text-gain" : "text-loss"
-                  )}
-                >
+                <p className={cn("num font-semibold text-sm", result.totalGain >= 0 ? "text-gain" : "text-loss")}>
                   {result.totalGain >= 0 ? "+" : ""}
                   {formatNpr(result.totalGain)} Net Gain
                 </p>
@@ -2447,19 +2379,13 @@ Backtested with MeroShare Console 🇳🇵`;
                 </span>
               </div>
               <p className="num mt-2 font-mono text-2xl sm:text-3xl font-bold text-primary">
-                {result.annualizedReturn !== null
-                  ? `${result.annualizedReturn.toFixed(2)}%`
-                  : "-"}
+                {result.annualizedReturn !== null ? `${result.annualizedReturn.toFixed(2)}%` : "-"}
                 <span className="text-xs font-normal text-muted-foreground ml-1">p.a.</span>
               </p>
               <div className="mt-2 text-xs text-muted-foreground">
                 <div className="flex items-center gap-1.5 font-medium">
                   <Landmark className="size-3.5 text-muted-foreground" />
-                  <span
-                    className={cn(
-                      result.alpha >= 0 ? "text-gain font-semibold" : "text-loss font-semibold"
-                    )}
-                  >
+                  <span className={cn(result.alpha >= 0 ? "text-gain font-semibold" : "text-loss font-semibold")}>
                     {result.alpha >= 0 ? "+" : ""}
                     {formatNpr(result.alpha)}
                   </span>
@@ -2486,9 +2412,7 @@ Backtested with MeroShare Console 🇳🇵`;
                 <span className="text-xs font-normal text-muted-foreground ml-1">shares</span>
               </p>
               <div className="mt-2 text-xs text-muted-foreground">
-                <p className="font-medium text-foreground">
-                  +{formatQty(result.bonusUnits)} Bonus Units Credited
-                </p>
+                <p className="font-medium text-foreground">+{formatQty(result.bonusUnits)} Bonus Units Credited</p>
                 <p className="text-[0.68rem]">
                   {reinvest && result.reinvestedUnits > 0
                     ? `+${result.reinvestedUnits} units from reinvested cash · `
@@ -2509,10 +2433,7 @@ Backtested with MeroShare Console 🇳🇵`;
                 {result.terminalPoints.length} trading days
               </span>
             </div>
-            <TimeMachineTerminalChart
-              points={result.terminalPoints}
-              height={380}
-            />
+            <TimeMachineTerminalChart points={result.terminalPoints} height={380} />
           </div>
 
           {/* Deep Analytics & Tabbed Ledger Section */}
@@ -2547,53 +2468,51 @@ Backtested with MeroShare Console 🇳🇵`;
                 </div>
 
                 {/* Desktop Table View */}
-                <div className="hidden sm:block overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead className="text-muted-foreground border-b border-border/60">
-                      <tr>
-                        <th className="py-2.5 px-3 text-left font-semibold">Year</th>
-                        <th className="py-2.5 px-3 text-right font-semibold">Buys</th>
-                        <th className="py-2.5 px-3 text-right font-semibold">Invested</th>
-                        <th className="py-2.5 px-3 text-right font-semibold">Bonus %</th>
-                        <th className="py-2.5 px-3 text-right font-semibold">Cash %</th>
-                        <th className="py-2.5 px-3 text-right font-semibold">Bonus Units</th>
-                        <th className="py-2.5 px-3 text-right font-semibold">Year-End Units</th>
-                        <th className="py-2.5 px-3 text-right font-semibold">Year-End Close</th>
-                        <th className="py-2.5 px-3 text-right font-semibold">Year-End Value</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/40 font-mono">
+                <div className="hidden sm:block overflow-x-auto xl:overflow-x-clip">
+                  <Table className="text-xs">
+                    <TableHeader className="text-muted-foreground">
+                      <TableRow className="bg-muted/40 hover:bg-muted/40">
+                        <TableHead className="py-2.5 px-3 text-left font-semibold">Year</TableHead>
+                        <TableHead className="py-2.5 px-3 text-right font-semibold">Buys</TableHead>
+                        <TableHead className="py-2.5 px-3 text-right font-semibold">Invested</TableHead>
+                        <TableHead className="py-2.5 px-3 text-right font-semibold">Bonus %</TableHead>
+                        <TableHead className="py-2.5 px-3 text-right font-semibold">Cash %</TableHead>
+                        <TableHead className="py-2.5 px-3 text-right font-semibold">Bonus Units</TableHead>
+                        <TableHead className="py-2.5 px-3 text-right font-semibold">Year-End Units</TableHead>
+                        <TableHead className="py-2.5 px-3 text-right font-semibold">Year-End Close</TableHead>
+                        <TableHead className="py-2.5 px-3 text-right font-semibold">Year-End Value</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody className="divide-y divide-border/40 font-mono">
                       {result.yearlyBreakdown.map((row) => (
-                        <tr key={row.year} className="hover:bg-muted/20 transition-colors">
-                          <td className="py-2.5 px-3 font-bold text-foreground">{row.year}</td>
-                          <td className="py-2.5 px-3 text-right text-muted-foreground">{row.buysCount}</td>
-                          <td className="py-2.5 px-3 text-right">{formatNpr(row.invested)}</td>
-                          <td className="py-2.5 px-3 text-right">
-                            {row.bonusPct > 0 ? (
-                              <span className="text-gain font-semibold">+{row.bonusPct}%</span>
-                            ) : (
-                              "-"
-                            )}
-                          </td>
-                          <td className="py-2.5 px-3 text-right">
+                        <TableRow key={row.year} className="hover:bg-muted/20 transition-colors">
+                          <TableCell className="py-2.5 px-3 font-bold text-foreground">{row.year}</TableCell>
+                          <TableCell className="py-2.5 px-3 text-right text-muted-foreground">
+                            {row.buysCount}
+                          </TableCell>
+                          <TableCell className="py-2.5 px-3 text-right">{formatNpr(row.invested)}</TableCell>
+                          <TableCell className="py-2.5 px-3 text-right">
+                            {row.bonusPct > 0 ? <span className="text-gain font-semibold">+{row.bonusPct}%</span> : "-"}
+                          </TableCell>
+                          <TableCell className="py-2.5 px-3 text-right">
                             {row.cashPct > 0 ? `${row.cashPct}%` : "-"}
-                          </td>
-                          <td className="py-2.5 px-3 text-right text-gain">
+                          </TableCell>
+                          <TableCell className="py-2.5 px-3 text-right text-gain">
                             {row.bonusUnits > 0 ? `+${row.bonusUnits}` : "-"}
-                          </td>
-                          <td className="py-2.5 px-3 text-right font-semibold">
+                          </TableCell>
+                          <TableCell className="py-2.5 px-3 text-right font-semibold">
                             {row.yearEndUnits.toLocaleString()}
-                          </td>
-                          <td className="py-2.5 px-3 text-right text-muted-foreground">
+                          </TableCell>
+                          <TableCell className="py-2.5 px-3 text-right text-muted-foreground">
                             {formatNpr(row.yearEndPrice)}
-                          </td>
-                          <td className="py-2.5 px-3 text-right font-bold text-foreground">
+                          </TableCell>
+                          <TableCell className="py-2.5 px-3 text-right font-bold text-foreground">
                             {formatNpr(row.yearEndValue)}
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       ))}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </div>
 
                 {/* Mobile Cards View */}
@@ -2610,7 +2529,9 @@ Backtested with MeroShare Console 🇳🇵`;
                       <div className="grid grid-cols-2 gap-2 text-[0.72rem]">
                         <div>
                           <span className="text-muted-foreground">Invested: </span>
-                          <span>{formatNpr(row.invested)} ({row.buysCount} buys)</span>
+                          <span>
+                            {formatNpr(row.invested)} ({row.buysCount} buys)
+                          </span>
                         </div>
                         <div>
                           <span className="text-muted-foreground">Holdings: </span>
@@ -2619,7 +2540,8 @@ Backtested with MeroShare Console 🇳🇵`;
                         <div>
                           <span className="text-muted-foreground">Dividends: </span>
                           <span className={cn(row.bonusPct ? "text-gain font-bold" : "")}>
-                            {row.bonusPct ? `${row.bonusPct}% bonus` : "-"} · {row.cashPct ? `${row.cashPct}% cash` : "-"}
+                            {row.bonusPct ? `${row.bonusPct}% bonus` : "-"} ·{" "}
+                            {row.cashPct ? `${row.cashPct}% cash` : "-"}
                           </span>
                         </div>
                         <div>
@@ -2641,7 +2563,8 @@ Backtested with MeroShare Console 🇳🇵`;
                     Corporate Actions & Dividend History
                   </h3>
                   <p className="text-xs text-muted-foreground">
-                    Every dividend distributed by {symbol} during your holding period and how it amplified your portfolio
+                    Every dividend distributed by {symbol} during your holding period and how it amplified your
+                    portfolio
                   </p>
                 </div>
 
@@ -2662,24 +2585,18 @@ Backtested with MeroShare Console 🇳🇵`;
                           </div>
                           <div>
                             <div className="flex items-center gap-2">
-                              <span className="font-bold text-sm text-foreground">
-                                FY {action.fiscalYear}
-                              </span>
+                              <span className="font-bold text-sm text-foreground">FY {action.fiscalYear}</span>
                               <span className="text-[0.68rem] text-muted-foreground">
                                 Book Close: {formatDate(action.date)}
                               </span>
                             </div>
                             <div className="flex items-center gap-2 text-xs mt-0.5">
                               {action.bonusPct > 0 && (
-                                <span className="text-gain font-semibold">
-                                  +{action.bonusPct}% Bonus Share
-                                </span>
+                                <span className="text-gain font-semibold">+{action.bonusPct}% Bonus Share</span>
                               )}
                               {action.bonusPct > 0 && action.cashPct > 0 && <span>·</span>}
                               {action.cashPct > 0 && (
-                                <span className="text-muted-foreground">
-                                  {action.cashPct}% Cash Dividend
-                                </span>
+                                <span className="text-muted-foreground">{action.cashPct}% Cash Dividend</span>
                               )}
                             </div>
                           </div>
@@ -2752,7 +2669,8 @@ Backtested with MeroShare Console 🇳🇵`;
                       <div className="flex justify-between items-baseline">
                         <span className="text-xs text-muted-foreground">Total Return:</span>
                         <span className="font-mono text-sm font-bold text-gain">
-                          {formatPercent(result.totalGainPct)} ({result.totalGain >= 0 ? "+" : ""}{formatNpr(result.totalGain)})
+                          {formatPercent(result.totalGainPct)} ({result.totalGain >= 0 ? "+" : ""}
+                          {formatNpr(result.totalGain)})
                         </span>
                       </div>
                       <div className="flex justify-between items-baseline">
@@ -2791,9 +2709,7 @@ Backtested with MeroShare Console 🇳🇵`;
                       </div>
                       <div className="flex justify-between items-baseline">
                         <span className="text-xs text-muted-foreground">Compounding:</span>
-                        <span className="font-mono text-xs text-muted-foreground">
-                          Yearly guaranteed basis
-                        </span>
+                        <span className="font-mono text-xs text-muted-foreground">Yearly guaranteed basis</span>
                       </div>
                     </div>
                   </div>
@@ -2803,9 +2719,7 @@ Backtested with MeroShare Console 🇳🇵`;
                 <div
                   className={cn(
                     "mt-5 rounded-2xl border p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3",
-                    result.alpha >= 0
-                      ? "border-gain/30 bg-gain/10 text-gain"
-                      : "border-loss/30 bg-loss/10 text-loss"
+                    result.alpha >= 0 ? "border-gain/30 bg-gain/10 text-gain" : "border-loss/30 bg-loss/10 text-loss",
                   )}
                 >
                   <div className="flex items-center gap-3">
@@ -2840,41 +2754,49 @@ Backtested with MeroShare Console 🇳🇵`;
             <TabsContent value="buys" className="mt-4">
               <Panel className="p-4 sm:p-6 border-border/70">
                 <div className="mb-4">
-                  <h3 className="font-display text-base font-bold text-foreground">
-                    SIP Execution & Purchase Ledger
-                  </h3>
+                  <h3 className="font-display text-base font-bold text-foreground">SIP Execution & Purchase Ledger</h3>
                   <p className="text-xs text-muted-foreground">
                     Chronological record of every installment executed, buy price, and cumulative holding
                   </p>
                 </div>
 
                 <div className="max-h-96 overflow-y-auto overflow-x-auto rounded-xl border border-border/50">
-                  <table className="w-full text-xs">
-                    <thead className="sticky top-0 bg-surface text-muted-foreground border-b border-border/60">
-                      <tr>
-                        <th className="py-2.5 px-3 text-left font-semibold">#</th>
-                        <th className="py-2.5 px-3 text-left font-semibold">Date</th>
-                        <th className="py-2.5 px-3 text-right font-semibold">Buy Price</th>
-                        <th className="py-2.5 px-3 text-right font-semibold">Amount</th>
-                        <th className="py-2.5 px-3 text-right font-semibold">Units Bought</th>
-                        <th className="py-2.5 px-3 text-right font-semibold">Cumulative Units</th>
-                        <th className="py-2.5 px-3 text-right font-semibold">Cumulative Cost</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/40 font-mono">
+                  <Table className="text-xs">
+                    <TableHeader className="sticky top-0 bg-surface text-muted-foreground">
+                      <TableRow className="bg-muted/40 hover:bg-muted/40">
+                        <TableHead className="py-2.5 px-3 text-left font-semibold">#</TableHead>
+                        <TableHead className="py-2.5 px-3 text-left font-semibold">Date</TableHead>
+                        <TableHead className="py-2.5 px-3 text-right font-semibold">Buy Price</TableHead>
+                        <TableHead className="py-2.5 px-3 text-right font-semibold">Amount</TableHead>
+                        <TableHead className="py-2.5 px-3 text-right font-semibold">Units Bought</TableHead>
+                        <TableHead className="py-2.5 px-3 text-right font-semibold">Cumulative Units</TableHead>
+                        <TableHead className="py-2.5 px-3 text-right font-semibold">Cumulative Cost</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody className="divide-y divide-border/40 font-mono">
                       {result.buyLedger.map((buy, idx) => (
-                        <tr key={idx} className="hover:bg-muted/20 transition-colors">
-                          <td className="py-2 px-3 text-muted-foreground text-[0.7rem]">{idx + 1}</td>
-                          <td className="py-2 px-3 font-medium text-foreground">{formatDate(buy.date)}</td>
-                          <td className="py-2 px-3 text-right">{formatNpr(buy.price)}</td>
-                          <td className="py-2 px-3 text-right text-muted-foreground">{formatNpr(buy.amount)}</td>
-                          <td className="py-2 px-3 text-right font-semibold text-foreground">+{buy.units}</td>
-                          <td className="py-2 px-3 text-right font-bold text-primary">{buy.cumulativeUnits.toLocaleString()}</td>
-                          <td className="py-2 px-3 text-right text-muted-foreground">{formatNpr(buy.cumulativeInvested)}</td>
-                        </tr>
+                        <TableRow key={idx} className="hover:bg-muted/20 transition-colors">
+                          <TableCell className="py-2 px-3 text-muted-foreground text-[0.7rem]">{idx + 1}</TableCell>
+                          <TableCell className="py-2 px-3 font-medium text-foreground">
+                            {formatDate(buy.date)}
+                          </TableCell>
+                          <TableCell className="py-2 px-3 text-right">{formatNpr(buy.price)}</TableCell>
+                          <TableCell className="py-2 px-3 text-right text-muted-foreground">
+                            {formatNpr(buy.amount)}
+                          </TableCell>
+                          <TableCell className="py-2 px-3 text-right font-semibold text-foreground">
+                            +{buy.units}
+                          </TableCell>
+                          <TableCell className="py-2 px-3 text-right font-bold text-primary">
+                            {buy.cumulativeUnits.toLocaleString()}
+                          </TableCell>
+                          <TableCell className="py-2 px-3 text-right text-muted-foreground">
+                            {formatNpr(buy.cumulativeInvested)}
+                          </TableCell>
+                        </TableRow>
                       ))}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </div>
               </Panel>
             </TabsContent>

@@ -54,106 +54,42 @@ function toNum(value: unknown): number {
   return 0;
 }
 
-export const getOwnDetail = createServerFn({ method: "GET" }).handler(
-  async (): Promise<OwnDetail> => {
-    const auth = await requireAuth();
-    if (auth.demo) return DEMO_USER;
-    return fetchOwnDetail(auth);
-  },
-);
+export const getOwnDetail = createServerFn({ method: "GET" }).handler(async (): Promise<OwnDetail> => {
+  const auth = await requireAuth();
+  if (auth.demo) return DEMO_USER;
+  return fetchOwnDetail(auth);
+});
 
-export const getPortfolio = createServerFn({ method: "GET" }).handler(
-  async (): Promise<PortfolioResponse> => {
-    const auth = await requireAuth();
-    if (auth.demo) return DEMO_PORTFOLIO;
-    return fetchPortfolio(auth);
-  },
-);
+export const getPortfolio = createServerFn({ method: "GET" }).handler(async (): Promise<PortfolioResponse> => {
+  const auth = await requireAuth();
+  if (auth.demo) return DEMO_PORTFOLIO;
+  return fetchPortfolio(auth);
+});
 
 /**
  * MeroShare holdings joined to live NEPSE prices on the server, so the client
  * receives one already-valued list. Scrips the feed doesn't know keep the
  * price MeroShare itself returned.
  */
-export const getEnrichedPortfolio = createServerFn({ method: "GET" }).handler(
-  async (): Promise<EnrichedPortfolio> => {
-    const auth = await requireAuth();
-    if (auth.demo) {
-      const [prices, status] = await Promise.all([getPriceMap(), getMarketStatus()]);
-      const holdings: EnrichedHolding[] = (DEMO_PORTFOLIO.meroShareMyPortfolio ?? []).map((item) => {
-        const scrip = String((item as Record<string, unknown>)["script"] ?? (item as Record<string, unknown>)["scrip"] ?? "").toUpperCase();
-        const units = Math.max(0, toNum((item as Record<string, unknown>)["currentBalance"]));
-        const live = prices.map.get(scrip);
-        const fallbackLtp = toNum((item as Record<string, unknown>)["lastTransactionPrice"]);
-        const fallbackPrev = toNum((item as Record<string, unknown>)["previousClosingPrice"]);
-        const ltp = live && live.ltp > 0 ? live.ltp : fallbackLtp;
-        const previousClose = live && live.previousClose > 0 ? live.previousClose : fallbackPrev;
-        const value = ltp * units;
-        const previousValue = previousClose * units;
-        return {
-          scrip,
-          description: cleanDescription(String((item as Record<string, unknown>)["scriptDesc"] ?? "")),
-          units,
-          ltp,
-          previousClose,
-          change: ltp - previousClose,
-          percentChange: previousClose > 0 ? ((ltp - previousClose) / previousClose) * 100 : 0,
-          value,
-          previousValue,
-          dayChange: value - previousValue,
-          high: live?.high ?? 0,
-          low: live?.low ?? 0,
-          volume: live?.volume ?? 0,
-          sector: live?.sector ?? null,
-          name: live?.name ?? cleanDescription(String((item as Record<string, unknown>)["scriptDesc"] ?? scrip)),
-          live: Boolean(live),
-        };
-      });
-      const totalValue = holdings.reduce((sum, h) => sum + h.value, 0);
-      const totalPreviousValue = holdings.reduce((sum, h) => sum + h.previousValue, 0);
-      const bySector = new Map<string, number>();
-      for (const h of holdings) {
-        const key = h.sector ?? "Unclassified";
-        bySector.set(key, (bySector.get(key) ?? 0) + h.value);
-      }
-      return {
-        holdings,
-        totalValue,
-        totalPreviousValue,
-        dayChange: totalValue - totalPreviousValue,
-        dayChangePercent: totalPreviousValue > 0 ? ((totalValue - totalPreviousValue) / totalPreviousValue) * 100 : 0,
-        totalUnits: holdings.reduce((sum, h) => sum + h.units, 0),
-        liveCount: holdings.filter((h) => h.live).length,
-        marketStale: prices.stale,
-        status,
-        sectors: [...bySector.entries()]
-          .map(([sector, value]) => ({
-            sector,
-            value,
-            weight: totalValue > 0 ? (value / totalValue) * 100 : 0,
-          }))
-          .sort((a, b) => b.value - a.value),
-      };
-    }
-    const [portfolio, prices, status] = await Promise.all([
-      fetchPortfolio(auth),
-      getPriceMap(),
-      getMarketStatus(),
-    ]);
-
-    const holdings: EnrichedHolding[] = (portfolio.meroShareMyPortfolio ?? []).map((item) => {
-      const scrip = String(item.script ?? item.scrip ?? "").toUpperCase();
-      const units = Math.max(0, toNum(item.currentBalance));
+export const getEnrichedPortfolio = createServerFn({ method: "GET" }).handler(async (): Promise<EnrichedPortfolio> => {
+  const auth = await requireAuth();
+  if (auth.demo) {
+    const [prices, status] = await Promise.all([getPriceMap(), getMarketStatus()]);
+    const holdings: EnrichedHolding[] = (DEMO_PORTFOLIO.meroShareMyPortfolio ?? []).map((item) => {
+      const scrip = String(
+        (item as Record<string, unknown>)["script"] ?? (item as Record<string, unknown>)["scrip"] ?? "",
+      ).toUpperCase();
+      const units = Math.max(0, toNum((item as Record<string, unknown>)["currentBalance"]));
       const live = prices.map.get(scrip);
-      const fallbackLtp = toNum(item.lastTransactionPrice);
-      const fallbackPrev = toNum(item.previousClosingPrice);
+      const fallbackLtp = toNum((item as Record<string, unknown>)["lastTransactionPrice"]);
+      const fallbackPrev = toNum((item as Record<string, unknown>)["previousClosingPrice"]);
       const ltp = live && live.ltp > 0 ? live.ltp : fallbackLtp;
       const previousClose = live && live.previousClose > 0 ? live.previousClose : fallbackPrev;
       const value = ltp * units;
       const previousValue = previousClose * units;
       return {
         scrip,
-        description: cleanDescription(String(item["scriptDesc"] ?? "")),
+        description: cleanDescription(String((item as Record<string, unknown>)["scriptDesc"] ?? "")),
         units,
         ltp,
         previousClose,
@@ -166,11 +102,10 @@ export const getEnrichedPortfolio = createServerFn({ method: "GET" }).handler(
         low: live?.low ?? 0,
         volume: live?.volume ?? 0,
         sector: live?.sector ?? null,
-        name: live?.name ?? cleanDescription(String(item["scriptDesc"] ?? scrip)),
+        name: live?.name ?? cleanDescription(String((item as Record<string, unknown>)["scriptDesc"] ?? scrip)),
         live: Boolean(live),
       };
     });
-
     const totalValue = holdings.reduce((sum, h) => sum + h.value, 0);
     const totalPreviousValue = holdings.reduce((sum, h) => sum + h.previousValue, 0);
     const bySector = new Map<string, number>();
@@ -178,14 +113,12 @@ export const getEnrichedPortfolio = createServerFn({ method: "GET" }).handler(
       const key = h.sector ?? "Unclassified";
       bySector.set(key, (bySector.get(key) ?? 0) + h.value);
     }
-
     return {
       holdings,
       totalValue,
       totalPreviousValue,
       dayChange: totalValue - totalPreviousValue,
-      dayChangePercent:
-        totalPreviousValue > 0 ? ((totalValue - totalPreviousValue) / totalPreviousValue) * 100 : 0,
+      dayChangePercent: totalPreviousValue > 0 ? ((totalValue - totalPreviousValue) / totalPreviousValue) * 100 : 0,
       totalUnits: holdings.reduce((sum, h) => sum + h.units, 0),
       liveCount: holdings.filter((h) => h.live).length,
       marketStale: prices.stale,
@@ -198,54 +131,104 @@ export const getEnrichedPortfolio = createServerFn({ method: "GET" }).handler(
         }))
         .sort((a, b) => b.value - a.value),
     };
-  },
-);
+  }
+  const [portfolio, prices, status] = await Promise.all([fetchPortfolio(auth), getPriceMap(), getMarketStatus()]);
 
-export const getMyShares = createServerFn({ method: "GET" }).handler(
-  async (): Promise<MyShareItem[]> => {
-    const auth = await requireAuth();
-    if (auth.demo) return DEMO_SHARES;
-    const res = await fetchPortfolio(auth);
-    return (res.meroShareMyPortfolio ?? []).map(
-      (p) =>
-        ({
-          script: p.script ?? p.scrip,
-          scriptDesc: p["scriptDesc"],
-          currentBalance: p.currentBalance,
-          lastTransactionPrice: p["lastTransactionPrice"],
-          previousClosingPrice: p["previousClosingPrice"],
-          valueAsOfLastTransactionPrice: p["valueAsOfLastTransactionPrice"],
-          valueAsOfPreviousClosingPrice: p["valueAsOfPreviousClosingPrice"],
-          valueOfLastTransPrice: p["valueOfLastTransPrice"],
-          valueOfPrevClosingPrice: p["valueOfPrevClosingPrice"],
-        }) as MyShareItem,
-    );
-  },
-);
+  const holdings: EnrichedHolding[] = (portfolio.meroShareMyPortfolio ?? []).map((item) => {
+    const scrip = String(item.script ?? item.scrip ?? "").toUpperCase();
+    const units = Math.max(0, toNum(item.currentBalance));
+    const live = prices.map.get(scrip);
+    const fallbackLtp = toNum(item.lastTransactionPrice);
+    const fallbackPrev = toNum(item.previousClosingPrice);
+    const ltp = live && live.ltp > 0 ? live.ltp : fallbackLtp;
+    const previousClose = live && live.previousClose > 0 ? live.previousClose : fallbackPrev;
+    const value = ltp * units;
+    const previousValue = previousClose * units;
+    return {
+      scrip,
+      description: cleanDescription(String(item["scriptDesc"] ?? "")),
+      units,
+      ltp,
+      previousClose,
+      change: ltp - previousClose,
+      percentChange: previousClose > 0 ? ((ltp - previousClose) / previousClose) * 100 : 0,
+      value,
+      previousValue,
+      dayChange: value - previousValue,
+      high: live?.high ?? 0,
+      low: live?.low ?? 0,
+      volume: live?.volume ?? 0,
+      sector: live?.sector ?? null,
+      name: live?.name ?? cleanDescription(String(item["scriptDesc"] ?? scrip)),
+      live: Boolean(live),
+    };
+  });
 
-export const getHoldingSymbols = createServerFn({ method: "GET" }).handler(
-  async (): Promise<string[]> => {
-    const auth = await requireAuth();
-    if (auth.demo) {
-      return [
-        ...new Set(
-          DEMO_PORTFOLIO.meroShareMyPortfolio
-            .map((p) => String(p.scrip ?? "").toUpperCase())
-            .filter(Boolean),
-        ),
-      ];
-    }
-    const raw = await fetchHoldingSymbols(auth);
-    if (Array.isArray(raw)) {
-      const symbols = raw.filter((s): s is string => typeof s === "string" && s.trim().length > 0);
-      if (symbols.length > 0) return symbols;
-    }
-    const portfolio = await fetchPortfolio(auth);
-    return (portfolio.meroShareMyPortfolio ?? [])
-      .map((p) => p.script ?? p.scrip)
-      .filter((s): s is string => typeof s === "string" && s.trim().length > 0);
-  },
-);
+  const totalValue = holdings.reduce((sum, h) => sum + h.value, 0);
+  const totalPreviousValue = holdings.reduce((sum, h) => sum + h.previousValue, 0);
+  const bySector = new Map<string, number>();
+  for (const h of holdings) {
+    const key = h.sector ?? "Unclassified";
+    bySector.set(key, (bySector.get(key) ?? 0) + h.value);
+  }
+
+  return {
+    holdings,
+    totalValue,
+    totalPreviousValue,
+    dayChange: totalValue - totalPreviousValue,
+    dayChangePercent: totalPreviousValue > 0 ? ((totalValue - totalPreviousValue) / totalPreviousValue) * 100 : 0,
+    totalUnits: holdings.reduce((sum, h) => sum + h.units, 0),
+    liveCount: holdings.filter((h) => h.live).length,
+    marketStale: prices.stale,
+    status,
+    sectors: [...bySector.entries()]
+      .map(([sector, value]) => ({
+        sector,
+        value,
+        weight: totalValue > 0 ? (value / totalValue) * 100 : 0,
+      }))
+      .sort((a, b) => b.value - a.value),
+  };
+});
+
+export const getMyShares = createServerFn({ method: "GET" }).handler(async (): Promise<MyShareItem[]> => {
+  const auth = await requireAuth();
+  if (auth.demo) return DEMO_SHARES;
+  const res = await fetchPortfolio(auth);
+  return (res.meroShareMyPortfolio ?? []).map(
+    (p) =>
+      ({
+        script: p.script ?? p.scrip,
+        scriptDesc: p["scriptDesc"],
+        currentBalance: p.currentBalance,
+        lastTransactionPrice: p["lastTransactionPrice"],
+        previousClosingPrice: p["previousClosingPrice"],
+        valueAsOfLastTransactionPrice: p["valueAsOfLastTransactionPrice"],
+        valueAsOfPreviousClosingPrice: p["valueAsOfPreviousClosingPrice"],
+        valueOfLastTransPrice: p["valueOfLastTransPrice"],
+        valueOfPrevClosingPrice: p["valueOfPrevClosingPrice"],
+      }) as MyShareItem,
+  );
+});
+
+export const getHoldingSymbols = createServerFn({ method: "GET" }).handler(async (): Promise<string[]> => {
+  const auth = await requireAuth();
+  if (auth.demo) {
+    return [
+      ...new Set(DEMO_PORTFOLIO.meroShareMyPortfolio.map((p) => String(p.scrip ?? "").toUpperCase()).filter(Boolean)),
+    ];
+  }
+  const raw = await fetchHoldingSymbols(auth);
+  if (Array.isArray(raw)) {
+    const symbols = raw.filter((s): s is string => typeof s === "string" && s.trim().length > 0);
+    if (symbols.length > 0) return symbols;
+  }
+  const portfolio = await fetchPortfolio(auth);
+  return (portfolio.meroShareMyPortfolio ?? [])
+    .map((p) => p.script ?? p.scrip)
+    .filter((s): s is string => typeof s === "string" && s.trim().length > 0);
+});
 
 export const getTransactions = createServerFn({ method: "POST" })
   .validator((input: unknown) =>
@@ -307,42 +290,38 @@ export const getWaccCalculated = createServerFn({ method: "POST" })
     return fetchWaccCalculated(auth, data.scrip);
   });
 
-export const getWaccScrips = createServerFn({ method: "POST" }).handler(
-  async (): Promise<WaccScripsResult> => {
-    const auth = await requireAuth();
-    if (auth.demo) {
-      const scrips = (DEMO_WACC_REPORT.waccReportResponse ?? [])
-        .map((r) => String(r.scrip ?? "").toUpperCase())
-        .filter(Boolean);
-      return { scrips, failed: false };
-    }
-    try {
-      const rows = await fetchWaccPendingScrips(auth);
-      return {
-        scrips: rows
-          .map((r) => String(typeof r === "string" ? r : (r.scrip ?? "")).toUpperCase())
-          .filter((s): s is string => Boolean(s)),
-        failed: false,
-      };
-    } catch (error) {
-      // myPurchase/share/ is frequently blocked by CDSC's security filter
-      // (HTML page instead of JSON). Non-fatal: the page falls back to the
-      // normal holdings list so per-scrip WACC stays possible.
-      console.error("[wacc] pending scrips unavailable, using holdings fallback", {
-        message: error instanceof Error ? error.message : String(error),
-      });
-      return { scrips: [], failed: true };
-    }
-  },
-);
+export const getWaccScrips = createServerFn({ method: "POST" }).handler(async (): Promise<WaccScripsResult> => {
+  const auth = await requireAuth();
+  if (auth.demo) {
+    const scrips = (DEMO_WACC_REPORT.waccReportResponse ?? [])
+      .map((r) => String(r.scrip ?? "").toUpperCase())
+      .filter(Boolean);
+    return { scrips, failed: false };
+  }
+  try {
+    const rows = await fetchWaccPendingScrips(auth);
+    return {
+      scrips: rows
+        .map((r) => String(typeof r === "string" ? r : (r.scrip ?? "")).toUpperCase())
+        .filter((s): s is string => Boolean(s)),
+      failed: false,
+    };
+  } catch (error) {
+    // myPurchase/share/ is frequently blocked by CDSC's security filter
+    // (HTML page instead of JSON). Non-fatal: the page falls back to the
+    // normal holdings list so per-scrip WACC stays possible.
+    console.error("[wacc] pending scrips unavailable, using holdings fallback", {
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return { scrips: [], failed: true };
+  }
+});
 
-export const getWaccReport = createServerFn({ method: "POST" }).handler(
-  async (): Promise<WaccReport> => {
-    const auth = await requireAuth();
-    if (auth.demo) return DEMO_WACC_REPORT;
-    return fetchWaccReport(auth);
-  },
-);
+export const getWaccReport = createServerFn({ method: "POST" }).handler(async (): Promise<WaccReport> => {
+  const auth = await requireAuth();
+  if (auth.demo) return DEMO_WACC_REPORT;
+  return fetchWaccReport(auth);
+});
 
 /**
  * Parse the per-scrip `myPurchase/view/` response into a cost basis.
@@ -362,14 +341,9 @@ function extractViewBasis(res: JsonRecord): { units: number; cost: number; rate:
     for (const r of arr) {
       if (typeof r !== "object" || r === null) continue;
       const row = r as Record<string, unknown>;
-      const q = Math.max(
-        0,
-        toNum(row["quantity"] ?? row["transactionQuantity"] ?? row["totalQuantity"]),
-      );
+      const q = Math.max(0, toNum(row["quantity"] ?? row["transactionQuantity"] ?? row["totalQuantity"]));
       const c = Math.max(0, toNum(row["userCost"] ?? row["totalCost"]));
-      const p = toNum(
-        row["userPrice"] ?? row["rate"] ?? row["purchasePrice"] ?? row["averageBuyRate"],
-      );
+      const p = toNum(row["userPrice"] ?? row["rate"] ?? row["purchasePrice"] ?? row["averageBuyRate"]);
       if (q > 0 && (c > 0 || p > 0)) usable = true;
       units += q;
       cost += c > 0 ? c : q * p;
@@ -379,10 +353,7 @@ function extractViewBasis(res: JsonRecord): { units: number; cost: number; rate:
     }
   }
   const cost = Math.max(0, toNum(rec["totalCost"] ?? rec["totalUserCost"] ?? rec["investment"]));
-  const units = Math.max(
-    0,
-    toNum(rec["totalQuantity"] ?? rec["totalUnits"] ?? rec["quantity"]),
-  );
+  const units = Math.max(0, toNum(rec["totalQuantity"] ?? rec["totalUnits"] ?? rec["quantity"]));
   const rate = toNum(rec["averageBuyRate"] ?? rec["waccRate"] ?? rec["rate"]);
   if (cost > 0 || units > 0) {
     return { units, cost, rate: rate > 0 ? rate : units > 0 ? cost / units : 0 };
@@ -406,182 +377,174 @@ function extractViewBasis(res: JsonRecord): { units: number; cost: number; rate:
  * limits; a failed scrip degrades to `missing` rather than failing the whole
  * summary.
  */
-export const getInvestmentSummary = createServerFn({ method: "GET" }).handler(
-  async (): Promise<InvestmentSummary> => {
-    const auth = await requireAuth();
-    if (auth.demo) {
-      const scrips: InvestmentScripSummary[] = DEMO_PURCHASE_SOURCES.map((r) => {
-        const units = Math.max(0, toNum(r.quantity ?? r.transactionQuantity));
-        const price = toNum(r.userPrice ?? r.rate ?? r.purchasePrice);
-        const cost = Math.max(0, toNum(r.userCost)) || units * price;
-        return {
-          scrip: String(r.scrip ?? "").toUpperCase(),
-          units,
-          cost,
-          waccRate: units > 0 ? cost / units : 0,
-          status: "calculated" as const,
-        };
-      });
-      const demoInvestment = scrips.reduce((s, r) => s + r.cost, 0);
-      const demoUnits = scrips.reduce((s, r) => s + r.units, 0);
+export const getInvestmentSummary = createServerFn({ method: "GET" }).handler(async (): Promise<InvestmentSummary> => {
+  const auth = await requireAuth();
+  if (auth.demo) {
+    const scrips: InvestmentScripSummary[] = DEMO_PURCHASE_SOURCES.map((r) => {
+      const units = Math.max(0, toNum(r.quantity ?? r.transactionQuantity));
+      const price = toNum(r.userPrice ?? r.rate ?? r.purchasePrice);
+      const cost = Math.max(0, toNum(r.userCost)) || units * price;
       return {
-        totalInvestment: demoInvestment,
-        totalUnits: demoUnits,
-        avgWacc: demoUnits > 0 ? demoInvestment / demoUnits : 0,
-        calculatedCount: scrips.length,
-        pendingCount: 0,
-        missingCount: 0,
-        scrips,
-      };
-    }
-
-    // Portfolio + account-wide WACC report in parallel. The report is the
-    // primary cost basis (single call, CDSC-calculated); per-scrip purchase
-    // source fills only the gaps (pending/missing scrips). Either may fail
-    // independently (CDSC security filter blocks some myPurchase/* calls
-    // while others work), so each degrades separately.
-    const [portfolioRes, reportRes] = await Promise.allSettled([
-      fetchPortfolio(auth),
-      fetchWaccReport(auth),
-    ]);
-    const portfolio = portfolioRes.status === "fulfilled" ? portfolioRes.value : null;
-    const report = reportRes.status === "fulfilled" ? reportRes.value : null;
-
-    const held = new Map<string, number>();
-    for (const item of portfolio?.meroShareMyPortfolio ?? []) {
-      const scrip = String(item.script ?? item.scrip ?? "").toUpperCase();
-      if (!scrip) continue;
-      held.set(scrip, Math.max(0, toNum(item.currentBalance)));
-    }
-
-    const byScrip = new Map<string, InvestmentScripSummary>();
-    for (const r of report?.waccReportResponse ?? []) {
-      const scrip = String(r.scrip ?? "").toUpperCase();
-      if (!scrip || byScrip.has(scrip)) continue;
-      const cost = Math.max(0, toNum(r.totalCost));
-      const units = Math.max(0, toNum(r.totalQuantity)) || held.get(scrip) || 0;
-      if (cost <= 0 && units <= 0) continue;
-      const rate = toNum(r.averageBuyRate);
-      byScrip.set(scrip, {
-        scrip,
+        scrip: String(r.scrip ?? "").toUpperCase(),
         units,
         cost,
-        waccRate: rate > 0 ? rate : units > 0 ? cost / units : 0,
-        status: "calculated",
-      });
-    }
-
-    // Scrips not covered by the report (pending WACC, report rows without
-    // cost, or a blocked/failed report call) fall through to per-scrip
-    // purchase source.
-    const symbols = [...held.keys()].filter((s) => !byScrip.has(s));
-
-    const BATCH = 5;
-    for (let i = 0; i < symbols.length; i += BATCH) {
-      const batch = symbols.slice(i, i + BATCH);
-      const settled = await Promise.allSettled(batch.map((s) => fetchWaccPending(auth, s)));
-      settled.forEach((result, idx) => {
-        const scrip = batch[idx] as string;
-        if (result.status === "rejected") {
-          byScrip.set(scrip, {
-            scrip,
-            units: held.get(scrip) ?? 0,
-            cost: 0,
-            waccRate: 0,
-            status: "missing",
-          });
-          return;
-        }
-        const res = result.value as WaccSearchResponse;
-        const summary = Array.isArray(res.waccSummaryResponse) ? res.waccSummaryResponse : [];
-        const pending = Array.isArray(res.waccUpdateResponse) ? res.waccUpdateResponse : [];
-        const qtyOf = (r: PurchaseSourceItem) =>
-          Math.max(0, toNum(r.quantity ?? r.transactionQuantity));
-        const priceOf = (r: PurchaseSourceItem) => toNum(r.userPrice ?? r.rate ?? r.purchasePrice);
-        if (summary.length > 0) {
-          let units = 0;
-          let cost = 0;
-          for (const r of summary) {
-            const q = qtyOf(r);
-            units += q;
-            cost += Math.max(0, toNum(r.userCost)) || q * priceOf(r);
-          }
-          const safeCost = Math.max(0, cost);
-          byScrip.set(scrip, {
-            scrip,
-            units,
-            cost: safeCost,
-            waccRate: units > 0 ? safeCost / units : 0,
-            status: "calculated",
-          });
-        } else if (pending.length > 0) {
-          let units = 0;
-          let cost = 0;
-          for (const r of pending) {
-            const q = qtyOf(r);
-            units += q;
-            cost += q * priceOf(r);
-          }
-          const safeCost = Math.max(0, cost);
-          byScrip.set(scrip, {
-            scrip,
-            units,
-            cost: safeCost,
-            waccRate: units > 0 ? safeCost / units : 0,
-            status: "pending",
-          });
-        } else {
-          byScrip.set(scrip, {
-            scrip,
-            units: held.get(scrip) ?? 0,
-            cost: 0,
-            waccRate: 0,
-            status: "missing",
-          });
-        }
-      });
-    }
-
-    // Last resort for still-missing scrips: `myPurchase/view/` returns one
-    // scrip's *calculated* WACC individually, even when the account-wide
-    // report is gated behind unfinished pending calculations and
-    // `search/wacc/` is blocked. This rescues users with partial WACC
-    // (e.g. 3 of 10 done) — their finished scrips surface real values.
-    const stillMissing = [...byScrip.entries()]
-      .filter(([, v]) => v.status === "missing")
-      .map(([k]) => k);
-    for (let i = 0; i < stillMissing.length; i += BATCH) {
-      const batch = stillMissing.slice(i, i + BATCH);
-      const settled = await Promise.allSettled(batch.map((s) => fetchWaccCalculated(auth, s)));
-      settled.forEach((result, idx) => {
-        if (result.status === "rejected") return;
-        const basis = extractViewBasis(result.value);
-        if (!basis) return;
-        const scrip = batch[idx] as string;
-        byScrip.set(scrip, {
-          scrip,
-          units: basis.units || held.get(scrip) || 0,
-          cost: basis.cost,
-          waccRate: basis.rate,
-          status: "calculated",
-        });
-      });
-    }
-
-    const scrips = [...byScrip.values()];
-    const totalInvestment = scrips.reduce((s, r) => s + r.cost, 0);
-    const totalUnits = scrips.reduce((s, r) => s + r.units, 0);
+        waccRate: units > 0 ? cost / units : 0,
+        status: "calculated" as const,
+      };
+    });
+    const demoInvestment = scrips.reduce((s, r) => s + r.cost, 0);
+    const demoUnits = scrips.reduce((s, r) => s + r.units, 0);
     return {
-      totalInvestment,
-      totalUnits,
-      avgWacc: totalUnits > 0 ? totalInvestment / totalUnits : 0,
-      calculatedCount: scrips.filter((r) => r.status === "calculated").length,
-      pendingCount: scrips.filter((r) => r.status === "pending").length,
-      missingCount: scrips.filter((r) => r.status === "missing").length,
+      totalInvestment: demoInvestment,
+      totalUnits: demoUnits,
+      avgWacc: demoUnits > 0 ? demoInvestment / demoUnits : 0,
+      calculatedCount: scrips.length,
+      pendingCount: 0,
+      missingCount: 0,
       scrips,
     };
-  },
-);
+  }
+
+  // Portfolio + account-wide WACC report in parallel. The report is the
+  // primary cost basis (single call, CDSC-calculated); per-scrip purchase
+  // source fills only the gaps (pending/missing scrips). Either may fail
+  // independently (CDSC security filter blocks some myPurchase/* calls
+  // while others work), so each degrades separately.
+  const [portfolioRes, reportRes] = await Promise.allSettled([fetchPortfolio(auth), fetchWaccReport(auth)]);
+  const portfolio = portfolioRes.status === "fulfilled" ? portfolioRes.value : null;
+  const report = reportRes.status === "fulfilled" ? reportRes.value : null;
+
+  const held = new Map<string, number>();
+  for (const item of portfolio?.meroShareMyPortfolio ?? []) {
+    const scrip = String(item.script ?? item.scrip ?? "").toUpperCase();
+    if (!scrip) continue;
+    held.set(scrip, Math.max(0, toNum(item.currentBalance)));
+  }
+
+  const byScrip = new Map<string, InvestmentScripSummary>();
+  for (const r of report?.waccReportResponse ?? []) {
+    const scrip = String(r.scrip ?? "").toUpperCase();
+    if (!scrip || byScrip.has(scrip)) continue;
+    const cost = Math.max(0, toNum(r.totalCost));
+    const units = Math.max(0, toNum(r.totalQuantity)) || held.get(scrip) || 0;
+    if (cost <= 0 && units <= 0) continue;
+    const rate = toNum(r.averageBuyRate);
+    byScrip.set(scrip, {
+      scrip,
+      units,
+      cost,
+      waccRate: rate > 0 ? rate : units > 0 ? cost / units : 0,
+      status: "calculated",
+    });
+  }
+
+  // Scrips not covered by the report (pending WACC, report rows without
+  // cost, or a blocked/failed report call) fall through to per-scrip
+  // purchase source.
+  const symbols = [...held.keys()].filter((s) => !byScrip.has(s));
+
+  const BATCH = 5;
+  for (let i = 0; i < symbols.length; i += BATCH) {
+    const batch = symbols.slice(i, i + BATCH);
+    const settled = await Promise.allSettled(batch.map((s) => fetchWaccPending(auth, s)));
+    settled.forEach((result, idx) => {
+      const scrip = batch[idx] as string;
+      if (result.status === "rejected") {
+        byScrip.set(scrip, {
+          scrip,
+          units: held.get(scrip) ?? 0,
+          cost: 0,
+          waccRate: 0,
+          status: "missing",
+        });
+        return;
+      }
+      const res = result.value as WaccSearchResponse;
+      const summary = Array.isArray(res.waccSummaryResponse) ? res.waccSummaryResponse : [];
+      const pending = Array.isArray(res.waccUpdateResponse) ? res.waccUpdateResponse : [];
+      const qtyOf = (r: PurchaseSourceItem) => Math.max(0, toNum(r.quantity ?? r.transactionQuantity));
+      const priceOf = (r: PurchaseSourceItem) => toNum(r.userPrice ?? r.rate ?? r.purchasePrice);
+      if (summary.length > 0) {
+        let units = 0;
+        let cost = 0;
+        for (const r of summary) {
+          const q = qtyOf(r);
+          units += q;
+          cost += Math.max(0, toNum(r.userCost)) || q * priceOf(r);
+        }
+        const safeCost = Math.max(0, cost);
+        byScrip.set(scrip, {
+          scrip,
+          units,
+          cost: safeCost,
+          waccRate: units > 0 ? safeCost / units : 0,
+          status: "calculated",
+        });
+      } else if (pending.length > 0) {
+        let units = 0;
+        let cost = 0;
+        for (const r of pending) {
+          const q = qtyOf(r);
+          units += q;
+          cost += q * priceOf(r);
+        }
+        const safeCost = Math.max(0, cost);
+        byScrip.set(scrip, {
+          scrip,
+          units,
+          cost: safeCost,
+          waccRate: units > 0 ? safeCost / units : 0,
+          status: "pending",
+        });
+      } else {
+        byScrip.set(scrip, {
+          scrip,
+          units: held.get(scrip) ?? 0,
+          cost: 0,
+          waccRate: 0,
+          status: "missing",
+        });
+      }
+    });
+  }
+
+  // Last resort for still-missing scrips: `myPurchase/view/` returns one
+  // scrip's *calculated* WACC individually, even when the account-wide
+  // report is gated behind unfinished pending calculations and
+  // `search/wacc/` is blocked. This rescues users with partial WACC
+  // (e.g. 3 of 10 done) — their finished scrips surface real values.
+  const stillMissing = [...byScrip.entries()].filter(([, v]) => v.status === "missing").map(([k]) => k);
+  for (let i = 0; i < stillMissing.length; i += BATCH) {
+    const batch = stillMissing.slice(i, i + BATCH);
+    const settled = await Promise.allSettled(batch.map((s) => fetchWaccCalculated(auth, s)));
+    settled.forEach((result, idx) => {
+      if (result.status === "rejected") return;
+      const basis = extractViewBasis(result.value);
+      if (!basis) return;
+      const scrip = batch[idx] as string;
+      byScrip.set(scrip, {
+        scrip,
+        units: basis.units || held.get(scrip) || 0,
+        cost: basis.cost,
+        waccRate: basis.rate,
+        status: "calculated",
+      });
+    });
+  }
+
+  const scrips = [...byScrip.values()];
+  const totalInvestment = scrips.reduce((s, r) => s + r.cost, 0);
+  const totalUnits = scrips.reduce((s, r) => s + r.units, 0);
+  return {
+    totalInvestment,
+    totalUnits,
+    avgWacc: totalUnits > 0 ? totalInvestment / totalUnits : 0,
+    calculatedCount: scrips.filter((r) => r.status === "calculated").length,
+    pendingCount: scrips.filter((r) => r.status === "pending").length,
+    missingCount: scrips.filter((r) => r.status === "missing").length,
+    scrips,
+  };
+});
 
 export const calculateWacc = createServerFn({ method: "POST" })
   .validator((input: unknown) =>

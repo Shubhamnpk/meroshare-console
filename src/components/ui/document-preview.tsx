@@ -24,7 +24,10 @@ type DocumentPreviewProps = {
 
 export function DocumentPreview({ url, sourceUrl }: DocumentPreviewProps) {
   const [pdfReady, setPdfReady] = useState(false);
-  const [PdfComp, setPdfComp] = useState<{ Document: typeof import("react-pdf").Document; Page: typeof import("react-pdf").Page } | null>(null);
+  const [PdfComp, setPdfComp] = useState<{
+    Document: typeof import("react-pdf").Document;
+    Page: typeof import("react-pdf").Page;
+  } | null>(null);
   const [pdfTotalPages, setPdfTotalPages] = useState(0);
   const [docType, setDocType] = useState<"pdf" | "image" | null>(null);
   const [containerSize, setContainerSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
@@ -52,7 +55,9 @@ export function DocumentPreview({ url, sourceUrl }: DocumentPreviewProps) {
         }
       });
     }
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -82,10 +87,7 @@ export function DocumentPreview({ url, sourceUrl }: DocumentPreviewProps) {
   }, []);
 
   const renderW = containerSize.w > 0 ? containerSize.w * BASE_RENDER_SCALE : 0;
-  const pdfRenderW =
-    containerSize.w > PDF_SIDE_PADDING
-      ? (containerSize.w - PDF_SIDE_PADDING) * BASE_RENDER_SCALE
-      : 0;
+  const pdfRenderW = containerSize.w > PDF_SIDE_PADDING ? (containerSize.w - PDF_SIDE_PADDING) * BASE_RENDER_SCALE : 0;
 
   // Layout size of the (2x) rendered content, used for centering math.
   const contentSize = useMemo<{ w: number; h: number } | null>(() => {
@@ -102,12 +104,7 @@ export function DocumentPreview({ url, sourceUrl }: DocumentPreviewProps) {
     return null;
   }, [renderW, pdfRenderW, docType, imgNatural, pdfAspect, pdfTotalPages]);
 
-  const zp = usePreviewZoomPan(
-    containerRef,
-    contentSize,
-    BASE_RENDER_SCALE,
-    !!url && !!contentSize,
-  );
+  const zp = usePreviewZoomPan(containerRef, contentSize, BASE_RENDER_SCALE, !!url && !!contentSize);
 
   // Which PDF page sits at the top of the viewport, derived from the pan offset.
   const currentPdfPage = useMemo(() => {
@@ -130,9 +127,7 @@ export function DocumentPreview({ url, sourceUrl }: DocumentPreviewProps) {
 
   if (!url) {
     return (
-      <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-        No document selected.
-      </div>
+      <div className="flex h-full items-center justify-center text-xs text-muted-foreground">No document selected.</div>
     );
   }
 
@@ -231,11 +226,7 @@ export function DocumentPreview({ url, sourceUrl }: DocumentPreviewProps) {
           onLoadError={(err) => {
             console.error("PDF load error:", err);
           }}
-          loading={
-            <div className="py-10 text-center text-sm text-muted-foreground">
-              Loading document...
-            </div>
-          }
+          loading={<div className="py-10 text-center text-sm text-muted-foreground">Loading document...</div>}
           error={
             <div className="flex flex-col items-center justify-center gap-3 p-8 py-10 text-center">
               <p className="text-sm font-medium text-destructive">Failed to load document</p>

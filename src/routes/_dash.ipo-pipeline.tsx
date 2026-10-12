@@ -4,23 +4,11 @@ import { useQuery } from "@tanstack/react-query";
 import { FileText, Hourglass, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useDocViewer } from "@/components/ui/use-doc-viewer";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ErrorBlock, EmptyBlock, LoadingBlock } from "@/components/states";
+import { StatChip, ChipRow } from "@/components/stat-chip";
 import { BackButton } from "@/components/back-button";
 import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
 import { mfApprovalsQuery, mfPipelineByTypeQuery, mfPipelineOverviewQuery } from "@/lib/queries";
@@ -61,23 +49,11 @@ function statusPill(status: string | null) {
       : "bg-amber-500/15 text-amber-600 dark:text-amber-400";
   return (
     <span
-      className={cn(
-        "inline-block max-w-40 truncate rounded-full px-2 py-0.5 text-[0.68rem] font-semibold",
-        tone,
-      )}
+      className={cn("inline-block max-w-40 truncate rounded-full px-2 py-0.5 text-[0.68rem] font-semibold", tone)}
       title={status}
     >
       {status}
     </span>
-  );
-}
-
-function StatChip({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-border/70 bg-card px-3.5 py-2 leading-tight">
-      <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="num font-semibold">{value}</p>
-    </div>
   );
 }
 
@@ -134,14 +110,7 @@ function IpoPipelinePage() {
   }, [pipelineQ.data, search, sort]);
 
   const counts = overviewQ.data?.counts ?? {};
-  const label =
-    pipeType === "ipo"
-      ? "IPO"
-      : pipeType === "right"
-        ? "Right"
-        : pipeType === "fpo"
-          ? "FPO"
-          : "Debenture";
+  const label = pipeType === "ipo" ? "IPO" : pipeType === "right" ? "Right" : pipeType === "fpo" ? "FPO" : "Debenture";
 
   return (
     <div className="space-y-5">
@@ -158,24 +127,14 @@ function IpoPipelinePage() {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        <StatChip
-          label={`${label} pending`}
-          value={pipelineQ.data ? formatNumber(pipelineQ.data.count) : "-"}
-        />
+      <ChipRow wrap>
+        <StatChip label={`${label} pending`} value={pipelineQ.data ? formatNumber(pipelineQ.data.count) : "-"} />
         <StatChip
           label="Amount awaiting approval"
-          value={
-            pipelineQ.data?.totalAmount != null
-              ? formatNpr(pipelineQ.data.totalAmount, { compact: true })
-              : "-"
-          }
+          value={pipelineQ.data?.totalAmount != null ? formatNpr(pipelineQ.data.totalAmount, { compact: true }) : "-"}
         />
-        <StatChip
-          label="All pipelines"
-          value={overviewQ.data ? formatNumber(overviewQ.data.total) : "-"}
-        />
-      </div>
+        <StatChip label="All pipelines" value={overviewQ.data ? formatNumber(overviewQ.data.total) : "-"} />
+      </ChipRow>
 
       <div className="flex flex-col gap-2 sm:flex-row">
         <div className="relative flex-1">
@@ -195,15 +154,11 @@ function IpoPipelinePage() {
               onClick={() => setPipeType(t.key)}
               className={cn(
                 "rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
-                pipeType === t.key
-                  ? "bg-primary/15 text-primary"
-                  : "text-muted-foreground hover:text-foreground",
+                pipeType === t.key ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground",
               )}
             >
               {t.label}
-              {counts[t.key] != null ? (
-                <span className="num ml-1 opacity-70">{counts[t.key]}</span>
-              ) : null}
+              {counts[t.key] != null ? <span className="num ml-1 opacity-70">{counts[t.key]}</span> : null}
             </button>
           ))}
         </div>
@@ -217,14 +172,12 @@ function IpoPipelinePage() {
         <EmptyBlock
           title={search ? "No matches" : `No ${label} in pipeline`}
           description={
-            search
-              ? "Nothing matches your search."
-              : `No ${label} applications pending with SEBON right now.`
+            search ? "Nothing matches your search." : `No ${label} applications pending with SEBON right now.`
           }
         />
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-border/70 bg-card">
-          <div className="overflow-x-auto">
+        <div className="overflow-clip rounded-2xl border border-border/70 bg-card">
+          <div className="overflow-x-auto xl:overflow-x-clip">
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/40 hover:bg-muted/40">
@@ -279,10 +232,7 @@ function IpoPipelinePage() {
               </TableHeader>
               <TableBody>
                 {rows.map((row, i) => (
-                  <TableRow
-                    key={`${row.company}-${i}`}
-                    className="cursor-pointer transition-colors hover:bg-muted/40"
-                  >
+                  <TableRow key={`${row.company}-${i}`} className="cursor-pointer transition-colors hover:bg-muted/40">
                     <TableCell className="max-w-56 pl-4">
                       <p className="truncate text-[13px] font-semibold" title={row.company}>
                         {row.company}
@@ -335,11 +285,7 @@ function IpoPipelinePage() {
                   <FileText className="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[13px] font-semibold">{a.title}</span>
-                    {a.bsDate ? (
-                      <span className="num block text-[11px] text-muted-foreground">
-                        {a.bsDate}
-                      </span>
-                    ) : null}
+                    {a.bsDate ? <span className="num block text-[11px] text-muted-foreground">{a.bsDate}</span> : null}
                   </span>
                   <span className="shrink-0 text-[11px] font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100">
                     Details
@@ -364,15 +310,11 @@ function IpoPipelinePage() {
           </DialogHeader>
           <dl className="grid grid-cols-2 gap-3 text-sm">
             <div>
-              <dt className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                Dated (BS)
-              </dt>
+              <dt className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">Dated (BS)</dt>
               <dd className="num mt-1 font-semibold">{approval?.bsDate ?? "-"}</dd>
             </div>
             <div>
-              <dt className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-                Dated (AD)
-              </dt>
+              <dt className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">Dated (AD)</dt>
               <dd className="num mt-1 font-semibold">
                 {approval?.adDate
                   ? new Date(approval.adDate).toLocaleDateString("en-GB", {

@@ -23,6 +23,7 @@ export function AreaChart({
   showAxes = false,
   wacc,
   includeWaccDomain = false,
+  anchor,
   className,
 }: {
   points: PricePoint[];
@@ -41,6 +42,8 @@ export function AreaChart({
   wacc?: number | null;
   /** When true, Y domain expands to include wacc (used for All/Max). Otherwise wacc clamps to edge. */
   includeWaccDomain?: boolean;
+  /** Direction anchor (e.g. previous close): up = last >= anchor, else first point. Day charts. */
+  anchor?: number | null;
   className?: string;
 }) {
   const W = 320;
@@ -72,11 +75,7 @@ export function AreaChart({
     // X-axis ticks evenly spaced across the time range
     const count = Math.min(5, points.length);
     const xTickIndices = Array.from(
-      new Set(
-        Array.from({ length: count }, (_, i) =>
-          Math.round((i / (count - 1)) * (points.length - 1))
-        )
-      )
+      new Set(Array.from({ length: count }, (_, i) => Math.round((i / (count - 1)) * (points.length - 1)))),
     ).sort((a, b) => a - b);
 
     const xTicks = xTickIndices.map((idx) => ({
@@ -86,7 +85,7 @@ export function AreaChart({
     }));
 
     return {
-      up: values[values.length - 1]! >= values[0]!,
+      up: values[values.length - 1]! >= (anchor ?? values[0]!),
       min,
       max,
       yTicks,
@@ -94,7 +93,7 @@ export function AreaChart({
       line: points.map((p, i) => `${x(i).toFixed(2)},${y(p.value).toFixed(2)}`),
       pts: points.map((p, i) => ({ x: x(i), y: y(p.value), time: p.time, value: p.value })),
     };
-  }, [points, showAxes, wacc, includeWaccDomain]);
+  }, [points, showAxes, wacc, includeWaccDomain, anchor]);
 
   const waccY = useMemo(() => {
     if (!geom || wacc == null || !Number.isFinite(wacc)) return null;
@@ -107,12 +106,7 @@ export function AreaChart({
 
   if (!geom) {
     return (
-      <div
-        className={cn(
-          "flex h-16 items-center justify-center text-xs text-muted-foreground",
-          className,
-        )}
-      >
+      <div className={cn("flex h-16 items-center justify-center text-xs text-muted-foreground", className)}>
         No history yet
       </div>
     );
@@ -145,10 +139,7 @@ export function AreaChart({
   };
 
   return (
-    <div
-      className={cn("relative min-w-0 select-none", className)}
-      onPointerLeave={() => setHover(null)}
-    >
+    <div className={cn("relative min-w-0 select-none", className)} onPointerLeave={() => setHover(null)}>
       <svg
         ref={svgRef}
         viewBox={`0 0 ${W} ${H}`}
@@ -269,9 +260,7 @@ export function AreaChart({
               <p className="num whitespace-nowrap text-sm font-semibold" style={{ color: stroke }}>
                 {formatValue(h.value)}
               </p>
-              <p className="num whitespace-nowrap text-[0.65rem] text-muted-foreground">
-                {formatLabel(h.time)}
-              </p>
+              <p className="num whitespace-nowrap text-[0.65rem] text-muted-foreground">{formatLabel(h.time)}</p>
               {tooltipExtra ? (
                 <div className="mt-1.5 border-t border-border/60 pt-1.5 text-left">
                   {tooltipExtra({ time: h.time, value: h.value })}
@@ -303,13 +292,7 @@ export function AreaChart({
           {geom.xTicks.map((tick, i) => (
             <span
               key={i}
-              className={cn(
-                i === 0
-                  ? "text-left"
-                  : i === geom.xTicks.length - 1
-                    ? "text-right"
-                    : "text-center"
-              )}
+              className={cn(i === 0 ? "text-left" : i === geom.xTicks.length - 1 ? "text-right" : "text-center")}
             >
               {formatLabel(tick.time)}
             </span>

@@ -3,12 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Fingerprint, Loader2, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  clearSessionUnlock,
-  isBiometricEnrolled,
-  isUnlockedThisSession,
-  unlockWithBiometrics,
-} from "@/lib/biometric";
+import { clearSessionUnlock, isBiometricEnrolled, isUnlockedThisSession, unlockWithBiometrics } from "@/lib/biometric";
 import { logout } from "@/lib/meroshare/auth.functions";
 
 const LOCK_TIMEOUT_MS = 15 * 60 * 1000;

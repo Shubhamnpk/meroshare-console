@@ -47,11 +47,7 @@ export function BrokerTicketsPanel({ brokerId }: { brokerId: BrokerId | null }) 
               <span
                 className={cn(
                   "mt-1.5 size-1.5 shrink-0 rounded-full",
-                  t.status === "resolved"
-                    ? "bg-emerald-500"
-                    : t.status === "pending"
-                      ? "bg-amber-500"
-                      : "bg-primary",
+                  t.status === "resolved" ? "bg-emerald-500" : t.status === "pending" ? "bg-amber-500" : "bg-primary",
                 )}
                 aria-hidden
               />

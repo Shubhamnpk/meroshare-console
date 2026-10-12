@@ -192,8 +192,7 @@ function toPerformance(row: Rec): MfPerformance | null {
 }
 
 export async function getMfPerformance(symbols?: string[]): Promise<MfPerformance[]> {
-  const qs =
-    symbols && symbols.length > 0 ? `?symbols=${encodeURIComponent(symbols.join(","))}` : "";
+  const qs = symbols && symbols.length > 0 ? `?symbols=${encodeURIComponent(symbols.join(","))}` : "";
   const data = await mfJson<Rec[] | Rec>(`/performance${qs}`);
   const list = Array.isArray(data) ? data : data ? [data] : [];
   return list.flatMap((r) => {
@@ -210,9 +209,7 @@ function toNavPoint(row: Rec): MfNavPoint | null {
 }
 
 async function getMfNavHistory(symbol: string): Promise<MfNavPoint[]> {
-  const data = await mfJson<{ series?: Rec[] }>(
-    `/schemes/${encodeURIComponent(symbol)}/nav-history`,
-  );
+  const data = await mfJson<{ series?: Rec[] }>(`/schemes/${encodeURIComponent(symbol)}/nav-history`);
   const series = Array.isArray(data?.series) ? data!.series! : [];
   return series
     .flatMap((r) => {
@@ -236,11 +233,7 @@ function toHolding(row: Rec): MfHolding | null {
 async function getMfHoldings(symbol: string): Promise<MfHolding[]> {
   const data = await mfJson<Rec | Rec[]>(`/schemes/${encodeURIComponent(symbol)}/holdings`);
   // API returns { symbol, count, holdings: [...] } or a flat array
-  const list = Array.isArray(data)
-    ? data
-    : Array.isArray(data?.["holdings"])
-      ? (data!["holdings"] as Rec[])
-      : [];
+  const list = Array.isArray(data) ? data : Array.isArray(data?.["holdings"]) ? (data!["holdings"] as Rec[]) : [];
   return list
     .flatMap((r) => {
       const h = toHolding(r);
@@ -345,9 +338,7 @@ export async function getMfPipelineOverview(): Promise<MfPipelineOverview | null
   const pick = (key: string): MfPipelineType[] =>
     key === "types" && Array.isArray(data[key])
       ? (data[key] as unknown[]).flatMap((t) =>
-          typeof t === "string" && ["ipo", "right", "fpo", "debenture", "mfs"].includes(t)
-            ? [t as MfPipelineType]
-            : [],
+          typeof t === "string" && ["ipo", "right", "fpo", "debenture", "mfs"].includes(t) ? [t as MfPipelineType] : [],
         )
       : [];
   const asRecord = (key: string): Record<string, number> => {
@@ -421,8 +412,7 @@ function toDebenture(row: Rec): MfDebenture | null {
     instrument,
     couponPct: num(row["coupon_pct"]),
     tenorYears: num(row["tenor_years"]),
-    maturityBs:
-      typeof maturity === "string" || typeof maturity === "number" ? String(maturity) : null,
+    maturityBs: typeof maturity === "string" || typeof maturity === "number" ? String(maturity) : null,
     sector: str(row["sector"]),
     units: num(row["units"]),
     faceValue: num(row["face_value"]),
@@ -495,10 +485,7 @@ export async function getMfProducts(): Promise<Record<string, MfProduct[]>> {
   return out;
 }
 
-function aggregateSlices(
-  all: { symbol: string; holdings: MfHolding[] }[],
-  top: number,
-): MfHoldingsMap {
+function aggregateSlices(all: { symbol: string; holdings: MfHolding[] }[], top: number): MfHoldingsMap {
   const byStock = new Map<string, { marketValue: number; schemes: Set<string> }>();
   let covered = 0;
   for (const { symbol, holdings } of all) {
@@ -569,9 +556,7 @@ export async function getMfManagerProduct(slug: string): Promise<MfManagerProduc
   if (!data || typeof data !== "object" || Array.isArray(data)) return null;
   const docs = Array.isArray(data["documents"]) ? (data["documents"] as Rec[]) : [];
   const portals = Array.isArray(data["portals"]) ? (data["portals"] as Rec[]) : [];
-  const schemesDetail = Array.isArray(data["schemes_detail"])
-    ? (data["schemes_detail"] as Rec[])
-    : [];
+  const schemesDetail = Array.isArray(data["schemes_detail"]) ? (data["schemes_detail"] as Rec[]) : [];
   return {
     slug: slug.toLowerCase(),
     name: str(data["name"]),
@@ -653,15 +638,11 @@ export async function getMfManagerDetail(slug: string): Promise<MfManagerDetail 
   const products = Array.isArray(data["products"]) ? (data["products"] as Rec[]) : [];
   const portals = Array.isArray(data["portals"]) ? (data["portals"] as Rec[]) : [];
   const documents = Array.isArray(data["documents"]) ? (data["documents"] as Rec[]) : [];
-  const schemesDetail = Array.isArray(data["schemes_detail"])
-    ? (data["schemes_detail"] as Rec[])
-    : [];
+  const schemesDetail = Array.isArray(data["schemes_detail"]) ? (data["schemes_detail"] as Rec[]) : [];
   const offersRaw = data["offers"];
   const offers: Record<string, boolean> =
     offersRaw && typeof offersRaw === "object" && !Array.isArray(offersRaw)
-      ? Object.fromEntries(
-          Object.entries(offersRaw as Record<string, unknown>).map(([k, v]) => [k, v === true]),
-        )
+      ? Object.fromEntries(Object.entries(offersRaw as Record<string, unknown>).map(([k, v]) => [k, v === true]))
       : {};
   const verified = (data["facts_verified"] ?? null) as Rec | null;
   const detailed: MfProductDetail[] = products.flatMap((p): MfProductDetail[] => {

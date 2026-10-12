@@ -8,37 +8,36 @@ import { marketSnapshotQuery } from "@/lib/queries";
 import { Panel } from "@/components/ui/panel";
 import { ErrorBlock, LoadingBlock, EmptyBlock } from "@/components/states";
 import { DeltaPill } from "@/components/stat-card";
+import { StatChip, ChipRow } from "@/components/stat-chip";
 import { CompactNpr, CompactQty } from "@/components/market/compact-value";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import {
-  ArrowDownRight,
-  ArrowUpRight,
-  Coins,
-  PiggyBank,
-  Search,
-  TrendingDown,
-  TrendingUp,
-  Wallet,
-} from "lucide-react";
+import { Coins, PiggyBank, Search, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
-import { ExportButton, csvRow } from "@/components/export-dialog";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableFooter,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { sortBy, useSort } from "@/components/sortable-table";
+import { ExportButton, buildCsv } from "@/components/export-dialog";
+import { TableCell, TableFooter, TableRow } from "@/components/ui/table";
 import { ScripSheet } from "@/components/market/scrip-sheet";
+import { GlobalPositionSheet } from "@/components/world/global-position-sheet";
 import { HistoryPanel } from "@/components/portfolio/history-panel";
-import { brokerConnectionsQuery, brokerHoldingsQuery, enrichedPortfolioQuery, investmentSummaryQuery, mfSchemesQuery, waccSearchQuery } from "@/lib/queries";
+import { GlobalHistoryPanel } from "@/components/world/global-history-panel";
+import { HoldingsTable, toPaperRows, type HoldingsSortKey as SortKey } from "@/components/portfolio/holdings-table";
+import {
+  brokerConnectionsQuery,
+  brokerHoldingsQuery,
+  enrichedPortfolioQuery,
+  globalValuationQuery,
+  investmentSummaryQuery,
+  mfSchemesQuery,
+  waccSearchQuery,
+} from "@/lib/queries";
+import { sectorOf } from "@/lib/nepse/sectors";
+import { deriveHoldings, useGlobalTxns } from "@/lib/world/store";
+import { formatDisplay, useDisplayCurrency, useDisplayRates } from "@/lib/world/display";
 import type { BrokerId } from "@/lib/brokers/types";
 import { useSettings } from "@/lib/settings";
 import { formatNpr, formatPercent, formatQty } from "@/lib/format";
-import { buyCost, sellProceeds, breakEvenPrice, daysBetween } from "@/lib/calc/fees";
+import { netPosition } from "@/lib/calc/position";
 import { cn } from "@/lib/utils";
 import { ogImage, canonicalLink } from "@/lib/seo";
 import type { EnrichedHolding } from "@/lib/nepse/types";
@@ -50,13 +49,13 @@ export const Route = createFileRoute("/_dash/portfolio")({
       {
         name: "description",
         content:
-          "Every scrip in your demat account valued at live NEPSE prices, its price history and dividend record.",
+          "Every stock in your demat account valued at live NEPSE prices, its price history and dividend record.",
       },
       { property: "og:title", content: "Portfolio | MeroShare Investor Console" },
       {
         property: "og:description",
         content:
-          "Every scrip in your demat account valued at live NEPSE prices, its price history and dividend record.",
+          "Every stock in your demat account valued at live NEPSE prices, its price history and dividend record.",
       },
       ogImage(),
     ],
@@ -69,6 +68,8 @@ function portfolioCsv(
   holdings: EnrichedHolding[],
   totals: { value: number; valuePrev: number },
   costOf: (scrip: string) => { cost: number; waccRate: number } | undefined,
+  isOpenEnd: (scrip: string) => boolean,
+  gross?: boolean,
 ) {
   const rows = holdings.map((h, i) => {
     const c = costOf(h.scrip);
@@ -76,16 +77,16 @@ function portfolioCsv(
     const cost = c?.cost ?? 0;
     let pl = 0;
     let plPct = "";
-    if (cost > 0 && wacc > 0) {
-      const buy = buyCost(h.units, wacc);
-      const net = sellProceeds({ units: h.units, price: h.ltp, avgCost: buy.perUnit, holdingDays: 400 });
-      pl = net.profit;
-      plPct = `${net.profitPercent.toFixed(2)}%`;
+    // Foreign books are zero-commission: always gross, never NEPSE charges.
+    if (!gross && cost > 0 && wacc > 0) {
+      const pos = netPosition(h.units, wacc, h.ltp, { isOpenEnd: isOpenEnd(h.scrip) });
+      pl = pos.profit;
+      plPct = `${pos.profitPct.toFixed(2)}%`;
     } else if (cost > 0) {
       pl = h.value - cost;
       plPct = `${((pl / cost) * 100).toFixed(2)}%`;
     }
-    return csvRow([
+    return [
       i + 1,
       h.scrip,
       h.description,
@@ -101,12 +102,12 @@ function portfolioCsv(
       `${h.percentChange.toFixed(2)}%`,
       totals.value > 0 ? `${((h.value / totals.value) * 100).toFixed(2)}%` : "0.00%",
       h.sector ?? "",
-    ]);
+    ];
   });
-  return [
-    csvRow([
+  return buildCsv(
+    [
       "SN",
-      "Scrip",
+      "Stock",
       "Description",
       "Units",
       "LTP",
@@ -120,54 +121,55 @@ function portfolioCsv(
       "Day change",
       "Weight",
       "Sector",
-    ]),
-    ...rows,
-  ].join("\n");
-}
-
-function StatChip({
-  icon,
-  label,
-  value,
-  valueClass,
-}: {
-  icon: ReactNode;
-  label: string;
-  value: ReactNode;
-  valueClass?: string;
-}) {
-  return (
-    <div className="flex shrink-0 items-center gap-2 rounded-xl border border-border/70 bg-card px-3.5 py-2">
-      <span className="text-muted-foreground">{icon}</span>
-      <div className="leading-tight">
-        <p className="whitespace-nowrap text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-          {label}
-        </p>
-        <p className={`num whitespace-nowrap font-semibold ${valueClass ?? ""}`}>{value}</p>
-      </div>
-    </div>
+    ],
+    rows,
   );
 }
 
-/** Single-row chip rail: never wraps, scrolls horizontally when squeezed. */
-function ChipRow({ children }: { children: ReactNode }) {
-  return (
-    <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      {children}
-    </div>
-  );
+/** Fractional-share display (formatQty rounds to whole kitta). */
+function formatShares(qty: number): string {
+  return String(Number(qty.toFixed(8)));
+}
+function formatNative(amount: number, currency: string): string {
+  // Pence keeps its own symbol (T212 "GBX", Yahoo "GBp") — never converted.
+  if (currency === "GBX" || currency === "GBp") return `${amount.toFixed(2)}p`;
+  const ccy = currency.toUpperCase();
+  if (ccy === "GBP") return `£${amount.toFixed(2)}`;
+  if (ccy === "USD") return `$${amount.toFixed(2)}`;
+  if (ccy === "INR") return `₹${amount.toFixed(2)}`;
+  if (ccy === "EUR") return `€${amount.toFixed(2)}`;
+  return `${String(Number(amount.toFixed(6)))} ${currency}`;
 }
 
-type SortKey =
-  | "scrip"
-  | "units"
-  | "ltp"
-  | "previousClose"
-  | "value"
-  | "avgBuy"
-  | "unrealized"
-  | "percentChange"
-  | "weight";
+function exportNetPl(
+  h: EnrichedHolding,
+  cost: { cost: number; waccRate: number } | undefined,
+  open: boolean,
+): number | null {
+  if (!cost || cost.cost <= 0 || cost.waccRate <= 0) return null;
+  return netPosition(h.units, cost.waccRate, h.ltp, { isOpenEnd: open }).profit;
+}
+
+/** Sector allocation chips, shared by Actual / Broker / Global views. */
+function SectorAllocationPanel({ sectors }: { sectors: { sector: string; weight: number }[] }) {
+  if (sectors.length === 0) return null;
+  return (
+    <Panel as="section">
+      <h2 className="mb-3 font-display text-base font-semibold">Sector allocation</h2>
+      <ul className="flex flex-wrap gap-2">
+        {sectors.slice(0, 8).map((s) => (
+          <li
+            key={s.sector}
+            className="flex items-center gap-2 rounded-xl border border-border/60 bg-surface px-3 py-2 text-sm"
+          >
+            <span className="font-medium">{s.sector}</span>
+            <span className="num text-muted-foreground">{s.weight.toFixed(1)}%</span>
+          </li>
+        ))}
+      </ul>
+    </Panel>
+  );
+}
 
 function PortfolioPage() {
   const { compactNumbers, autoRefresh, refreshMinutes } = useSettings();
@@ -180,9 +182,10 @@ function PortfolioPage() {
   const schemesQ = useQuery(mfSchemesQuery());
   const [search, setSearch] = useState("");
   const [picked, setPicked] = useState<string | null>(null);
+  const [globalPicked, setGlobalPicked] = useState<string | null>(null);
   const [yoOpen, setYoOpen] = useState(false);
   const [yoVersion, setYoVersion] = useState(0);
-  const [view, setView] = useState<"actual" | "yobroker" | "broker">("actual");
+  const [view, setView] = useState<"actual" | "yobroker" | "broker" | "global">("actual");
   useEffect(() => {
     const onChange = () => setYoVersion((v) => v + 1);
     window.addEventListener("yobroker:change", onChange);
@@ -210,8 +213,7 @@ function PortfolioPage() {
   })();
   const yoActive = yoData.active;
   const connections = useQuery(brokerConnectionsQuery());
-  const realBrokerId = (connections.data?.find((c) => c.brokerId !== "yobroker")?.brokerId ??
-    null) as BrokerId | null;
+  const realBrokerId = (connections.data?.find((c) => c.brokerId !== "yobroker")?.brokerId ?? null) as BrokerId | null;
   const brokerHoldings = useQuery({
     ...brokerHoldingsQuery(realBrokerId),
     enabled: Boolean(realBrokerId) && view === "broker",
@@ -251,19 +253,15 @@ function PortfolioPage() {
     schemesQ.data?.some((s) => s.symbol.toUpperCase() === scrip.toUpperCase() && s.fundType === "open_end") ?? false;
 
   const costOf = (scrip: string) => costMap.get(scrip);
-  // Real pocket P/L: buy-side commission amortized + sell charges + CGT — open-end MF has no charges
   const plOf = (h: EnrichedHolding) => {
     const c = costMap.get(h.scrip);
     if (!c || c.cost <= 0 || c.waccRate <= 0) return 0;
-    const open = isOpenEnd(h.scrip);
-    const buy = buyCost(h.units, c.waccRate, { isOpenEnd: open });
-    const net = sellProceeds({ units: h.units, price: h.ltp, avgCost: buy.perUnit, holdingDays: 400, isOpenEnd: open });
-    return net.profit;
+    return netPosition(h.units, c.waccRate, h.ltp, { isOpenEnd: isOpenEnd(h.scrip) }).profit;
   };
   const buyOf = (h: EnrichedHolding) => {
     const c = costMap.get(h.scrip);
     if (!c || c.waccRate <= 0) return null;
-    return buyCost(h.units, c.waccRate, { isOpenEnd: isOpenEnd(c.scrip) });
+    return netPosition(h.units, c.waccRate, h.ltp, { isOpenEnd: isOpenEnd(h.scrip) }).buy;
   };
 
   // Totals for footer: all-in cost and net receivable
@@ -288,21 +286,18 @@ function PortfolioPage() {
         continue;
       }
       const open = isOpenEnd(h.scrip);
-      const buy = buyCost(h.units, c.waccRate, { isOpenEnd: open });
-      const net = sellProceeds({ units: h.units, price: h.ltp, avgCost: buy.perUnit, holdingDays: 400, isOpenEnd: open });
-      sum += net.netReceivable;
+      sum += netPosition(h.units, c.waccRate, h.ltp, { isOpenEnd: open }).net.netReceivable;
     }
     return sum;
   }, [holdings, costMap, schemesQ.data]);
   const unrealizedPL = totalNetReceivable - totalBuyCost;
-  const allInAvgWacc = holdings.length > 0 && totalBuyCost > 0 ? totalBuyCost / totals.units : investment.data?.avgWacc ?? 0;
+  const allInAvgWacc =
+    holdings.length > 0 && totalBuyCost > 0 ? totalBuyCost / totals.units : (investment.data?.avgWacc ?? 0);
 
   const items = useMemo(() => {
     const term = search.trim().toLowerCase();
     const filtered = term
-      ? holdings.filter((h) =>
-          [h.scrip, h.description, h.name].some((s) => s.toLowerCase().includes(term)),
-        )
+      ? holdings.filter((h) => [h.scrip, h.description, h.name].some((s) => s.toLowerCase().includes(term)))
       : holdings;
     const weightOf = (h: EnrichedHolding) => (totals.value > 0 ? h.value / totals.value : 0);
     const getter = (h: EnrichedHolding): string | number => {
@@ -322,7 +317,7 @@ function PortfolioPage() {
         case "unrealized":
           return plOf(h);
         case "percentChange":
-          return h.dayChange;
+          return h.percentChange;
         case "weight":
           return weightOf(h);
       }
@@ -355,8 +350,8 @@ function PortfolioPage() {
         value,
         previousValue: prevValue,
         dayChange: value - prevValue,
-        avgCost: h.avgCost,
-      } as EnrichedHolding & { avgCost: number };
+        avgBuy: h.avgCost,
+      } as EnrichedHolding & { avgBuy: number };
     });
     const totalValue = holdingsYo.reduce((s, h) => s + h.value, 0);
     const totalPrev = holdingsYo.reduce((s, h) => s + h.previousValue, 0);
@@ -374,9 +369,7 @@ function PortfolioPage() {
     if (!yoEnriched) return [];
     const term = search.trim().toLowerCase();
     const filtered = term
-      ? yoEnriched.holdings.filter((h) =>
-          [h.scrip, h.description].some((s) => s.toLowerCase().includes(term)),
-        )
+      ? yoEnriched.holdings.filter((h) => [h.scrip, h.description].some((s) => s.toLowerCase().includes(term)))
       : yoEnriched.holdings;
     const weightOf = (h: (typeof yoEnriched.holdings)[number]) =>
       yoEnriched.totalValue > 0 ? h.value / yoEnriched.totalValue : 0;
@@ -393,11 +386,11 @@ function PortfolioPage() {
         case "value":
           return h.value;
         case "avgBuy":
-          return (h as unknown as { avgCost: number }).avgCost ?? 0;
+          return h.avgBuy;
         case "unrealized":
-          return h.value - h.units * ((h as unknown as { avgCost: number }).avgCost ?? 0);
+          return h.value - h.units * h.avgBuy;
         case "percentChange":
-          return h.dayChange;
+          return h.percentChange;
         case "weight":
           return weightOf(h);
         default:
@@ -450,9 +443,7 @@ function PortfolioPage() {
     if (!brokerEnriched) return [];
     const term = search.trim().toLowerCase();
     const filtered = term
-      ? brokerEnriched.holdings.filter((h) =>
-          [h.scrip, h.description].some((s) => s.toLowerCase().includes(term)),
-        )
+      ? brokerEnriched.holdings.filter((h) => [h.scrip, h.description].some((s) => s.toLowerCase().includes(term)))
       : brokerEnriched.holdings;
     const weightOf = (h: (typeof brokerEnriched.holdings)[number]) =>
       brokerEnriched.totalValue > 0 ? h.value / brokerEnriched.totalValue : 0;
@@ -473,7 +464,7 @@ function PortfolioPage() {
         case "unrealized":
           return h.avgBuy > 0 ? h.value - h.units * h.avgBuy : h.value;
         case "percentChange":
-          return h.dayChange;
+          return h.percentChange;
         case "weight":
           return weightOf(h);
         default:
@@ -483,24 +474,186 @@ function PortfolioPage() {
     return sortBy(filtered, getter, sort.dir);
   }, [brokerEnriched, search, sort]);
 
+  // Broker cost basis (WACC where known) for the full chip set + footer.
+  const brokerCost = useMemo(() => {
+    if (!brokerEnriched) return { cost: 0, unrealized: 0 };
+    let cost = 0;
+    for (const h of brokerEnriched.holdings) {
+      if (h.avgBuy > 0) cost += h.units * h.avgBuy;
+    }
+    return { cost, unrealized: brokerEnriched.totalValue - cost };
+  }, [brokerEnriched]);
+
+  // Broker sector allocation (same panel as Actual), from the symbol map.
+  const brokerSectors = useMemo(() => {
+    if (!brokerEnriched || brokerEnriched.totalValue <= 0) return [];
+    const bySector = new Map<string, number>();
+    for (const h of brokerEnriched.holdings) {
+      const sector = sectorOf(h.scrip) ?? "Unclassified";
+      bySector.set(sector, (bySector.get(sector) ?? 0) + h.value);
+    }
+    return [...bySector.entries()]
+      .map(([sector, value]) => ({
+        sector,
+        weight: (value / brokerEnriched.totalValue) * 100,
+      }))
+      .sort((a, b) => b.weight - a.weight);
+  }, [brokerEnriched]);
+
+  // Global (non-NEPSE) book: imported lots valued in NPR server-side.
+  // Never mixed with demat data — own tab, own totals, own export.
+  const globalTxns = useGlobalTxns();
+  const globalLots = useMemo(
+    () =>
+      deriveHoldings(globalTxns).map((h) => ({
+        symbol: h.symbol,
+        qty: h.qty,
+        avgPrice: h.avgPrice,
+        currency: h.currency,
+      })),
+    [globalTxns],
+  );
+  const globalValuation = useQuery({
+    ...globalValuationQuery(globalLots, view === "global"),
+  });
+  // Display currency for the global book (NPR figures convert here).
+  const displayCurrency = useDisplayCurrency();
+  const nprRate = useDisplayRates(["NPR"]);
+  const toDisplay = nprRate?.["NPR"] ?? null;
+  const gMoney = (npr: number) =>
+    toDisplay == null
+      ? formatNpr(npr, { compact: compactNumbers })
+      : formatDisplay(npr * toDisplay, displayCurrency, { compact: compactNumbers });
+  const globalEnriched = useMemo(() => {
+    const lotBySymbol = new Map(globalLots.map((l) => [l.symbol, l] as const));
+    const rows = (globalValuation.data?.rows ?? [])
+      .filter((r) => r.ok)
+      .map((r) => {
+        const lot = lotBySymbol.get(r.symbol);
+        return {
+          scrip: r.symbol,
+          description: r.name || r.symbol,
+          units: r.qty,
+          ltp: r.ltpNpr,
+          previousClose: r.prevNpr,
+          change: r.ltpNpr - r.prevNpr,
+          percentChange: r.pct,
+          value: r.valueNpr,
+          previousValue: r.prevValueNpr,
+          dayChange: r.dayChangeNpr,
+          avgBuy: r.avgBuyNpr,
+          sector: r.sector,
+          // Native purchase figures for display (Avg column + P/L tooltip).
+          avgNative: lot?.avgPrice ?? 0,
+          nativeCcy: lot?.currency ?? r.currency,
+          ltpNative: r.ltpNative,
+          prevNative: r.prevNative,
+          liveCcy: r.liveCcy,
+        };
+      });
+    const totalValue = rows.reduce((s, h) => s + h.value, 0);
+    const totalPrev = rows.reduce((s, h) => s + h.previousValue, 0);
+    const totalCost = rows.reduce((s, h) => s + h.units * h.avgBuy, 0);
+    return {
+      holdings: rows,
+      totalValue,
+      totalPrev,
+      dayChange: totalValue - totalPrev,
+      dayPct: totalPrev > 0 ? ((totalValue - totalPrev) / totalPrev) * 100 : 0,
+      totalUnits: rows.reduce((s, h) => s + h.units, 0),
+      totalCost,
+      unrealized: totalValue - totalCost,
+      skipped: (globalValuation.data?.rows.length ?? 0) - rows.length,
+    };
+  }, [globalValuation.data, globalLots]);
+
+  const globalItems = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    const filtered = term
+      ? globalEnriched.holdings.filter((h) => [h.scrip, h.description].some((s) => s.toLowerCase().includes(term)))
+      : globalEnriched.holdings;
+    const weightOf = (h: (typeof globalEnriched.holdings)[number]) =>
+      globalEnriched.totalValue > 0 ? h.value / globalEnriched.totalValue : 0;
+    const getter = (h: (typeof globalEnriched.holdings)[number]): string | number => {
+      // Amount columns sort by the displayed native figures (what the eye
+      // checks), not the NPR books behind them. Single-currency books sort
+      // exactly; mixed books sort by face numbers — true worth stays in NPR.
+      switch (sort.key) {
+        case "scrip":
+          return h.scrip;
+        case "units":
+          return h.units;
+        case "ltp":
+          return h.ltpNative;
+        case "previousClose":
+          return h.prevNative;
+        case "value":
+          return h.units * h.ltpNative;
+        case "avgBuy":
+          return h.avgNative;
+        case "unrealized":
+          return h.avgBuy > 0 ? h.value - h.units * h.avgBuy : h.value;
+        case "percentChange":
+          return h.percentChange;
+        case "weight":
+          return weightOf(h);
+        default:
+          return "";
+      }
+    };
+    return sortBy(filtered, getter, sort.dir);
+  }, [globalEnriched, search, sort]);
+
+  // Global sector allocation (same panel as Actual), from quote sectors.
+  const globalSectors = useMemo(() => {
+    if (globalEnriched.totalValue <= 0) return [];
+    const bySector = new Map<string, number>();
+    for (const h of globalEnriched.holdings) {
+      const sector = h.sector ?? "Unclassified";
+      bySector.set(sector, (bySector.get(sector) ?? 0) + h.value);
+    }
+    return [...bySector.entries()]
+      .map(([sector, value]) => ({
+        sector,
+        weight: (value / globalEnriched.totalValue) * 100,
+      }))
+      .sort((a, b) => b.weight - a.weight);
+  }, [globalEnriched]);
+
   // Cost basis + export source follow the active view so Broker exports broker rows.
   const brokerExportCostOf = (scrip: string) => {
     const h = brokerEnriched?.holdings.find((x) => x.scrip === scrip);
     if (!h || h.avgBuy <= 0) return undefined;
     return { cost: h.units * h.avgBuy, waccRate: h.avgBuy };
   };
+  const globalExportCostOf = (scrip: string) => {
+    const h = globalEnriched.holdings.find((x) => x.scrip === scrip);
+    if (!h || h.avgBuy <= 0) return undefined;
+    return { cost: h.units * h.avgBuy, waccRate: h.avgBuy };
+  };
   const expIsBroker = view === "broker";
-  const expItems = (
-    expIsBroker ? (brokerEnriched ? brokerItems : []) : items
-  ) as unknown as EnrichedHolding[];
+  const expIsGlobal = view === "global";
+  const expItems = (expIsBroker
+    ? brokerEnriched
+      ? brokerItems
+      : []
+    : expIsGlobal
+      ? globalItems
+      : items) as unknown as EnrichedHolding[];
   const expTotals = expIsBroker
     ? {
         value: brokerEnriched?.totalValue ?? 0,
         valuePrev: brokerEnriched?.totalPrev ?? 0,
       }
-    : totals;
-  const expCostOf = expIsBroker ? brokerExportCostOf : costOf;
-  const expFilename = expIsBroker ? "broker-portfolio" : "portfolio";
+    : expIsGlobal
+      ? {
+          value: globalEnriched.totalValue,
+          valuePrev: globalEnriched.totalPrev,
+        }
+      : totals;
+  const expCostOf = expIsBroker ? brokerExportCostOf : expIsGlobal ? globalExportCostOf : costOf;
+  const expFilename = expIsBroker ? "broker-portfolio" : expIsGlobal ? "global-portfolio" : "portfolio";
+  const expIsGross = expIsGlobal;
 
   // auto-switch to Yo Broker view when activated first time
   useEffect(() => {
@@ -516,22 +669,25 @@ function PortfolioPage() {
           <h1 className="font-display text-2xl font-semibold sm:text-3xl">Portfolio</h1>
           <p className="mt-1 hidden text-sm text-muted-foreground sm:block">
             {view === "yobroker" && yoEnriched
-              ? `${yoEnriched.holdings.length} scrip${yoEnriched.holdings.length === 1 ? "" : "s"} · virtual Yo Broker portfolio. Click any scrip for detail.`
+              ? `${yoEnriched.holdings.length} stock${yoEnriched.holdings.length === 1 ? "" : "s"} · virtual Yo Broker portfolio.`
               : view === "broker" && brokerEnriched
-                ? `${brokerEnriched.holdings.length} scrip${brokerEnriched.holdings.length === 1 ? "" : "s"} · live ${realBrokerId === "naasa-x" ? "Naasa X" : realBrokerId} broker holdings. Click any scrip for detail.`
-                : `${holdings.length} scrip${holdings.length === 1 ? "" : "s"} · ${liveCount} valued at live NEPSE prices. Click any scrip for its full detail.`}
+                ? `${brokerEnriched.holdings.length} stock${brokerEnriched.holdings.length === 1 ? "" : "s"} · live ${realBrokerId === "naasa-x" ? "Naasa X" : realBrokerId} broker holdings.`
+                : view === "global"
+                  ? `${globalEnriched.holdings.length} foreign stock${globalEnriched.holdings.length === 1 ? "" : "s"} · valued in NPR at live world prices.`
+                  : `${holdings.length} stock${holdings.length === 1 ? "" : "s"} · ${liveCount} valued at live NEPSE prices.`}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <ExportButton
             disabled={expItems.length === 0}
+            className="min-h-11"
             formats={[
               {
                 title: "CSV",
                 description: "Spreadsheet-friendly rows of every holding",
                 filename: expFilename,
                 extension: "csv",
-                build: () => portfolioCsv(expItems, expTotals, expCostOf),
+                build: () => portfolioCsv(expItems, expTotals, expCostOf, isOpenEnd, expIsGross),
               },
               {
                 title: "JSON",
@@ -547,21 +703,15 @@ function PortfolioPage() {
                 extension: "pdf",
                 build: () => "",
                 pdf: () => ({
-                  title: expIsBroker ? "Broker holdings at live prices" : "Portfolio holdings at live prices",
-                  head: [
-                    "SN",
-                    "Scrip",
-                    "Description",
-                    "Units",
-                    "LTP",
-                    "Value",
-                    "Avg buy",
-                    "P/L",
-                    "Day %",
-                  ],
+                  title: expIsBroker
+                    ? "Broker holdings at live prices"
+                    : expIsGlobal
+                      ? "Global holdings at live prices"
+                      : "Portfolio holdings at live prices",
+                  head: ["SN", "Stock", "Description", "Units", "LTP", "Value", "Avg buy", "P/L", "Day %"],
                   body: expItems.map((h, i) => {
                     const c = expCostOf(h.scrip);
-                    const pl = c && c.cost > 0 ? h.value - c.cost : null;
+                    const pl = expIsGross ? (c ? h.value - c.cost : null) : exportNetPl(h, c, isOpenEnd(h.scrip));
                     return [
                       i + 1,
                       h.scrip,
@@ -578,7 +728,7 @@ function PortfolioPage() {
                     ? [
                         "",
                         "Total",
-                        `${brokerEnriched?.holdings.length ?? 0} scrips · live broker prices`,
+                        `${brokerEnriched?.holdings.length ?? 0} stocks · live broker prices`,
                         formatQty(brokerEnriched?.totalUnits ?? 0),
                         "",
                         (brokerEnriched?.totalValue ?? 0).toFixed(2),
@@ -586,21 +736,31 @@ function PortfolioPage() {
                         "-",
                         `${(brokerEnriched?.dayPct ?? 0) >= 0 ? "+" : ""}${(brokerEnriched?.dayPct ?? 0).toFixed(2)}%`,
                       ]
-                    : [
-                        "",
-                        "Total",
-                        `${holdings.length} scrips · ${liveCount} at live prices`,
-                        formatQty(totals.units),
-                        "",
-                        totals.value.toFixed(2),
-                        investment.data && investment.data.avgWacc > 0
-                          ? investment.data.avgWacc.toFixed(2)
-                          : "-",
-                        totalInvestment > 0
-                          ? `${unrealizedPL >= 0 ? "+" : ""}${unrealizedPL.toFixed(2)}`
-                          : "-",
-                        `${totals.dayPct >= 0 ? "+" : ""}${totals.dayPct.toFixed(2)}%`,
-                      ],
+                    : expIsGlobal
+                      ? [
+                          "",
+                          "Total",
+                          `${globalEnriched.holdings.length} stocks · global prices (NPR)`,
+                          formatShares(globalEnriched.totalUnits),
+                          "",
+                          globalEnriched.totalValue.toFixed(2),
+                          "-",
+                          globalEnriched.totalCost > 0
+                            ? `${globalEnriched.unrealized >= 0 ? "+" : ""}${globalEnriched.unrealized.toFixed(2)}`
+                            : "-",
+                          `${globalEnriched.dayPct >= 0 ? "+" : ""}${globalEnriched.dayPct.toFixed(2)}%`,
+                        ]
+                      : [
+                          "",
+                          "Total",
+                          `${holdings.length} stocks · ${liveCount} at live prices`,
+                          formatQty(totals.units),
+                          "",
+                          totals.value.toFixed(2),
+                          investment.data && investment.data.avgWacc > 0 ? investment.data.avgWacc.toFixed(2) : "-",
+                          totalInvestment > 0 ? `${unrealizedPL >= 0 ? "+" : ""}${unrealizedPL.toFixed(2)}` : "-",
+                          `${totals.dayPct >= 0 ? "+" : ""}${totals.dayPct.toFixed(2)}%`,
+                        ],
                 }),
               },
             ]}
@@ -612,80 +772,66 @@ function PortfolioPage() {
               void q.refetch();
               void investment.refetch();
               if (view === "broker") void brokerHoldings.refetch();
+              if (view === "global") void globalValuation.refetch();
             }}
-            disabled={q.isFetching || investment.isFetching}
-            className="gap-1.5"
+            disabled={q.isFetching || investment.isFetching || globalValuation.isFetching}
+            className="min-h-11 gap-1.5"
             aria-label="Refresh portfolio"
           >
             <RefreshCw
-              className={`size-3.5 ${q.isFetching || investment.isFetching ? "animate-spin" : ""}`}
+              className={`size-3.5 ${q.isFetching || investment.isFetching || globalValuation.isFetching ? "animate-spin" : ""}`}
             />{" "}
             Refresh
           </Button>
         </div>
       </div>
 
-      {yoActive || realBrokerId ? (
+      {yoActive || realBrokerId || globalLots.length > 0 ? (
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex rounded-full border border-border/70 bg-card p-1">
-            {(
-              [
-                { id: "actual", label: "Actual", show: true },
-                { id: "yobroker", label: "Yo Broker", show: yoActive },
-                { id: "broker", label: "Broker", show: Boolean(realBrokerId) },
-              ] as const
-            )
-              .filter((t) => t.show)
-              .map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => setView(t.id)}
-                  className={cn(
-                    "rounded-full px-3 py-1 text-xs font-semibold transition-colors",
-                    view === t.id
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {t.label}
-                </button>
-              ))}
-          </div>
-          <span className="text-xs text-muted-foreground">
-            {view === "yobroker"
-              ? `Virtual ${formatNpr(yoData.cash)} cash · ${yoEnriched?.holdings.length ?? 0} holdings`
-              : view === "broker"
-                ? `Live ${realBrokerId === "naasa-x" ? "Naasa X" : realBrokerId} holdings`
-                : "Real demat holdings"}
-          </span>
+          <Tabs value={view} onValueChange={(v) => setView(v as typeof view)}>
+            <TabsList>
+              {(
+                [
+                  { id: "actual", label: "Actual", show: true },
+                  { id: "yobroker", label: "Yo Broker", show: yoActive },
+                  { id: "broker", label: "Broker", show: Boolean(realBrokerId) },
+                  { id: "global", label: "Global", show: globalLots.length > 0 },
+                ] as const
+              )
+                .filter((t) => t.show)
+                .map((t) => (
+                  <TabsTrigger key={t.id} value={t.id}>
+                    {t.label}
+                  </TabsTrigger>
+                ))}
+            </TabsList>
+          </Tabs>
         </div>
       ) : null}
 
       {q.data?.marketStale ? (
         <p className="rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
-          The market feed is temporarily unreachable. Prices shown are MeroShare's own, which may
-          lag the market.
+          The market feed is temporarily unreachable. Prices shown are MeroShare's own, which may lag the market.
         </p>
       ) : null}
 
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Search
+          aria-hidden
+          className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+        />
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by scrip or company name…"
+          placeholder="Search by stock or company name…"
+          aria-label="Search holdings"
           className="h-10 rounded-xl pl-9"
         />
       </div>
 
       {view === "yobroker" && yoEnriched ? (
         <ChipRow>
-          <StatChip
-            icon={<Coins className="size-4" />}
-            label="Yo scrips"
-            value={String(yoEnriched.holdings.length)}
-          />
+          <StatChip icon={<Coins className="size-4" />} label="Yo stocks" value={String(yoEnriched.holdings.length)} />
           <StatChip
             icon={<Wallet className="size-4" />}
             label="Yo units"
@@ -703,9 +849,7 @@ function PortfolioPage() {
             }
             label="Yo market value"
             value={formatNpr(yoEnriched.totalValue, { compact: compactNumbers })}
-            valueClass={
-              yoEnriched.dayChange > 0 ? "text-gain" : yoEnriched.dayChange < 0 ? "text-loss" : ""
-            }
+            valueClass={yoEnriched.dayChange > 0 ? "text-gain" : yoEnriched.dayChange < 0 ? "text-loss" : ""}
           />
           <StatChip
             icon={<Wallet className="size-4" />}
@@ -726,12 +870,11 @@ function PortfolioPage() {
             value={
               <>
                 {yoEnriched.dayChange > 0 ? "+" : yoEnriched.dayChange < 0 ? "-" : ""}
-                <CompactNpr value={Math.abs(yoEnriched.dayChange)} compact={compactNumbers} /> ({yoEnriched.dayPct.toFixed(2)}%)
+                <CompactNpr value={Math.abs(yoEnriched.dayChange)} compact={compactNumbers} /> (
+                {yoEnriched.dayPct.toFixed(2)}%)
               </>
             }
-            valueClass={
-              yoEnriched.dayChange > 0 ? "text-gain" : yoEnriched.dayChange < 0 ? "text-loss" : ""
-            }
+            valueClass={yoEnriched.dayChange > 0 ? "text-gain" : yoEnriched.dayChange < 0 ? "text-loss" : ""}
           />
           <StatChip
             icon={<PiggyBank className="size-4" />}
@@ -754,20 +897,17 @@ function PortfolioPage() {
         ) : brokerHoldings.isPending ? (
           <LoadingBlock label="Loading broker holdings" rows={1} />
         ) : brokerHoldings.isError || !brokerEnriched ? (
-          <ErrorBlock
-            error={brokerHoldings.error}
-            retry={() => void brokerHoldings.refetch()}
-          />
+          <ErrorBlock error={brokerHoldings.error} retry={() => void brokerHoldings.refetch()} />
         ) : (
           <ChipRow>
             <StatChip
               icon={<Coins className="size-4" />}
-              label="Broker scrips"
+              label="Stocks"
               value={String(brokerEnriched.holdings.length)}
             />
             <StatChip
               icon={<Wallet className="size-4" />}
-              label="Broker units"
+              label="Units"
               value={<CompactQty value={brokerEnriched.totalUnits} compact={compactNumbers} />}
             />
             <StatChip
@@ -782,13 +922,7 @@ function PortfolioPage() {
               }
               label="Broker value"
               value={formatNpr(brokerEnriched.totalValue, { compact: compactNumbers })}
-              valueClass={
-                brokerEnriched.dayChange > 0
-                  ? "text-gain"
-                  : brokerEnriched.dayChange < 0
-                    ? "text-loss"
-                    : ""
-              }
+              valueClass={brokerEnriched.dayChange > 0 ? "text-gain" : brokerEnriched.dayChange < 0 ? "text-loss" : ""}
             />
             <StatChip
               icon={
@@ -804,26 +938,41 @@ function PortfolioPage() {
               value={
                 <>
                   {brokerEnriched.dayChange > 0 ? "+" : brokerEnriched.dayChange < 0 ? "-" : ""}
-                  <CompactNpr value={Math.abs(brokerEnriched.dayChange)} compact={compactNumbers} /> ({brokerEnriched.dayPct.toFixed(2)}%)
+                  <CompactNpr value={Math.abs(brokerEnriched.dayChange)} compact={compactNumbers} /> (
+                  {brokerEnriched.dayPct.toFixed(2)}%)
                 </>
               }
-              valueClass={
-                brokerEnriched.dayChange > 0
-                  ? "text-gain"
-                  : brokerEnriched.dayChange < 0
-                    ? "text-loss"
-                    : ""
-              }
+              valueClass={brokerEnriched.dayChange > 0 ? "text-gain" : brokerEnriched.dayChange < 0 ? "text-loss" : ""}
             />
+            <StatChip
+              icon={<TrendingUp className="size-4" />}
+              label="Value (prev close)"
+              value={formatNpr(brokerEnriched.totalPrev, { compact: compactNumbers })}
+            />
+            <StatChip
+              icon={<PiggyBank className="size-4" />}
+              label="Total investment"
+              value={formatNpr(brokerCost.cost, { compact: compactNumbers })}
+            />
+            {brokerCost.cost > 0 ? (
+              <StatChip
+                icon={
+                  brokerCost.unrealized >= 0 ? (
+                    <TrendingUp className="size-4 text-gain" />
+                  ) : (
+                    <TrendingDown className="size-4 text-loss" />
+                  )
+                }
+                label="Return"
+                value={`${brokerCost.unrealized >= 0 ? "+" : ""}${formatNpr(brokerCost.unrealized, { compact: compactNumbers })} (${((brokerCost.unrealized / brokerCost.cost) * 100).toFixed(2)}%)`}
+                valueClass={brokerCost.unrealized >= 0 ? "text-gain" : "text-loss"}
+              />
+            ) : null}
           </ChipRow>
         )
-      ) : (
+      ) : view === "global" ? null : (
         <ChipRow>
-          <StatChip
-            icon={<Coins className="size-4" />}
-            label="Scrips held"
-            value={String(holdings.length)}
-          />
+          <StatChip icon={<Coins className="size-4" />} label="Stocks" value={String(holdings.length)} />
           <StatChip
             icon={<Wallet className="size-4" />}
             label="Total units"
@@ -841,9 +990,7 @@ function PortfolioPage() {
             }
             label="Market value"
             value={formatNpr(totals.value, { compact: compactNumbers })}
-            valueClass={
-              totals.dayChange > 0 ? "text-gain" : totals.dayChange < 0 ? "text-loss" : ""
-            }
+            valueClass={totals.dayChange > 0 ? "text-gain" : totals.dayChange < 0 ? "text-loss" : ""}
           />
           <StatChip
             icon={<TrendingUp className="size-4" />}
@@ -867,16 +1014,12 @@ function PortfolioPage() {
                 <CompactNpr value={Math.abs(totals.dayChange)} compact={compactNumbers} /> ({totals.dayPct.toFixed(2)}%)
               </>
             }
-            valueClass={
-              totals.dayChange > 0 ? "text-gain" : totals.dayChange < 0 ? "text-loss" : ""
-            }
+            valueClass={totals.dayChange > 0 ? "text-gain" : totals.dayChange < 0 ? "text-loss" : ""}
           />
           <StatChip
             icon={<PiggyBank className="size-4" />}
             label={pendingCount > 0 ? `Investment` : "Total investment"}
-            value={
-              investment.isLoading ? "…" : formatNpr(totalBuyCost, { compact: compactNumbers })
-            }
+            value={investment.isLoading ? "…" : formatNpr(totalBuyCost, { compact: compactNumbers })}
           />
           {totalBuyCost > 0 ? (
             <StatChip
@@ -897,152 +1040,49 @@ function PortfolioPage() {
 
       {view === "yobroker" && yoEnriched ? (
         yoEnriched.holdings.length === 0 ? (
-          <EmptyBlock
-            title="No Yo holdings"
-            description="Buy virtual scrips with Yo Broker to see them here. Use the Terminal or Market to place paper orders."
-          />
+          <EmptyBlock title="No Yo holdings" description="Buy virtual stocks with Yo Broker to see them here.">
+            <p className="text-xs text-muted-foreground">
+              Use the{" "}
+              <Link to="/terminal" className="font-medium text-primary hover:underline">
+                Terminal
+              </Link>{" "}
+              or{" "}
+              <Link to="/market" className="font-medium text-primary hover:underline">
+                Market
+              </Link>{" "}
+              to place paper orders.
+            </p>
+          </EmptyBlock>
         ) : yoItems.length === 0 ? (
-          <EmptyBlock title="No matches" description="Nothing matches your search." />
+          <EmptyBlock title="No matches" description="Nothing matches your search.">
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              className="text-xs font-medium text-primary hover:underline"
+            >
+              Clear search
+            </button>
+          </EmptyBlock>
         ) : (
-          <Panel padding="none" className="overflow-hidden">
-            <Table className="min-w-[760px]">
-              <TableHeader>
-                <TableRow className="bg-muted/40 hover:bg-muted/40">
-                  <TableHead className="w-10 pl-4">SN</TableHead>
-                  <SortableTh
-                    label="Scrip"
-                    active={sort.key === "scrip"}
-                    dir={sort.dir}
-                    onClick={() => toggle("scrip")}
-                    align="left"
-                    kind="text"
-                  />
-                  <SortableTh
-                    label="Units"
-                    active={sort.key === "units"}
-                    dir={sort.dir}
-                    onClick={() => toggle("units")}
-                    align="right"
-                  />
-                  <SortableTh
-                    label="LTP"
-                    active={sort.key === "ltp"}
-                    dir={sort.dir}
-                    onClick={() => toggle("ltp")}
-                    align="right"
-                  />
-                  <SortableTh
-                    label="Prev close"
-                    active={sort.key === "previousClose"}
-                    dir={sort.dir}
-                    onClick={() => toggle("previousClose")}
-                    align="right"
-                  />
-                  <SortableTh
-                    label="Value"
-                    active={sort.key === "value"}
-                    dir={sort.dir}
-                    onClick={() => toggle("value")}
-                    align="right"
-                  />
-                  <SortableTh
-                    label="Avg cost"
-                    active={sort.key === "avgBuy"}
-                    dir={sort.dir}
-                    onClick={() => toggle("avgBuy")}
-                    align="right"
-                  />
-                  <SortableTh
-                    label="Net P/L"
-                    active={sort.key === "unrealized"}
-                    dir={sort.dir}
-                    onClick={() => toggle("unrealized")}
-                    align="right"
-                  />
-                  <SortableTh
-                    label="Day"
-                    active={sort.key === "percentChange"}
-                    dir={sort.dir}
-                    onClick={() => toggle("percentChange")}
-                    align="right"
-                  />
-                  <SortableTh
-                    label="Weight"
-                    active={sort.key === "weight"}
-                    dir={sort.dir}
-                    onClick={() => toggle("weight")}
-                    align="right"
-                    className="pr-4"
-                  />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {yoItems.map((h, idx) => {
-                  const weight =
-                    yoEnriched.totalValue > 0 ? (h.value / yoEnriched.totalValue) * 100 : 0;
-                  const avg = (h as unknown as { avgCost: number }).avgCost ?? 0;
-                  const pl = h.value - h.units * avg;
-                  const plPct = avg > 0 ? (pl / (h.units * avg)) * 100 : 0;
-                  return (
-                    <TableRow
-                      key={`${h.scrip}-${idx}`}
-                      className="cursor-pointer"
-                      onClick={() => setPicked(h.scrip)}
-                    >
-                      <TableCell className="pl-4 text-xs text-muted-foreground">
-                        {idx + 1}
-                      </TableCell>
-                      <TableCell>
-                        <p className="font-semibold hover:text-primary">{h.scrip}</p>
-                        <p className="max-w-52 truncate text-xs text-muted-foreground">
-                          {h.description}
-                        </p>
-                      </TableCell>
-                      <TableCell className="num text-right">{formatQty(h.units)}</TableCell>
-                      <TableCell className="text-right">
-                        <span className="num font-medium">{formatNpr(h.ltp)}</span>
-                      </TableCell>
-                      <TableCell className="num text-right text-muted-foreground">
-                        {h.previousClose > 0 ? formatNpr(h.previousClose) : "-"}
-                      </TableCell>
-                      <TableCell className="num text-right font-medium">
-                        {formatNpr(h.value)}
-                      </TableCell>
-                      <TableCell className="num text-right text-muted-foreground">
-                        {formatNpr(avg)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <DeltaPill
-                          value={pl}
-                        >{`${pl >= 0 ? "+" : "-"}${formatNpr(Math.abs(pl))} (${plPct.toFixed(1)}%)`}</DeltaPill>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <DeltaPill
-                          value={h.percentChange}
-                        >{`${h.dayChange >= 0 ? "+" : "-"}${formatNpr(Math.abs(h.dayChange))} (${h.percentChange.toFixed(2)}%)`}</DeltaPill>
-                      </TableCell>
-                      <TableCell className="pr-4 text-right">
-                        <div className="flex flex-col items-end gap-1">
-                          <span className="num text-xs text-muted-foreground">
-                            {weight.toFixed(1)}%
-                          </span>
-                          <div
-                            className="h-1 w-14 overflow-hidden rounded-full bg-muted"
-                            aria-hidden
-                          >
-                            <div
-                              className="h-full rounded-full bg-violet-500/60"
-                              style={{ width: `${Math.min(100, weight)}%` }}
-                            />
-                          </div>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </Panel>
+          <HoldingsTable
+            rows={toPaperRows(yoItems, yoEnriched.totalValue, {
+              avgTitle: "Avg cost",
+              noBasisTitle: "No cost data for this stock",
+            })}
+            sort={sort}
+            onToggle={toggle}
+            onPick={(scrip) => setPicked(scrip)}
+            avgLabel="Avg buy"
+            weightBarClass="bg-emerald-500/60"
+            footnote={
+              yoItems.length !== yoEnriched.holdings.length ? (
+                <p aria-live="polite" className="border-t border-border/60 px-4 py-2.5 text-xs text-muted-foreground">
+                  Showing {yoItems.length} of {yoEnriched.holdings.length} stocks · filtered value{" "}
+                  {formatNpr(yoItems.reduce((s, h) => s + h.value, 0))}
+                </p>
+              ) : null
+            }
+          />
         )
       ) : view === "broker" ? (
         !realBrokerId ? (
@@ -1055,380 +1095,414 @@ function PortfolioPage() {
         ) : brokerHoldings.isError || !brokerEnriched ? (
           <ErrorBlock error={brokerHoldings.error} retry={() => void brokerHoldings.refetch()} />
         ) : brokerEnriched.holdings.length === 0 ? (
-          <EmptyBlock
-            title="No broker holdings"
-            description="Your connected broker account currently holds no scrips."
-          />
+          <EmptyBlock title="No broker holdings" description="Your connected broker account currently holds no stocks.">
+            <Link to="/terminal" className="text-xs font-medium text-primary hover:underline">
+              Open trading terminal
+            </Link>
+          </EmptyBlock>
         ) : brokerItems.length === 0 ? (
-          <EmptyBlock title="No matches" description="Nothing matches your search." />
+          <EmptyBlock title="No matches" description="Nothing matches your search.">
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              className="text-xs font-medium text-primary hover:underline"
+            >
+              Clear search
+            </button>
+          </EmptyBlock>
         ) : (
-          <Panel padding="none" className="overflow-hidden">
-            <Table className="min-w-[760px]">
-              <TableHeader>
-                <TableRow className="bg-muted/40 hover:bg-muted/40">
-                  <TableHead className="w-10 pl-4">SN</TableHead>
-                  <SortableTh
-                    label="Scrip"
-                    active={sort.key === "scrip"}
-                    dir={sort.dir}
-                    onClick={() => toggle("scrip")}
-                    align="left"
-                    kind="text"
-                  />
-                  <SortableTh
-                    label="Units"
-                    active={sort.key === "units"}
-                    dir={sort.dir}
-                    onClick={() => toggle("units")}
-                    align="right"
-                  />
-                  <SortableTh
-                    label="LTP"
-                    active={sort.key === "ltp"}
-                    dir={sort.dir}
-                    onClick={() => toggle("ltp")}
-                    align="right"
-                  />
-                  <SortableTh
-                    label="Prev close"
-                    active={sort.key === "previousClose"}
-                    dir={sort.dir}
-                    onClick={() => toggle("previousClose")}
-                    align="right"
-                  />
-                  <SortableTh
-                    label="Value"
-                    active={sort.key === "value"}
-                    dir={sort.dir}
-                    onClick={() => toggle("value")}
-                    align="right"
-                  />
-                  <SortableTh
-                    label="Avg buy"
-                    active={sort.key === "avgBuy"}
-                    dir={sort.dir}
-                    onClick={() => toggle("avgBuy")}
-                    align="right"
-                  />
-                  <SortableTh
-                    label="Net P/L"
-                    active={sort.key === "unrealized"}
-                    dir={sort.dir}
-                    onClick={() => toggle("unrealized")}
-                    align="right"
-                  />
-                  <SortableTh
-                    label="Day"
-                    active={sort.key === "percentChange"}
-                    dir={sort.dir}
-                    onClick={() => toggle("percentChange")}
-                    align="right"
-                  />
-                  <SortableTh
-                    label="Weight"
-                    active={sort.key === "weight"}
-                    dir={sort.dir}
-                    onClick={() => toggle("weight")}
-                    align="right"
-                    className="pr-4"
-                  />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {brokerItems.map((h, idx) => {
-                  const weight =
-                    brokerEnriched.totalValue > 0 ? (h.value / brokerEnriched.totalValue) * 100 : 0;
-                  const hasBasis = h.avgBuy > 0;
-                  const pl = hasBasis ? h.value - h.units * h.avgBuy : 0;
-                  const plPct = hasBasis && h.units * h.avgBuy > 0 ? (pl / (h.units * h.avgBuy)) * 100 : 0;
-                  return (
-                    <TableRow
-                      key={`${h.scrip}-${idx}`}
-                      className="cursor-pointer"
-                      onClick={() => setPicked(h.scrip)}
-                    >
-                      <TableCell className="pl-4 text-xs text-muted-foreground">
-                        {idx + 1}
-                      </TableCell>
-                      <TableCell>
-                        <p className="font-semibold hover:text-primary">{h.scrip}</p>
-                        <p className="max-w-52 truncate text-xs text-muted-foreground">
-                          {h.description}
-                        </p>
-                      </TableCell>
-                      <TableCell className="num text-right">{formatQty(h.units)}</TableCell>
-                      <TableCell className="text-right">
-                        <span className="num font-medium">{formatNpr(h.ltp)}</span>
-                      </TableCell>
-                      <TableCell className="num text-right text-muted-foreground">
-                        {h.previousClose > 0 ? formatNpr(h.previousClose) : "-"}
-                      </TableCell>
-                      <TableCell className="num text-right font-medium">
-                        {formatNpr(h.value)}
-                      </TableCell>
-                      <TableCell
-                        className="num text-right text-muted-foreground"
-                        title={hasBasis ? "WACC avg buy" : "No WACC cost data for this scrip"}
-                      >
-                        {hasBasis ? formatNpr(h.avgBuy) : "-"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {hasBasis ? (
-                          <DeltaPill
-                            value={pl}
-                          >{`${pl >= 0 ? "+" : "-"}${formatNpr(Math.abs(pl))} (${plPct.toFixed(1)}%)`}</DeltaPill>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <DeltaPill
-                          value={h.percentChange}
-                        >{`${h.dayChange >= 0 ? "+" : "-"}${formatNpr(Math.abs(h.dayChange))} (${h.percentChange.toFixed(2)}%)`}</DeltaPill>
-                      </TableCell>
-                      <TableCell className="pr-4 text-right">
-                        <div className="flex flex-col items-end gap-1">
-                          <span className="num text-xs text-muted-foreground">
-                            {weight.toFixed(1)}%
-                          </span>
-                          <div
-                            className="h-1 w-14 overflow-hidden rounded-full bg-muted"
-                            aria-hidden
-                          >
-                            <div
-                              className="h-full rounded-full bg-emerald-500/60"
-                              style={{ width: `${Math.min(100, weight)}%` }}
-                            />
-                          </div>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-            {brokerItems.length !== brokerEnriched.holdings.length ? (
-              <p className="border-t border-border/60 px-4 py-2.5 text-xs text-muted-foreground">
-                Showing {brokerItems.length} of {brokerEnriched.holdings.length} scrips · filtered
-                value {formatNpr(brokerItems.reduce((s, h) => s + h.value, 0))}
-              </p>
-            ) : null}
-          </Panel>
-        )
-      ) : q.isLoading ? (
-        <LoadingBlock label="Loading portfolio" />
-      ) : q.isError ? (
-        <ErrorBlock error={q.error} retry={() => void q.refetch()} />
-      ) : holdings.length === 0 ? (
-        <EmptyBlock
-          title="No holdings"
-          description="Your demat account currently holds no scrips."
-        />
-      ) : items.length === 0 ? (
-        <EmptyBlock
-          title="No matches"
-          description="Nothing matches your search. Try a different scrip or company."
-        />
-      ) : (
-        <Panel padding="none" className="overflow-hidden">
-          <Table className="min-w-[760px]">
-            <TableHeader>
-              <TableRow className="bg-muted/40 hover:bg-muted/40">
-                <TableHead className="w-10 pl-4">SN</TableHead>
-                <SortableTh
-                  label="Scrip"
-                  active={sort.key === "scrip"}
-                  dir={sort.dir}
-                  onClick={() => toggle("scrip")}
-                  align="left"
-                  kind="text"
-                />
-                <SortableTh
-                  label="Units"
-                  active={sort.key === "units"}
-                  dir={sort.dir}
-                  onClick={() => toggle("units")}
-                  align="right"
-                />
-                <SortableTh
-                  label="LTP"
-                  active={sort.key === "ltp"}
-                  dir={sort.dir}
-                  onClick={() => toggle("ltp")}
-                  align="right"
-                />
-                <SortableTh
-                  label="Prev close"
-                  active={sort.key === "previousClose"}
-                  dir={sort.dir}
-                  onClick={() => toggle("previousClose")}
-                  align="right"
-                />
-                <SortableTh
-                  label="Value"
-                  active={sort.key === "value"}
-                  dir={sort.dir}
-                  onClick={() => toggle("value")}
-                  align="right"
-                />
-                <SortableTh
-                  label="Avg buy"
-                  active={sort.key === "avgBuy"}
-                  dir={sort.dir}
-                  onClick={() => toggle("avgBuy")}
-                  align="right"
-                />
-                <SortableTh
-                  label="Net P/L"
-                  active={sort.key === "unrealized"}
-                  dir={sort.dir}
-                  onClick={() => toggle("unrealized")}
-                  align="right"
-                />
-                <SortableTh
-                  label="Day"
-                  active={sort.key === "percentChange"}
-                  dir={sort.dir}
-                  onClick={() => toggle("percentChange")}
-                  align="right"
-                />
-                <SortableTh
-                  label="Weight"
-                  active={sort.key === "weight"}
-                  dir={sort.dir}
-                  onClick={() => toggle("weight")}
-                  align="right"
-                  className="pr-4"
-                />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {items.map((h, idx) => {
-                const weight = totals.value > 0 ? (h.value / totals.value) * 100 : 0;
-                const basis = costOf(h.scrip);
-                const hasBasis = Boolean(basis && basis.cost > 0 && basis.waccRate > 0);
-                const open = isOpenEnd(h.scrip);
-                const buy = hasBasis ? buyCost(h.units, basis!.waccRate, { isOpenEnd: open }) : null;
-                const net = hasBasis && buy ? sellProceeds({ units: h.units, price: h.ltp, avgCost: buy.perUnit, holdingDays: 400, isOpenEnd: open }) : null;
-                const pl = net ? net.profit : hasBasis ? h.value - (basis?.cost ?? 0) : 0;
-                const plPct = net ? net.profitPercent : hasBasis && (basis?.cost ?? 0) > 0 ? (pl / (basis?.cost ?? 1)) * 100 : 0;
-                return (
-                  <TableRow
-                    key={`${h.scrip}-${idx}`}
-                    className="cursor-pointer"
-                    onClick={() => setPicked(h.scrip)}
-                  >
-                    <TableCell className="pl-4 text-xs text-muted-foreground">{idx + 1}</TableCell>
-                    <TableCell>
-                      <p className="font-semibold transition-colors hover:text-primary">
-                        {h.scrip}
-                      </p>
-                      <p className="max-w-52 truncate text-xs text-muted-foreground">
-                        {h.description}
-                      </p>
+          <HoldingsTable
+            rows={toPaperRows(
+              brokerItems,
+              brokerEnriched.totalValue,
+              {
+                avgTitle: "WACC avg buy",
+                noBasisTitle: "No WACC cost data for this stock",
+              },
+              { net: true, isOpenEnd },
+            )}
+            sort={sort}
+            onToggle={toggle}
+            onPick={(scrip) => setPicked(scrip)}
+            avgLabel="Avg buy"
+            trendArrows
+            weightBarClass="bg-emerald-500/60"
+            footer={
+              brokerItems.length === brokerEnriched.holdings.length ? (
+                <TableFooter>
+                  <TableRow>
+                    <TableCell className="pl-4 font-semibold" colSpan={2}>
+                      Total
                     </TableCell>
-                    <TableCell className="num text-right">{formatQty(h.units)}</TableCell>
-                    <TableCell className="text-right">
-                      <span className="inline-flex items-center justify-end gap-1">
-                        <span className="num font-medium">{formatNpr(h.ltp)}</span>
-                        {h.previousClose > 0 &&
-                          h.ltp > 0 &&
-                          h.ltp !== h.previousClose &&
-                          (h.percentChange > 0 ? (
-                            <ArrowUpRight className="size-3.5 text-gain" aria-hidden />
-                          ) : (
-                            <ArrowDownRight className="size-3.5 text-loss" aria-hidden />
-                          ))}
-                      </span>
+                    <TableCell className="num text-right font-semibold">
+                      {formatQty(brokerEnriched.totalUnits)}
                     </TableCell>
-                    <TableCell className="num text-right text-muted-foreground">
-                      {h.previousClose > 0 ? formatNpr(h.previousClose) : "-"}
-                    </TableCell>
-                    <TableCell className="num text-right font-medium">
-                      {formatNpr(h.value)}
+                    <TableCell colSpan={2} />
+                    <TableCell className="num text-right font-semibold">
+                      {formatNpr(brokerEnriched.totalValue, { compact: compactNumbers })}
                     </TableCell>
                     <TableCell
-                      className="num text-right text-muted-foreground"
+                      className="num text-right font-semibold text-muted-foreground"
                       title={
-                        hasBasis
-                          ? basis?.status === "pending"
-                            ? "Estimated from purchase price (WACC not confirmed yet)"
-                            : "CDSC-calculated WACC — hover for all-in"
-                          : "No cost data (blocked or not available)"
-                      }
-                    >
-                      {hasBasis && (basis?.waccRate ?? 0) > 0 ? (
-                        (() => {
-                          const buy = buyCost(h.units, basis!.waccRate);
-                          return (
-                            <span title={`All-in ${formatNpr(buy.perUnit)} incl. broker+SEBON+DP`}>
-                              {basis?.status === "pending" ? "~" : ""}
-                              {formatNpr(basis?.waccRate ?? 0)}
-                            </span>
-                          );
-                        })()
-                      ) : (
-                        "-"
-                      )}
-                    </TableCell>
-                    <TableCell
-                      className="text-right"
-                      title={
-                        hasBasis
-                          ? `Net after all charges & CGT · Breakeven ${formatNpr(breakEvenPrice(h.units, buyCost(h.units, basis!.waccRate).perUnit, 400))}`
+                        brokerCost.cost > 0 && brokerEnriched.totalUnits > 0
+                          ? `All-in avg ${formatNpr(brokerCost.cost / brokerEnriched.totalUnits)}`
                           : undefined
                       }
                     >
-                      {hasBasis ? (
-                        <DeltaPill value={pl}>
-                          {`${pl >= 0 ? "+" : "-"}${formatNpr(Math.abs(pl))} (${plPct.toFixed(1)}%)`}
+                      {brokerCost.cost > 0 && brokerEnriched.totalUnits > 0
+                        ? formatNpr(brokerCost.cost / brokerEnriched.totalUnits)
+                        : "-"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {brokerCost.cost > 0 ? (
+                        <DeltaPill
+                          value={brokerCost.unrealized}
+                          title={`${brokerCost.unrealized >= 0 ? "+" : "-"}${formatNpr(Math.abs(brokerCost.unrealized))} net total`}
+                        >
+                          {`${brokerCost.unrealized >= 0 ? "+" : ""}${((brokerCost.unrealized / brokerCost.cost) * 100).toFixed(2)}%`}
                         </DeltaPill>
                       ) : (
                         <span className="text-xs text-muted-foreground">-</span>
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      <DeltaPill value={h.percentChange}>
-                        {`${h.dayChange >= 0 ? "+" : "-"}${formatNpr(Math.abs(h.dayChange))} (${h.percentChange.toFixed(2)}%)`}
+                      <DeltaPill value={brokerEnriched.dayChange}>
+                        {`${brokerEnriched.dayChange >= 0 ? "+" : "-"}${formatNpr(Math.abs(brokerEnriched.dayChange))} (${brokerEnriched.dayPct.toFixed(2)}%)`}
                       </DeltaPill>
                     </TableCell>
-                    <TableCell className="pr-4 text-right">
-                      <div className="flex flex-col items-end gap-1">
-                        <span className="num text-xs text-muted-foreground">
-                          {weight.toFixed(1)}%
-                        </span>
-                        <div className="h-1 w-14 overflow-hidden rounded-full bg-muted" aria-hidden>
-                          <div
-                            className="h-full rounded-full bg-primary/60"
-                            style={{ width: `${Math.min(100, weight)}%` }}
-                          />
-                        </div>
-                      </div>
-                    </TableCell>
+                    <TableCell className="num pr-4 text-right font-semibold">100%</TableCell>
                   </TableRow>
-                );
+                </TableFooter>
+              ) : null
+            }
+            footnote={
+              brokerItems.length !== brokerEnriched.holdings.length ? (
+                <p aria-live="polite" className="border-t border-border/60 px-4 py-2.5 text-xs text-muted-foreground">
+                  Showing {brokerItems.length} of {brokerEnriched.holdings.length} stocks · filtered value{" "}
+                  {formatNpr(brokerItems.reduce((s, h) => s + h.value, 0))}
+                </p>
+              ) : null
+            }
+          />
+        )
+      ) : view === "global" ? (
+        globalLots.length === 0 ? (
+          <EmptyBlock
+            title="No global holdings"
+            description="Foreign stocks live here, never mixed with NEPSE demat. Import a Trading 212 statement or standard CSV."
+          >
+            <Link
+              to="/transactions"
+              search={{ tab: "global" }}
+              className="text-xs font-medium text-primary hover:underline"
+            >
+              Open global transactions
+            </Link>
+          </EmptyBlock>
+        ) : globalValuation.isPending ? (
+          <LoadingBlock label="Loading global prices" />
+        ) : globalValuation.isError ? (
+          <ErrorBlock error={globalValuation.error} retry={() => void globalValuation.refetch()} />
+        ) : globalEnriched.holdings.length === 0 ? (
+          <EmptyBlock
+            title="No priced holdings"
+            description={
+              globalEnriched.skipped > 0
+                ? `${globalEnriched.skipped} holding${globalEnriched.skipped === 1 ? "" : "s"} could not be priced (quote or FX unavailable).`
+                : "Your imported lots net to zero."
+            }
+          />
+        ) : globalItems.length === 0 ? (
+          <EmptyBlock title="No matches" description="Nothing matches your search.">
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              className="text-xs font-medium text-primary hover:underline"
+            >
+              Clear search
+            </button>
+          </EmptyBlock>
+        ) : (
+          <>
+            <ChipRow>
+              <StatChip
+                icon={<Coins className="size-4" />}
+                label="Stocks"
+                value={String(globalEnriched.holdings.length)}
+              />
+              <StatChip
+                icon={<Wallet className="size-4" />}
+                label="Units"
+                value={formatShares(globalEnriched.totalUnits)}
+              />
+              <StatChip
+                icon={
+                  globalEnriched.dayChange > 0 ? (
+                    <TrendingUp className="size-4 text-gain" />
+                  ) : globalEnriched.dayChange < 0 ? (
+                    <TrendingDown className="size-4 text-loss" />
+                  ) : (
+                    <TrendingUp className="size-4" />
+                  )
+                }
+                label="Value"
+                value={gMoney(globalEnriched.totalValue)}
+                valueClass={
+                  globalEnriched.dayChange > 0 ? "text-gain" : globalEnriched.dayChange < 0 ? "text-loss" : ""
+                }
+              />
+              <StatChip
+                icon={<TrendingUp className="size-4" />}
+                label="Value (prev close)"
+                value={gMoney(globalEnriched.totalPrev)}
+              />
+              <StatChip
+                icon={
+                  globalEnriched.dayChange > 0 ? (
+                    <TrendingUp className="size-4 text-gain" />
+                  ) : globalEnriched.dayChange < 0 ? (
+                    <TrendingDown className="size-4 text-loss" />
+                  ) : (
+                    <TrendingUp className="size-4" />
+                  )
+                }
+                label="Day change"
+                value={
+                  <>
+                    {globalEnriched.dayChange > 0 ? "+" : globalEnriched.dayChange < 0 ? "-" : ""}
+                    {toDisplay == null ? (
+                      <CompactNpr value={Math.abs(globalEnriched.dayChange)} compact={compactNumbers} />
+                    ) : (
+                      formatDisplay(Math.abs(globalEnriched.dayChange) * toDisplay, displayCurrency)
+                    )}{" "}
+                    ({globalEnriched.dayPct.toFixed(2)}%)
+                  </>
+                }
+                valueClass={
+                  globalEnriched.dayChange > 0 ? "text-gain" : globalEnriched.dayChange < 0 ? "text-loss" : ""
+                }
+              />
+              <StatChip
+                icon={<PiggyBank className="size-4" />}
+                label="Total investment"
+                value={gMoney(globalEnriched.totalCost)}
+              />
+              {globalEnriched.totalCost > 0 ? (
+                <StatChip
+                  icon={
+                    globalEnriched.unrealized >= 0 ? (
+                      <TrendingUp className="size-4 text-gain" />
+                    ) : (
+                      <TrendingDown className="size-4 text-loss" />
+                    )
+                  }
+                  label="Return"
+                  value={`${globalEnriched.unrealized >= 0 ? "+" : "−"}${gMoney(Math.abs(globalEnriched.unrealized))} (${((globalEnriched.unrealized / globalEnriched.totalCost) * 100).toFixed(2)}%)`}
+                  valueClass={globalEnriched.unrealized >= 0 ? "text-gain" : "text-loss"}
+                />
+              ) : null}
+            </ChipRow>
+            <HoldingsTable
+              rows={globalItems.map((h, idx) => {
+                const hasBasis = h.avgBuy > 0;
+                const pl = hasBasis ? h.value - h.units * h.avgBuy : 0;
+                const plPct = hasBasis && h.units * h.avgBuy > 0 ? (pl / (h.units * h.avgBuy)) * 100 : 0;
+                const nativeGain = h.units * (h.ltpNative - h.avgNative);
+                const dayNative = h.units * (h.ltpNative - h.prevNative);
+                return {
+                  key: `${h.scrip}-${idx}`,
+                  scrip: h.scrip,
+                  description: h.description,
+                  units: h.units,
+                  unitsDisplay: formatShares(h.units),
+                  ltp: h.ltp,
+                  previousClose: h.previousClose,
+                  value: h.value,
+                  dayChange: h.dayChange,
+                  dayPct: h.percentChange,
+                  weight: globalEnriched.totalValue > 0 ? (h.value / globalEnriched.totalValue) * 100 : 0,
+                  ltpDisplay: formatNative(h.ltpNative, h.liveCcy),
+                  prevDisplay: formatNative(h.prevNative, h.liveCcy),
+                  valueDisplay: formatNative(h.units * h.ltpNative, h.liveCcy),
+                  dayDisplay: `${dayNative >= 0 ? "+" : "-"}${formatNative(Math.abs(dayNative), h.liveCcy)}`,
+                  avg: hasBasis
+                    ? {
+                        value: h.avgBuy,
+                        display: formatNative(h.avgNative, h.nativeCcy),
+                        cellTitle: `Avg cost ${formatNative(h.avgNative, h.nativeCcy)}`,
+                      }
+                    : { value: null, cellTitle: "No cost data for this stock" },
+                  pl: hasBasis
+                    ? {
+                        value: pl,
+                        pct: plPct,
+                        title: `${nativeGain >= 0 ? "+" : ""}${formatNative(Math.abs(nativeGain), h.nativeCcy)} net`,
+                      }
+                    : null,
+                };
               })}
-            </TableBody>
-            {items.length === holdings.length ? (
+              sort={sort}
+              onToggle={toggle}
+              onPick={(scrip) => setGlobalPicked(scrip)}
+              avgLabel="Avg buy"
+              trendArrows
+              weightBarClass="bg-emerald-500/60"
+              footer={
+                globalItems.length === globalEnriched.holdings.length ? (
+                  <TableFooter>
+                    <TableRow>
+                      <TableCell className="pl-4 font-semibold" colSpan={2}>
+                        Total
+                      </TableCell>
+                      <TableCell className="num text-right font-semibold">
+                        {formatShares(globalEnriched.totalUnits)}
+                      </TableCell>
+                      <TableCell colSpan={2} />
+                      <TableCell className="num text-right font-semibold">
+                        {gMoney(globalEnriched.totalValue)}
+                      </TableCell>
+                      <TableCell className="num text-right font-semibold text-muted-foreground">-</TableCell>
+                      <TableCell className="text-right">
+                        {globalEnriched.totalCost > 0 ? (
+                          <DeltaPill
+                            value={globalEnriched.unrealized}
+                            title={`${globalEnriched.unrealized >= 0 ? "+" : "−"}${gMoney(Math.abs(globalEnriched.unrealized))} total`}
+                          >
+                            {`${globalEnriched.unrealized >= 0 ? "+" : "−"}${((globalEnriched.unrealized / globalEnriched.totalCost) * 100).toFixed(2)}%`}
+                          </DeltaPill>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <DeltaPill value={globalEnriched.dayChange}>
+                          {`${globalEnriched.dayChange >= 0 ? "+" : "−"}${gMoney(Math.abs(globalEnriched.dayChange))} (${globalEnriched.dayPct.toFixed(2)}%)`}
+                        </DeltaPill>
+                      </TableCell>
+                      <TableCell className="num pr-4 text-right font-semibold">100%</TableCell>
+                    </TableRow>
+                  </TableFooter>
+                ) : null
+              }
+              footnote={
+                globalItems.length !== globalEnriched.holdings.length || globalEnriched.skipped > 0 ? (
+                  <p aria-live="polite" className="border-t border-border/60 px-4 py-2.5 text-xs text-muted-foreground">
+                    {globalItems.length !== globalEnriched.holdings.length ? (
+                      <>
+                        Showing {globalItems.length} of {globalEnriched.holdings.length} stocks · filtered value{" "}
+                        {gMoney(globalItems.reduce((s, h) => s + h.value, 0))}
+                        {globalEnriched.skipped > 0 ? ". " : ""}
+                      </>
+                    ) : null}
+                    {globalEnriched.skipped > 0
+                      ? `${globalEnriched.skipped} unpriced (quote or FX unavailable).`
+                      : null}
+                  </p>
+                ) : null
+              }
+            />
+          </>
+        )
+      ) : q.isLoading ? (
+        <LoadingBlock label="Loading portfolio" />
+      ) : q.isError ? (
+        <ErrorBlock error={q.error} retry={() => void q.refetch()} />
+      ) : holdings.length === 0 ? (
+        <EmptyBlock title="No holdings" description="Your demat account currently holds no stocks.">
+          <Link to="/market" className="text-xs font-medium text-primary hover:underline">
+            Browse market
+          </Link>
+        </EmptyBlock>
+      ) : items.length === 0 ? (
+        <EmptyBlock title="No matches" description="Nothing matches your search. Try a different stock or company.">
+          <button
+            type="button"
+            onClick={() => setSearch("")}
+            className="text-xs font-medium text-primary hover:underline"
+          >
+            Clear search
+          </button>
+        </EmptyBlock>
+      ) : (
+        <HoldingsTable
+          rows={items.map((h, idx) => {
+            const basis = costOf(h.scrip);
+            const hasBasis = Boolean(basis && basis.cost > 0 && basis.waccRate > 0);
+            const open = isOpenEnd(h.scrip);
+            const pos = hasBasis ? netPosition(h.units, basis!.waccRate, h.ltp, { isOpenEnd: open }) : null;
+            const pl = pos ? pos.profit : hasBasis ? h.value - (basis?.cost ?? 0) : 0;
+            const plPct = pos
+              ? pos.profitPct
+              : hasBasis && (basis?.cost ?? 0) > 0
+                ? (pl / (basis?.cost ?? 1)) * 100
+                : 0;
+            const waccRate = basis?.waccRate ?? 0;
+            return {
+              key: `${h.scrip}-${idx}`,
+              scrip: h.scrip,
+              description: h.description,
+              units: h.units,
+              ltp: h.ltp,
+              previousClose: h.previousClose,
+              value: h.value,
+              dayChange: h.dayChange,
+              dayPct: h.percentChange,
+              weight: totals.value > 0 ? (h.value / totals.value) * 100 : 0,
+              avg:
+                hasBasis && waccRate > 0
+                  ? {
+                      value: waccRate,
+                      prefix: basis?.status === "pending" ? "~" : "",
+                      title: `All-in ${formatNpr(pos!.buy.perUnit)} incl. broker+SEBON+DP`,
+                      cellTitle:
+                        basis?.status === "pending"
+                          ? "Estimated from purchase price (WACC not confirmed yet)"
+                          : "CDSC-calculated WACC — hover for all-in",
+                    }
+                  : {
+                      value: null,
+                      cellTitle: "No cost data (blocked or not available)",
+                    },
+              pl: hasBasis
+                ? {
+                    value: pl,
+                    pct: plPct,
+                    title: `${pl >= 0 ? "+" : "-"}${formatNpr(Math.abs(pl))} net · Breakeven ${formatNpr(pos!.breakeven)}`,
+                  }
+                : null,
+            };
+          })}
+          sort={sort}
+          onToggle={toggle}
+          onPick={(scrip) => setPicked(scrip)}
+          avgLabel="Avg buy"
+          trendArrows
+          weightBarClass="bg-primary/60"
+          footer={
+            items.length === holdings.length ? (
               <TableFooter>
                 <TableRow>
                   <TableCell className="pl-4 font-semibold" colSpan={2}>
                     Total
                   </TableCell>
-                  <TableCell className="num text-right font-semibold">
-                    {formatQty(totals.units)}
-                  </TableCell>
+                  <TableCell className="num text-right font-semibold">{formatQty(totals.units)}</TableCell>
                   <TableCell colSpan={2} />
                   <TableCell className="num text-right font-semibold">
                     {formatNpr(totals.value, { compact: compactNumbers })}
                   </TableCell>
-                  <TableCell className="num text-right font-semibold text-muted-foreground" title={`All-in avg ${formatNpr(allInAvgWacc)}`}>
+                  <TableCell
+                    className="num text-right font-semibold text-muted-foreground"
+                    title={`All-in avg ${formatNpr(allInAvgWacc)}`}
+                  >
                     {allInAvgWacc > 0 ? formatNpr(allInAvgWacc) : "-"}
                   </TableCell>
                   <TableCell className="text-right">
                     {totalBuyCost > 0 ? (
-                      <DeltaPill value={unrealizedPL}>
-                        {`${unrealizedPL >= 0 ? "+" : "-"}${formatNpr(Math.abs(unrealizedPL))}`}
+                      <DeltaPill
+                        value={unrealizedPL}
+                        title={`${unrealizedPL >= 0 ? "+" : "-"}${formatNpr(Math.abs(unrealizedPL))} net total`}
+                      >
+                        {`${unrealizedPL >= 0 ? "+" : ""}${((unrealizedPL / totalBuyCost) * 100).toFixed(2)}%`}
                       </DeltaPill>
                     ) : (
                       <span className="text-xs text-muted-foreground">-</span>
@@ -1442,52 +1516,54 @@ function PortfolioPage() {
                   <TableCell className="num pr-4 text-right font-semibold">100%</TableCell>
                 </TableRow>
               </TableFooter>
-            ) : null}
-          </Table>
-          {items.length !== holdings.length ? (
-            <p className="border-t border-border/60 px-4 py-2.5 text-xs text-muted-foreground">
-              Showing {items.length} of {holdings.length} scrips · filtered value{" "}
-              {formatNpr(items.reduce((s, h) => s + h.value, 0))}
-            </p>
-          ) : null}
-        </Panel>
+            ) : null
+          }
+          footnote={
+            items.length !== holdings.length ? (
+              <p aria-live="polite" className="border-t border-border/60 px-4 py-2.5 text-xs text-muted-foreground">
+                Showing {items.length} of {holdings.length} stocks · filtered value{" "}
+                {formatNpr(items.reduce((s, h) => s + h.value, 0))}
+              </p>
+            ) : null
+          }
+        />
       )}
 
       {view === "actual" && q.data && q.data.sectors.length > 0 ? (
-        <Panel as="section">
-          <h2 className="mb-3 font-display text-base font-semibold">Sector allocation</h2>
-          <ul className="flex flex-wrap gap-2">
-            {q.data.sectors.slice(0, 8).map((s) => (
-              <li
-                key={s.sector}
-                className="flex items-center gap-2 rounded-xl border border-border/60 bg-surface px-3 py-2 text-sm"
-              >
-                <span className="font-medium">{s.sector}</span>
-                <span className="num text-muted-foreground">{s.weight.toFixed(1)}%</span>
-              </li>
-            ))}
-          </ul>
-        </Panel>
+        <SectorAllocationPanel sectors={q.data.sectors} />
       ) : null}
 
+      {view === "broker" && brokerSectors.length > 0 ? <SectorAllocationPanel sectors={brokerSectors} /> : null}
+
+      {view === "global" && globalSectors.length > 0 ? <SectorAllocationPanel sectors={globalSectors} /> : null}
+
+      {view === "global" && globalEnriched.holdings.length > 0 ? <GlobalHistoryPanel txns={globalTxns} /> : null}
+
       {view === "yobroker" && yoEnriched && yoEnriched.holdings.length > 0 ? (
-        <HistoryPanel
-          holdings={yoEnriched.holdings as unknown as EnrichedHolding[]}
-          onPickScrip={setPicked}
-        />
+        <HistoryPanel holdings={yoEnriched.holdings as unknown as EnrichedHolding[]} onPickScrip={setPicked} />
       ) : view === "broker" && brokerEnriched && brokerEnriched.holdings.length > 0 ? (
-        <HistoryPanel
-          holdings={brokerEnriched.holdings as unknown as EnrichedHolding[]}
-          onPickScrip={setPicked}
-        />
+        <HistoryPanel holdings={brokerEnriched.holdings as unknown as EnrichedHolding[]} onPickScrip={setPicked} />
       ) : view === "actual" && holdings.length > 0 ? (
-        <HistoryPanel holdings={holdings} onPickScrip={setPicked} />
+        <HistoryPanel
+          holdings={holdings}
+          onPickScrip={setPicked}
+          waccOf={(scrip) => {
+            const c = costOf(scrip);
+            return c && c.waccRate > 0 ? { rate: c.waccRate, pending: c.status !== "calculated" } : undefined;
+          }}
+        />
       ) : null}
 
       <ScripSheet
         symbol={picked}
         onOpenChange={(open) => {
           if (!open) setPicked(null);
+        }}
+      />
+      <GlobalPositionSheet
+        symbol={globalPicked}
+        onOpenChange={(open) => {
+          if (!open) setGlobalPicked(null);
         }}
       />
       <YoBrokerModal open={yoOpen} onOpenChange={setYoOpen} />

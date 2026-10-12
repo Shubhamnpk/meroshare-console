@@ -2,13 +2,7 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Eye, EyeOff, Loader2, ShieldCheck } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -123,9 +117,7 @@ export function PasswordDialog() {
             onChange={setConfirmPassword}
             autoComplete="new-password"
           />
-          {confirmPassword.length > 0 && !match && (
-            <p className="text-xs text-red-600">Passwords do not match.</p>
-          )}
+          {confirmPassword.length > 0 && !match && <p className="text-xs text-red-600">Passwords do not match.</p>}
           <Button type="submit" disabled={mutation.isPending || !valid} className="w-full">
             {mutation.isPending ? (
               <>
@@ -166,8 +158,7 @@ export function PinDialog() {
         <DialogHeader>
           <DialogTitle>Change transaction PIN</DialogTitle>
           <DialogDescription>
-            Required to approve share applications and payments. Exactly 4 digits, applied directly
-            on MeroShare.
+            Required to approve share applications and payments. Exactly 4 digits, applied directly on MeroShare.
           </DialogDescription>
         </DialogHeader>
         <form

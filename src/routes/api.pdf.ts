@@ -32,10 +32,7 @@ export const Route = createFileRoute("/api/pdf")({
             headers: { Accept: "application/pdf,image/*", "User-Agent": "MeroShare-Console/1.0" },
           });
           if (!upstream.ok || !upstream.body) {
-            return Response.json(
-              { error: `Upstream responded ${upstream.status}` },
-              { status: 502 },
-            );
+            return Response.json({ error: `Upstream responded ${upstream.status}` }, { status: 502 });
           }
           const contentType = upstream.headers.get("content-type") ?? "application/pdf";
           const contentLength = Number(upstream.headers.get("content-length") ?? 0);

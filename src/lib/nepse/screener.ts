@@ -109,21 +109,15 @@ function latestRsi(bars: DailyBar[], period = 14): number | null {
 // Short-term scoring
 // ---------------------------------------------------------------------------
 
-export function computeShortTermScore(
-  price: LivePrice,
-  bars: DailyBar[],
-  allPrices: LivePrice[],
-): ShortTermScore {
-  const { ltp, previousClose, high, low, volume, turnover, fiftyTwoWeekHigh, fiftyTwoWeekLow } =
-    price;
+export function computeShortTermScore(price: LivePrice, bars: DailyBar[], allPrices: LivePrice[]): ShortTermScore {
+  const { ltp, previousClose, high, low, volume, turnover, fiftyTwoWeekHigh, fiftyTwoWeekLow } = price;
 
   // RSI (0-100)
   const rsiVal = latestRsi(bars);
 
   // 52-week position (0 = at low, 100 = at high)
   const week52Range = (fiftyTwoWeekHigh ?? 0) - (fiftyTwoWeekLow ?? 0);
-  const week52Position =
-    week52Range > 0 ? clamp(((ltp - (fiftyTwoWeekLow ?? 0)) / week52Range) * 100, 0, 100) : 50;
+  const week52Position = week52Range > 0 ? clamp(((ltp - (fiftyTwoWeekLow ?? 0)) / week52Range) * 100, 0, 100) : 50;
 
   // Day change %
   const dayChangePercent = previousClose > 0 ? ((ltp - previousClose) / previousClose) * 100 : 0;
@@ -234,27 +228,18 @@ export function computeLongTermScore(
   const profit = latestReport?.profit ?? null;
 
   // ROE = EPS / Net Worth per Share * 100
-  const roe =
-    eps != null && netWorth != null && netWorth > 0
-      ? Math.round((eps / netWorth) * 1000) / 10
-      : null;
+  const roe = eps != null && netWorth != null && netWorth > 0 ? Math.round((eps / netWorth) * 1000) / 10 : null;
 
   // Use average of last 3 years' dividends for yield (more realistic than latest only)
   const recentDividends = dividends.slice(0, 3);
   const avgDividendTotal =
-    recentDividends.length > 0
-      ? recentDividends.reduce((a, d) => a + d.totalDividend, 0) / recentDividends.length
-      : 0;
+    recentDividends.length > 0 ? recentDividends.reduce((a, d) => a + d.totalDividend, 0) / recentDividends.length : 0;
   const dividendYield =
-    avgDividendTotal > 0 && faceValue > 0 && price.ltp > 0
-      ? (avgDividendTotal * faceValue) / (price.ltp * 100)
-      : null;
+    avgDividendTotal > 0 && faceValue > 0 && price.ltp > 0 ? (avgDividendTotal * faceValue) / price.ltp : null;
 
   // Dividend streak: count consecutive fiscal years with dividends
   // MUST start from the most recent fiscal year — if latest year is missing, streak = 0
-  const fiscalYears = [...new Set(dividends.map((d) => d.fiscalYear).filter(Boolean))]
-    .sort()
-    .reverse();
+  const fiscalYears = [...new Set(dividends.map((d) => d.fiscalYear).filter(Boolean))].sort().reverse();
   let dividendStreak = 0;
   if (fiscalYears.length > 0) {
     const latestFY = parseInt(fiscalYears[0]!);
@@ -281,16 +266,13 @@ export function computeLongTermScore(
   // Dividend growth: compare latest vs 3 years ago
   let dividendGrowth = 0;
   if (dividends.length >= 3 && dividends[2]!.totalDividend > 0) {
-    dividendGrowth =
-      ((dividends[0]!.totalDividend - dividends[2]!.totalDividend) / dividends[2]!.totalDividend) *
-      100;
+    dividendGrowth = ((dividends[0]!.totalDividend - dividends[2]!.totalDividend) / dividends[2]!.totalDividend) * 100;
   }
 
   // 52-week stability (narrower range = more stable)
   const week52Range =
     (price.fiftyTwoWeekHigh ?? 0) > 0 && (price.fiftyTwoWeekLow ?? 0) > 0
-      ? ((price.fiftyTwoWeekHigh ?? 0) - (price.fiftyTwoWeekLow ?? 0)) /
-        (price.fiftyTwoWeekLow ?? 1)
+      ? ((price.fiftyTwoWeekHigh ?? 0) - (price.fiftyTwoWeekLow ?? 0)) / (price.fiftyTwoWeekLow ?? 1)
       : null;
 
   // EPS trend: compare latest two reports
@@ -418,12 +400,7 @@ export function computeLongTermScore(
 
   // === Composite score ===
   const rawScore =
-    valuation * 0.25 +
-    profitability * 0.2 +
-    quality * 0.15 +
-    dividendScore * 0.2 +
-    stability * 0.1 +
-    growth * 0.1;
+    valuation * 0.25 + profitability * 0.2 + quality * 0.15 + dividendScore * 0.2 + stability * 0.1 + growth * 0.1;
   const score = Math.round(clamp(rawScore, 0, 100));
 
   // === Red flags ===
@@ -436,8 +413,7 @@ export function computeLongTermScore(
 
   // === Signal tag ===
   let signal: LongTermSignal = "WATCHLIST";
-  if (redFlags.length === 0 && pe != null && pe > 0 && pe < 12 && pb != null && pb < 1.5)
-    signal = "VALUE";
+  if (redFlags.length === 0 && pe != null && pe > 0 && pe < 12 && pb != null && pb < 1.5) signal = "VALUE";
   if (redFlags.length === 0 && dividendYield != null && dividendYield > 4) signal = "INCOME";
   if (redFlags.length === 0 && epsTrend > 10 && eps != null && eps > 0) signal = "GROWTH";
   // BLUECHIP: high turnover (proxy for large cap) + consistent dividends

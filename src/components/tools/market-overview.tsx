@@ -1,22 +1,16 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import {
-  AreaChart,
-  Area,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-import { indexDailyQuery, indexGraphQuery } from "@/lib/queries";
+import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis, YAxis, type TooltipProps } from "recharts";
+import { dividendsQuery, faceValuesQuery, indexDailyQuery, indexGraphQuery } from "@/lib/queries";
 import { SortableTh, sortBy, useSort } from "@/components/sortable-table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Activity,
   Layers,
   TrendingUp,
   TrendingDown,
-  LayoutGrid,
+  List,
   TableProperties,
   PieChart,
   Search,
@@ -29,8 +23,11 @@ import {
   LineChart,
 } from "lucide-react";
 import { formatNpr, formatNumber, formatPercent, formatQty } from "@/lib/format";
-import type { LivePrice, MarketIndex, PricePoint, SectorIndex } from "@/lib/nepse/types";
+import { DeltaPill } from "@/components/stat-card";
+import { EmptyBlock } from "@/components/states";
+import type { DividendRow, LivePrice, MarketIndex, PricePoint, SectorIndex } from "@/lib/nepse/types";
 import { normalizeSectorKey, subindexKeyFor } from "@/lib/nepse/sectors";
+import { avgTotalLast5Y } from "@/lib/nepse/timeline";
 import { ScripSheet } from "@/components/market/scrip-sheet";
 import { IndexChartModal } from "@/components/tools/index-chart-modal";
 import { MarketMarquee } from "@/components/market/market-marquee";
@@ -39,28 +36,9 @@ import { SectorBadge } from "@/components/market/sector-icon";
 import { CompactNpr, CompactQty } from "@/components/market/compact-value";
 import { cn } from "@/lib/utils";
 
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function tileColor(pct: number): string {
-  if (pct > 3) return "bg-emerald-500 text-white";
-  if (pct > 1) return "bg-emerald-500/75 text-white";
-  if (pct > 0.2) return "bg-emerald-500/40 text-emerald-100";
-  if (pct >= -0.2) return "bg-muted/70 text-muted-foreground";
-  if (pct > -1) return "bg-red-500/40 text-red-100";
-  if (pct > -3) return "bg-red-500/75 text-white";
-  return "bg-red-500 text-white";
-}
-
-function sectorBorderColor(pct: number): string {
-  if (pct > 1) return "border-emerald-500/50";
-  if (pct > 0) return "border-emerald-500/25";
-  if (pct === 0) return "border-border/50";
-  if (pct > -1) return "border-red-500/25";
-  return "border-red-500/50";
-}
 
 function sectorSortKey(s: string): number {
   const order = [
@@ -202,12 +180,7 @@ export function SentimentGauge({ score, compact = false }: { score: number; comp
       >
         <title>{`${label} ${Math.round(display)}`}</title>
         {zones.map((z, i) => (
-          <path
-            key={i}
-            d={arcPath(z.from, z.to, 40, 58)}
-            fill={z.color}
-            opacity={i === activeZone ? 0.95 : 0.22}
-          />
+          <path key={i} d={arcPath(z.from, z.to, 40, 58)} fill={z.color} opacity={i === activeZone ? 0.95 : 0.22} />
         ))}
         {[180, 144, 108, 72, 36, 0].map((deg) => {
           const a = pt(deg, 58);
@@ -296,15 +269,12 @@ function IntelCard({
         <span className={cn("flex size-5 items-center justify-center rounded-md", color)}>
           <Icon className="size-3 text-white" />
         </span>
-        <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-          {title}
-        </span>
+        <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">{title}</span>
       </div>
       {children}
     </div>
   );
 }
-
 
 function IndexCard({
   name,
@@ -396,15 +366,27 @@ function IndexCard({
               {close.toLocaleString("en-NP", { maximumFractionDigits: 2 })}
             </p>
             <span className={cn("num text-xs font-medium", isUp ? "text-emerald-400/80" : "text-red-400/80")}>
-              {isUp ? "+" : ""}{formatNumber(pointChange)}
+              {isUp ? "+" : ""}
+              {formatNumber(pointChange)}
             </span>
           </div>
         )}
 
-        <div className="mt-1.5 h-14">
+        {data && (
+          <div className="mt-1 flex justify-between text-[0.6rem] text-muted-foreground/70">
+            <span className="flex items-center gap-0.5">
+              <TrendingUp className="size-2.5 text-emerald-400/60" /> {formatNumber(data.high)}
+            </span>
+            <span className="flex items-center gap-0.5">
+              <TrendingDown className="size-2.5 text-red-400/60" /> {formatNumber(data.low)}
+            </span>
+          </div>
+        )}
+
+        <div className="relative -mx-3.5 -mb-3.5 mt-1.5 h-16 overflow-hidden rounded-b-2xl">
           {chartData.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
+              <AreaChart data={chartData} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
                 <defs>
                   <linearGradient id={chartGradientId(name)} x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor={color} stopOpacity={0.35} />
@@ -412,12 +394,7 @@ function IndexCard({
                   </linearGradient>
                 </defs>
                 <XAxis dataKey="t" type="number" domain={["dataMin", "dataMax"]} hide />
-                <YAxis
-                  type="number"
-                  domain={yDomain ?? ["dataMin", "dataMax"]}
-                  hide
-                  allowDataOverflow={false}
-                />
+                <YAxis type="number" domain={yDomain ?? ["dataMin", "dataMax"]} hide allowDataOverflow={false} />
                 <Area
                   type="monotone"
                   dataKey="v"
@@ -436,8 +413,29 @@ function IndexCard({
                     background: "hsl(var(--card))",
                     color: "hsl(var(--foreground))",
                   }}
-                  formatter={(val: number) => [val.toLocaleString("en-NP", { maximumFractionDigits: 2 }), name]}
-                  labelFormatter={(t) => new Date(t as number).toLocaleDateString("en-NP")}
+                  content={(props: TooltipProps<number, string>) => {
+                    const entry = props.payload?.[0] as { value?: number; payload?: { t?: number } } | undefined;
+                    if (!props.active || entry == null) return null;
+                    const cur = typeof entry.value === "number" ? entry.value : 0;
+                    const first = chartData[0]?.v ?? 0;
+                    const pct = first > 0 ? ((cur - first) / first) * 100 : 0;
+                    const t = entry.payload?.t ?? 0;
+                    return (
+                      <div className="num leading-tight font-semibold whitespace-nowrap">
+                        <p className={pct >= 0 ? "text-sm text-emerald-400" : "text-sm text-red-400"}>
+                          {formatPercent(pct)}
+                        </p>
+                        <p className="text-[0.65rem] font-normal text-muted-foreground">
+                          {t > 0
+                            ? new Date(t).toLocaleTimeString("en-NP", {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : ""}
+                        </p>
+                      </div>
+                    );
+                  }}
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -468,17 +466,6 @@ function IndexCard({
             </div>
           )}
         </div>
-
-        {data && (
-          <div className="mt-1.5 flex justify-between text-[0.6rem] text-muted-foreground/70">
-            <span className="flex items-center gap-0.5">
-              <TrendingUp className="size-2.5 text-emerald-400/60" /> {formatNumber(data.high)}
-            </span>
-            <span className="flex items-center gap-0.5">
-              <TrendingDown className="size-2.5 text-red-400/60" /> {formatNumber(data.low)}
-            </span>
-          </div>
-        )}
       </div>
     </button>
   );
@@ -693,9 +680,7 @@ function BenchmarksSection({
               </button>
             ))}
           </div>
-          <span className="hidden text-[11px] text-muted-foreground/70 sm:inline">
-            Click a card for the full chart
-          </span>
+          <span className="hidden text-[11px] text-muted-foreground/70 sm:inline">Click a card for the full chart</span>
         </div>
       </div>
 
@@ -720,9 +705,7 @@ function BenchmarksSection({
             >
               <span className={cn("size-1.5 rounded-full", up ? "bg-emerald-500" : "bg-red-500")} />
               {o.label}
-              <span className={cn("num", up ? "text-emerald-400" : "text-red-400")}>
-                {formatPercent(pct)}
-              </span>
+              <span className={cn("num", up ? "text-emerald-400" : "text-red-400")}>{formatPercent(pct)}</span>
             </button>
           );
         })}
@@ -731,14 +714,15 @@ function BenchmarksSection({
         )}
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="flex snap-x gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {active.map((o) => (
-          <BenchmarkCard
-            key={o.key}
-            option={o}
-            preloaded={indexGraphQueries?.[o.graphKey]?.data ?? indexGraphQueries?.[o.graphKey.toUpperCase()]?.data}
-            onOpen={() => onOpen(o)}
-          />
+          <div key={o.key} className="w-64 shrink-0 snap-start sm:w-72">
+            <BenchmarkCard
+              option={o}
+              preloaded={indexGraphQueries?.[o.graphKey]?.data ?? indexGraphQueries?.[o.graphKey.toUpperCase()]?.data}
+              onOpen={() => onOpen(o)}
+            />
+          </div>
         ))}
       </div>
       {active.length === 0 && (
@@ -775,11 +759,7 @@ export function MoverRows({
         <p
           className={cn(
             "text-[11px] font-bold uppercase tracking-wider",
-            tone === "gain"
-              ? "text-emerald-400"
-              : tone === "loss"
-                ? "text-red-400"
-                : "text-muted-foreground",
+            tone === "gain" ? "text-emerald-400" : tone === "loss" ? "text-red-400" : "text-muted-foreground",
           )}
         >
           {title}
@@ -805,9 +785,7 @@ export function MoverRows({
                   {ordinal(i + 1)}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-xs font-bold text-foreground">
-                    {p.symbol}
-                  </span>
+                  <span className="block truncate text-xs font-bold text-foreground">{p.symbol}</span>
                   <span className="num block truncate text-[10px] text-muted-foreground">
                     {formatNpr(p.ltp)} · <CompactNpr value={p.turnover} />
                   </span>
@@ -837,16 +815,9 @@ export function MoverRows({
 // Main component: Market Overview & Market Depth
 // ---------------------------------------------------------------------------
 
-export type MarketDepthViewMode = "matrix" | "grid" | "treemap";
+export type MarketDepthViewMode = "matrix" | "stocks" | "treemap";
 
-type DepthSortKey =
-  | "sector"
-  | "points"
-  | "turnover"
-  | "share"
-  | "breadth"
-  | "performer"
-  | "traded";
+type DepthSortKey = "sector" | "points" | "turnover" | "share" | "yield" | "breadth" | "performer" | "traded";
 
 export function MarketOverview({
   prices,
@@ -871,9 +842,7 @@ export function MarketOverview({
     sectorName?: string;
   }>({ open: false, title: "" });
 
-  const nepseIndex = indices.find(
-    (i) => /nepse/i.test(i.name) && !/sensitive|float/i.test(i.name),
-  );
+  const nepseIndex = indices.find((i) => /nepse/i.test(i.name) && !/sensitive|float/i.test(i.name));
 
   // Build sector map for fast code/name lookups
   const sectorIndexMap = useMemo(() => {
@@ -900,11 +869,45 @@ export function MarketOverview({
           normalizeSectorKey(si.code) === aliased ||
           (si.sector != null && normalizeSectorKey(si.sector) === aliased),
       ) ??
-      [...sectorIndexMap.values()].find((si) =>
-        si.name.toLowerCase().includes(lower.split(" ")[0] ?? ""),
-      )
+      [...sectorIndexMap.values()].find((si) => si.name.toLowerCase().includes(lower.split(" ")[0] ?? ""))
     );
   };
+
+  // Sector 5-yr yields: same calendar rule as sector details — the mean of
+  // members' 5-yr avg total yields. Faces chunk at 200 (API limit); members
+  // without data sit out instead of faking a zero.
+  const divSymbols = useMemo(() => prices.map((p) => p.symbol), [prices]);
+  const faceChunks = useMemo(() => {
+    const out: string[][] = [];
+    for (let i = 0; i < divSymbols.length; i += 200) out.push(divSymbols.slice(i, i + 200));
+    return out;
+  }, [divSymbols]);
+  const dividendsQ = useQuery(dividendsQuery());
+  const facesQs = useQueries({ queries: faceChunks.map((chunk) => faceValuesQuery(chunk)) });
+  const divBySymbol = useMemo(() => {
+    const map = new Map<string, DividendRow[]>();
+    for (const d of dividendsQ.data ?? []) {
+      const arr = map.get(d.symbol) ?? [];
+      arr.push(d);
+      map.set(d.symbol, arr);
+    }
+    return map;
+  }, [dividendsQ.data]);
+  const faces = useMemo(() => {
+    const merged: Record<string, number> = {};
+    for (const q of facesQs) Object.assign(merged, q.data ?? {});
+    return merged;
+  }, [facesQs]);
+  // Per-stock 5-yr avg total yields (same calendar rule as sector details).
+  const stockYield = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const p of prices) {
+      const avg = avgTotalLast5Y(divBySymbol.get(p.symbol) ?? []);
+      const fv = faces[p.symbol] ?? 100;
+      if (avg !== null && avg > 0 && fv > 0 && p.ltp > 0) map.set(p.symbol, (avg * fv) / p.ltp);
+    }
+    return map;
+  }, [prices, divBySymbol, faces]);
 
   // Aggregated sector statistics and market breadth
   const { sectors, breadth, totalMarketTurnover, totalMarketVolume } = useMemo(() => {
@@ -920,8 +923,7 @@ export function MarketOverview({
     const advancers = prices.filter((p) => p.percentChange > 0).length;
     const decliners = prices.filter((p) => p.percentChange < 0).length;
     const unchanged = total - advancers - decliners;
-    const avgChange =
-      total > 0 ? prices.reduce((s, p) => s + p.percentChange, 0) / total : 0;
+    const avgChange = total > 0 ? prices.reduce((s, p) => s + p.percentChange, 0) / total : 0;
     const grandTurnover = prices.reduce((s, p) => s + p.turnover, 0);
     const grandVolume = prices.reduce((s, p) => s + p.volume, 0);
 
@@ -940,15 +942,24 @@ export function MarketOverview({
         const topLoser = sortedByChange[sortedByChange.length - 1];
         const topTraded = sortedByTurnover[0];
         const si = findSectorIndex(sector);
+        // Mean of members' 5-yr avg total yields; members without in-window
+        // dividends sit out (never a faked zero).
+        const memberYields: number[] = [];
+        for (const p of items) {
+          const avg = avgTotalLast5Y(divBySymbol.get(p.symbol) ?? []);
+          const fv = faces[p.symbol] ?? 100;
+          if (avg !== null && avg > 0 && fv > 0 && p.ltp > 0) {
+            memberYields.push((avg * fv) / p.ltp);
+          }
+        }
 
         return {
           sector,
           sectorIndex: si,
           items: sortedByTurnover,
-          avgChange:
-            items.length > 0
-              ? items.reduce((s, p) => s + p.percentChange, 0) / items.length
-              : 0,
+          avgYield5: memberYields.length > 0 ? memberYields.reduce((s, y) => s + y, 0) / memberYields.length : null,
+          yieldMembers: memberYields.length,
+          avgChange: items.length > 0 ? items.reduce((s, p) => s + p.percentChange, 0) / items.length : 0,
           sectorPoints: si?.close ?? null,
           sectorPointChange: si?.change ?? null,
           sectorPercentChange: si?.percentChange ?? null,
@@ -979,7 +990,7 @@ export function MarketOverview({
       totalMarketTurnover: grandTurnover,
       totalMarketVolume: grandVolume,
     };
-  }, [prices, sectorIndexMap]);
+  }, [prices, sectorIndexMap, divBySymbol, faces]);
 
   // ── Sentiment Score (0 = extreme bear, 100 = extreme bull) ──
   const sentimentScore = useMemo(() => {
@@ -1003,7 +1014,10 @@ export function MarketOverview({
 
   // ── Volume Surge / Most Active ──
   const volumeSurge = useMemo(() => {
-    return [...prices].filter((p) => p.turnover > 0).sort((a, b) => b.turnover - a.turnover).slice(0, 5);
+    return [...prices]
+      .filter((p) => p.turnover > 0)
+      .sort((a, b) => b.turnover - a.turnover)
+      .slice(0, 5);
   }, [prices]);
 
   // ── Sector Rotation (vs market avg) ──
@@ -1028,19 +1042,20 @@ export function MarketOverview({
   }, [prices]);
 
   const sentimentLabel =
-    sentimentScore >= 80 ? "Strong Bull"
-      : sentimentScore >= 60 ? "Mild Bull"
-        : sentimentScore >= 40 ? "Neutral"
-          : sentimentScore >= 20 ? "Mild Bear"
+    sentimentScore >= 80
+      ? "Strong Bull"
+      : sentimentScore >= 60
+        ? "Mild Bull"
+        : sentimentScore >= 40
+          ? "Neutral"
+          : sentimentScore >= 20
+            ? "Mild Bear"
             : "Strong Bear";
-
 
   const treemapTiles: HeatTile[] = useMemo(() => {
     return [...prices]
       .filter((p) => p.ltp > 0)
-      .sort((a, b) =>
-        treemapMetric === "turnover" ? b.turnover - a.turnover : b.volume - a.volume,
-      )
+      .sort((a, b) => (treemapMetric === "turnover" ? b.turnover - a.turnover : b.volume - a.volume))
       .slice(0, 80)
       .map((p) => {
         const val = treemapMetric === "turnover" ? p.turnover : p.volume;
@@ -1062,11 +1077,7 @@ export function MarketOverview({
     return sectors.filter(
       (s) =>
         s.sector.toLowerCase().includes(term) ||
-        s.items.some(
-          (p) =>
-            p.symbol.toLowerCase().includes(term) ||
-            p.name.toLowerCase().includes(term),
-        ),
+        s.items.some((p) => p.symbol.toLowerCase().includes(term) || p.name.toLowerCase().includes(term)),
     );
   }, [sectors, searchQuery]);
 
@@ -1076,10 +1087,7 @@ export function MarketOverview({
     const term = searchQuery.toLowerCase().trim();
     if (!term) return [];
     return [...prices]
-      .filter(
-        (p) =>
-          p.symbol.toLowerCase().includes(term) || p.name.toLowerCase().includes(term),
-      )
+      .filter((p) => p.symbol.toLowerCase().includes(term) || p.name.toLowerCase().includes(term))
       .sort((a, b) => b.turnover - a.turnover)
       .slice(0, 12);
   }, [prices, searchQuery]);
@@ -1091,6 +1099,7 @@ export function MarketOverview({
       points: "number",
       turnover: "number",
       share: "number",
+      yield: "number",
       breadth: "number",
       performer: "number",
       traded: "number",
@@ -1108,6 +1117,8 @@ export function MarketOverview({
           return s.totalTurnover;
         case "share":
           return s.marketSharePct;
+        case "yield":
+          return s.avgYield5 ?? Number.NEGATIVE_INFINITY;
         case "breadth":
           return s.advancers - s.decliners;
         case "performer":
@@ -1119,6 +1130,53 @@ export function MarketOverview({
     return sortBy(filteredSectors, getter, depthSort.dir);
   }, [filteredSectors, depthSort]);
 
+  // Individual stocks view: same search box filters by symbol, name or
+  // sector; sortable like the Market page table (top 200 by the sort).
+  const { sort: stockSort, toggle: toggleStockSort } = useSort<
+    "symbol" | "sector" | "ltp" | "percentChange" | "volume" | "turnover" | "yield"
+  >(
+    { key: "turnover", dir: "desc" },
+    {
+      symbol: "text",
+      sector: "text",
+      ltp: "number",
+      percentChange: "number",
+      volume: "number",
+      turnover: "number",
+      yield: "number",
+    },
+  );
+  const stockRows = useMemo(() => {
+    const term = searchQuery.trim().toLowerCase();
+    const rows = term
+      ? prices.filter(
+          (p) =>
+            p.symbol.toLowerCase().includes(term) ||
+            p.name.toLowerCase().includes(term) ||
+            (p.sector ?? "Others").toLowerCase().includes(term),
+        )
+      : prices;
+    const getter = (p: (typeof rows)[number]): string | number => {
+      switch (stockSort.key) {
+        case "symbol":
+          return p.symbol;
+        case "sector":
+          return p.sector ?? "Others";
+        case "ltp":
+          return p.ltp;
+        case "percentChange":
+          return p.percentChange;
+        case "volume":
+          return p.volume;
+        case "yield":
+          return stockYield.get(p.symbol) ?? Number.NEGATIVE_INFINITY;
+        default:
+          return p.turnover;
+      }
+    };
+    return sortBy(rows, getter, stockSort.dir).slice(0, 200);
+  }, [prices, searchQuery, stockSort, stockYield]);
+
   const sentiment =
     breadth.avgChange >= 1
       ? "Strong Bullish"
@@ -1127,6 +1185,8 @@ export function MarketOverview({
         : breadth.avgChange >= -1
           ? "Weak Bearish"
           : "Heavy Bearish";
+  // White position needle on the breadth bar (same touch as sector details).
+  const breadthNeedle = Math.max(3, Math.min(97, breadth.advPct));
 
   return (
     <div className="space-y-5">
@@ -1142,9 +1202,7 @@ export function MarketOverview({
             indexName: idx,
           })
         }
-        onSelectSector={(sec) =>
-          void navigate({ to: "/sectors/$sectorName", params: { sectorName: sec } })
-        }
+        onSelectSector={(sec) => void navigate({ to: "/sectors/$sectorName", params: { sectorName: sec } })}
         onSelectScrip={(sym) => setPickedScrip(sym)}
       />
 
@@ -1169,15 +1227,11 @@ export function MarketOverview({
         <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
           <div className="flex items-center gap-2">
             <Activity className="size-4 text-primary" />
-            <h3 className="font-display text-sm font-semibold text-foreground">
-              Market Breadth &amp; Flow
-            </h3>
+            <h3 className="font-display text-sm font-semibold text-foreground">Market Breadth &amp; Flow</h3>
             <span
               className={cn(
                 "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase",
-                breadth.avgChange >= 0
-                  ? "bg-emerald-500/15 text-emerald-400"
-                  : "bg-red-500/15 text-red-400",
+                breadth.avgChange >= 0 ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400",
               )}
             >
               {sentiment} · {formatPercent(breadth.avgChange)}
@@ -1186,48 +1240,59 @@ export function MarketOverview({
 
           <div className="flex items-center gap-4 text-xs">
             <span className="text-muted-foreground">
-              Turnover:{" "}
-              <CompactNpr value={totalMarketTurnover} className="font-bold text-foreground" />
+              Turnover: <CompactNpr value={totalMarketTurnover} className="font-bold text-foreground" />
             </span>
             <span className="text-muted-foreground">
-              Volume:{" "}
-              <CompactQty value={totalMarketVolume} className="font-bold text-foreground" />
+              Volume: <CompactQty value={totalMarketVolume} className="font-bold text-foreground" />
             </span>
           </div>
         </div>
 
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
           <div className="min-w-0 flex-1">
-            {/* Breadth Bar */}
-            <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted/40">
+            {/* Breadth Bar with position needle */}
+            <div className="relative mt-8">
               <div
-                className="bg-emerald-500 transition-all"
-                style={{ width: `${breadth.advPct}%` }}
-                title={`${breadth.advancers} Advancers`}
-              />
+                className="absolute -top-7 -translate-x-1/2 transition-all duration-500"
+                style={{ left: `${breadthNeedle}%` }}
+              >
+                <span className="num rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[11px] font-bold whitespace-nowrap text-emerald-400">
+                  ▲ {breadth.advPct}%
+                </span>
+              </div>
               <div
-                className="bg-muted-foreground/30 transition-all"
-                style={{
-                  width: `${breadth.total > 0 ? Math.round((breadth.unchanged / breadth.total) * 100) : 0}%`,
-                }}
-                title={`${breadth.unchanged} Unchanged`}
+                className="absolute -top-1.5 bottom-0 w-[3px] -translate-x-1/2 rounded-full bg-white shadow-[0_0_10px_rgba(255,255,255,0.9)] transition-all duration-500"
+                style={{ left: `${breadthNeedle}%` }}
+                title={`${breadth.advancers} advancing (${breadth.advPct}%)`}
               />
-              <div
-                className="bg-red-500 transition-all"
-                style={{
-                  width: `${breadth.total > 0 ? Math.round((breadth.decliners / breadth.total) * 100) : 0}%`,
-                }}
-                title={`${breadth.decliners} Decliners`}
-              />
+              <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted/40">
+                <div
+                  className="bg-emerald-500 transition-all"
+                  style={{ width: `${breadth.advPct}%` }}
+                  title={`${breadth.advancers} Advancers`}
+                />
+                <div
+                  className="bg-muted-foreground/30 transition-all"
+                  style={{
+                    width: `${breadth.total > 0 ? Math.round((breadth.unchanged / breadth.total) * 100) : 0}%`,
+                  }}
+                  title={`${breadth.unchanged} Unchanged`}
+                />
+                <div
+                  className="bg-red-500 transition-all"
+                  style={{
+                    width: `${breadth.total > 0 ? Math.round((breadth.decliners / breadth.total) * 100) : 0}%`,
+                  }}
+                  title={`${breadth.decliners} Decliners`}
+                />
+              </div>
             </div>
 
             <div className="mt-2 flex justify-between text-xs text-muted-foreground">
               <span className="font-semibold text-emerald-400">
                 ▲ {breadth.advancers} Advancing ({breadth.advPct}%)
               </span>
-              <span className="text-muted-foreground/80">
-                - {breadth.unchanged} Unchanged
-              </span>
+              <span className="text-muted-foreground/80">- {breadth.unchanged} Unchanged</span>
               <span className="font-semibold text-red-400">
                 ▼ {breadth.decliners} Declining (
                 {breadth.total > 0 ? Math.round((breadth.decliners / breadth.total) * 100) : 0}%)
@@ -1248,9 +1313,7 @@ export function MarketOverview({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <Layers className="size-4 text-primary" />
-            <h2 className="font-display text-base font-bold text-foreground">
-              Market Depth &amp; Sector Heatmap
-            </h2>
+            <h2 className="font-display text-base font-bold text-foreground">Market Depth &amp; Sector Heatmap</h2>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -1261,7 +1324,7 @@ export function MarketOverview({
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search sector or scrip…"
+                placeholder="Search sector or stock…"
                 className="h-8 w-full rounded-xl border border-border/60 bg-surface pl-8 pr-3 text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-primary/50 focus:outline-hidden"
               />
             </div>
@@ -1283,16 +1346,16 @@ export function MarketOverview({
               </button>
               <button
                 type="button"
-                onClick={() => setViewMode("grid")}
+                onClick={() => setViewMode("stocks")}
                 className={cn(
                   "flex items-center gap-1.5 rounded-lg px-2.5 py-1 transition-colors cursor-pointer",
-                  viewMode === "grid"
+                  viewMode === "stocks"
                     ? "bg-primary text-primary-foreground font-semibold shadow-xs"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
-                <LayoutGrid className="size-3.5" />
-                <span className="hidden sm:inline">Sector Grid</span>
+                <List className="size-3.5" />
+                <span className="hidden sm:inline">Stocks</span>
               </button>
               <button
                 type="button"
@@ -1316,8 +1379,8 @@ export function MarketOverview({
           <div className="rounded-2xl border border-border/70 bg-card/60 p-3.5 shadow-xs">
             <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
               {matchingScrips.length > 0
-                ? `Scrips matching “${searchQuery.trim()}” (${matchingScrips.length})`
-                : `No scrips match “${searchQuery.trim()}”`}
+                ? `Stocks matching “${searchQuery.trim()}” (${matchingScrips.length})`
+                : `No stocks match “${searchQuery.trim()}”`}
             </p>
             {matchingScrips.length > 0 && (
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
@@ -1350,22 +1413,76 @@ export function MarketOverview({
 
         {/* View Mode 1: Market Depth Matrix (Institutional Table) */}
         {viewMode === "matrix" && (
-          <div className="overflow-hidden rounded-2xl border border-border/70 bg-card/80 shadow-xs">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-border/60 bg-surface/80 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                    <SortableTh label="Sector" active={depthSort.key === "sector"} dir={depthSort.dir} onClick={() => toggleDepthSort("sector")} kind="text" className="py-2.5 pl-4 pr-2 font-semibold" />
-                    <SortableTh label="Index Points" active={depthSort.key === "points"} dir={depthSort.dir} onClick={() => toggleDepthSort("points")} align="right" className="py-2.5 px-3 font-semibold" />
-                    <SortableTh label="Turnover" active={depthSort.key === "turnover"} dir={depthSort.dir} onClick={() => toggleDepthSort("turnover")} align="right" className="py-2.5 px-3 font-semibold" />
-                    <SortableTh label="Mkt Share" active={depthSort.key === "share"} dir={depthSort.dir} onClick={() => toggleDepthSort("share")} align="right" className="py-2.5 px-3 font-semibold" />
-                    <SortableTh label="Breadth" active={depthSort.key === "breadth"} dir={depthSort.dir} onClick={() => toggleDepthSort("breadth")} className="py-2.5 px-3 text-center min-w-[120px] font-semibold" />
-                    <SortableTh label="Top Performer" active={depthSort.key === "performer"} dir={depthSort.dir} onClick={() => toggleDepthSort("performer")} className="py-2.5 px-3 font-semibold" />
-                    <SortableTh label="Heaviest Scrip" active={depthSort.key === "traded"} dir={depthSort.dir} onClick={() => toggleDepthSort("traded")} className="py-2.5 px-3 font-semibold" />
-                    <th className="py-2.5 pr-4 pl-2 text-right">Chart</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/40">
+          <div className="overflow-clip rounded-2xl border border-border/70 bg-card/80 shadow-xs">
+            <div className="overflow-x-auto xl:overflow-x-clip">
+              <Table className="text-left text-xs">
+                <TableHeader>
+                  <TableRow className="bg-muted/40 hover:bg-muted/40">
+                    <SortableTh
+                      label="Sector"
+                      active={depthSort.key === "sector"}
+                      dir={depthSort.dir}
+                      onClick={() => toggleDepthSort("sector")}
+                      kind="text"
+                      className="py-2.5 pl-4 pr-2 font-semibold"
+                    />
+                    <SortableTh
+                      label="Index Points"
+                      active={depthSort.key === "points"}
+                      dir={depthSort.dir}
+                      onClick={() => toggleDepthSort("points")}
+                      align="right"
+                      className="py-2.5 px-3 font-semibold"
+                    />
+                    <SortableTh
+                      label="Turnover"
+                      active={depthSort.key === "turnover"}
+                      dir={depthSort.dir}
+                      onClick={() => toggleDepthSort("turnover")}
+                      align="right"
+                      className="py-2.5 px-3 font-semibold"
+                    />
+                    <SortableTh
+                      label="Mkt Share"
+                      active={depthSort.key === "share"}
+                      dir={depthSort.dir}
+                      onClick={() => toggleDepthSort("share")}
+                      align="right"
+                      className="py-2.5 px-3 font-semibold"
+                    />
+                    <SortableTh
+                      label="Yield 5Y"
+                      active={depthSort.key === "yield"}
+                      dir={depthSort.dir}
+                      onClick={() => toggleDepthSort("yield")}
+                      align="right"
+                      className="py-2.5 px-3 font-semibold"
+                    />
+                    <SortableTh
+                      label="Breadth"
+                      active={depthSort.key === "breadth"}
+                      dir={depthSort.dir}
+                      onClick={() => toggleDepthSort("breadth")}
+                      className="py-2.5 px-3 text-center min-w-[120px] font-semibold"
+                    />
+                    <SortableTh
+                      label="Top Performer"
+                      active={depthSort.key === "performer"}
+                      dir={depthSort.dir}
+                      onClick={() => toggleDepthSort("performer")}
+                      className="py-2.5 px-3 font-semibold"
+                    />
+                    <SortableTh
+                      label="Heaviest Stock"
+                      active={depthSort.key === "traded"}
+                      dir={depthSort.dir}
+                      onClick={() => toggleDepthSort("traded")}
+                      className="py-2.5 px-3 font-semibold"
+                    />
+                    <TableHead className="py-2.5 pr-4 pl-2 text-right">Chart</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody className="divide-y divide-border/40">
                   {sortedSectors.map((s) => {
                     const isUp = (s.sectorPercentChange ?? s.avgChange) >= 0;
                     const openSector = () =>
@@ -1375,13 +1492,13 @@ export function MarketOverview({
                       });
 
                     return (
-                      <tr
+                      <TableRow
                         key={s.sector}
                         onClick={openSector}
                         title={`Open ${s.sector} sector page`}
                         className="group hover:bg-surface/50 transition-colors cursor-pointer"
                       >
-                        <td className="py-3 pl-4 pr-2">
+                        <TableCell className="py-3 pl-4 pr-2">
                           <button
                             type="button"
                             onClick={(e) => {
@@ -1396,9 +1513,9 @@ export function MarketOverview({
                               {s.items.length}
                             </span>
                           </button>
-                        </td>
+                        </TableCell>
 
-                        <td className="py-3 px-3 text-right">
+                        <TableCell className="py-3 px-3 text-right">
                           <div className="flex flex-col items-end">
                             <span
                               className="num font-bold text-foreground"
@@ -1408,37 +1525,28 @@ export function MarketOverview({
                                   : undefined
                               }
                             >
-                              {s.sectorPoints != null
-                                ? formatNumber(s.sectorPoints)
-                                : "—"}
+                              {s.sectorPoints != null ? formatNumber(s.sectorPoints) : "—"}
                             </span>
-                            <span
-                              className={cn(
-                                "num text-[11px] font-semibold",
-                                isUp ? "text-gain" : "text-loss",
-                              )}
-                            >
+                            <span className={cn("num text-[11px] font-semibold", isUp ? "text-gain" : "text-loss")}>
                               {s.sectorPercentChange != null && s.sectorPointChange != null
                                 ? `${s.sectorPointChange >= 0 ? "+" : ""}${formatNumber(s.sectorPointChange)} (${formatPercent(s.sectorPercentChange)})`
                                 : formatPercent(s.sectorPercentChange ?? s.avgChange)}
                             </span>
                           </div>
-                        </td>
+                        </TableCell>
 
-                        <td className="py-3 px-3 text-right">
+                        <TableCell className="py-3 px-3 text-right">
                           <div className="flex flex-col items-end">
                             <CompactNpr value={s.totalTurnover} className="num font-semibold text-foreground" />
                             <span className="num text-[10px] text-muted-foreground">
                               <CompactQty value={s.totalVolume} /> shares
                             </span>
                           </div>
-                        </td>
+                        </TableCell>
 
-                        <td className="py-3 px-3 text-right">
+                        <TableCell className="py-3 px-3 text-right">
                           <div className="flex flex-col items-end gap-1">
-                            <span className="num font-semibold text-foreground">
-                              {s.marketSharePct.toFixed(1)}%
-                            </span>
+                            <span className="num font-semibold text-foreground">{s.marketSharePct.toFixed(1)}%</span>
                             <div className="h-1.5 w-14 rounded-full bg-muted overflow-hidden">
                               <div
                                 className="h-full bg-primary"
@@ -1446,32 +1554,52 @@ export function MarketOverview({
                               />
                             </div>
                           </div>
-                        </td>
+                        </TableCell>
 
-                        <td className="py-3 px-3 text-center">
+                        <TableCell
+                          className="num py-3 px-3 text-right font-semibold text-primary"
+                          title={
+                            s.avgYield5 != null
+                              ? `Mean of ${s.yieldMembers} members' 5-yr avg total yields on LTP`
+                              : "No in-window dividends in this sector"
+                          }
+                        >
+                          {s.avgYield5 != null ? `${s.avgYield5.toFixed(2)}%` : "—"}
+                        </TableCell>
+
+                        <TableCell className="py-3 px-3 text-center">
                           <div className="flex flex-col items-center gap-1">
-                            <div className="flex h-2 w-28 overflow-hidden rounded-full bg-muted">
+                            <div className="relative">
                               <div
-                                className="bg-emerald-500"
+                                className="absolute -top-0.5 -bottom-0.5 w-[2px] -translate-x-1/2 rounded-full bg-white shadow-[0_0_6px_rgba(255,255,255,0.9)]"
                                 style={{
-                                  width: `${(s.advancers / s.items.length) * 100}%`,
+                                  left: `${Math.max(4, Math.min(96, (s.advancers / s.items.length) * 100))}%`,
                                 }}
-                                title={`${s.advancers} Up`}
+                                title={`${s.advancers} of ${s.items.length} advancing`}
                               />
-                              <div
-                                className="bg-muted-foreground/30"
-                                style={{
-                                  width: `${(s.unchanged / s.items.length) * 100}%`,
-                                }}
-                                title={`${s.unchanged} Flat`}
-                              />
-                              <div
-                                className="bg-red-500"
-                                style={{
-                                  width: `${(s.decliners / s.items.length) * 100}%`,
-                                }}
-                                title={`${s.decliners} Down`}
-                              />
+                              <div className="flex h-2 w-28 overflow-hidden rounded-full bg-muted">
+                                <div
+                                  className="bg-emerald-500"
+                                  style={{
+                                    width: `${(s.advancers / s.items.length) * 100}%`,
+                                  }}
+                                  title={`${s.advancers} Up`}
+                                />
+                                <div
+                                  className="bg-muted-foreground/30"
+                                  style={{
+                                    width: `${(s.unchanged / s.items.length) * 100}%`,
+                                  }}
+                                  title={`${s.unchanged} Flat`}
+                                />
+                                <div
+                                  className="bg-red-500"
+                                  style={{
+                                    width: `${(s.decliners / s.items.length) * 100}%`,
+                                  }}
+                                  title={`${s.decliners} Down`}
+                                />
+                              </div>
                             </div>
                             <span className="text-[10px] text-muted-foreground">
                               <span className="text-emerald-400 font-semibold">{s.advancers}↑</span>{" "}
@@ -1479,9 +1607,9 @@ export function MarketOverview({
                               <span className="text-red-400 font-semibold">{s.decliners}↓</span>
                             </span>
                           </div>
-                        </td>
+                        </TableCell>
 
-                        <td className="py-3 px-3 text-left">
+                        <TableCell className="py-3 px-3 text-left">
                           {s.topGainer ? (
                             <button
                               type="button"
@@ -1501,9 +1629,9 @@ export function MarketOverview({
                           ) : (
                             <span className="text-muted-foreground/60">—</span>
                           )}
-                        </td>
+                        </TableCell>
 
-                        <td className="py-3 px-3 text-left">
+                        <TableCell className="py-3 px-3 text-left">
                           {s.topTraded ? (
                             <button
                               type="button"
@@ -1516,14 +1644,17 @@ export function MarketOverview({
                               <span className="font-bold text-foreground group-hover/trade:text-primary">
                                 {s.topTraded.symbol}
                               </span>{" "}
-                              <CompactNpr value={s.topTraded.turnover} className="num text-[10px] text-muted-foreground" />
+                              <CompactNpr
+                                value={s.topTraded.turnover}
+                                className="num text-[10px] text-muted-foreground"
+                              />
                             </button>
                           ) : (
                             <span className="text-muted-foreground/60">—</span>
                           )}
-                        </td>
+                        </TableCell>
 
-                        <td className="py-3 pr-4 pl-2 text-right">
+                        <TableCell className="py-3 pr-4 pl-2 text-right">
                           <button
                             type="button"
                             onClick={(e) => {
@@ -1538,109 +1669,128 @@ export function MarketOverview({
                           >
                             Chart
                           </button>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     );
                   })}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           </div>
         )}
 
-        {/* View Mode 2: Sector Grid (Interactive Heatmap Cards) */}
-        {viewMode === "grid" && (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {filteredSectors.map((s) => {
-              const isUp = (s.sectorPercentChange ?? s.avgChange) >= 0;
-
-              return (
-                <div
-                  key={s.sector}
-                  className={cn(
-                    "rounded-2xl border bg-card/60 p-3.5 transition-all shadow-xs",
-                    sectorBorderColor(s.avgChange),
-                  )}
-                >
-                  {/* Sector header — opens the dedicated sector detail page */}
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void navigate({
-                        to: "/sectors/$sectorName",
-                        params: { sectorName: s.sector },
-                      })
-                    }
-                    title={`Open ${s.sector} sector page`}
-                    className="mb-2.5 flex w-full items-center justify-between gap-2 border-b border-border/40 pb-2 text-left group cursor-pointer hover:border-primary/40 transition-colors"
-                  >
-                    <div className="flex min-w-0 flex-1 items-center gap-2">
-                      <SectorBadge sector={s.sector} />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1">
-                          <p className="truncate text-xs font-bold text-foreground group-hover:text-primary transition-colors">
-                            {s.sector}
-                          </p>
-                          <ArrowUpRight className="size-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </div>
-                      <p className="truncate text-[10px] text-muted-foreground">
-                        {s.items.length} stocks · <CompactNpr value={s.totalTurnover} /> vol
-                      </p>
-                      </div>
-                    </div>
-
-                    <div className="ml-2 text-right">
-                      <p
-                        className={cn(
-                          "num text-xs font-bold",
-                          isUp ? "text-emerald-400" : "text-red-400",
-                        )}
-                      >
-                        {s.sectorPercentChange != null
-                          ? formatPercent(s.sectorPercentChange)
-                          : formatPercent(s.avgChange)}
-                      </p>
-                      {s.sectorPoints != null && (
-                        <p className="num text-[10px] text-muted-foreground">
-                          {formatNumber(s.sectorPoints)}
-                        </p>
-                      )}
-                    </div>
-                  </button>
-
-                  {/* Stock tiles */}
-                  <div className="grid grid-cols-3 gap-1 sm:grid-cols-4">
-                    {s.items.map((p) => {
-                      const maxTurnover = s.items[0]?.turnover ?? 1;
-                      const scale = Math.max(0.4, Math.min(1, p.turnover / maxTurnover));
-
-                      return (
-                        <button
-                          key={p.symbol}
-                          type="button"
-                          onClick={() => setPickedScrip(p.symbol)}
-                          className={cn(
-                            "flex flex-col items-center justify-center rounded-md px-1 py-1 text-center transition-all hover:ring-1 hover:ring-white/40 cursor-pointer",
-                            tileColor(p.percentChange),
-                          )}
-                          style={{ opacity: Math.max(0.45, scale) }}
-                          title={`${p.symbol} ${formatNpr(p.ltp)} (${formatPercent(p.percentChange)})`}
+        {/* View Mode 2: All Stocks (filterable, sortable table) */}
+        {viewMode === "stocks" &&
+          (stockRows.length === 0 ? (
+            <EmptyBlock
+              title="No matches"
+              description={
+                searchQuery.trim()
+                  ? `No stocks match “${searchQuery.trim()}”.`
+                  : "No listed stocks in the feed right now."
+              }
+            />
+          ) : (
+            <div className="overflow-clip rounded-2xl border border-border/70 bg-card/80 shadow-xs">
+              <div className="overflow-x-auto xl:overflow-x-clip">
+                <Table className="text-left text-xs">
+                  <TableHeader>
+                    <TableRow className="bg-muted/40 hover:bg-muted/40">
+                      <SortableTh
+                        label="Stock"
+                        active={stockSort.key === "symbol"}
+                        dir={stockSort.dir}
+                        onClick={() => toggleStockSort("symbol")}
+                        kind="text"
+                        className="py-2.5 pl-4 pr-2 font-semibold"
+                      />
+                      <SortableTh
+                        label="Sector"
+                        active={stockSort.key === "sector"}
+                        dir={stockSort.dir}
+                        onClick={() => toggleStockSort("sector")}
+                        kind="text"
+                        className="hidden py-2.5 px-3 font-semibold lg:table-cell"
+                      />
+                      <SortableTh
+                        label="LTP"
+                        active={stockSort.key === "ltp"}
+                        dir={stockSort.dir}
+                        onClick={() => toggleStockSort("ltp")}
+                        align="right"
+                        className="py-2.5 px-3 font-semibold"
+                      />
+                      <SortableTh
+                        label="Change"
+                        active={stockSort.key === "percentChange"}
+                        dir={stockSort.dir}
+                        onClick={() => toggleStockSort("percentChange")}
+                        align="right"
+                        className="py-2.5 px-3 font-semibold"
+                      />
+                      <SortableTh
+                        label="Yield 5Y"
+                        active={stockSort.key === "yield"}
+                        dir={stockSort.dir}
+                        onClick={() => toggleStockSort("yield")}
+                        align="right"
+                        className="py-2.5 px-3 font-semibold"
+                      />
+                      <SortableTh
+                        label="Volume"
+                        active={stockSort.key === "volume"}
+                        dir={stockSort.dir}
+                        onClick={() => toggleStockSort("volume")}
+                        align="right"
+                        className="hidden py-2.5 px-3 font-semibold sm:table-cell"
+                      />
+                      <SortableTh
+                        label="Turnover"
+                        active={stockSort.key === "turnover"}
+                        dir={stockSort.dir}
+                        onClick={() => toggleStockSort("turnover")}
+                        align="right"
+                        className="hidden py-2.5 px-3 font-semibold md:table-cell"
+                      />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {stockRows.map((p) => (
+                      <TableRow key={p.symbol} className="cursor-pointer" onClick={() => setPickedScrip(p.symbol)}>
+                        <TableCell className="py-2.5 pl-4 pr-2">
+                          <p className="font-semibold">{p.symbol}</p>
+                          <p className="max-w-52 truncate text-[11px] text-muted-foreground">{p.name}</p>
+                        </TableCell>
+                        <TableCell className="hidden py-2.5 px-3 text-muted-foreground lg:table-cell">
+                          {p.sector ?? "Others"}
+                        </TableCell>
+                        <TableCell className="num py-2.5 px-3 text-right font-medium">{formatNpr(p.ltp)}</TableCell>
+                        <TableCell className="py-2.5 px-3 text-right">
+                          <DeltaPill value={p.percentChange}>{formatPercent(p.percentChange)}</DeltaPill>
+                        </TableCell>
+                        <TableCell
+                          className="num py-2.5 px-3 text-right font-semibold text-primary"
+                          title={
+                            stockYield.get(p.symbol) != null
+                              ? "5-year average total yield on LTP"
+                              : "No in-window dividends"
+                          }
                         >
-                          <span className="text-[10px] font-bold leading-tight">
-                            {p.symbol}
-                          </span>
-                          <span className="num text-[9px] leading-tight opacity-85 font-medium">
-                            {formatPercent(p.percentChange)}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                          {stockYield.get(p.symbol) != null ? `${stockYield.get(p.symbol)!.toFixed(2)}%` : "—"}
+                        </TableCell>
+                        <TableCell className="num hidden py-2.5 px-3 text-right text-muted-foreground sm:table-cell">
+                          {formatQty(p.volume)}
+                        </TableCell>
+                        <TableCell className="num hidden py-2.5 px-3 text-right text-muted-foreground md:table-cell">
+                          {formatNpr(p.turnover, { compact: true })}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          ))}
 
         {/* View Mode 3: Treemap View */}
         {viewMode === "treemap" && (

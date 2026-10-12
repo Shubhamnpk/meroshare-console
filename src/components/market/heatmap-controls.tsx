@@ -1,12 +1,6 @@
 import { Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 /**
@@ -75,9 +69,7 @@ export function ModeSwitch<T extends string>({
           onClick={() => onChange(m.key)}
           className={cn(
             "rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
-            value === m.key
-              ? "bg-primary/15 text-primary"
-              : "text-muted-foreground hover:text-foreground",
+            value === m.key ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground",
           )}
         >
           {m.label}
