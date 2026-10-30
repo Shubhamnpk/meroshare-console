@@ -126,6 +126,8 @@ export function IndexChartModal({
 
   const bars: ChartBar[] = dailyQuery.data ?? [];
   const intradayPoints: PricePoint[] = intradayQuery.data ?? [];
+  /** Previous session close anchors the 1D line color (never the opening tick). */
+  const prevSessionClose = bars.length >= 2 ? (bars[bars.length - 2]?.close ?? null) : null;
   const isLoading =
     range === "1D"
       ? intradayQuery.isLoading || (intradayPoints.length < 2 && dailyQuery.isLoading)
@@ -166,15 +168,15 @@ export function IndexChartModal({
       : bars.length > 0
         ? bars[bars.length - 1]!.close
         : null;
-  // Hovered/pinned point takes over the headline, with its % change beside
-  // it (day % for candles, session % for ticks). At rest the % below the
-  // number covers the visible range (session move on 1D, bar range above).
+  // Every 1D % anchors on the previous close, never the opening tick —
+  // pre-market prints must not move the day number. Bar ranges keep their
+  // genuine first-to-last move.
+  const dayBase = prevSessionClose && prevSessionClose > 0 ? prevSessionClose : sessionBase;
   const restPct =
     range === "1D" && intradayPoints.length >= 2
       ? (() => {
-          const first = intradayPoints[0]!.value;
           const last = intradayPoints[intradayPoints.length - 1]!.value;
-          return first ? ((last - first) / first) * 100 : 0;
+          return dayBase ? ((last - dayBase) / dayBase) * 100 : 0;
         })()
       : bars.length > 0
         ? (() => {
@@ -189,27 +191,27 @@ export function IndexChartModal({
       ? ((hoveredBar.close - hoveredBar.open) / hoveredBar.open) * 100
       : 0
     : hoveredPt
-      ? sessionBase
-        ? ((hoveredPt.value - sessionBase) / sessionBase) * 100
+      ? dayBase
+        ? ((hoveredPt.value - dayBase) / dayBase) * 100
         : 0
       : restPct;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] w-[calc(100vw-1.5rem)] max-w-4xl overflow-y-auto p-4 sm:p-6">
+      <DialogContent className="h-dvh max-h-none w-full overflow-y-auto p-4 sm:h-auto sm:max-h-[92vh] sm:w-[calc(100vw-1.5rem)] sm:p-6">
         <DialogHeader className="pr-8 text-left border-b border-border/50 pb-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <DialogTitle className="font-display text-lg font-bold sm:text-xl">{title}</DialogTitle>
+                <DialogTitle className="truncate font-display text-lg font-bold sm:text-xl">{title}</DialogTitle>
               </div>
-              <p className="mt-0.5 text-xs text-muted-foreground">
+              <p className="mt-0.5 hidden text-xs text-muted-foreground sm:block">
                 Historical trading data &amp; technical performance across all ranges.
               </p>
             </div>
 
             {shownValue != null && (
-              <div className="flex flex-col items-end text-right">
+              <div className="flex shrink-0 flex-col items-end text-right">
                 <span className="num text-2xl font-bold">{formatNumber(shownValue)}</span>
                 {shownPct != null && (
                   <span className={`num text-sm font-semibold ${shownPct >= 0 ? "text-gain" : "text-loss"}`}>
@@ -225,8 +227,8 @@ export function IndexChartModal({
         <div className="space-y-4 pt-2">
           {/* Controls Bar: Range Selectors + Chart Mode + Indicators */}
           <div className="flex flex-wrap items-center justify-between gap-2">
-            {/* Range Pills */}
-            <div className="flex flex-wrap items-center gap-1 rounded-xl bg-surface p-1 border border-border/60">
+            {/* Range Pills — single scrollable row on mobile */}
+            <div className="flex items-center gap-1 overflow-x-auto rounded-xl bg-surface p-1 border border-border/60 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {INDEX_RANGES.map((r) => (
                 <button
                   key={r.key}
@@ -234,7 +236,7 @@ export function IndexChartModal({
                   aria-pressed={range === r.key}
                   onClick={() => setRange(r.key)}
                   className={cn(
-                    "rounded-lg px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer",
+                    "shrink-0 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer",
                     range === r.key
                       ? "bg-primary text-primary-foreground font-semibold shadow-xs"
                       : "text-muted-foreground hover:text-foreground",
@@ -346,6 +348,7 @@ export function IndexChartModal({
                 logScale={false}
                 light={light}
                 height={360}
+                dayBase={prevSessionClose}
                 onHover={setHover}
                 onSelectPoint={(p) => setPinnedPoint((cur) => (cur && p && cur.time === p.time ? null : p))}
                 onSelectBar={(d) => setPinnedBar(d ? (bars.find((b) => b.date === d) ?? null) : null)}

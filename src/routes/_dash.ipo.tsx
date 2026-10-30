@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Archive, ArrowUpRight, CalendarRange, CheckCircle2, ClipboardList, Rocket } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyBlock, ErrorBlock, SkeletonCards, SkeletonLines } from "@/components/states";
 import {
@@ -33,7 +34,7 @@ import { ApplicationReports } from "@/components/ipo/application-reports";
 import { IpoDetailSheet, type IpoSheetEdit, type IpoSheetIssue } from "@/components/ipo/ipo-detail-sheet";
 import { cn } from "@/lib/utils";
 import { ogImage, canonicalLink } from "@/lib/seo";
-import { parseBsRange, statusGroup, upcomingMerged } from "@/lib/ipo/status";
+import { IPO_AUDIENCE_TONE, ipoAudience, parseBsRange, statusGroup, upcomingMerged } from "@/lib/ipo/status";
 
 export const Route = createFileRoute("/_dash/ipo")({
   validateSearch: (search: Record<string, unknown>): { tab?: string | undefined } => ({
@@ -58,13 +59,13 @@ export const Route = createFileRoute("/_dash/ipo")({
   component: IpoPage,
 });
 
-function CountdownChip({ target }: { target: string | undefined }) {
-  const days = daysUntil(target);
+function CountdownChip({ target, opening }: { target: string | Date | undefined; opening?: boolean }) {
+  const days = daysUntil(target instanceof Date ? target.toISOString() : target);
   if (days === null) return null;
   if (days === 0)
     return (
       <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[0.68rem] font-semibold text-primary">
-        Closing today
+        {opening ? "Opens today" : "Closing today"}
       </span>
     );
   if (days < 0)
@@ -76,12 +77,12 @@ function CountdownChip({ target }: { target: string | undefined }) {
   if (days === 1)
     return (
       <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[0.68rem] font-semibold text-primary">
-        Closes tomorrow
+        {opening ? "Opens tomorrow" : "Closes tomorrow"}
       </span>
     );
   return (
     <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[0.68rem] font-semibold text-primary">
-      {days} days left
+      {opening ? `Opens in ${days}d` : `${days} days left`}
     </span>
   );
 }
@@ -89,11 +90,17 @@ function CountdownChip({ target }: { target: string | undefined }) {
 function UpcomingSection({
   cdscUpcoming,
   archUpcoming,
+  onPick,
 }: {
   cdscUpcoming: ApplicableIssue[];
   archUpcoming: IpoArchiveRow[];
+  onPick: (issue: ApplicableIssue) => void;
 }) {
+  const [archRow, setArchRow] = useState<IpoArchiveRow | null>(null);
   if (cdscUpcoming.length === 0 && archUpcoming.length === 0) return null;
+  const archAudience = archRow
+    ? ipoAudience({ company: archRow.company, reservedFor: archRow.reservedFor, fullText: archRow.fullText })
+    : null;
   return (
     <section className="space-y-2">
       <h2 className="font-display text-base font-semibold">
@@ -103,62 +110,148 @@ function UpcomingSection({
         </span>
       </h2>
       <ul className="grid gap-2 md:grid-cols-2">
-        {cdscUpcoming.map((issue) => (
-          <li key={issue.companyShareId} className="rounded-xl border border-border/60 bg-surface p-3">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold">{issue.companyName}</p>
-                <p className="num text-xs text-muted-foreground">
-                  {issue.scrip} · {issue.shareTypeName} {issue.shareGroupName}
+        {cdscUpcoming.map((issue) => {
+          const audience = ipoAudience(issue);
+          return (
+            <li
+              key={issue.companyShareId}
+              className="rounded-xl border border-border/60 bg-surface transition-colors hover:border-primary/40"
+            >
+              <button
+                type="button"
+                onClick={() => onPick(issue)}
+                title={`${issue.companyName} — view full details`}
+                className="block w-full cursor-pointer p-3 text-left"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="flex min-w-0 items-center gap-1.5">
+                      <span className="truncate text-sm font-semibold">{issue.companyName}</span>
+                      <span
+                        title={`Open to ${audience.detail ?? audience.label.toLowerCase()}`}
+                        className={`shrink-0 rounded-full border px-1.5 py-px text-[0.65rem] font-semibold ${IPO_AUDIENCE_TONE[audience.key]}`}
+                      >
+                        {audience.label}
+                      </span>
+                    </p>
+                    <p className="num mt-0.5 text-xs text-muted-foreground">
+                      {issue.scrip} · {issue.shareTypeName} {issue.shareGroupName}
+                    </p>
+                  </div>
+                  <CountdownChip target={issue.issueOpenDate} opening />
+                </div>
+                <p className="num mt-2 text-xs text-muted-foreground">
+                  Opens {formatDate(issue.issueOpenDate)} · Rs {formatNumber(issue.sharePerUnit)}/unit
                 </p>
-              </div>
-              <CountdownChip target={issue.issueOpenDate} />
-            </div>
-            <p className="num mt-2 text-xs text-muted-foreground">
-              Opens {formatDate(issue.issueOpenDate)} · Rs {formatNumber(issue.sharePerUnit)}/unit
-            </p>
-          </li>
-        ))}
+              </button>
+            </li>
+          );
+        })}
         {archUpcoming.map((row, i) => {
           const range = row.dateRange ? parseBsRange(row.dateRange) : null;
           const today = new Date(new Date().toDateString()).getTime();
           const live = range ? today >= range.start.getTime() && today <= range.end.getTime() : null;
           const units = row.units ? toNumber(row.units) : 0;
+          const audience = ipoAudience({ company: row.company, reservedFor: row.reservedFor, fullText: row.fullText });
           return (
-            <li key={`arch-${row.company}-${i}`} className="rounded-xl border border-border/60 bg-surface p-3">
-              <div className="flex items-start justify-between gap-3">
-                <p className="min-w-0 truncate text-sm font-semibold" title={row.company}>
-                  {row.company}
+            <li
+              key={`arch-${row.company}-${i}`}
+              className="rounded-xl border border-border/60 bg-surface transition-colors hover:border-primary/40"
+            >
+              <button
+                type="button"
+                onClick={() => setArchRow(row)}
+                title={`${row.company} — view details`}
+                className="block w-full cursor-pointer p-3 text-left"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <p className="flex min-w-0 items-center gap-1.5">
+                    <span className="truncate text-sm font-semibold" title={row.company}>
+                      {row.company}
+                    </span>
+                    <span
+                      title={`Open to ${audience.detail ?? audience.label.toLowerCase()}`}
+                      className={`shrink-0 rounded-full border px-1.5 py-px text-[0.65rem] font-semibold ${IPO_AUDIENCE_TONE[audience.key]}`}
+                    >
+                      {audience.label}
+                    </span>
+                  </p>
+                  {live ? (
+                    <span className="num shrink-0 rounded-full bg-gain/15 px-2 py-0.5 text-[0.68rem] font-semibold text-gain">
+                      Open now
+                    </span>
+                  ) : (
+                    <CountdownChip target={range?.start} opening />
+                  )}
+                </div>
+                <p className="num mt-1 truncate text-xs text-muted-foreground">
+                  {units > 0 ? `${formatQty(units)} units` : "Units TBA"}
+                  {row.dateRange ? ` · ${row.dateRange}` : ""}
                 </p>
-                {live === null ? null : live ? (
-                  <span className="num shrink-0 rounded-full bg-gain/15 px-2 py-0.5 text-[0.68rem] font-semibold text-gain">
-                    Open now
-                  </span>
-                ) : (
-                  <span className="num shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[0.68rem] font-semibold text-primary">
-                    Opens {formatDate(range!.start)}
-                  </span>
-                )}
-              </div>
-              <p className="num mt-1 truncate text-xs text-muted-foreground">
-                {units > 0 ? `${formatQty(units)} units` : "Units TBA"}
-                {row.dateRange ? ` · ${row.dateRange}` : ""}
-              </p>
-              {row.url ? (
-                <a
-                  href={row.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title="Read the issue announcement on merolagani (opens in a new tab)"
-                  className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-                >
-                  View announcement <ArrowUpRight className="size-3" />
-                </a>
-              ) : null}
+              </button>
             </li>
           );
         })}
       </ul>
+      <Dialog
+        open={archRow !== null}
+        onOpenChange={(open) => {
+          if (!open) setArchRow(null);
+        }}
+      >
+        <DialogContent className="max-h-[85vh] w-[calc(100vw-1.5rem)] max-w-md overflow-y-auto p-4 sm:p-5">
+          <DialogHeader className="text-left">
+            <DialogTitle className="font-display text-base">{archRow?.company ?? "Upcoming issue"}</DialogTitle>
+          </DialogHeader>
+          {archRow ? (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-1.5">
+                {archAudience ? (
+                  <span
+                    title={archAudience.detail ?? archAudience.label}
+                    className={`rounded-full border px-2 py-0.5 text-[0.68rem] font-semibold ${IPO_AUDIENCE_TONE[archAudience.key]}`}
+                  >
+                    {archAudience.label}
+                  </span>
+                ) : null}
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[0.68rem] font-semibold text-muted-foreground">
+                  Upcoming
+                </span>
+              </div>
+              {archRow?.reservedFor ? (
+                <p className="text-xs text-muted-foreground">
+                  Reserved for <span className="font-medium text-foreground">{archRow.reservedFor}</span>
+                </p>
+              ) : null}
+              <dl className="grid grid-cols-2 gap-2">
+                {[
+                  ["Units", archRow.units ?? "TBA"],
+                  ["Dates", archRow.dateRange ?? "TBA"],
+                  ["Announced", archRow.announcementDate ?? "—"],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-xl border border-border/60 bg-surface px-3 py-2">
+                    <dt className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">{label}</dt>
+                    <dd className="num mt-0.5 text-sm font-medium">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+              {archRow.url ? (
+                <a
+                  href={archRow.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                >
+                  Read the announcement <ArrowUpRight className="size-3" />
+                </a>
+              ) : null}
+              <p className="text-[0.68rem] leading-relaxed text-muted-foreground">
+                Sourced from public IPO announcements. Dates follow the Nepali calendar as published.
+              </p>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }
@@ -189,6 +282,7 @@ function CalendarView({ showDemo = true }: { showDemo?: boolean }) {
     .slice(0, 10);
 
   const hasArchive = archiveUpcoming.length > 0 || archivePast.length > 0 || archiveClosed.length > 0;
+  const [sheetIssue, setSheetIssue] = useState<IpoSheetIssue | null>(null);
 
   return (
     <div className="space-y-5">
@@ -234,7 +328,24 @@ function CalendarView({ showDemo = true }: { showDemo?: boolean }) {
             )}
           </section>
 
-          <UpcomingSection cdscUpcoming={groups.upcoming} archUpcoming={archiveUpcoming} />
+          <UpcomingSection
+            cdscUpcoming={groups.upcoming}
+            archUpcoming={archiveUpcoming}
+            onPick={(i) =>
+              setSheetIssue({
+                companyShareId: i.companyShareId,
+                ...(i.companyName ? { companyName: i.companyName } : {}),
+                ...(i.scrip ? { scrip: i.scrip } : {}),
+                ...(i.shareTypeName ? { shareTypeName: i.shareTypeName } : {}),
+                ...(i.shareGroupName ? { shareGroupName: i.shareGroupName } : {}),
+                ...(i.issueOpenDate ? { issueOpenDate: i.issueOpenDate } : {}),
+                ...(i.issueCloseDate ? { issueCloseDate: i.issueCloseDate } : {}),
+                ...(i.sharePerUnit != null ? { sharePerUnit: i.sharePerUnit } : {}),
+                ...(i.minUnit != null ? { minUnit: i.minUnit } : {}),
+                ...(i.maxUnit != null ? { maxUnit: i.maxUnit } : {}),
+              })
+            }
+          />
 
           <section className="space-y-2">
             <h2 className="font-display text-base font-semibold">Recently closed</h2>
@@ -292,6 +403,12 @@ function CalendarView({ showDemo = true }: { showDemo?: boolean }) {
           </section>
         </>
       )}
+      <IpoDetailSheet
+        issue={sheetIssue}
+        onOpenChange={(open) => {
+          if (!open) setSheetIssue(null);
+        }}
+      />
     </div>
   );
 }
@@ -577,8 +694,8 @@ function IpoPage() {
         <TabsContent value="apply" className="mt-4">
           {demoIpoOn ? (
             <p className="mb-3 rounded-xl border border-primary/25 bg-primary/10 px-3 py-2 text-xs text-muted-foreground">
-              Demo IPO playground — these issues are fake. Apply, edit and withdraw to test the
-              forms; nothing is sent to CDSC. Turn it off in Settings → Advanced.
+              Demo IPO playground — these issues are fake. Apply, edit and withdraw to test the forms; nothing is sent
+              to CDSC. Turn it off in Settings → Advanced.
             </p>
           ) : null}
           {issues.isLoading ? (
@@ -726,7 +843,11 @@ function IpoPage() {
                   </ul>
                 )}
               </section>
-              <UpcomingSection cdscUpcoming={cdscUpcoming} archUpcoming={archUpcoming} />
+              <UpcomingSection
+                cdscUpcoming={cdscUpcoming}
+                archUpcoming={archUpcoming}
+                onPick={(i) => openSheet(i, null)}
+              />
             </div>
           )}
         </TabsContent>

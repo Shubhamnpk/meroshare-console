@@ -33,6 +33,7 @@ import {
   type IndicatorConfig,
 } from "@/components/market/terminal-chart";
 import { normalise, type LinePoint } from "@/lib/nepse/indicators";
+import { getNepseSession } from "@/lib/nepse/session";
 import { chartDayLabel, chartTimeLabel } from "@/components/market/chart-modal";
 import { PointBreakdown } from "@/components/portfolio/history-panel";
 import { WatchlistPanel } from "@/components/market/watchlist-panel";
@@ -45,10 +46,11 @@ import {
   ChartExpandButton,
   ChartIndicatorsPopover,
   ChartStyleSwitch,
+  MiniSelect,
 } from "@/components/market/chart-controls";
 import { GlobalTerminalCard } from "@/components/market/global-terminal-card";
 import { deriveHoldings, useGlobalTxns } from "@/lib/world/store";
-import { normalizeWorldSymbol } from "@/lib/world/symbols";
+import { normalizeWorldSymbol, worldBadge } from "@/lib/world/symbols";
 import { PriceAlertDialog } from "@/components/brokers/price-alert-dialog";
 import {
   brokerAmoListQuery,
@@ -58,6 +60,7 @@ import {
   brokerWatchlistsQuery,
   chartSeriesQuery,
   enrichedPortfolioQuery,
+  globalDaySeriesQuery,
   indexDailyQuery,
   indexGraphQuery,
   investmentSummaryQuery,
@@ -90,7 +93,6 @@ import {
 import { cn } from "@/lib/utils";
 import { aggregateBars, type BarAgg } from "@/lib/charts/aggregate";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSettings, useWatchlist, type TerminalState } from "@/lib/prefs";
 import { ogImage, canonicalLink } from "@/lib/seo";
 
@@ -124,6 +126,21 @@ export const Route = createFileRoute("/_dash/terminal")({
 });
 
 const RANGES: ChartRange[] = ["1D", "1W", "1M", "3M", "6M", "1Y", "3Y", "5Y", "MAX"];
+type WorthRes = "1" | "5" | "15" | "60";
+const WORTH_SECONDS: Record<WorthRes, number> = { "1": 60, "5": 300, "15": 900, "60": 3600 };
+/** Net-worth scope: which books feed the 1D line and its invest anchor. */
+type WorthScope = "all" | "nepse" | "global";
+const WORTH_SCOPE_OPTIONS = [
+  { value: "all", code: "All", label: "All markets" },
+  { value: "nepse", code: "NEPSE", label: "NEPSE only" },
+  { value: "global", code: "Global", label: "Global only" },
+] as const;
+const INTRADAY_RES_OPTIONS = [
+  { value: "1", code: "1m", label: "1 minute" },
+  { value: "5", code: "5m", label: "5 minutes" },
+  { value: "15", code: "15m", label: "15 minutes" },
+  { value: "60", code: "1h", label: "1 hour" },
+] as const;
 /** Max overlay lines in the compare picker. Two fixed query slots below. */
 const MAX_COMPARE = 2;
 const INDEX_SYMBOLS = ["NEPSE", "SENSITIVE", "FLOAT", "SENFLOAT"] as const;
@@ -152,19 +169,6 @@ function num(value: number | null | undefined, digits = 2) {
   return typeof value === "number" && Number.isFinite(value) ? value.toFixed(digits) : "-";
 }
 
-/** Short human tag for a world-search hit (Crypto, Futures, ETF…). */
-function worldBadge(h: { type: string; exchange: string }): string {
-  const t = h.type.toUpperCase();
-  if (t.includes("CRYPTO")) return "Crypto";
-  if (t.includes("FUTURE")) return "Futures";
-  if (t.includes("ETF")) return "ETF";
-  if (t.includes("INDEX")) return "Index";
-  if (t.includes("CURRENCY") || t === "FX" || t.includes("FOREX")) return "FX";
-  if (t.includes("MUTUAL")) return "Fund";
-  if (t.includes("EQUITY")) return h.exchange || "Stock";
-  return h.exchange || h.type || "Global";
-}
-
 /** Stable empty for the chart-lines memo (no rebuilds from fresh `[]`). */
 const NO_ORDER_LINES: { price: number; side: "BUY" | "SELL"; qty: number; amo: boolean }[] = [];
 
@@ -182,6 +186,36 @@ function copyText(text: string, label: string): void {
   } catch {
     toast.error("Copy failed");
   }
+}
+
+/**
+ * Live NEPSE session pill (same look as the global terminal card). The live
+ * feed rules when fresh, so a public holiday never shows a false open; the
+ * static clock covers feed gaps. Countdowns still assume Mon–Fri sessions.
+ */
+const SESSION_FRESH_MS = 20 * 60_000;
+
+function NepseSessionPill({ liveOpen, fetchedAt }: { liveOpen: boolean | null; fetchedAt: string | null }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  const clock = getNepseSession(now);
+  const fetchedMs = fetchedAt ? Date.parse(fetchedAt) : NaN;
+  const live = liveOpen != null && Number.isFinite(fetchedMs) && now - fetchedMs < SESSION_FRESH_MS ? liveOpen : null;
+  const open = live ?? clock.open;
+  return (
+    <span
+      className="inline-flex items-center gap-1 font-medium"
+      title="Live session status when fresh, else NEPSE 11:00 AM – 3:00 PM NPT, Mon–Fri (public holidays approximate)"
+    >
+      <span aria-hidden className={cn("size-1.5 rounded-full", open ? "bg-gain" : "bg-loss")} />
+      <span className={open ? "text-gain" : "text-loss"}>
+        {open ? "open" : clock.opensIn ? `closed · opens in ${clock.opensIn}` : "closed"}
+      </span>
+    </span>
+  );
 }
 
 function DetailField({
@@ -373,10 +407,19 @@ function TerminalPage() {
   const [expanded, setExpanded] = useState(false);
   const [compareSymbols, setCompareSymbols] = useState<string[]>([]);
   const [compareOpen, setCompareOpen] = useState(false);
+  /** Mobile-only: long-press the header star to peek its label; fades away. */
+  const [starHint, setStarHint] = useState(false);
+  const starPressTimer = useRef<number | null>(null);
+  const starHideTimer = useRef<number | null>(null);
+  const starLongRef = useRef(false);
+  const clearStarTimers = () => {
+    if (starPressTimer.current) window.clearTimeout(starPressTimer.current);
+    if (starHideTimer.current) window.clearTimeout(starHideTimer.current);
+    starPressTimer.current = null;
+    starHideTimer.current = null;
+  };
   const toggleCompareSymbol = (s: string) =>
-    setCompareSymbols((prev) =>
-      prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s].slice(0, MAX_COMPARE),
-    );
+    setCompareSymbols((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s].slice(0, MAX_COMPARE)));
   /** Pinned net-worth date (portfolio mode): shows that day's per-scrip prices below. */
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   useEffect(() => {
@@ -631,15 +674,26 @@ function TerminalPage() {
   // misroutes NEPSE symbols into the world feed.
   const nepseKnown =
     !snapshot.isPending &&
-    prices.length > 0 &&
-    prices.some((p) => p.symbol.toUpperCase() === state.symbol.toUpperCase());
-  const isGlobal = mode === "scrip" && !isIndexEarly && !nepseKnown && normalizeWorldSymbol(state.symbol) !== null;
+    ((prices.length > 0 && prices.some((p) => p.symbol.toUpperCase() === state.symbol.toUpperCase())) ||
+      holdings.some((h) => h.scrip.toUpperCase() === state.symbol.toUpperCase()));
+  // Wait for both NEPSE and portfolio data before treating an unknown ticker as
+  // global. A held NEPSE scrip can be absent from a partial market snapshot.
+  const isGlobal =
+    mode === "scrip" &&
+    !isIndexEarly &&
+    !snapshot.isPending &&
+    !portfolio.isPending &&
+    !nepseKnown &&
+    normalizeWorldSymbol(state.symbol) !== null;
 
   const series = useQuery({
     ...chartSeriesQuery(state.symbol, state.range),
     enabled: mode === "scrip" && Boolean(state.symbol) && !isGlobal,
   });
   const [intradayRes, setIntradayRes] = useState<import("@/lib/charts/udf").UdfResolution>("1");
+  /** Net-worth intraday bucket (client-side resample). 15m default: calm line. */
+  const [worthRes, setWorthRes] = useState<WorthRes>("15");
+  const [worthScope, setWorthScope] = useState<WorthScope>("all");
   const udf = useQuery({
     ...udfHistoryQuery(
       state.symbol,
@@ -774,6 +828,21 @@ function TerminalPage() {
 
   const gTxns = useGlobalTxns();
   const gSyms = useMemo(() => deriveHoldings(gTxns).map((h) => h.symbol), [gTxns]);
+  /** Global book legs for the net-worth mixer (NPR valuation server-side). */
+  const globalLots = useMemo(
+    () =>
+      deriveHoldings(gTxns)
+        .filter((h) => h.qty > 0)
+        .map((h) => ({ symbol: h.symbol, qty: h.qty, avgPrice: h.avgPrice, currency: h.currency })),
+    [gTxns],
+  );
+  const hasGlobal = globalLots.length > 0;
+  const globalDay = useQuery({
+    ...globalDaySeriesQuery(globalLots, mode === "portfolio" && state.range === "1D" && hasGlobal),
+  });
+  useEffect(() => {
+    if (!hasGlobal && worthScope === "global") setWorthScope("all");
+  }, [hasGlobal, worthScope]);
   const quickSymbols = useMemo(() => {
     const owned = holdings.map((h) => h.scrip);
     return [...new Set(["NEPSE", ...owned, ...watchSymbols, ...gSyms])].slice(0, 12);
@@ -999,15 +1068,15 @@ function TerminalPage() {
   }, [compareA.data, compareB.data, compareASymbol, compareBSymbol, state.symbol]);
 
   // Main symbol first, then overlays — stable reference for the table below.
-  const compareFundSymbols = useMemo(
-    () => [state.symbol, ...compareSymbols],
-    [state.symbol, compareSymbols],
-  );
+  const compareFundSymbols = useMemo(() => [state.symbol, ...compareSymbols], [state.symbol, compareSymbols]);
 
   // Raw overlay closes for the header readout: hovered point when hovering,
   // else the last close. Bars match by date; intraday ticks by nearest time.
   const compareRawByLabel = useMemo(() => {
-    const m = new Map<string, { bars: Map<string, number> | null; lastBar: number; ticks: { t: number; v: number }[] }>();
+    const m = new Map<
+      string,
+      { bars: Map<string, number> | null; lastBar: number; ticks: { t: number; v: number }[] }
+    >();
     const slots: [string, typeof compareA.data][] = [
       [compareASymbol, compareA.data],
       [compareBSymbol, compareB.data],
@@ -1124,7 +1193,19 @@ function TerminalPage() {
 
   const showProfit = mode === "portfolio" && basis === "profit";
 
-  const costMissing = showProfit && !investment.isPending && costByScrip.size === 0;
+  /** Total invest anchor follows the scope mixer: NEPSE WACC, global NPR cost, or both. */
+  const nepseInvest = investment.data?.totalInvestment ?? 0;
+  const globalInvest = globalDay.data?.cost ?? 0;
+  const scopeInvest =
+    worthScope === "global" ? globalInvest : worthScope === "nepse" ? nepseInvest : nepseInvest + globalInvest;
+  const nepseCostMissing = !investment.isPending && costByScrip.size === 0;
+  const costMissing =
+    showProfit &&
+    (worthScope === "global"
+      ? !(globalInvest > 0)
+      : worthScope === "nepse"
+        ? nepseCostMissing
+        : nepseCostMissing && !(globalInvest > 0));
   const effectiveProfit = showProfit && !costMissing;
   const indexBars: ChartBar[] = useMemo(() => {
     if (!isIndexEarly) return NO_BARS;
@@ -1199,14 +1280,99 @@ function TerminalPage() {
   }, [indexSessionPoints, isIndexEarly, state.range]);
   const portfolioIntraday = useMemo(() => {
     if (mode !== "portfolio" || state.range !== "1D") return NO_POINTS;
-    const pts = ((worthIntraday.data?.points ?? []) as PricePoint[]).filter(
-      (p) => Number.isFinite(p.value) && p.value > 0 && Number.isFinite(Number(p.time)),
-    );
-    if (pts.length < 2) return NO_POINTS;
-    const sorted = [...pts].sort((a, b) => Number(a.time) - Number(b.time));
-    const cost = effectiveProfit ? (investment.data?.totalInvestment ?? 0) : 0;
-    return cost > 0 ? sorted.map((p) => ({ ...p, value: p.value - cost })) : sorted;
-  }, [worthIntraday.data, mode, state.range, effectiveProfit, investment.data]);
+    const clean = (pts: PricePoint[]) =>
+      pts
+        .filter((p) => Number.isFinite(p.value) && p.value > 0 && Number.isFinite(Number(p.time)))
+        .map((p) => ({ t: Number(p.time), v: p.value }))
+        .sort((a, b) => a.t - b.t);
+    // Scope mixer: NEPSE leg, global leg (NPR), or both summed. Each leg
+    // forward-fills from its first print — sessions never overlap, so the
+    // union plus backfill is the only honest continuous line.
+    const legs: { t: number; v: number }[][] = [];
+    if (worthScope !== "global") {
+      const nepse = clean((worthIntraday.data?.points ?? []) as PricePoint[]);
+      if (nepse.length >= 2) legs.push(nepse);
+    }
+    if (worthScope !== "nepse" && hasGlobal) {
+      const global = clean(
+        ((globalDay.data?.points ?? []) as { time: number; value: number }[]).map(
+          (p) => ({ time: p.time, value: p.value }) as PricePoint,
+        ),
+      );
+      if (global.length >= 2) legs.push(global);
+    }
+    if (legs.length === 0) return NO_POINTS;
+    const cursors = legs.map(() => 0);
+    const union = [...new Set(legs.flatMap((l) => l.map((p) => p.t)))].sort((a, b) => a - b);
+    const merged = union.map((t) => {
+      let value = 0;
+      legs.forEach((leg, i) => {
+        let price = leg[0]!.v;
+        while (cursors[i]! < leg.length && leg[cursors[i]!]!.t <= t) {
+          price = leg[cursors[i]!]!.v;
+          cursors[i]! += 1;
+        }
+        value += price;
+      });
+      return { time: t, value };
+    });
+    // Continuous 24h grid: bucket to the picked interval, legs backfilled
+    // flat to the window start, forward-fill flat to now.
+    const step = WORTH_SECONDS[worthRes] ?? 900;
+    const nowBucket = Math.floor(Date.now() / 1000 / step) * step;
+    const dayStart = nowBucket - Math.ceil((24 * 3600) / step) * step;
+    const startBucket = Math.floor(merged[0]!.time / step) * step;
+    const grid: PricePoint[] = [];
+    let i = 0;
+    let last = merged[0]!.value;
+    for (let b = dayStart; b <= nowBucket; b += step) {
+      if (b >= startBucket) {
+        while (i < merged.length && merged[i]!.time <= b) {
+          last = merged[i]!.value;
+          i += 1;
+        }
+      }
+      grid.push({ time: b, value: last });
+    }
+    const cost = effectiveProfit ? scopeInvest : 0;
+    return cost > 0 ? grid.map((p) => ({ ...p, value: p.value - cost })) : grid;
+  }, [
+    worthIntraday.data,
+    globalDay.data,
+    hasGlobal,
+    mode,
+    state.range,
+    effectiveProfit,
+    scopeInvest,
+    worthRes,
+    worthScope,
+  ]);
+  /** Leg census: which holdings actually made it into the 1D line. */
+  const legCensus = useMemo(() => {
+    if (mode !== "portfolio" || state.range !== "1D") return null;
+    const nepse = holdings.filter((h) => h.units > 0).map((h) => h.scrip.toUpperCase());
+    const mappedNepse = new Set(Object.keys(worthIntraday.data?.ticks ?? {}));
+    const failedGlobal = new Set((globalDay.data?.failed ?? []).map((s) => s.toUpperCase()));
+    const global = globalLots.map((l) => l.symbol.toUpperCase());
+    const missing = [...nepse.filter((s) => !mappedNepse.has(s)), ...global.filter((s) => failedGlobal.has(s))];
+    // Global legs still loading count as missing until their query settles.
+    const pendingGlobal = globalDay.isPending ? global : [];
+    return {
+      total: nepse.length + global.length,
+      mapped: nepse.length + global.length - missing.length - pendingGlobal.length,
+      missing: [...new Set([...missing, ...pendingGlobal])],
+      mapping: worthIntraday.isPending || globalDay.isPending,
+    };
+  }, [
+    mode,
+    state.range,
+    holdings,
+    worthIntraday.data,
+    globalDay.data,
+    globalDay.isPending,
+    worthIntraday.isPending,
+    globalLots,
+  ]);
   const mirrorBars = series.data?.bars ?? NO_BARS;
   const mirrorIntraday = series.data?.intraday ?? NO_POINTS;
   const hasMirror = mirrorBars.length > 0 || mirrorIntraday.length > 0;
@@ -1398,14 +1564,31 @@ function TerminalPage() {
   // convention as every pill in the app.
   const dayBase =
     mode === "scrip" && !isIndexEarly && (quote?.previousClose ?? 0) > 0 ? quote!.previousClose : intradayFirst;
+  // Index day % comes straight from the API quote, never open-to-last math:
+  // pre-market moves shift the opening print, so first-tick anchoring lies.
+  const apiIndexPct = useMemo(() => {
+    if (mode !== "scrip" || !isIndexEarly) return null;
+    const sym = state.symbol.toUpperCase();
+    const hit = (snapshot.data?.indices ?? []).find((idx) => {
+      const clean = idx.name
+        .replace(/\s*Index$/i, "")
+        .trim()
+        .toUpperCase()
+        .replace(/\s+/g, "");
+      if (sym === "SENFLOAT") return clean.includes("SENSITIVE") && clean.includes("FLOAT");
+      return clean === sym;
+    });
+    return typeof hit?.percentChange === "number" ? hit.percentChange : null;
+  }, [mode, isIndexEarly, snapshot.data?.indices, state.symbol]);
   const rangeReturn = isIntraday
-    ? effectiveProfit
-      ? costNow > 0
-        ? ((intradayLast - intradayFirst) / costNow) * 100
-        : 0
-      : dayBase > 0
-        ? ((intradayLast - dayBase) / dayBase) * 100
-        : 0
+    ? (apiIndexPct ??
+      (effectiveProfit
+        ? costNow > 0
+          ? ((intradayLast - intradayFirst) / costNow) * 100
+          : 0
+        : dayBase > 0
+          ? ((intradayLast - dayBase) / dayBase) * 100
+          : 0))
     : effectiveProfit
       ? costNow > 0
         ? (last / costNow) * 100
@@ -1549,9 +1732,9 @@ function TerminalPage() {
         <GlobalTerminalCard symbol={state.symbol} light={light} onOpenWatchlist={() => setWatchlistOpen(true)} />
       ) : (
         <div className="rounded-2xl border border-border/60 bg-surface">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-3 py-3">
-            <div>
-              <p className="font-display text-lg font-semibold">
+          <div className="flex items-center justify-between gap-3 border-b border-border/60 px-3 py-3">
+            <div className="min-w-0">
+              <p className="truncate font-display text-lg font-semibold">
                 {mode === "portfolio" ? (
                   effectiveProfit ? (
                     "Portfolio profit (est.)"
@@ -1567,40 +1750,78 @@ function TerminalPage() {
                       </span>
                     ) : null}
                     {!isIndex ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          watchlist.toggle(state.symbol);
-                          toast.success(watched ? "Removed from watchlist" : "Added to watchlist");
-                        }}
-                        aria-label={watched ? "Remove from watchlist" : "Add to watchlist"}
-                        title={watched ? "Remove from watchlist" : "Add to watchlist"}
-                        className={cn(
-                          "inline-flex size-7 shrink-0 items-center justify-center rounded-lg border transition-colors",
-                          watched
-                            ? "border-amber-500/50 bg-amber-500/15 text-amber-600 dark:text-amber-400"
-                            : "border-border/70 text-muted-foreground hover:border-primary/40 hover:text-primary",
-                        )}
-                      >
-                        {watched ? (
-                          <Star className="size-3.5 fill-warning text-warning" />
-                        ) : (
-                          <Star className="size-3.5" />
-                        )}
-                      </button>
+                      <span className="relative inline-flex shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            watchlist.toggle(state.symbol);
+                            toast.success(watched ? "Removed from watchlist" : "Added to watchlist");
+                          }}
+                          onTouchStart={() => {
+                            starLongRef.current = false;
+                            clearStarTimers();
+                            starPressTimer.current = window.setTimeout(() => {
+                              starLongRef.current = true;
+                              setStarHint(true);
+                              starHideTimer.current = window.setTimeout(() => setStarHint(false), 2200);
+                            }, 450);
+                          }}
+                          onTouchMove={clearStarTimers}
+                          onTouchEnd={(e) => {
+                            // Long-press only peeks the label — swallow the toggle tap.
+                            if (starPressTimer.current) window.clearTimeout(starPressTimer.current);
+                            if (starLongRef.current) {
+                              e.preventDefault();
+                              starLongRef.current = false;
+                            }
+                          }}
+                          aria-label={watched ? "Remove from watchlist" : "Add to watchlist"}
+                          title={watched ? "Remove from watchlist" : "Add to watchlist"}
+                          className={cn(
+                            "inline-flex size-7 shrink-0 touch-none items-center justify-center rounded-lg border select-none transition-colors [-webkit-touch-callout:none]",
+                            watched
+                              ? "border-amber-500/50 bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                              : "border-border/70 text-muted-foreground hover:border-primary/40 hover:text-primary",
+                          )}
+                        >
+                          {watched ? (
+                            <Star className="size-3.5 fill-warning text-warning" />
+                          ) : (
+                            <Star className="size-3.5" />
+                          )}
+                        </button>
+                        <span
+                          aria-hidden
+                          className={cn(
+                            "pointer-events-none absolute top-full left-0 z-30 mt-1 rounded-lg border border-border/60 bg-popover px-2 py-1 text-[11px] font-medium whitespace-nowrap shadow-lg transition-opacity duration-500",
+                            starHint ? "opacity-100" : "opacity-0",
+                          )}
+                        >
+                          {watched ? "Remove from watchlist" : "Add to watchlist"}
+                        </span>
+                      </span>
                     ) : null}
                   </span>
                 )}
               </p>
-              <p className="text-xs text-muted-foreground">
+              <p className={cn("text-xs text-muted-foreground", mode === "portfolio" ? "hidden sm:block" : undefined)}>
                 {mode === "portfolio"
                   ? effectiveProfit
                     ? "Value minus invested cost at each close · today's WACC rate"
                     : `${holdings.length} holdings valued at each historical close`
                   : (quote?.name ?? series.data?.name ?? "NEPSE listed stock")}
+                {mode === "scrip" ? (
+                  <>
+                    {" · "}
+                    <NepseSessionPill
+                      liveOpen={snapshot.data?.status.isOpen ?? null}
+                      fetchedAt={snapshot.data?.fetchedAt ?? null}
+                    />
+                  </>
+                ) : null}
               </p>
             </div>
-            <div className="text-right">
+            <div className="shrink-0 text-right">
               <p className="num text-lg font-semibold">
                 {formatNpr(
                   hover?.close ??
@@ -1608,7 +1829,9 @@ function TerminalPage() {
                       ? isIntraday
                         ? intradayLast
                         : last
-                      : (quote?.ltp ?? (isIntraday ? intradayLast : last))),
+                      : isIntraday
+                        ? intradayLast || quote?.ltp
+                        : (quote?.ltp ?? last)),
                 )}
               </p>
               <DeltaPill value={hover?.changePercent ?? rangeReturn}>
@@ -1618,8 +1841,8 @@ function TerminalPage() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 border-b border-border/60 px-3 py-2">
-            <div className="flex flex-wrap gap-1">
+          <div className="flex flex-col gap-2 border-b border-border/60 px-3 py-2 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="flex w-full items-center gap-1 overflow-x-auto [scrollbar-width:none] sm:w-auto sm:flex-wrap sm:overflow-visible [&::-webkit-scrollbar]:hidden">
               {RANGES.map((r) => {
                 // 1D needs an intraday source (index session feed, or mirror /
                 // UDF for a normal symbol). When it settles dry the button is
@@ -1633,7 +1856,7 @@ function TerminalPage() {
                     title={unavailable ? "1D unavailable — showing 1W" : undefined}
                     onClick={() => setState((prev) => ({ ...prev, range: r }))}
                     className={cn(
-                      "rounded-lg px-2 py-1 text-xs font-medium transition-colors",
+                      "shrink-0 rounded-lg px-2 py-1 text-xs font-medium transition-colors",
                       state.range === r ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-muted/60",
                       unavailable && "cursor-not-allowed opacity-40 hover:bg-transparent",
                     )}
@@ -1643,120 +1866,166 @@ function TerminalPage() {
                 );
               })}
             </div>
-            {showAgg ? (
-              <>
-                <span className="hidden h-4 w-px bg-border sm:block" />
-                <BarAggSelect value={barAgg} onChange={setBarAgg} />
-              </>
-            ) : null}
-            {state.range === "1D" && mode === "scrip" && !isIndex ? (
-              <>
-                <span className="hidden h-4 w-px bg-border sm:block" />
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-muted-foreground">Interval</span>
-                  <Select
+            <div className="flex flex-wrap items-center gap-2 sm:contents">
+              {showAgg ? (
+                <>
+                  <span className="hidden h-4 w-px bg-border sm:block" />
+                  <BarAggSelect value={barAgg} onChange={setBarAgg} />
+                </>
+              ) : null}
+              {state.range === "1D" && mode === "scrip" && !isIndex ? (
+                <>
+                  <span className="hidden h-4 w-px bg-border sm:block" />
+                  <MiniSelect
+                    label="Interval"
                     value={intradayRes}
-                    onValueChange={(v) => setIntradayRes(v as import("@/lib/charts/udf").UdfResolution)}
-                  >
-                    <SelectTrigger className="h-7 w-24 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1">1m</SelectItem>
-                      <SelectItem value="5">5m</SelectItem>
-                      <SelectItem value="15">15m</SelectItem>
-                      <SelectItem value="60">1h</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </>
-            ) : null}
+                    onChange={(v) => setIntradayRes(v as import("@/lib/charts/udf").UdfResolution)}
+                    options={INTRADAY_RES_OPTIONS}
+                  />
+                </>
+              ) : null}
+              {state.range === "1D" && mode === "portfolio" ? (
+                <>
+                  <span className="hidden h-4 w-px bg-border sm:block" />
+                  <MiniSelect
+                    label="Interval"
+                    value={worthRes}
+                    onChange={(v) => setWorthRes(v as WorthRes)}
+                    options={INTRADAY_RES_OPTIONS}
+                  />
+                </>
+              ) : null}
+              {state.range === "1D" && mode === "portfolio" ? (
+                <>
+                  <span className="hidden h-4 w-px bg-border sm:block" />
+                  <MiniSelect
+                    label="Scope"
+                    value={worthScope}
+                    onChange={(v) => setWorthScope(v as WorthScope)}
+                    options={hasGlobal ? WORTH_SCOPE_OPTIONS : WORTH_SCOPE_OPTIONS.slice(0, 2)}
+                    triggerClassName="w-[4.25rem]"
+                  />
+                </>
+              ) : null}
+              {state.range === "1D" &&
+              mode === "portfolio" &&
+              legCensus &&
+              legCensus.total > 0 &&
+              (legCensus.mapping || legCensus.missing.length > 0) ? (
+                <span
+                  title={
+                    legCensus.mapping
+                      ? "Still pulling today's ticks — the line fills in as legs arrive"
+                      : `Not in today's line: ${legCensus.missing.slice(0, 6).join(", ")}${legCensus.missing.length > 6 ? ` +${legCensus.missing.length - 6} more` : ""}`
+                  }
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border/60 bg-surface px-2 py-1 text-[11px] text-muted-foreground"
+                >
+                  <span className="relative flex size-1.5">
+                    {legCensus.mapping ? (
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
+                    ) : null}
+                    <span
+                      className={`relative inline-flex size-1.5 rounded-full ${legCensus.mapping ? "bg-primary" : "bg-amber-500"}`}
+                    />
+                  </span>
+                  {legCensus.mapping ? (
+                    <>
+                      Mapping {legCensus.mapped}/{legCensus.total}…
+                    </>
+                  ) : (
+                    <>
+                      {legCensus.mapped}/{legCensus.total} mapped
+                    </>
+                  )}
+                </span>
+              ) : null}
 
-            <span className="hidden h-4 w-px bg-border sm:block" />
+              <span className="hidden h-4 w-px bg-border sm:block" />
 
-            <ChartStyleSwitch
-              value={chart.style}
-              onChange={(s) => setChart({ style: s })}
-              disabledKeys={
-                isIntraday && !intraday.some((p) => p.open != null && p.high != null && p.low != null)
-                  ? ["candles"]
-                  : undefined
-              }
-            />
+              <ChartStyleSwitch
+                value={chart.style}
+                onChange={(s) => setChart({ style: s })}
+                disabledKeys={
+                  isIntraday && !intraday.some((p) => p.open != null && p.high != null && p.low != null)
+                    ? ["candles"]
+                    : undefined
+                }
+              />
 
-            {mode === "portfolio" ? (
-              <>
-                <span className="hidden h-4 w-px bg-border sm:block" />
-                <div className="flex gap-1 rounded-lg bg-muted/50 p-0.5">
-                  {(["value", "profit"] as const).map((b) => (
-                    <button
-                      key={b}
-                      type="button"
-                      onClick={() => setBasis(b)}
-                      title={
-                        b === "profit"
-                          ? "Investment excluded: value minus est. cost at each close"
-                          : "Full portfolio value at each close"
-                      }
-                      className={cn(
-                        "rounded-md px-2 py-1 text-xs font-medium transition-colors",
-                        basis === b
-                          ? "bg-background text-foreground shadow-sm"
-                          : "text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      {b === "value" ? "Value" : "Profit"}
-                    </button>
-                  ))}
-                </div>
-              </>
-            ) : null}
+              {mode === "portfolio" ? (
+                <>
+                  <span className="hidden h-4 w-px bg-border sm:block" />
+                  <div className="flex gap-1 rounded-lg bg-muted/50 p-0.5">
+                    {(["value", "profit"] as const).map((b) => (
+                      <button
+                        key={b}
+                        type="button"
+                        onClick={() => setBasis(b)}
+                        title={
+                          b === "profit"
+                            ? "Investment excluded: value minus est. cost at each close"
+                            : "Full portfolio value at each close"
+                        }
+                        className={cn(
+                          "rounded-md px-2 py-1 text-xs font-medium transition-colors",
+                          basis === b
+                            ? "bg-background text-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        {b === "value" ? "Value" : "Profit"}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              ) : null}
 
-            <div className="ml-auto flex items-center gap-1">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 gap-1.5 text-xs lg:hidden"
-                onClick={() => setWatchlistOpen(true)}
-                aria-label="Open watchlist"
-              >
-                <Star className={watchlist.symbols.length > 0 ? "size-3.5 fill-warning text-warning" : "size-3.5"} />
-                {watchlist.symbols.length > 0 ? <span className="num">{watchlist.symbols.length}</span> : null}
-                <span className="hidden sm:inline">Watchlist</span>
-              </Button>
-              {mode === "scrip" && !isGlobal ? (
+              <div className="ml-auto flex items-center gap-1">
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-8 gap-1.5 text-xs"
-                  onClick={() => setCompareOpen(true)}
-                  aria-label="Compare with other companies"
+                  className="h-8 gap-1.5 text-xs lg:hidden"
+                  onClick={() => setWatchlistOpen(true)}
+                  aria-label="Open watchlist"
                 >
-                  <GitCompareArrows className="size-3.5" />
-                  <span className="hidden sm:inline">Compare</span>
-                  {compareSymbols.length > 0 ? (
-                    <span className="num rounded-full bg-primary/15 px-1.5 py-0.5 text-[0.68rem] font-semibold text-primary">
-                      {compareSymbols.length}
-                    </span>
-                  ) : null}
+                  <Star className={watchlist.symbols.length > 0 ? "size-3.5 fill-warning text-warning" : "size-3.5"} />
+                  {watchlist.symbols.length > 0 ? <span className="num">{watchlist.symbols.length}</span> : null}
+                  <span className="hidden sm:inline">Watchlist</span>
                 </Button>
-              ) : null}
-              <ChartIndicatorsPopover
-                value={chart.indicators}
-                onToggle={setIndicator}
-                logScale={chart.logScale}
-                onLogScale={(v) => setChart({ logScale: v })}
-              />
-              <ChartExpandButton expanded={expanded} onToggle={() => setExpanded((v) => !v)} />
-              <Button
-                variant="outline"
-                size="icon"
-                className="size-8"
-                onClick={snapshotPng}
-                aria-label="Download chart snapshot"
-              >
-                <Camera className="size-3.5" />
-              </Button>
+                {mode === "scrip" && !isGlobal ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1.5 text-xs"
+                    onClick={() => setCompareOpen(true)}
+                    aria-label="Compare with other companies"
+                  >
+                    <GitCompareArrows className="size-3.5" />
+                    <span className="hidden sm:inline">Compare</span>
+                    {compareSymbols.length > 0 ? (
+                      <span className="num rounded-full bg-primary/15 px-1.5 py-0.5 text-[0.68rem] font-semibold text-primary">
+                        {compareSymbols.length}
+                      </span>
+                    ) : null}
+                  </Button>
+                ) : null}
+                <ChartIndicatorsPopover
+                  value={chart.indicators}
+                  onToggle={setIndicator}
+                  logScale={chart.logScale}
+                  onLogScale={(v) => setChart({ logScale: v })}
+                />
+                <ChartExpandButton expanded={expanded} onToggle={() => setExpanded((v) => !v)} />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="size-8"
+                  onClick={snapshotPng}
+                  aria-label="Download chart snapshot"
+                >
+                  <Camera className="size-3.5" />
+                </Button>
+              </div>
             </div>
           </div>
 
@@ -1801,9 +2070,14 @@ function TerminalPage() {
                 <span className="size-2 rounded-full" style={{ background: "#2563eb" }} aria-hidden />
                 <span className="font-semibold">{state.symbol}</span>
                 <span className="num text-muted-foreground">
-                  {formatNpr(hover?.close ?? (quote?.ltp ?? (isIntraday ? intradayLast : last)))}
+                  {formatNpr(hover?.close ?? quote?.ltp ?? (isIntraday ? intradayLast : last))}
                 </span>
-                <span className={cn("num font-medium", (hover?.changePercent ?? rangeReturn) >= 0 ? "text-gain" : "text-loss")}>
+                <span
+                  className={cn(
+                    "num font-medium",
+                    (hover?.changePercent ?? rangeReturn) >= 0 ? "text-gain" : "text-loss",
+                  )}
+                >
                   {formatPercent(hover?.changePercent ?? rangeReturn)}
                 </span>
               </span>
@@ -1811,9 +2085,7 @@ function TerminalPage() {
                 <span key={o.label} className="flex items-center gap-1.5">
                   <span className="size-2 rounded-full" style={{ background: o.color }} aria-hidden />
                   <span className="font-semibold">{o.label}</span>
-                  <span className="num text-muted-foreground">
-                    {o.price > 0 ? formatNpr(o.price) : "—"}
-                  </span>
+                  <span className="num text-muted-foreground">{o.price > 0 ? formatNpr(o.price) : "—"}</span>
                   <span className={cn("num font-medium", o.pct >= 0 ? "text-gain" : "text-loss")}>
                     {formatPercent(o.pct)}
                   </span>
@@ -1923,6 +2195,7 @@ function TerminalPage() {
                       }
                 }
                 onSelectPoint={(p) => setPinnedPoint((cur) => (cur && p && cur.time === p.time ? null : p))}
+                focusLastHours={mode === "portfolio" && state.range === "1D" ? 12 : undefined}
               />
             )}
           </div>
@@ -2070,9 +2343,7 @@ function TerminalPage() {
           (termAmos.data ?? []).length === 0 &&
           !todayOrders.isPending &&
           !termAmos.isPending ? (
-            <p className="px-4 pb-3 text-xs text-muted-foreground">
-              Nothing here yet. Orders you place from the ticket land here — AMOs queue while the market is closed.
-            </p>
+            <p className="px-4 pb-3 text-xs text-muted-foreground">Nothing here yet.</p>
           ) : unifiedRows.length === 0 && (todayOrders.isPending || termAmos.isPending) ? (
             <p className="px-4 pb-2 text-xs text-muted-foreground">Loading orders…</p>
           ) : (

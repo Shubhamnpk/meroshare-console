@@ -1,18 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import {
-  ArrowLeft,
-  Activity,
-  TrendingUp,
-  TrendingDown,
-  Flame,
-  Crown,
-  History,
-  ListOrdered,
-  ChartCandlestick,
-  SlidersHorizontal,
-} from "lucide-react";
+import { ArrowLeft, Activity, TrendingUp, TrendingDown, Flame, Crown, History, ListOrdered } from "lucide-react";
+import { ChartIndicatorsPopover, ChartStyleSwitch } from "@/components/market/chart-controls";
 import { Button } from "@/components/ui/button";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import {
@@ -81,15 +71,6 @@ const SECTOR_RANGE_DAYS: Record<ChartRangeKey, number> = {
 const RANGES = CHART_RANGES.map((key) => ({ key, label: key, days: SECTOR_RANGE_DAYS[key] }));
 
 type RangeKey = ChartRangeKey;
-
-const INDICATOR_TOGGLES: { key: keyof IndicatorConfig; label: string }[] = [
-  { key: "volume", label: "Vol" },
-  { key: "sma20", label: "SMA 20" },
-  { key: "sma50", label: "SMA 50" },
-  { key: "ema20", label: "EMA 20" },
-  { key: "bollinger", label: "BB" },
-  { key: "rsi", label: "RSI" },
-];
 
 const norm = (s: string) =>
   s
@@ -324,7 +305,6 @@ function SectorDetailPage() {
   const setChartStyle = (s: ChartStyle) => setChart({ style: s });
   const indicators = chart.indicators;
   const setIndicators = (v: IndicatorConfig) => setChart({ indicators: v });
-  const [showIndicatorMenu, setShowIndicatorMenu] = useState(false);
   const [picked, setPicked] = useState<string | null>(null);
   const [hover, setHover] = useState<HoverInfo | null>(null);
 
@@ -566,7 +546,7 @@ function SectorDetailPage() {
           hoverLabel={hover ? "day" : headerRangeLabel}
         />
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-1 rounded-xl bg-surface p-1 border border-border/60">
+          <div className="flex items-center gap-1 overflow-x-auto rounded-xl bg-surface p-1 border border-border/60 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {RANGES.map((r) => {
               const disabled = r.key === "1D" && intradayUnavailable;
               return (
@@ -577,7 +557,7 @@ function SectorDetailPage() {
                   title={disabled ? "Intraday not published for this sector" : undefined}
                   onClick={() => setRange(r.key)}
                   className={cn(
-                    "rounded-lg px-2.5 py-1 text-xs font-medium transition-colors",
+                    "shrink-0 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors",
                     disabled ? "cursor-not-allowed opacity-35" : "cursor-pointer",
                     range === r.key && !disabled
                       ? "bg-primary text-primary-foreground font-semibold shadow-xs"
@@ -591,66 +571,15 @@ function SectorDetailPage() {
           </div>
           <div className="flex items-center gap-1.5">
             <div className="flex items-center rounded-lg bg-surface border border-border/60 p-0.5 text-xs">
-              <button
-                type="button"
-                onClick={() => setChartStyle("area")}
-                className={cn(
-                  "rounded px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer",
-                  chartStyle === "area"
-                    ? "bg-muted text-foreground font-semibold"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                Area
-              </button>
-              <button
-                type="button"
-                onClick={() => setChartStyle("candles")}
-                className={cn(
-                  "flex items-center gap-1 rounded px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer",
-                  chartStyle === "candles"
-                    ? "bg-muted text-foreground font-semibold"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <ChartCandlestick className="size-3" />
-                Candles
-              </button>
+              <ChartStyleSwitch value={chartStyle} onChange={setChartStyle} />
             </div>
 
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setShowIndicatorMenu((s) => !s)}
-                className={cn(
-                  "flex items-center gap-1 rounded-lg border border-border/60 bg-surface px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground cursor-pointer",
-                  showIndicatorMenu && "border-primary/50 text-foreground",
-                )}
-              >
-                <SlidersHorizontal className="size-3" />
-                <span className="hidden sm:inline">Indicators</span>
-              </button>
-
-              {showIndicatorMenu && (
-                <div className="absolute right-0 top-full z-30 mt-1 flex min-w-40 flex-wrap gap-1 rounded-xl border border-border bg-card p-2 shadow-xl">
-                  {INDICATOR_TOGGLES.map((t) => (
-                    <button
-                      key={t.key}
-                      type="button"
-                      onClick={() => setIndicators({ ...indicators, [t.key]: !indicators[t.key] })}
-                      className={cn(
-                        "rounded-md border px-2 py-0.5 text-[0.68rem] font-medium transition-colors cursor-pointer",
-                        indicators[t.key]
-                          ? "border-primary/50 bg-primary/15 text-primary"
-                          : "border-border/60 bg-surface text-muted-foreground hover:border-primary/30",
-                      )}
-                    >
-                      {t.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <ChartIndicatorsPopover
+              value={indicators}
+              onToggle={(key, v) => setIndicators({ ...indicators, [key]: v })}
+              logScale={chart.logScale}
+              onLogScale={(v) => setChart({ logScale: v })}
+            />
           </div>
         </div>
         <div className="[&_canvas]:touch-none">
@@ -664,7 +593,7 @@ function SectorDetailPage() {
               intraday={intradayPoints}
               style={chartStyle}
               indicators={indicators}
-              logScale={false}
+              logScale={chart.logScale}
               light={light}
               height={300}
               onHover={setHover}
@@ -679,7 +608,7 @@ function SectorDetailPage() {
               intraday={NO_POINTS}
               style={chartStyle}
               indicators={indicators}
-              logScale={false}
+              logScale={chart.logScale}
               light={light}
               height={300}
               onHover={setHover}

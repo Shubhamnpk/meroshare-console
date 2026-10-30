@@ -33,6 +33,7 @@ import { avgCashLast5Y, avgTotalLast5Y } from "@/lib/nepse/timeline";
 import type { DividendRow } from "@/lib/nepse/types";
 import { formatDateTime, formatNpr, formatNumber, formatPercent, formatQty, sessionAgeLabel } from "@/lib/format";
 import { sectorOf } from "@/lib/nepse/sectors";
+import { normalizeWorldSymbol } from "@/lib/world/symbols";
 import { useWatchlist } from "@/lib/watchlist";
 import { useSettings } from "@/lib/settings";
 import { cn } from "@/lib/utils";
@@ -774,7 +775,9 @@ function MarketPage() {
         onOpenChange={setWatchlistOpen}
         onPick={(symbol) => {
           setWatchlistOpen(false);
-          setPicked(symbol);
+          const nepse = (snapshot.data?.prices ?? []).some((p) => p.symbol === symbol);
+          if (!nepse && normalizeWorldSymbol(symbol)) void navigate({ to: "/terminal", search: { symbol } });
+          else setPicked(symbol);
         }}
       />
       <WatchlistFloat count={watchlist.symbols.length} onOpen={() => setWatchlistOpen(true)} />

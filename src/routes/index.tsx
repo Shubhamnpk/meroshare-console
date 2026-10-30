@@ -32,6 +32,7 @@ import { clearVault, getVaultOwner, hasVault, readVault, writeVault } from "@/li
 import { toast } from "sonner";
 import { ogImage, canonicalLink } from "@/lib/seo";
 import { getCapitals, getCurrentUser, login, loginDemo } from "@/lib/meroshare/auth.functions";
+import capitalsFallback from "@/lib/meroshare/capitals.json";
 import type { Capital } from "@/lib/meroshare/types";
 
 export const Route = createFileRoute("/")({
@@ -155,6 +156,11 @@ function LoginPage() {
     queryKey: ["capitals"],
     queryFn: () => getCapitals(),
     staleTime: 60 * 60_000,
+    // Vendored list renders instantly so the picker can never spin forever;
+    // initialDataUpdatedAt 0 marks the seed stale so the live list always
+    // replaces it in the background on mount.
+    initialData: capitalsFallback,
+    initialDataUpdatedAt: 0,
   });
 
   const selected = useMemo(() => capitals.data?.find((c) => c.id === capitalId) ?? null, [capitals.data, capitalId]);
@@ -294,13 +300,16 @@ function LoginPage() {
       onClick={() => setCapitalOpen(true)}
     >
       <span className={cn("flex min-w-0 items-center gap-1.5", !selected && "text-muted-foreground")}>
-        {capitals.isLoading ? (
-          <span className="truncate">Loading DP list…</span>
-        ) : selected ? (
+        {selected ? (
           <>
             <span className="num shrink-0 text-xs text-muted-foreground">{selected.code}</span>
             <span className="truncate">{selected.name}</span>
+            {capitals.isFetching ? (
+              <span className="size-3 shrink-0 animate-spin rounded-full border border-muted-foreground/40 border-t-transparent" aria-hidden />
+            ) : null}
           </>
+        ) : capitals.isLoading ? (
+          <span className="truncate">Loading DP list…</span>
         ) : (
           <span className="truncate">Select your DP</span>
         )}
@@ -548,7 +557,7 @@ function LoginPage() {
                   Remember me on this device
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  Prefills your username next time. Your password is never saved.
+                  Saves your DP and username for next time.
                 </p>
               </div>
             </div>

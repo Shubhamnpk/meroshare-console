@@ -588,6 +588,7 @@ function ipoRows(rows: Rec[] | undefined): IpoArchiveRow[] {
   return (rows ?? []).flatMap((row): IpoArchiveRow[] => {
     const company = str(row["company"]);
     if (!company) return [];
+    const reserved = row["is_reserved_share"];
     return [
       {
         company,
@@ -595,6 +596,9 @@ function ipoRows(rows: Rec[] | undefined): IpoArchiveRow[] {
         dateRange: str(row["date_range"]),
         announcementDate: str(row["announcement_date"]),
         url: str(row["url"]),
+        fullText: str(row["full_text"]),
+        isReservedShare: reserved === true || reserved === 1 || String(reserved ?? "").toLowerCase() === "true",
+        reservedFor: str(row["reserved_for"]),
       },
     ];
   });
@@ -1248,11 +1252,24 @@ async function mapLimit<T, R>(items: T[], limit: number, worker: (item: T) => Pr
   return out;
 }
 
+/** Last N calendar month keys (YYYY-MM), newest last. */
+function recentMonths(count: number): string[] {
+  const capped = Math.min(Math.max(1, count), 240);
+  const now = new Date();
+  const out: string[] = [];
+  for (let i = capped - 1; i >= 0; i--) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
+    out.push(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`);
+  }
+  return out;
+}
+
 /** Deep daily-close history from the archive, oldest → newest. */
 async function getArchiveBars(symbol: string, months: number): Promise<DailyBar[]> {
-  const { data: manifest } = await feedJson<Rec>(`${YONEPSE_BASE}/data/ltp/manifest.json`, TTL.daily);
-  const available = [...((manifest?.["availableMonths"] ?? []) as string[])].sort();
-  const wanted = available.slice(Math.max(0, available.length - months));
+  // Month keys are generated locally, never read from the upstream manifest
+  // (it once shipped an unresolved merge conflict as "JSON"). Missing months
+  // 404 and contribute nothing.
+  const wanted = recentMonths(months);
   const chunks = await mapLimit(wanted, 8, (month) => archiveMonthBars(symbol, month));
   return chunks.flat();
 }
@@ -1263,7 +1280,8 @@ async function getArchiveBars(symbol: string, months: number): Promise<DailyBar[
  * views are cheap; the first load fans out over the archive.
  */
 export async function getScripFullHistory(symbol: string): Promise<DailyBar[]> {
-  const bars = await getArchiveBars(symbol.toUpperCase(), 1200);
+  const upper = symbol.toUpperCase();
+  const bars = await getArchiveBars(canonicalSymbol(upper) || upper, 1200);
   return bars.sort((a, b) => a.date.localeCompare(b.date));
 }
 
@@ -1280,16 +1298,19 @@ export async function getScripFullHistory(symbol: string): Promise<DailyBar[]> {
 export async function getChartSeries(symbol: string, range: ChartRange): Promise<ChartSeries> {
   const upper = symbol.toUpperCase();
   const months = RANGE_MONTHS[range];
+  // Feed-side name (open-end funds rename: GYSM → GSYM). The mirror 404s
+  // unknown names harmlessly; the archive needs the exact key.
+  const feed = canonicalSymbol(upper) || upper;
 
   const [history, intradayRaw, archive, live] = await Promise.all([
-    bitnepalJson<Rec[]>(`/securities/${encodeURIComponent(upper)}/history`, TTL.medium),
+    bitnepalJson<Rec[]>(`/securities/${encodeURIComponent(feed)}/history`, TTL.medium),
     range === "1D"
-      ? bitnepalJson<Rec[]>(`/securities/${encodeURIComponent(upper)}/graph`, TTL.fast)
+      ? bitnepalJson<Rec[]>(`/securities/${encodeURIComponent(feed)}/graph`, TTL.fast)
       : Promise.resolve({ data: null as Rec[] | null, stale: false }),
     // YONEPSE archive doubles as the fallback: short ranges (1W/1M) use the
     // last 1-2 monthly files when the main history feed is unavailable.
     // Archive bars are overlaid first so reported bars always win.
-    range === "1D" ? Promise.resolve<DailyBar[]>([]) : getArchiveBars(upper, months),
+    range === "1D" ? Promise.resolve<DailyBar[]>([]) : getArchiveBars(feed, months),
     getLivePrices(),
   ]);
 

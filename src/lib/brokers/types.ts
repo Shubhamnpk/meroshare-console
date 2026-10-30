@@ -1,6 +1,7 @@
 // Broker connections: registry + shared types (no secrets in these shapes).
 // A "broker" here is an external trading terminal account (e.g. Naasa X)
 // the user optionally links so the server can act on their behalf.
+import type { JsonRecord } from "../meroshare/types";
 
 export const BROKER_IDS = ["naasa-x", "tms", "yobroker"] as const;
 export type BrokerId = (typeof BROKER_IDS)[number];
@@ -214,6 +215,13 @@ export interface BrokerBank {
   bankName: string;
   branchName: string;
   isPrimary: boolean;
+}
+
+/** Broker KYC bundle: SSA identity card + full client file (raw records). */
+export interface BrokerKycBundle {
+  ssa: JsonRecord | null;
+  client: JsonRecord | null;
+  branches: { id: string; code: string; name: string; city: string }[];
 }
 
 export interface WithdrawRequest {

@@ -316,6 +316,7 @@ export function ChartModal({
             <AreaChart
               points={active.points}
               height={300}
+              anchor={stats?.base ?? null}
               formatValue={formatValue}
               formatLabel={(t) => (active.key === "1D" ? formatIntradayLabel(t) : formatDailyLabel(t))}
               tooltipExtra={(p) => {

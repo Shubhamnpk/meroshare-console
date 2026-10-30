@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode, type Ref, type UIEventHandler } from "react";
 import { cn } from "@/lib/utils";
 
 export function SwipeableCards({
@@ -93,13 +93,19 @@ export function SwipeStrip({
   children,
   cols = "sm:grid-cols-2 xl:grid-cols-4",
   className,
+  innerRef,
+  onScroll,
 }: {
   children: ReactNode;
   cols?: string;
   className?: string;
+  innerRef?: Ref<HTMLDivElement>;
+  onScroll?: UIEventHandler<HTMLDivElement>;
 }) {
   return (
     <div
+      ref={innerRef}
+      onScroll={onScroll}
       className={cn(
         "flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1 [scrollbar-width:none] sm:grid sm:snap-none sm:overflow-x-visible sm:pb-0 [&::-webkit-scrollbar]:hidden",
         cols,

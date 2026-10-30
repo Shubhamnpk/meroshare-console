@@ -3,6 +3,7 @@
 // Single attempt per call (no retry loops: protects the user's broker account
 // from lockouts). Read-only proof: never places, modifies, or cancels orders.
 import type { BrokerTestResult } from "./types";
+import type { JsonRecord } from "../meroshare/types";
 
 const BASE = process.env["NAASA_BASE_URL"];
 const KC = process.env["NAASA_AUTH_URL"];
@@ -319,7 +320,7 @@ export async function establishNaasaSession(username: string, password: string):
     .catch(() => ({}))) as { clientCode?: string; sessionNo?: string };
   if (!tl.clientCode)
     throw new BrokerLoginError("Trading account not activated.", "Signed in, but no client code came back.");
-  const host = new URL(BASE).hostname;
+  const host = new URL(BASE ?? "").hostname;
   return {
     cookies: headerFor(host).Cookie ?? "",
     clientCode: tl.clientCode,
@@ -1442,6 +1443,190 @@ export async function getTradeflowTxns(
     currentPage: typeof json["currentPage"] === "number" ? json["currentPage"] : 0,
     rows: Array.isArray(rows) ? (rows as Record<string, unknown>[]) : [],
   };
+}
+
+/** One KYC-host record: SSA profile or full client file. Null when not returned. */
+async function newkycRecord(accessToken: string, path: string): Promise<JsonRecord | null> {
+  const { done, signal } = withTimeout(TIMEOUT_MS);
+  try {
+    const res = await fetch(`${NEWKYC}${path}`, {
+      signal,
+      headers: {
+        "User-Agent": UA,
+        Accept: "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+    if (res.status === 401) throw new BrokerSessionError();
+    if (!res.ok) {
+      return null;
+    }
+    const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (json["isSuccess"] === false) {
+      return null;
+    }
+    const result = json["result"];
+    if (result && typeof result === "object" && !Array.isArray(result)) {
+      return result as unknown as JsonRecord;
+    }
+    // Some records (e.g. /client/profile) come back bare, with no envelope.
+    if (
+      typeof json["error"] === "undefined" &&
+      (typeof json["clientCode"] === "string" ||
+        typeof json["fullName"] === "string" ||
+        typeof json["firstName"] === "string")
+    ) {
+      return json as unknown as JsonRecord;
+    }
+    return null;
+  } finally {
+    done();
+  }
+}
+
+/** Host root: the secure-image signer lives outside /api/v1. */
+const NEWKYC_ROOT = "https://api-newkyc.naasasecurities.com.np";
+
+export interface NaasaBranch {
+  id: string;
+  code: string;
+  name: string;
+  city: string;
+}
+
+/** Branch directory (tradeflow masters, read-only). Empty when not permitted. */
+export async function getNaasaBranches(accessToken: string): Promise<NaasaBranch[]> {
+  try {
+    const json = await tradeflowGet<unknown[]>(accessToken, "/settings/branches");
+    if (!Array.isArray(json)) return [];
+    return json
+      .map((b) => {
+        const r = b as Record<string, unknown>;
+        return {
+          id: String(r["id"] ?? ""),
+          code: String(r["branchCode"] ?? ""),
+          name: String(r["accountName"] ?? ""),
+          city: String(r["city"] ?? ""),
+        };
+      })
+      .filter((b) => b.id !== "" || b.code !== "");
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Signed S3 URLs for stored document keys (read-only). Keys stay as stored
+ * (`latest-kyc/…`); the signer canonicalizes thumbnails to the full raw
+ * image. Unknown keys are skipped, never throw.
+ */
+export async function getNaasaDocUrls(accessToken: string, keys: string[]): Promise<Record<string, string>> {
+  const clean = [...new Set(keys)].filter((k) => /^latest-kyc\/[A-Za-z0-9/_.-]+$/.test(k)).slice(0, 40);
+  const out: Record<string, string> = {};
+  await Promise.all(
+    clean.map(async (key) => {
+      const { done, signal } = withTimeout(TIMEOUT_MS);
+      try {
+        const res = await fetch(`${NEWKYC_ROOT}/secure-image/${key}`, {
+          signal,
+          headers: {
+            "User-Agent": UA,
+            Accept: "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+        });
+        if (res.status === 401) throw new BrokerSessionError();
+        if (!res.ok) return;
+        const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+        const url =
+          (typeof json["url"] === "string" ? json["url"] : null) ??
+          (json["data"] && typeof json["data"] === "object" ? (json["data"] as Record<string, unknown>)["url"] : null);
+        if (typeof url === "string" && url.startsWith("https://")) out[key] = url;
+      } catch (e) {
+        // One bad key must not sink the batch; session errors propagate.
+        if (e instanceof BrokerSessionError) throw e;
+      } finally {
+        done();
+      }
+    }),
+  );
+  return out;
+}
+
+export interface GeoLabel {
+  line: string;
+  mapUrl: string;
+}
+
+const geoCache = new Map<string, GeoLabel>();
+
+/**
+ * Human address lines from map pins (reverse-geocode, cached forever — pins
+ * don't move). The broker stores district/municipality as internal Mongo IDs,
+ * so names come from the pin instead. Returns only pins that resolved.
+ */
+export async function getNaasaGeoLabels(points: { key: string; lat: number; lng: number }[]): Promise<{
+  labels: Record<string, GeoLabel>;
+}> {
+  const labels: Record<string, GeoLabel> = {};
+  const fresh = points.filter((p) => {
+    const hit = geoCache.get(p.key);
+    if (hit) labels[p.key] = hit;
+    return !hit;
+  });
+  await Promise.all(
+    fresh.map(async (p) => {
+      const { done, signal } = withTimeout(TIMEOUT_MS);
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?lat=${p.lat}&lon=${p.lng}&format=jsonv2&zoom=14`,
+          {
+            signal,
+            headers: { "User-Agent": "meroshare-next-console (broker profile map)", Accept: "application/json" },
+          },
+        );
+        if (!res.ok) return;
+        const json = (await res.json().catch(() => ({}))) as {
+          address?: Record<string, string>;
+        };
+        const a = json.address ?? {};
+        const bits = [
+          a["village"] ?? a["suburb"] ?? a["town"] ?? a["city"] ?? a["municipality"],
+          a["county"],
+          a["state"],
+        ].filter((b): b is string => typeof b === "string" && b.trim() !== "");
+        if (bits.length === 0) return;
+        const label: GeoLabel = {
+          line: bits.join(", "),
+          mapUrl: `https://www.openstreetmap.org/?mlat=${p.lat}&mlon=${p.lng}#map=14/${p.lat}/${p.lng}`,
+        };
+        if (geoCache.size > 500) geoCache.clear();
+        geoCache.set(p.key, label);
+        labels[p.key] = label;
+      } catch {
+        // Unresolved pins simply stay out; text rows still render.
+      } finally {
+        done();
+      }
+    }),
+  );
+  return { labels };
+}
+
+/**
+ * Broker KYC bundle (KYC host, read-only): the SSA identity card plus the
+ * full client file — contacts, family, nominee, IDs, addresses, occupation,
+ * banks, statuses and completion flags. Either side may be null.
+ */
+export async function getNaasaKycBundle(accessToken: string): Promise<{
+  ssa: JsonRecord | null;
+  client: JsonRecord | null;
+}> {
+  const [ssa, client] = await Promise.all([
+    newkycRecord(accessToken, "/ssa/profile"),
+    newkycRecord(accessToken, "/client/profile"),
+  ]);
+  return { ssa, client };
 }
 
 /** Linked bank accounts (KYC host). */

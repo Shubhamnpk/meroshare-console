@@ -13,6 +13,10 @@ import { errorMessage } from "@/lib/format";
 import { formatNpr, formatPercent } from "@/lib/format";
 import { useWatchlist } from "@/lib/watchlist";
 import { useWatchlist as usePrefsWatchlist } from "@/lib/prefs";
+import { deriveHoldings, useGlobalTxns } from "@/lib/world/store";
+import { normalizeWorldSymbol } from "@/lib/world/symbols";
+import { useWorldQuotes } from "@/lib/world/quotes";
+import { native } from "@/components/world/global-position-sheet";
 
 /**
  * Watchlist as a side panel, shared by Market, Dashboard and Terminal.
@@ -111,23 +115,40 @@ export function WatchlistPanel({
   }, [open, brokerId, brokerWatchlists.isPending, brokerKey, localKey]);
 
   const prices = snapshot.data?.prices ?? [];
+  const nepseSet = useMemo(() => new Set(prices.map((p) => p.symbol)), [prices]);
+  const globalTxns = useGlobalTxns();
+  const globalHoldings = useMemo(() => deriveHoldings(globalTxns), [globalTxns]);
   const rows = useMemo(
     () =>
       watchlist.symbols.map((symbol) => ({
         symbol,
         price: prices.find((p) => p.symbol === symbol) ?? null,
+        global: !nepseSet.has(symbol),
       })),
-    [watchlist.symbols, prices],
+    [watchlist.symbols, prices, nepseSet],
   );
+  // Live world quotes for the non-feed rows (Yahoo-backed, cached 60s).
+  const globalSymbols = useMemo(
+    () => rows.filter((r) => r.global && normalizeWorldSymbol(r.symbol)).map((r) => r.symbol),
+    [rows],
+  );
+  const worldQuotes = useWorldQuotes(globalSymbols);
 
   const suggestions = useMemo(() => {
     const q = term.trim().toLowerCase();
     if (!q) return [];
-    return prices
+    const nepse = prices
       .filter((p) => !watchlist.has(p.symbol))
       .filter((p) => p.symbol.toLowerCase().includes(q) || p.name.toLowerCase().includes(q))
+      .map((p) => ({ symbol: p.symbol, name: p.name, global: false }))
       .slice(0, 6);
-  }, [term, prices, watchlist]);
+    const held = globalHoldings
+      .filter((h) => !watchlist.has(h.symbol))
+      .filter((h) => h.symbol.toLowerCase().includes(q))
+      .map((h) => ({ symbol: h.symbol, name: `Global holding · ${h.currency}`, global: true }))
+      .slice(0, 3);
+    return [...nepse, ...held].slice(0, 6);
+  }, [term, prices, watchlist, globalHoldings]);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -182,6 +203,11 @@ export function WatchlistPanel({
                     <span className="min-w-0">
                       <span className="font-semibold">{s.symbol}</span>{" "}
                       <span className="truncate text-xs text-muted-foreground">{s.name}</span>
+                      {s.global ? (
+                        <span className="ml-1 rounded bg-info/10 px-1 py-0.5 text-[0.62rem] font-semibold text-info">
+                          Global
+                        </span>
+                      ) : null}
                     </span>
                     <Star className="size-4 shrink-0 text-muted-foreground" />
                   </button>
@@ -200,22 +226,35 @@ export function WatchlistPanel({
             />
           ) : (
             <ul className="space-y-2">
-              {rows.map(({ symbol, price }) => (
+              {rows.map(({ symbol, price, global }) => {
+                const wq = price ? null : worldQuotes.get(symbol.toUpperCase()) ?? null;
+                return (
                 <li
                   key={symbol}
                   className="flex items-center gap-2 rounded-xl border border-border/60 bg-surface px-3 py-2.5 transition-colors hover:border-primary/30 hover:bg-accent/5"
                 >
                   <button type="button" onClick={() => onPick(symbol)} className="min-w-0 flex-1 text-left">
                     <span className="flex items-baseline justify-between gap-2">
-                      <span className="truncate text-sm font-semibold">{symbol}</span>
-                      <span className="num shrink-0 text-sm font-semibold">{price ? formatNpr(price.ltp) : "-"}</span>
+                      <span className="truncate text-sm font-semibold">
+                        {symbol}
+                        {global ? (
+                          <span className="ml-1.5 rounded bg-info/10 px-1 py-0.5 align-middle text-[0.62rem] font-semibold text-info">
+                            Global
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="num shrink-0 text-sm font-semibold">
+                        {price ? formatNpr(price.ltp) : wq ? native(wq.ltp, wq.currency ?? "") : "-"}
+                      </span>
                     </span>
                     <span className="mt-0.5 flex items-center justify-between gap-2">
                       <span className="truncate text-xs text-muted-foreground">
-                        {price?.name ?? "Not in the live feed"}
+                        {price?.name ?? wq?.name ?? (global ? "Opens in the global terminal" : "Not in the live feed")}
                       </span>
                       {price ? (
                         <DeltaPill value={price.percentChange}>{formatPercent(price.percentChange)}</DeltaPill>
+                      ) : wq ? (
+                        <DeltaPill value={wq.percentChange}>{formatPercent(wq.percentChange)}</DeltaPill>
                       ) : null}
                     </span>
                   </button>
@@ -231,7 +270,8 @@ export function WatchlistPanel({
                     <Trash2 className="size-4" />
                   </button>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           )}
         </div>

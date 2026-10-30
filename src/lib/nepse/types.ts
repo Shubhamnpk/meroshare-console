@@ -231,6 +231,12 @@ export interface IpoArchiveRow {
   dateRange: string | null;
   announcementDate: string | null;
   url: string | null;
+  /** Full announcement text (quota audience lives here when present). */
+  fullText?: string | null;
+  /** Upstream reserved-quota flag. */
+  isReservedShare?: boolean;
+  /** Upstream audience text, e.g. "Local residents". */
+  reservedFor?: string | null;
 }
 
 export interface EnrichedHolding {

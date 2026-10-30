@@ -17,10 +17,18 @@ export function Money({
 }) {
   const raw = (currency ?? "").trim();
   const sym = raw ? currencySymbol(raw) : "";
-  const prefix = ["£", "$", "€", "₹", "रू"].includes(sym);
+  const prefix = ["£", "$", "€", "₹"].includes(sym);
   return (
     <span className={cn("num whitespace-nowrap", className)}>
-      {!raw ? amount : sym === "p" ? `${amount}p` : prefix ? `${sym}${amount}` : `${amount} ${sym}`}
+      {!raw
+        ? amount
+        : sym === "p"
+          ? `${amount}p`
+          : sym === "रु"
+            ? `रु ${amount}`
+            : prefix
+              ? `${sym}${amount}`
+              : `${amount} ${sym}`}
     </span>
   );
 }

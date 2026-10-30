@@ -101,6 +101,7 @@ export function TerminalChart({
   tradeMarkers,
   orderLines,
   dayBase,
+  focusLastHours,
 }: {
   bars: ChartBar[];
   intraday: PricePoint[];
@@ -128,6 +129,8 @@ export function TerminalChart({
   tradeMarkers?: { time: string; side: "BUY" | "SELL"; qty: number }[] | undefined;
   /** Open-order bid/sale marks pinned at their limit prices (day orders + AMO). */
   orderLines?: { price: number; side: "BUY" | "SELL"; qty: number; amo: boolean }[] | undefined;
+  /** Intraday only: open zoomed to the last N hours (user can still scroll out). */
+  focusLastHours?: number | null | undefined;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const hoverRef = useRef(onHover);
@@ -269,7 +272,10 @@ export function TerminalChart({
         );
         const first = sanitizedIntraday[0]?.value ?? 0;
         const last = sanitizedIntraday[sanitizedIntraday.length - 1]?.value ?? 0;
-        const colour = last >= first ? UP : DOWN;
+        // Session color follows the day base (prev close), never the opening
+        // tick — pre-market prints must not flip a green day red.
+        const base = dayBase != null && dayBase > 0 ? dayBase : first;
+        const colour = last >= base ? UP : DOWN;
         if (style === "candles" && ohlc.length >= 2) {
           const series = chart.addSeries(CandlestickSeries, {
             upColor: UP,
@@ -741,6 +747,15 @@ export function TerminalChart({
       };
       chart.subscribeCrosshairMove(handler);
       chart.timeScale().fitContent();
+      if (focusLastHours != null && isIntraday && sanitizedIntraday.length > 1) {
+        const lastT = Number(sanitizedIntraday[sanitizedIntraday.length - 1]!.time);
+        if (Number.isFinite(lastT)) {
+          chart.timeScale().setVisibleRange({
+            from: (lastT - focusLastHours * 3600) as UTCTimestamp,
+            to: lastT as UTCTimestamp,
+          });
+        }
+      }
 
       return () => {
         chart.unsubscribeCrosshairMove(handler);
@@ -771,6 +786,7 @@ export function TerminalChart({
     tradeMarkers,
     orderLines,
     dayBase,
+    focusLastHours,
   ]);
 
   // "+" quick-order follows the mouse anywhere over the chart body (the

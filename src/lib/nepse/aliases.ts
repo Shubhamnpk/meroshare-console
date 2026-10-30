@@ -1,15 +1,14 @@
 // Symbol aliases: renamed schemes where the holding (CDSC/demat side) and the
-// market feed disagree, e.g. holding GYSM vs feed GYSA — same scheme.
+// market feed disagree, e.g. holding GYSM vs feed GSYM — same scheme.
 // Canonical = the name market feeds use. Add new renames here as
 // `ALIAS (holding side): CANONICAL (feed side)`; everything that joins
 // holdings to feed data resolves through canonicalSymbol().
 // NEVER apply these to CDSC/myPurchase calls — CDSC knows the demat-side name.
 const SYMBOL_ALIASES: Record<string, string> = {
-  GYSM: "GYSA",
-  // GARIMA SUBARNA YOJANA (OPEN ENDED MUTUAL FUND): CDSC/demat GSYM == feed GYSA (per user).
-  // GSYA is alternate feed name for same scheme — normalize to GYSA.
-  GSYM: "GYSA",
-  GSYA: "GYSA",
+  // GARIMA SUBARNA YOJANA (OPEN ENDED MUTUAL FUND): CDSC/demat GYSM ==
+  // YONEPSE archive GSYM (verified in the monthly files; the mirror carries
+  // none of the variants, and GYSA/GSYA keys don't exist there either).
+  GYSM: "GSYM",
 };
 
 /** Feed-side name for a symbol (uppercase in, uppercase out, identity fallback). */

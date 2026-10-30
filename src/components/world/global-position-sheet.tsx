@@ -31,12 +31,12 @@ export function bigMoney(v: number | null, currency: string): string {
   const abs = Math.abs(v);
   const scaled =
     abs >= 1e12
-      ? `${(v / 1e12).toFixed(2)}T`
+      ? `${trimNum(v / 1e12, 2)}T`
       : abs >= 1e9
-        ? `${(v / 1e9).toFixed(2)}B`
+        ? `${trimNum(v / 1e9, 2)}B`
         : abs >= 1e6
-          ? `${(v / 1e6).toFixed(2)}M`
-          : v.toFixed(2);
+          ? `${trimNum(v / 1e6, 2)}M`
+          : trimNum(v, 2);
   const c = currency.toUpperCase();
   if (c === "USD") return `$${scaled}`;
   if (c === "INR") return `₹${scaled}`;
@@ -45,15 +45,24 @@ export function bigMoney(v: number | null, currency: string): string {
   return currency ? `${scaled} ${currency}` : scaled;
 }
 
+/**
+ * Decimals trimmed to what carries value (11896p, not 11896.00p; 12.12p
+ * keeps its paise). Fiat caps at 2dp; anything else keeps up to 6 so small
+ * crypto amounts never collapse to zero.
+ */
+function trimNum(amount: number, maxDp: number): string {
+  return String(Number(amount.toFixed(maxDp)));
+}
+
 export function native(amount: number, currency: string): string {
   if (!Number.isFinite(amount)) return "-";
-  if (currency === "GBX" || currency === "GBp") return `${amount.toFixed(2)}p`;
-  if (currency === "GBP") return `£${amount.toFixed(2)}`;
-  if (currency === "USD") return `$${amount.toFixed(2)}`;
-  if (currency === "INR") return `₹${amount.toFixed(2)}`;
-  if (currency === "EUR") return `€${amount.toFixed(2)}`;
+  if (currency === "GBX" || currency === "GBp") return `${trimNum(amount, 2)}p`;
+  if (currency === "GBP") return `£${trimNum(amount, 2)}`;
+  if (currency === "USD") return `$${trimNum(amount, 2)}`;
+  if (currency === "INR") return `₹${trimNum(amount, 2)}`;
+  if (currency === "EUR") return `€${trimNum(amount, 2)}`;
   if (!currency) return String(Number(amount.toFixed(8)));
-  return `${String(Number(amount.toFixed(2)))} ${currency}`;
+  return `${trimNum(amount, 6)} ${currency}`;
 }
 
 /**

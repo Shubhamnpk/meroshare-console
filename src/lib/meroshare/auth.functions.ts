@@ -59,15 +59,21 @@ export const loginDemo = createServerFn({ method: "POST" }).handler(async (): Pr
 export const logout = createServerFn({ method: "POST" }).handler(async () => {
   const data = await readSession();
   if (!data.demo && data.token !== "demo-token" && data.token) {
-    await logoutCdsc({
-      token: data.token,
-      demat: data.demat ?? "",
-      boid: data.boid ?? "",
-      clientCode: data.clientCode ?? "",
-      name: data.name ?? "",
-      username: data.username ?? "",
-      accountNumber: data.accountNumber ?? "",
-    });
+    // Best-effort CDSC logout: CDSC calls have no timeout, so a stalled CDSC
+    // must never block session clearing (or a logout error would leave a
+    // zombie session behind while the app already navigates to sign-in).
+    await Promise.race([
+      logoutCdsc({
+        token: data.token,
+        demat: data.demat ?? "",
+        boid: data.boid ?? "",
+        clientCode: data.clientCode ?? "",
+        name: data.name ?? "",
+        username: data.username ?? "",
+        accountNumber: data.accountNumber ?? "",
+      }).catch(() => {}),
+      new Promise((resolve) => setTimeout(resolve, 10_000)),
+    ]);
   }
   const session = await getMeroShareSession();
   await session.clear();

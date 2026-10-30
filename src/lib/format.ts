@@ -1,8 +1,5 @@
+/** At most 2 decimals, dropping a useless ".00" everywhere (universal rule). */
 const NUM = new Intl.NumberFormat("en-NP", { maximumFractionDigits: 2 });
-const NUM2 = new Intl.NumberFormat("en-NP", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
 
 export function toNumber(value: unknown): number {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
@@ -17,13 +14,13 @@ export function formatNpr(value: unknown, opts?: { compact?: boolean }): string 
   const n = toNumber(value);
   if (opts?.compact) {
     const abs = Math.abs(n);
-    if (abs >= 1_00_00_00_00_000) return `\u0930\u0941 ${NUM2.format(n / 1_00_00_00_00_000)} Kharba`;
-    if (abs >= 1_00_00_00_000) return `\u0930\u0941 ${NUM2.format(n / 1_00_00_00_000)} Arba`;
-    if (abs >= 1_00_00_000) return `\u0930\u0941 ${NUM2.format(n / 1_00_00_000)} Cr`;
-    if (abs >= 1_00_000) return `\u0930\u0941 ${NUM2.format(n / 1_00_000)} L`;
-    if (abs >= 1_000) return `\u0930\u0941 ${NUM2.format(n / 1_000)} K`;
+    if (abs >= 1_00_00_00_00_000) return `रु ${NUM.format(n / 1_00_00_00_00_000)} Kharba`;
+    if (abs >= 1_00_00_00_000) return `रु ${NUM.format(n / 1_00_00_00_000)} Arba`;
+    if (abs >= 1_00_00_000) return `रु ${NUM.format(n / 1_00_00_000)} Cr`;
+    if (abs >= 1_00_000) return `रु ${NUM.format(n / 1_00_000)} L`;
+    if (abs >= 1_000) return `रु ${NUM.format(n / 1_000)} K`;
   }
-  return `\u0930\u0941 ${NUM2.format(n)}`;
+  return `रु ${NUM.format(n)}`;
 }
 
 export function formatNumber(value: unknown): string {
@@ -44,7 +41,7 @@ export function currencySymbol(ccy: string | null | undefined): string {
   if (c === "USD") return "$";
   if (c === "EUR") return "€";
   if (c === "INR") return "₹";
-  if (c === "NPR") return "रू";
+  if (c === "NPR") return "रु";
   return c;
 }
 
@@ -60,12 +57,12 @@ export function formatQty(value: unknown, opts?: { compact?: boolean }): string 
 }
 
 export function formatPercent(value: number): string {
-  if (!Number.isFinite(value) || value === 0) return "0.00%";
-  return `${value > 0 ? "+" : "-"}${Math.abs(value).toFixed(2)}%`;
+  if (!Number.isFinite(value) || value === 0) return "0%";
+  return `${value > 0 ? "+" : "-"}${NUM.format(Math.abs(value))}%`;
 }
 
 export function formatSignedNpr(value: number): string {
-  return `${value >= 0 ? "+" : "-"}\u0930\u0941 ${NUM2.format(Math.abs(value))}`;
+  return `${value >= 0 ? "+" : "-"}\u0930\u0941 ${NUM.format(Math.abs(value))}`;
 }
 
 export function formatDate(value: unknown): string {

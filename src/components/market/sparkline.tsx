@@ -16,12 +16,15 @@ export function Sparkline({
   fill = true,
   showLastDot = false,
   className,
+  /** Official direction (e.g. API % change): overrides the first→last guess. */
+  direction,
 }: {
   points: Point[];
   height?: number;
   fill?: boolean;
   showLastDot?: boolean;
   className?: string;
+  direction?: "up" | "down" | null | undefined;
 }) {
   const W = 320;
   const H = 96;
@@ -43,9 +46,9 @@ export function Sparkline({
       area: `M ${linePoints.join(" L ")} L ${W},${H} L 0,${H} Z`,
       lastX: x(points.length - 1),
       lastY: y(last.value),
-      up: last.value >= points[0]!.value,
+      up: direction != null ? direction === "up" : last.value >= points[0]!.value,
     };
-  }, [points]);
+  }, [points, direction]);
 
   if (points.length < 2) {
     return (

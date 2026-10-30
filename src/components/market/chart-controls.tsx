@@ -118,6 +118,39 @@ export function ChartExpandButton({ expanded, onToggle }: { expanded: boolean; o
   );
 }
 
+/** Compact label + code-style dropdown shared by the Per-point and Interval picks. */
+export function MiniSelect({
+  label,
+  value,
+  onChange,
+  options,
+  triggerClassName,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: readonly { value: string; code: string; label: string }[];
+  triggerClassName?: string | undefined;
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="text-[11px] text-muted-foreground">{label}</span>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className={cn("h-6 w-[3.25rem] gap-1 px-2 text-[11px]", triggerClassName)}>
+          {options.find((o) => o.value === value)?.code ?? value}
+        </SelectTrigger>
+        <SelectContent className="min-w-[5rem]">
+          {options.map((o) => (
+            <SelectItem key={o.value} value={o.value} className="py-1 pl-2 pr-6 text-[11px]">
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 /** Per-point candle aggregation: compact range-style code on the trigger, full helper words in the dropdown. */
 const BAR_AGG_OPTIONS = [
   { value: "day", code: "1D", label: "Daily" },
@@ -128,20 +161,6 @@ const BAR_AGG_OPTIONS = [
 
 export function BarAggSelect({ value, onChange }: { value: BarAgg; onChange: (v: BarAgg) => void }) {
   return (
-    <div className="flex items-center gap-1.5">
-      <span className="text-[11px] text-muted-foreground">Per point</span>
-      <Select value={value} onValueChange={(v) => onChange(v as BarAgg)}>
-        <SelectTrigger className="h-6 w-[3.25rem] gap-1 px-2 text-[11px]">
-          {BAR_AGG_OPTIONS.find((o) => o.value === value)?.code ?? value}
-        </SelectTrigger>
-        <SelectContent className="min-w-[5rem]">
-          {BAR_AGG_OPTIONS.map((o) => (
-            <SelectItem key={o.value} value={o.value} className="py-1 pl-2 pr-6 text-[11px]">
-              {o.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
+    <MiniSelect label="Per point" value={value} onChange={(v) => onChange(v as BarAgg)} options={BAR_AGG_OPTIONS} />
   );
 }

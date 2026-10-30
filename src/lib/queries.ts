@@ -69,6 +69,9 @@ import { brokerVaultStatus, listBrokerConnections } from "./brokers/brokers.func
 import {
   getBrokerBanks,
   getBrokerCompanyInfo,
+  getBrokerDocUrls,
+  getBrokerGeoLabels,
+  getBrokerKycBundle,
   getBrokerDepth,
   getBrokerDirectStatus,
   getBrokerFundTransactions,
@@ -546,6 +549,47 @@ export const brokerBanksQuery = (brokerId: BrokerId | null) =>
     },
     enabled: Boolean(brokerId),
     staleTime: 5 * 60_000,
+    retry: false,
+  });
+
+export const brokerKycBundleQuery = (brokerId: BrokerId | null) =>
+  queryOptions({
+    queryKey: ["broker-kyc", brokerId],
+    queryFn: async () => {
+      if (brokerId === "yobroker") return { ssa: null, client: null, branches: [] };
+      return getBrokerKycBundle({ data: { brokerId: brokerId! } });
+    },
+    enabled: Boolean(brokerId),
+    staleTime: 10 * 60_000,
+    retry: false,
+  });
+
+export const brokerGeoLabelsQuery = (
+  brokerId: BrokerId | null,
+  points: { key: string; lat: number; lng: number }[],
+  active = true,
+) =>
+  queryOptions({
+    queryKey: ["broker-geo", brokerId, points.map((p) => `${p.key}:${p.lat},${p.lng}`).join("|")],
+    queryFn: async () => {
+      if (brokerId === "yobroker" || points.length === 0)
+        return { labels: {} as Record<string, { line: string; mapUrl: string }> };
+      return getBrokerGeoLabels({ data: { brokerId: brokerId!, points } });
+    },
+    enabled: Boolean(brokerId) && points.length > 0 && active,
+    staleTime: 24 * 60 * 60_000,
+    retry: false,
+  });
+
+export const brokerDocUrlsQuery = (brokerId: BrokerId | null, keys: string[], active = true) =>
+  queryOptions({
+    queryKey: ["broker-doc-urls", brokerId, keys.join("|")],
+    queryFn: async () => {
+      if (brokerId === "yobroker" || keys.length === 0) return { urls: {} as Record<string, string> };
+      return getBrokerDocUrls({ data: { brokerId: brokerId!, keys } });
+    },
+    enabled: Boolean(brokerId) && keys.length > 0 && active,
+    staleTime: 30 * 60_000,
     retry: false,
   });
 

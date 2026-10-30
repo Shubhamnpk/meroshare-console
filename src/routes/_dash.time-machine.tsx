@@ -1401,7 +1401,7 @@ Backtested with MeroShare Console 🇳🇵`;
               </div>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">
-                  रू
+                  रु 
                 </span>
                 <Input
                   id="tm-compare-amount"
@@ -2146,7 +2146,7 @@ Backtested with MeroShare Console 🇳🇵`;
             </div>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">
-                रू
+                रु 
               </span>
               <Input
                 id="tm-amount"

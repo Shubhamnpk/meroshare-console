@@ -18,7 +18,7 @@ import { sortBy, useSort } from "@/components/sortable-table";
 import { ExportButton, buildCsv } from "@/components/export-dialog";
 import { TableCell, TableFooter, TableRow } from "@/components/ui/table";
 import { ScripSheet } from "@/components/market/scrip-sheet";
-import { GlobalPositionSheet } from "@/components/world/global-position-sheet";
+import { GlobalPositionSheet, native as formatNative } from "@/components/world/global-position-sheet";
 import { HistoryPanel } from "@/components/portfolio/history-panel";
 import { GlobalHistoryPanel } from "@/components/world/global-history-panel";
 import { HoldingsTable, toPaperRows, type HoldingsSortKey as SortKey } from "@/components/portfolio/holdings-table";
@@ -129,16 +129,6 @@ function portfolioCsv(
 /** Fractional-share display (formatQty rounds to whole kitta). */
 function formatShares(qty: number): string {
   return String(Number(qty.toFixed(8)));
-}
-function formatNative(amount: number, currency: string): string {
-  // Pence keeps its own symbol (T212 "GBX", Yahoo "GBp") — never converted.
-  if (currency === "GBX" || currency === "GBp") return `${amount.toFixed(2)}p`;
-  const ccy = currency.toUpperCase();
-  if (ccy === "GBP") return `£${amount.toFixed(2)}`;
-  if (ccy === "USD") return `$${amount.toFixed(2)}`;
-  if (ccy === "INR") return `₹${amount.toFixed(2)}`;
-  if (ccy === "EUR") return `€${amount.toFixed(2)}`;
-  return `${String(Number(amount.toFixed(6)))} ${currency}`;
 }
 
 function exportNetPl(
@@ -1309,6 +1299,17 @@ function PortfolioPage() {
                 const plPct = hasBasis && h.units * h.avgBuy > 0 ? (pl / (h.units * h.avgBuy)) * 100 : 0;
                 const nativeGain = h.units * (h.ltpNative - h.avgNative);
                 const dayNative = h.units * (h.ltpNative - h.prevNative);
+                // Amount cells follow the preferred display currency (NPR
+                // books converted); native figures stay as fallback + tooltip.
+                const disp = (npr: number) =>
+                  toDisplay == null ? null : formatDisplay(npr * toDisplay, displayCurrency);
+                const ltpText = formatNative(h.ltpNative, h.liveCcy);
+                const prevText = formatNative(h.prevNative, h.liveCcy);
+                const valueText = disp(h.value) ?? formatNative(h.units * h.ltpNative, h.liveCcy);
+                const dayText =
+                  disp(Math.abs(h.dayChange)) ?? formatNative(Math.abs(dayNative), h.liveCcy);
+                const avgText = disp(h.avgBuy) ?? formatNative(h.avgNative, h.nativeCcy);
+                const plText = disp(Math.abs(pl)) ?? formatNative(Math.abs(nativeGain), h.nativeCcy);
                 return {
                   key: `${h.scrip}-${idx}`,
                   scrip: h.scrip,
@@ -1321,14 +1322,14 @@ function PortfolioPage() {
                   dayChange: h.dayChange,
                   dayPct: h.percentChange,
                   weight: globalEnriched.totalValue > 0 ? (h.value / globalEnriched.totalValue) * 100 : 0,
-                  ltpDisplay: formatNative(h.ltpNative, h.liveCcy),
-                  prevDisplay: formatNative(h.prevNative, h.liveCcy),
-                  valueDisplay: formatNative(h.units * h.ltpNative, h.liveCcy),
-                  dayDisplay: `${dayNative >= 0 ? "+" : "-"}${formatNative(Math.abs(dayNative), h.liveCcy)}`,
+                  ltpDisplay: ltpText,
+                  prevDisplay: prevText,
+                  valueDisplay: valueText,
+                  dayDisplay: `${h.dayChange >= 0 ? "+" : "-"}${dayText}`,
                   avg: hasBasis
                     ? {
                         value: h.avgBuy,
-                        display: formatNative(h.avgNative, h.nativeCcy),
+                        display: avgText,
                         cellTitle: `Avg cost ${formatNative(h.avgNative, h.nativeCcy)}`,
                       }
                     : { value: null, cellTitle: "No cost data for this stock" },
@@ -1336,7 +1337,7 @@ function PortfolioPage() {
                     ? {
                         value: pl,
                         pct: plPct,
-                        title: `${nativeGain >= 0 ? "+" : ""}${formatNative(Math.abs(nativeGain), h.nativeCcy)} net`,
+                        title: `${pl >= 0 ? "+" : ""}${plText} net`,
                       }
                     : null,
                 };

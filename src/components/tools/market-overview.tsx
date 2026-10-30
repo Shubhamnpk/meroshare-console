@@ -21,7 +21,10 @@ import {
   AlertTriangle,
   BarChart3,
   LineChart,
+  LayoutGrid,
+  Check,
 } from "lucide-react";
+import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { formatNpr, formatNumber, formatPercent, formatQty } from "@/lib/format";
 import { DeltaPill } from "@/components/stat-card";
 import { EmptyBlock } from "@/components/states";
@@ -35,6 +38,7 @@ import { Heatmap, type HeatTile } from "@/components/market/heatmap";
 import { SectorBadge } from "@/components/market/sector-icon";
 import { CompactNpr, CompactQty } from "@/components/market/compact-value";
 import { cn } from "@/lib/utils";
+import { SwipeItem, SwipeStrip } from "@/components/swipeable-cards";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -334,7 +338,7 @@ function IndexCard({
       type="button"
       onClick={onClick}
       className={cn(
-        "group relative overflow-hidden rounded-2xl border bg-card/70 p-3.5 text-left transition-all hover:ring-2 cursor-pointer shadow-xs",
+        "group relative block w-full overflow-hidden rounded-2xl border bg-card/70 p-3.5 text-left transition-all hover:ring-2 cursor-pointer shadow-xs",
         isUp
           ? "border-emerald-500/30 hover:ring-emerald-500/30 hover:border-emerald-500/50"
           : "border-red-500/30 hover:ring-red-500/30 hover:border-red-500/50",
@@ -569,6 +573,9 @@ function BenchmarksSection({
 }) {
   const [filter, setFilter] = useState<"all" | "major" | "sub">("all");
   const [selected, setSelected] = useState<string[] | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const stripRef = useRef<HTMLDivElement>(null);
+  const [page, setPage] = useState(0);
 
   const options = useMemo<BenchmarkOption[]>(() => {
     const majors: BenchmarkOption[] = indices.map((idx) => {
@@ -646,6 +653,26 @@ function BenchmarksSection({
     .map((k) => options.find((o) => o.key === k))
     .filter((o): o is BenchmarkOption => Boolean(o));
 
+  /** Mobile dots: one per visible card plus the View-all card. */
+  const dotTotal = active.length + 1;
+  const handleStripScroll = () => {
+    const el = stripRef.current;
+    if (!el || dotTotal < 2) return;
+    const max = el.scrollWidth - el.clientWidth;
+    const i = max > 0 ? Math.round((el.scrollLeft / max) * (dotTotal - 1)) : 0;
+    setPage((prev) => {
+      const next = Math.min(Math.max(i, 0), dotTotal - 1);
+      return prev === next ? prev : next;
+    });
+  };
+  const goToDot = (i: number) => {
+    const el = stripRef.current;
+    if (!el) return;
+    const max = el.scrollWidth - el.clientWidth;
+    setPage(i);
+    el.scrollTo({ left: dotTotal > 1 ? (i / (dotTotal - 1)) * max : 0, behavior: "smooth" });
+  };
+
   return (
     <div>
       <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
@@ -684,8 +711,8 @@ function BenchmarksSection({
         </div>
       </div>
 
-      {/* Picker chips */}
-      <div className="mb-2.5 flex gap-1.5 overflow-x-auto pb-1">
+      {/* Picker chips (desktop only — mobile uses the View-all sheet) */}
+      <div className="mb-2.5 hidden gap-1.5 overflow-x-auto pb-1 sm:flex">
         {visible.map((o) => {
           const isOn = activeKeys.includes(o.key);
           const pct = o.quote?.percentChange ?? 0;
@@ -714,17 +741,120 @@ function BenchmarksSection({
         )}
       </div>
 
-      <div className="flex snap-x gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <SwipeStrip cols="sm:grid-cols-2 lg:grid-cols-3" innerRef={stripRef} onScroll={handleStripScroll}>
         {active.map((o) => (
-          <div key={o.key} className="w-64 shrink-0 snap-start sm:w-72">
+          <SwipeItem key={o.key}>
             <BenchmarkCard
               option={o}
               preloaded={indexGraphQueries?.[o.graphKey]?.data ?? indexGraphQueries?.[o.graphKey.toUpperCase()]?.data}
               onOpen={() => onOpen(o)}
             />
-          </div>
+          </SwipeItem>
         ))}
-      </div>
+        {/* Mobile-only "View all" card: opens the full benchmark picker. */}
+        <SwipeItem className="w-36 self-stretch sm:hidden">
+          <button
+            type="button"
+            onClick={() => setSheetOpen(true)}
+            className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-1.5 rounded-2xl border border-dashed border-border/70 bg-card/50 p-3.5 text-muted-foreground transition-colors active:border-primary/60 active:text-primary"
+          >
+            <LayoutGrid className="size-5" />
+            <span className="text-xs font-semibold">View all</span>
+            <span className="text-[11px] opacity-70">{options.length} benchmarks</span>
+          </button>
+        </SwipeItem>
+      </SwipeStrip>
+
+      {/* Mobile-only position dots: one per card, tap to jump. */}
+      {dotTotal > 1 && (
+        <div className="mt-2 flex justify-center gap-1.5 sm:hidden">
+          {Array.from({ length: dotTotal }, (_, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => goToDot(i)}
+              aria-label={`Go to card ${i + 1}`}
+              className={cn(
+                "h-1.5 rounded-full transition-all",
+                page === i ? "w-5 bg-primary" : "w-1.5 bg-muted-foreground/40",
+              )}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Mobile benchmark picker: every major + sub-index, tap to toggle. */}
+      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+        <SheetContent side="bottom" className="flex max-h-[82vh] flex-col gap-0 overflow-hidden px-4 pt-3 pb-0">
+          <div className="mx-auto mb-2 h-1 w-10 shrink-0 rounded-full bg-muted-foreground/30" />
+          <SheetHeader className="mb-3 shrink-0 flex-row items-center justify-between text-left">
+            <div>
+              <SheetTitle className="text-sm">All benchmarks</SheetTitle>
+              <p className="text-[11px] text-muted-foreground">
+                {activeKeys.length} of {options.length} showing — tap to add or remove
+              </p>
+            </div>
+          </SheetHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {(
+              [
+                { title: "Majors", list: options.filter((o) => o.kind === "major") },
+                { title: "Sub-indices", list: options.filter((o) => o.kind === "sub") },
+              ] as const
+            ).map((group) =>
+              group.list.length > 0 ? (
+                <div key={group.title} className="mb-3">
+                  <p className="mb-1.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                    {group.title}
+                  </p>
+                  <div className="overflow-hidden rounded-2xl border border-border/60">
+                    {group.list.map((o, i) => {
+                      const isOn = activeKeys.includes(o.key);
+                      return (
+                        <button
+                          key={o.key}
+                          type="button"
+                          onClick={() => toggle(o.key)}
+                          className={cn(
+                            "flex w-full cursor-pointer items-center gap-2.5 px-3 py-2.5 text-left transition-colors",
+                            i > 0 && "border-t border-border/40",
+                            isOn ? "bg-primary/10" : "bg-card active:bg-muted",
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "flex size-5 shrink-0 items-center justify-center rounded-full border",
+                              isOn
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : "border-border/70 text-transparent",
+                            )}
+                          >
+                            <Check className="size-3" />
+                          </span>
+                          <span className="min-w-0 flex-1 truncate text-xs font-semibold">{o.label}</span>
+                          <DeltaPill value={o.quote?.percentChange ?? 0}>
+                            {formatPercent(o.quote?.percentChange ?? 0)}
+                          </DeltaPill>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null,
+            )}
+          </div>
+          <div className="shrink-0 border-t border-border/40 bg-background py-3">
+            <SheetClose asChild>
+              <button
+                type="button"
+                className="w-full cursor-pointer rounded-xl bg-primary py-2.5 text-xs font-semibold text-primary-foreground"
+              >
+                Done
+              </button>
+            </SheetClose>
+          </div>
+        </SheetContent>
+      </Sheet>
       {active.length === 0 && (
         <p className="rounded-xl border border-dashed border-border/60 p-4 text-center text-xs text-muted-foreground">
           No benchmarks selected — pick from the chips above.
@@ -1227,7 +1357,7 @@ export function MarketOverview({
         <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
           <div className="flex items-center gap-2">
             <Activity className="size-4 text-primary" />
-            <h3 className="font-display text-sm font-semibold text-foreground">Market Breadth &amp; Flow</h3>
+            <h3 className="font-display text-sm font-semibold text-foreground">Market</h3>
             <span
               className={cn(
                 "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase",

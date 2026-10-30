@@ -65,6 +65,59 @@ export function archiveEndPassed(row: { dateRange?: string | null }): boolean {
   return end.getTime() < new Date(new Date().toDateString()).getTime();
 }
 
+export type IpoAudienceKey = "general" | "foreign" | "local";
+
+/**
+ * Which public an issue is for, derived from fields we already fetch —
+ * no extra calls. CDSC separates quotas into their own issue rows, so the
+ * share group names it (foreign-employment and project-affected locals
+ * never read "Ordinary Share"). Archive rows only carry free text, so those
+ * match on explicit markers and default to general.
+ */
+export function ipoAudience(input: {
+  shareGroupName?: unknown;
+  shareTypeName?: unknown;
+  companyName?: unknown;
+  company?: unknown;
+  /** Upstream audience text — wins over every heuristic when present. */
+  reservedFor?: unknown;
+  fullText?: unknown;
+}): { key: IpoAudienceKey; label: string; detail?: string } {
+  const stated = String(input.reservedFor ?? "").trim();
+  const text = [input.shareGroupName, input.shareTypeName, stated, input.fullText, input.companyName, input.company]
+    .map((v) => String(v ?? ""))
+    .join(" | ");
+  const genericGroup =
+    [input.shareGroupName, input.shareTypeName]
+      .map((v) => String(v ?? ""))
+      .join(" ")
+      .trim() === "" ||
+    /^[\s|()]*ordinary shares?[\s|()]*$/i.test(
+      [input.shareGroupName, input.shareTypeName].map((v) => String(v ?? "")).join(" | "),
+    );
+  const tl = text.toLowerCase();
+  const foreign =
+    /foreign|employment|abroad|migrant|pravasi|bidesh/.test(tl) &&
+    (stated !== "" || /foreign employment|working abroad|for (nepalis )?abroad/.test(tl));
+  if (foreign)
+    return {
+      key: "foreign",
+      label: "Foreign employment",
+      ...(stated ? { detail: stated } : {}),
+    };
+  const local =
+    /project affected|affected local|local residents?|for locals|displaced|rehab/.test(tl) ||
+    (!genericGroup && /local/.test(tl));
+  if (local) return { key: "local", label: "Locals", ...(stated ? { detail: stated } : {}) };
+  return { key: "general", label: "General public" };
+}
+
+export const IPO_AUDIENCE_TONE: Record<IpoAudienceKey, string> = {
+  general: "border-border/60 bg-muted text-muted-foreground",
+  foreign: "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  local: "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+};
+
 export function upcomingMerged(open: ApplicableIssue[], calendarList: ApplicableIssue[], archived: IpoArchiveRow[]) {
   const listedNames = [...open, ...calendarList].map((i) => i.companyName || i.scrip || "");
   const cdscUpcoming = calendarList.filter((i) => statusGroup(i) === "upcoming");

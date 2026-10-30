@@ -20,6 +20,10 @@ import { Button } from "@/components/ui/button";
 import { StatCard, DeltaPill } from "@/components/stat-card";
 import { AdaptiveNpr, CompactQty } from "@/components/market/compact-value";
 import { WatchlistPanel } from "@/components/market/watchlist-panel";
+import { normalizeWorldSymbol } from "@/lib/world/symbols";
+import { useWorldQuotes } from "@/lib/world/quotes";
+import { native } from "@/components/world/global-position-sheet";
+import { IpoDetailSheet, type IpoSheetIssue } from "@/components/ipo/ipo-detail-sheet";
 import { useWatchlist } from "@/lib/watchlist";
 import { ErrorBlock, LoadingBlock, EmptyBlock, SkeletonCards } from "@/components/states";
 import { ScripSheet } from "@/components/market/scrip-sheet";
@@ -52,7 +56,8 @@ import {
   sessionAgeLabel,
 } from "@/lib/format";
 import { parseFeedDate } from "@/lib/nepali-dates";
-import { upcomingMerged } from "@/lib/ipo/status";
+import { IPO_AUDIENCE_TONE, ipoAudience, upcomingMerged, type IpoAudienceKey } from "@/lib/ipo/status";
+import type { ApplicableIssue } from "@/lib/meroshare/types";
 import { ogImage, canonicalLink } from "@/lib/seo";
 import { cn } from "@/lib/utils";
 import { canonicalSymbol } from "@/lib/nepse/aliases";
@@ -167,9 +172,19 @@ function DashboardPage() {
   const navigate = useNavigate();
   const [picked, setPicked] = useState<string | null>(null);
   const [pickedTab, setPickedTab] = useState<string | null>(null);
+  const [sheetIssue, setSheetIssue] = useState<IpoSheetIssue | null>(null);
   const [watchlistOpen, setWatchlistOpen] = useState(false);
   const watchlist = useWatchlist();
   const [chartOpen, setChartOpen] = useState(false);
+  // World quotes for watchlist symbols missing from the NEPSE feed.
+  const dashGlobalSymbols = useMemo(
+    () =>
+      watchlist.symbols.filter(
+        (s) => !(market.data?.prices ?? []).some((p) => p.symbol === s) && normalizeWorldSymbol(s),
+      ),
+    [watchlist.symbols, market.data],
+  );
+  const dashWorldQuotes = useWorldQuotes(dashGlobalSymbols);
 
   const data = portfolio.data;
   const holdings = data?.holdings ?? [];
@@ -269,22 +284,45 @@ function DashboardPage() {
   })();
 
   // Upcoming below open: same grouping as /ipo calendar so closed never shows as upcoming.
-  const upcomingIssues = (() => {
+  type UpcomingCardItem = {
+    key: string;
+    title: string;
+    sub: string;
+    audience: { key: IpoAudienceKey; label: string; detail?: string };
+    countdown: string | null;
+    issue?: ApplicableIssue | undefined;
+  };
+  const upcomingIssues: UpcomingCardItem[] = (() => {
     const { cdscUpcoming, archUpcoming } = upcomingMerged(
       openIssues,
       calendar.data ?? [],
       archive.data?.upcoming ?? [],
     );
     return [
-      ...cdscUpcoming.map((i) => ({
-        key: `cdsc-${i.companyShareId}`,
-        title: i.companyName || i.scrip || "",
-        sub: `${i.scrip ?? ""} · opens ${formatDate(i.issueOpenDate)}`.trim(),
-      })),
+      ...cdscUpcoming.map((i) => {
+        const opensIn = daysUntil(i.issueOpenDate);
+        return {
+          key: `cdsc-${i.companyShareId}`,
+          title: i.companyName || i.scrip || "",
+          sub: `${i.scrip ?? ""} · opens ${formatDate(i.issueOpenDate)}`.trim(),
+          audience: ipoAudience(i),
+          countdown:
+            opensIn === null
+              ? null
+              : opensIn <= 0
+                ? "Opens today"
+                : opensIn === 1
+                  ? "Opens tomorrow"
+                  : `Opens in ${opensIn}d`,
+          issue: i,
+        };
+      }),
       ...archUpcoming.map((row, n) => ({
         key: `arch-${row.company}-${n}`,
         title: row.company,
         sub: [row.units ? `${row.units} units` : null, row.dateRange ?? null].filter(Boolean).join(" · "),
+        audience: ipoAudience({ company: row.company, reservedFor: row.reservedFor, fullText: row.fullText }),
+        countdown: null as string | null,
       })),
     ].slice(0, 3);
   })();
@@ -529,7 +567,11 @@ function DashboardPage() {
                   </div>
                   {nepsePoints.length >= 2 ? (
                     <div className="-mr-4 h-12 w-32 self-start sm:-mr-5 sm:w-48">
-                      <Sparkline points={nepsePoints} showLastDot />
+                      <Sparkline
+                        points={nepsePoints}
+                        showLastDot
+                        direction={nepse ? (nepse.percentChange >= 0 ? "up" : "down") : undefined}
+                      />
                     </div>
                   ) : null}
                 </div>
@@ -628,20 +670,30 @@ function DashboardPage() {
             <div className="flex snap-x gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {watchlist.symbols.map((symbol) => {
                 const price = market.data?.prices.find((p) => p.symbol === symbol);
+                const wq = price ? null : dashWorldQuotes.get(symbol.toUpperCase()) ?? null;
                 return (
                   <button
                     key={symbol}
                     type="button"
                     onClick={() => {
+                      const nepse = (market.data?.prices ?? []).some((p) => p.symbol === symbol);
+                      if (!nepse && normalizeWorldSymbol(symbol)) {
+                        void navigate({ to: "/terminal", search: { symbol } });
+                        return;
+                      }
                       setPicked(symbol);
                       setPickedTab(null);
                     }}
                     className="w-36 shrink-0 snap-start rounded-xl border border-border/60 bg-surface px-3 py-2.5 text-left transition-colors hover:border-primary/40"
                   >
                     <p className="truncate text-[13px] font-semibold">{symbol}</p>
-                    <p className="num mt-0.5 text-sm font-semibold">{price ? formatNpr(price.ltp) : "-"}</p>
+                    <p className="num mt-0.5 text-sm font-semibold">
+                      {price ? formatNpr(price.ltp) : wq ? native(wq.ltp, wq.currency ?? "") : "-"}
+                    </p>
                     {price ? (
                       <DeltaPill value={price.percentChange}>{formatPercent(price.percentChange)}</DeltaPill>
+                    ) : wq ? (
+                      <DeltaPill value={wq.percentChange}>{formatPercent(wq.percentChange)}</DeltaPill>
                     ) : null}
                   </button>
                 );
@@ -862,33 +914,90 @@ function DashboardPage() {
                 <div className="min-w-0 space-y-2 overflow-hidden">
                   <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Upcoming</h3>
                   <ul className="grid min-w-0 gap-2 overflow-hidden md:grid-cols-2">
-                    {upcomingIssues.map((item) => (
-                      <li
-                        key={item.key}
-                        className="block rounded-xl border border-dashed border-border/60 bg-surface/60 transition-colors hover:border-primary/40"
-                      >
-                        <Link
-                          to="/ipo"
-                          search={{ tab: "calendar" }}
-                          title={`${item.title} - view in IPO calendar`}
-                          className="block rounded-xl p-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    {upcomingIssues.map((item) => {
+                      const issue = item.issue;
+                      return (
+                        <li
+                          key={item.key}
+                          className="block rounded-xl border border-dashed border-border/60 bg-surface/60 transition-colors hover:border-primary/40"
                         >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className="truncate text-sm font-semibold" title={item.title}>
-                                {item.title}
-                              </p>
-                              <p className="num mt-0.5 truncate text-xs text-muted-foreground" title={item.sub}>
-                                {item.sub}
-                              </p>
-                            </div>
-                            <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[0.68rem] font-semibold text-muted-foreground">
-                              Upcoming
-                            </span>
-                          </div>
-                        </Link>
-                      </li>
-                    ))}
+                          {issue ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSheetIssue({
+                                  companyShareId: issue.companyShareId,
+                                  ...(issue.companyName ? { companyName: issue.companyName } : {}),
+                                  ...(issue.scrip ? { scrip: issue.scrip } : {}),
+                                  ...(issue.shareTypeName ? { shareTypeName: issue.shareTypeName } : {}),
+                                  ...(issue.shareGroupName ? { shareGroupName: issue.shareGroupName } : {}),
+                                  ...(issue.issueOpenDate ? { issueOpenDate: issue.issueOpenDate } : {}),
+                                  ...(issue.issueCloseDate ? { issueCloseDate: issue.issueCloseDate } : {}),
+                                  ...(issue.sharePerUnit != null ? { sharePerUnit: issue.sharePerUnit } : {}),
+                                  ...(issue.minUnit != null ? { minUnit: issue.minUnit } : {}),
+                                  ...(issue.maxUnit != null ? { maxUnit: issue.maxUnit } : {}),
+                                })
+                              }
+                              title={`${item.title} — view full details`}
+                              className="block w-full cursor-pointer rounded-xl p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="flex min-w-0 items-center gap-1.5">
+                                    <span className="truncate text-sm font-semibold" title={item.title}>
+                                      {item.title}
+                                    </span>
+                                    <span
+                                      title={`Open to ${item.audience.detail ?? item.audience.label.toLowerCase()}`}
+                                      className={`shrink-0 rounded-full border px-1.5 py-px text-[0.65rem] font-semibold ${IPO_AUDIENCE_TONE[item.audience.key]}`}
+                                    >
+                                      {item.audience.label}
+                                    </span>
+                                  </p>
+                                  <p className="num mt-0.5 truncate text-xs text-muted-foreground" title={item.sub}>
+                                    {item.sub}
+                                  </p>
+                                </div>
+                                {item.countdown ? (
+                                  <span className="num shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[0.68rem] font-semibold text-primary">
+                                    {item.countdown}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </button>
+                          ) : (
+                            <Link
+                              to="/ipo"
+                              search={{ tab: "calendar" }}
+                              title={`${item.title} - view in IPO calendar`}
+                              className="block rounded-xl p-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="flex min-w-0 items-center gap-1.5">
+                                    <span className="truncate text-sm font-semibold" title={item.title}>
+                                      {item.title}
+                                    </span>
+                                    <span
+                                      title={`Open to ${item.audience.detail ?? item.audience.label.toLowerCase()}`}
+                                      className={`shrink-0 rounded-full border px-1.5 py-px text-[0.65rem] font-semibold ${IPO_AUDIENCE_TONE[item.audience.key]}`}
+                                    >
+                                      {item.audience.label}
+                                    </span>
+                                  </p>
+                                  <p className="num mt-0.5 truncate text-xs text-muted-foreground" title={item.sub}>
+                                    {item.sub}
+                                  </p>
+                                </div>
+                                <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[0.68rem] font-semibold text-muted-foreground">
+                                  Upcoming
+                                </span>
+                              </div>
+                            </Link>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
               ) : null}
@@ -908,11 +1017,23 @@ function DashboardPage() {
         }}
       />
 
+      <IpoDetailSheet
+        issue={sheetIssue}
+        onOpenChange={(open) => {
+          if (!open) setSheetIssue(null);
+        }}
+      />
+
       <WatchlistPanel
         open={watchlistOpen}
         onOpenChange={setWatchlistOpen}
         onPick={(symbol) => {
           setWatchlistOpen(false);
+          const nepse = (market.data?.prices ?? []).some((p) => p.symbol === symbol);
+          if (!nepse && normalizeWorldSymbol(symbol)) {
+            void navigate({ to: "/terminal", search: { symbol } });
+            return;
+          }
           setPicked(symbol);
           setPickedTab(null);
         }}

@@ -20,7 +20,8 @@ import { formatNpr } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { CHART_RANGES, type ChartRangeKey } from "@/lib/charts/ranges";
 
-const RANGES = CHART_RANGES;
+/** Slim picker: 1D 1W 1M 6M 1Y MAX (canonical list keeps the rest elsewhere). */
+const RANGES = CHART_RANGES.filter((r) => r !== "3M" && r !== "5Y");
 type RangeKey = ChartRangeKey;
 
 /** NEPSE history window per range; 1W reuses the 1-month daily fetch, sliced. */
@@ -212,6 +213,30 @@ export function PortfolioDayCard({ holdings }: { holdings: { scrip: string; unit
   const lo = tailed.length > 0 ? Math.min(...tailed.map((p) => p.value)) : 0;
   const hi = tailed.length > 0 ? Math.max(...tailed.map((p) => p.value)) : 0;
   const showCost = invested > 0 && invested >= lo && invested <= hi;
+  /** Window move: last vs first print of the drawn line (24h on 1D). Drives the pill and the line color. */
+  const windowPct =
+    tailed.length >= 2 && tailed[0]!.value > 0
+      ? ((tailed[tailed.length - 1]!.value - tailed[0]!.value) / tailed[0]!.value) * 100
+      : null;
+
+  /** Leg census for the 1D merge: which holdings made it into today's line. */
+  const census = useMemo(() => {
+    if (!isDay) return null;
+    const nepse = holdings.filter((h) => h.units > 0).map((h) => h.scrip.toUpperCase());
+    const mappedNepse = new Set(Object.keys(intraday.data?.ticks ?? {}));
+    const failed = new Set(
+      ((daySeries.data as { failed?: string[] } | undefined)?.failed ?? []).map((s) => s.toUpperCase()),
+    );
+    const global = globalLots.filter((l) => l.qty > 0).map((l) => l.symbol.toUpperCase());
+    const missing = [...nepse.filter((s) => !mappedNepse.has(s)), ...global.filter((s) => failed.has(s))];
+    if (daySeries.isPending) missing.push(...global.filter((s) => !failed.has(s)));
+    return {
+      total: nepse.length + global.length,
+      mapped: nepse.length + global.length - [...new Set(missing)].length,
+      missing: [...new Set(missing)],
+      mapping: intraday.isPending || daySeries.isPending,
+    };
+  }, [isDay, holdings, globalLots, intraday.data, intraday.isPending, daySeries]);
 
   if (holdings.length === 0 && globalLots.length === 0) return null;
 
@@ -239,6 +264,12 @@ export function PortfolioDayCard({ holdings }: { holdings: { scrip: string; unit
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <h2 className="font-display text-base font-semibold">Portfolio</h2>
+          {windowPct != null ? (
+            <span className={`num text-xs font-bold ${windowPct >= 0 ? "text-gain" : "text-loss"}`}>
+              {windowPct >= 0 ? "+" : ""}
+              {windowPct.toFixed(2)}%
+            </span>
+          ) : null}
           <Link
             to="/terminal"
             search={{ mode: "portfolio" }}
@@ -246,6 +277,34 @@ export function PortfolioDayCard({ holdings }: { holdings: { scrip: string; unit
           >
             Net worth <ArrowUpRight className="size-3" />
           </Link>
+          {census && census.total > 0 && (census.mapping || census.missing.length > 0) ? (
+            <span
+              title={
+                census.mapping
+                  ? "Still pulling today's ticks — the line fills in as legs arrive"
+                  : `Not in today's line: ${census.missing.slice(0, 6).join(", ")}${census.missing.length > 6 ? ` +${census.missing.length - 6} more` : ""}`
+              }
+              className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-surface px-1.5 py-0.5 text-[0.68rem] text-muted-foreground"
+            >
+              <span className="relative flex size-1.5">
+                {census.mapping ? (
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
+                ) : null}
+                <span
+                  className={`relative inline-flex size-1.5 rounded-full ${census.mapping ? "bg-primary" : "bg-amber-500"}`}
+                />
+              </span>
+              {census.mapping ? (
+                <>
+                  Mapping {census.mapped}/{census.total}…
+                </>
+              ) : (
+                <>
+                  {census.mapped}/{census.total} mapped
+                </>
+              )}
+            </span>
+          ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Portfolio range">
           {RANGES.map((r) => (
@@ -286,6 +345,7 @@ export function PortfolioDayCard({ holdings }: { holdings: { scrip: string; unit
           <AreaChart
             points={tailed}
             height={144}
+            anchor={tailed.length > 0 ? tailed[0]!.value : null}
             wacc={showCost ? invested : null}
             formatValue={(v) => formatNpr(v)}
             formatLabel={(t) => (isDay ? chartTimeLabel(t) : dayLabel(t))}

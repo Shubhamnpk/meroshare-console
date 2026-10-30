@@ -75,3 +75,16 @@ export async function nseMaster(): Promise<Map<string, string>> {
 export function clearNseMaster(): void {
   masterCache = null;
 }
+
+/** Short human tag for a world-search hit (Crypto, Futures, ETF…). */
+export function worldBadge(h: { type: string; exchange: string }): string {
+  const t = h.type.toUpperCase();
+  if (t.includes("CRYPTO")) return "Crypto";
+  if (t.includes("FUTURE")) return "Futures";
+  if (t.includes("ETF")) return "ETF";
+  if (t.includes("INDEX")) return "Index";
+  if (t.includes("CURRENCY") || t === "FX" || t.includes("FOREX")) return "FX";
+  if (t.includes("MUTUAL")) return "Fund";
+  if (t.includes("EQUITY")) return h.exchange || "Stock";
+  return h.exchange || h.type || "Global";
+}

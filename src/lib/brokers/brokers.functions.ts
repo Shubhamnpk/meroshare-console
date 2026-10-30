@@ -13,6 +13,7 @@ import {
   type BrokerFunds,
   type BrokerHolding,
   type BrokerId,
+  type BrokerKycBundle,
   type BrokerMarketStatus,
   type BrokerOrder,
   type BrokerOrderEvent,
@@ -50,6 +51,10 @@ import {
   getNaasaMarketWatch,
   getNaasaOrderBook,
   getNaasaOrderHistory,
+  getNaasaBranches,
+  getNaasaDocUrls,
+  getNaasaGeoLabels,
+  getNaasaKycBundle,
   getNaasaQuote,
   getNaasaSession,
   getNaasaTickets,
@@ -1170,6 +1175,63 @@ export const getBrokerBanks = createServerFn({ method: "GET" })
       branchName: String(r["branchName"] ?? ""),
       isPrimary: r["isPrimary"] === true,
     }));
+  });
+
+/** Broker KYC bundle: SSA identity card + full client file. Read-only. */
+export const getBrokerKycBundle = createServerFn({ method: "GET" })
+  .validator((input: unknown) => z.object({ brokerId: z.enum(["naasa-x"]) }).parse(input))
+  .handler(async ({ data }): Promise<BrokerKycBundle> => {
+    const bundle = await withTradeflow(data.brokerId, async (bearer) => ({
+      ...(await getNaasaKycBundle(bearer)),
+      branches: await getNaasaBranches(bearer),
+    }));
+    return { ssa: bundle.ssa, client: bundle.client, branches: bundle.branches };
+  });
+
+const docUrlsInput = z.object({
+  brokerId: z.enum(["naasa-x"]),
+  keys: z
+    .array(
+      z
+        .string()
+        .regex(/^latest-kyc\/[A-Za-z0-9/_.-]+$/)
+        .max(200),
+    )
+    .max(40),
+});
+
+const geoInput = z.object({
+  brokerId: z.enum(["naasa-x"]),
+  points: z
+    .array(
+      z.object({
+        key: z.string().regex(/^[A-Za-z0-9_-]{1,32}$/),
+        lat: z.number().min(-90).max(90),
+        lng: z.number().min(-180).max(180),
+      }),
+    )
+    .max(8),
+});
+
+/** Human address lines + map links for KYC map pins. Read-only. */
+export const getBrokerGeoLabels = createServerFn({ method: "GET" })
+  .validator((input: unknown) => geoInput.parse(input))
+  .handler(async ({ data }): Promise<{ labels: Record<string, { line: string; mapUrl: string }> }> => {
+    return getNaasaGeoLabels(data.points);
+  });
+
+/** Signed view URLs for stored KYC document keys. Read-only, short-lived. */
+export const getBrokerDocUrls = createServerFn({ method: "GET" })
+  .validator(
+    (input: unknown): { brokerId: "naasa-x"; keys: string[] } =>
+      docUrlsInput.parse(input) as {
+        brokerId: "naasa-x";
+        keys: string[];
+      },
+  )
+  .handler(async ({ data }): Promise<{ urls: Record<string, string> }> => {
+    const urls = await withTradeflow(data.brokerId, (bearer) => getNaasaDocUrls(bearer, data.keys));
+    return { urls };
   });
 
 const withdrawInput = z.object({

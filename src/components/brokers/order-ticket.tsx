@@ -9,7 +9,6 @@ import { Input } from "@/components/ui/input";
 import { AmountInput } from "@/components/ui/amount-input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DeltaPill } from "@/components/stat-card";
 import { RangeBar } from "@/components/market/range-bar";
 import {
   brokerAmoListQuery,
@@ -273,9 +272,6 @@ export function OrderTicket({
             {quote.data ? (
               <div className="text-right">
                 <p className="num text-base font-semibold">{formatNpr(quote.data.ltp ?? 0)}</p>
-                <DeltaPill value={quote.data.changePercent ?? 0}>
-                  {quote.data.changePercent !== null ? `${quote.data.changePercent.toFixed(2)}%` : "-"}
-                </DeltaPill>
                 {!wsReady ? (
                   <p
                     className="mt-1 text-[0.68rem] font-medium text-warning"
@@ -524,7 +520,7 @@ export function OrderTicket({
                 ? `Depth failed: ${errorMessage(depth.error, "unknown")}`
                 : depth.data && depth.data.errorCode !== 0
                   ? depth.data.message || "No depth right now. Streams during market hours."
-                  : "Top of book, live from your broker."}
+                  : ""}
             </p>
           </div>
           <Button
@@ -602,52 +598,54 @@ export function OrderTicket({
             </p>
           </div>
         ) : null}
-        <div className="mt-3 space-y-3 border-t border-border/60 pt-3 text-xs text-muted-foreground">
-          {dayLow > 0 && dayHigh > dayLow && spot > 0 ? (
-            <div>
-              <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-muted-foreground">Day range</p>
-              <RangeBar
-                low={dayLow}
-                high={dayHigh}
-                value={Math.min(Math.max(spot, dayLow), dayHigh)}
-                format={(v) => num(v)}
-                tone={dayUp ? "gain" : "loss"}
-                colorByPosition
-                valueToneByPosition
-              />
-            </div>
-          ) : (
-            <div className="flex justify-between">
-              <span>High / Low</span>
-              <span className="num">
-                {num(quote.data?.high)} / {num(quote.data?.low)}
-              </span>
-            </div>
-          )}
-          {wLow > 0 && wHigh > wLow && spot > 0 ? (
-            <div>
-              <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-muted-foreground">
-                52-week range
-              </p>
-              <RangeBar
-                low={wLow}
-                high={wHigh}
-                value={Math.min(Math.max(spot, wLow), wHigh)}
-                format={(v) => num(v)}
-                tone={dayUp ? "gain" : "loss"}
-                colorByPosition
-                valueToneByPosition
-              />
-            </div>
-          ) : (
-            <div className="flex justify-between">
-              <span>52w H / L</span>
-              <span className="num">
-                {num(quote.data?.weekHigh52)} / {num(quote.data?.weekLow52)}
-              </span>
-            </div>
-          )}
-          <div className="flex justify-between">
+        <div className="mt-3 border-t border-border/60 pt-3 text-xs text-muted-foreground">
+          <div className="flex flex-wrap gap-3">
+            {dayLow > 0 && dayHigh > dayLow && spot > 0 ? (
+              <div className="min-w-36 flex-1">
+                <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-muted-foreground">Day range</p>
+                <RangeBar
+                  low={dayLow}
+                  high={dayHigh}
+                  value={Math.min(Math.max(spot, dayLow), dayHigh)}
+                  format={(v) => num(v)}
+                  tone={dayUp ? "gain" : "loss"}
+                  colorByPosition
+                  valueToneByPosition
+                />
+              </div>
+            ) : (
+              <div className="flex min-w-36 flex-1 justify-between">
+                <span>High / Low</span>
+                <span className="num">
+                  {num(quote.data?.high)} / {num(quote.data?.low)}
+                </span>
+              </div>
+            )}
+            {wLow > 0 && wHigh > wLow && spot > 0 ? (
+              <div className="min-w-36 flex-1">
+                <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-muted-foreground">
+                  52-week range
+                </p>
+                <RangeBar
+                  low={wLow}
+                  high={wHigh}
+                  value={Math.min(Math.max(spot, wLow), wHigh)}
+                  format={(v) => num(v)}
+                  tone={dayUp ? "gain" : "loss"}
+                  colorByPosition
+                  valueToneByPosition
+                />
+              </div>
+            ) : (
+              <div className="flex min-w-36 flex-1 justify-between">
+                <span>52w H / L</span>
+                <span className="num">
+                  {num(quote.data?.weekHigh52)} / {num(quote.data?.weekLow52)}
+                </span>
+              </div>
+            )}
+          </div>
+          <div className="mt-3 flex justify-between">
             <span>Volume</span>
             <span className="num">
               {quote.data?.volume !== null && quote.data?.volume !== undefined
