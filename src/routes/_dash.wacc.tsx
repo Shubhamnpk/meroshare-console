@@ -23,7 +23,7 @@ import { calculateWacc } from "@/lib/meroshare/portfolio.functions";
 import { errorMessage, formatDate, formatNpr, formatQty, toNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { ogImage, canonicalLink } from "@/lib/seo";
-import type { PurchaseSourceItem, WaccReportItem } from "@/lib/meroshare/types";
+import type { InvestmentScripSummary, PurchaseSourceItem } from "@/lib/meroshare/types";
 
 export const Route = createFileRoute("/_dash/wacc")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -474,15 +474,26 @@ function PendingTable({ scrip, rows }: { scrip: string; rows: PurchaseSourceItem
   );
 }
 
-function reportCsv(holdings: WaccReportItem[]) {
-  const lines = holdings.map((h) => [
-    String(h.scrip ?? ""),
-    String(toNumber(h.totalQuantity)),
-    String(toNumber(h.averageBuyRate)),
-    String(toNumber(h.totalCost)),
-    String(h.lastModifiedDate ?? ""),
+/** One row of the account-wide table: a holding, complete or not. */
+interface ReportRow {
+  scrip: string;
+  units: number;
+  cost: number;
+  rate: number;
+  updated: string | null;
+  status: InvestmentScripSummary["status"];
+}
+
+function reportCsv(rows: ReportRow[]) {
+  const lines = rows.map((h) => [
+    h.scrip,
+    h.status,
+    String(h.units),
+    String(h.rate),
+    String(h.cost),
+    String(h.updated ?? ""),
   ]);
-  return buildCsv(["Stock", "Quantity", "WACC rate", "Total cost", "Last modified"], lines);
+  return buildCsv(["Stock", "Status", "Quantity", "WACC rate", "Total cost", "Last modified"], lines);
 }
 
 function WaccReportPanel({
@@ -495,7 +506,43 @@ function WaccReportPanel({
   onPickScrip: (scrip: string) => void;
 }) {
   const report = useQuery(waccReportQuery());
-  const holdings = report.data?.waccReportResponse ?? [];
+  // The summary is the union we actually want: CDSC's account report (a single
+  // call, but only finished scrips) plus the per-scrip purchase source that
+  // rescues partial-WACC accounts. Using the report alone dropped stocks whose
+  // basis came from that fallback. Same query key as the page: no extra call.
+  const summary = useQuery(investmentSummaryQuery());
+  const reportRows = report.data?.waccReportResponse ?? [];
+  const summaryScrips = summary.data?.scrips ?? [];
+  const holdings = useMemo<ReportRow[]>(() => {
+    const byScrip = new Map<string, ReportRow>();
+    for (const s of summaryScrips) {
+      const scrip = String(s.scrip ?? "").toUpperCase();
+      if (!scrip) continue;
+      byScrip.set(scrip, {
+        scrip,
+        units: Math.max(0, toNumber(s.units)),
+        cost: Math.max(0, toNumber(s.cost)),
+        rate: Math.max(0, toNumber(s.waccRate)),
+        updated: null,
+        status: s.status,
+      });
+    }
+    // Report values win where they exist: they are CDSC's own numbers.
+    for (const r of reportRows) {
+      const scrip = String(r.scrip ?? "").toUpperCase();
+      if (!scrip) continue;
+      const prev = byScrip.get(scrip);
+      byScrip.set(scrip, {
+        scrip,
+        units: Math.max(0, toNumber(r.totalQuantity)) || prev?.units || 0,
+        cost: Math.max(0, toNumber(r.totalCost)) || prev?.cost || 0,
+        rate: Math.max(0, toNumber(r.averageBuyRate)) || prev?.rate || 0,
+        updated: r.lastModifiedDate ?? prev?.updated ?? null,
+        status: "calculated",
+      });
+    }
+    return [...byScrip.values()];
+  }, [summaryScrips, reportRows]);
   const { sort, toggle } = useSort<"scrip" | "qty" | "rate" | "cost" | "updated">(
     { key: "scrip", dir: "asc" },
     { scrip: "text", qty: "number", rate: "number", cost: "number", updated: "text" },
@@ -503,15 +550,15 @@ function WaccReportPanel({
   const sorted = useMemo(() => {
     switch (sort.key) {
       case "qty":
-        return sortBy(holdings, (h) => toNumber(h.totalQuantity), sort.dir);
+        return sortBy(holdings, (h) => h.units, sort.dir);
       case "rate":
-        return sortBy(holdings, (h) => toNumber(h.averageBuyRate), sort.dir);
+        return sortBy(holdings, (h) => h.rate, sort.dir);
       case "cost":
-        return sortBy(holdings, (h) => toNumber(h.totalCost), sort.dir);
+        return sortBy(holdings, (h) => h.cost, sort.dir);
       case "updated":
-        return sortBy(holdings, (h) => String(h.lastModifiedDate ?? ""), sort.dir);
+        return sortBy(holdings, (h) => String(h.updated ?? ""), sort.dir);
       default:
-        return sortBy(holdings, (h) => String(h.scrip ?? ""), sort.dir);
+        return sortBy(holdings, (h) => h.scrip, sort.dir);
     }
   }, [holdings, sort]);
   const highlight = highlightScrip?.toUpperCase() ?? "";
@@ -527,23 +574,35 @@ function WaccReportPanel({
       el.scrollIntoView({ behavior: "smooth", block: "center" });
     }
   });
-  if (!report.data || holdings.length === 0) return null;
-  const totalCost = holdings.reduce((s, h) => s + Math.max(0, toNumber(h.totalCost)), 0);
-  const totalUnits = holdings.reduce((s, h) => s + Math.max(0, toNumber(h.totalQuantity)), 0);
+  if (holdings.length === 0) return null;
+  // Totals count finished scrips only: pending rows carry an estimate and
+  // missing rows carry nothing, so adding them would misstate the cost basis.
+  const calculated = holdings.filter((h) => h.status === "calculated");
+  const totalCost = calculated.reduce((s, h) => s + Math.max(0, h.cost), 0);
+  const totalUnits = calculated.reduce((s, h) => s + Math.max(0, h.units), 0);
   const avgWacc = totalUnits ? totalCost / totalUnits : 0;
+  const openCount = holdings.length - calculated.length;
   return (
     <section className="space-y-3 pt-4">
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className="font-display text-base font-semibold">Calculated WACC</h2>
-        <span className="text-xs text-muted-foreground">all stocks</span>
-        <span className="num ml-auto rounded-full border border-border/70 bg-card px-3 py-1.5 text-xs text-muted-foreground">
+        <h2 className="font-display text-base font-semibold">WACC by stock</h2>
+        <span className="text-xs text-muted-foreground">all holdings</span>
+        {openCount > 0 ? (
+          <span className="rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs font-semibold text-amber-600">
+            {openCount} not calculated
+          </span>
+        ) : null}
+        <span
+          className="num ml-auto rounded-full border border-border/70 bg-card px-3 py-1.5 text-xs text-muted-foreground"
+          title="Finished scrips only: pending and missing rows are listed but not summed"
+        >
           {holdings.length} stocks · {formatQty(totalUnits)} units · {formatNpr(totalCost)} invested
         </span>
         <ExportButton
           formats={[
             {
               title: "CSV",
-              description: "Calculated WACC for every stock",
+              description: "Every stock with its WACC status",
               filename: "wacc-report",
               extension: "csv",
               build: () => reportCsv(holdings),
@@ -605,26 +664,53 @@ function WaccReportPanel({
           </TableHeader>
           <TableBody className="divide-y divide-border/60">
             {sorted.map((h, idx) => {
-              const key = String(h.scrip ?? "").toUpperCase();
+              const key = h.scrip;
               const isHi = highlight !== "" && key === highlight;
               return (
                 <TableRow
-                  key={String(h.scrip)}
+                  key={key}
                   ref={(el) => {
                     if (el) rowRefs.current.set(key, el);
                     else rowRefs.current.delete(key);
                   }}
-                  onClick={() => onPickScrip(String(h.scrip ?? ""))}
-                  title={`View WACC detail for ${String(h.scrip ?? "")}`}
+                  onClick={() => onPickScrip(key)}
+                  title={`View WACC detail for ${key}`}
                   className={cn("cursor-pointer hover:bg-accent/30", isHi && "bg-primary/10")}
                 >
                   <TableCell className="pl-4 text-xs text-muted-foreground">{idx + 1}</TableCell>
-                  <TableCell className="px-4 py-2.5 font-semibold">{h.scrip}</TableCell>
-                  <TableCell className="num px-4 py-2.5 text-right">{formatQty(toNumber(h.totalQuantity))}</TableCell>
-                  <TableCell className="num px-4 py-2.5 text-right">{formatNpr(toNumber(h.averageBuyRate))}</TableCell>
-                  <TableCell className="num px-4 py-2.5 text-right">{formatNpr(toNumber(h.totalCost))}</TableCell>
+                  <TableCell className="px-4 py-2.5">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="font-semibold">{key}</span>
+                      {h.status !== "calculated" ? (
+                        <span
+                          className={cn(
+                            "rounded-full px-1.5 py-px text-[0.62rem] font-semibold",
+                            h.status === "pending"
+                              ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                              : "bg-muted text-muted-foreground",
+                          )}
+                          title={
+                            h.status === "pending"
+                              ? "CDSC has not finished this WACC yet; figures are an estimate"
+                              : "No purchase source on file for this stock yet"
+                          }
+                        >
+                          {h.status === "pending" ? "pending" : "not set"}
+                        </span>
+                      ) : null}
+                    </span>
+                  </TableCell>
+                  <TableCell className="num px-4 py-2.5 text-right">
+                    {h.units > 0 ? formatQty(h.units) : "-"}
+                  </TableCell>
+                  <TableCell className="num px-4 py-2.5 text-right">
+                    {h.rate > 0 ? formatNpr(h.rate) : "-"}
+                  </TableCell>
+                  <TableCell className="num px-4 py-2.5 text-right">
+                    {h.cost > 0 ? `${h.status === "pending" ? "≈ " : ""}${formatNpr(h.cost)}` : "-"}
+                  </TableCell>
                   <TableCell className="hidden px-4 py-2.5 text-muted-foreground md:table-cell">
-                    {h.lastModifiedDate ?? ""}
+                    {h.updated ?? "-"}
                   </TableCell>
                 </TableRow>
               );
@@ -633,7 +719,8 @@ function WaccReportPanel({
           <TableFooter>
             <TableRow className="border-t border-border/70 bg-muted/40 font-semibold">
               <TableCell className="px-4 py-2.5" colSpan={2}>
-                Total · {holdings.length} stock{holdings.length > 1 ? "s" : ""}
+                Total · {calculated.length} calculated
+                {openCount > 0 ? ` of ${holdings.length}` : ` stock${calculated.length === 1 ? "" : "s"}`}
               </TableCell>
               <TableCell className="num px-4 py-2.5 text-right">{formatQty(totalUnits)}</TableCell>
               <TableCell
@@ -667,7 +754,7 @@ function WaccPage() {
   }, [scripParam]);
   const search = useQuery(waccSearchQuery(scrip || null));
   const investment = useQuery(investmentSummaryQuery());
-  // Same cache as the Calculated WACC panel below: if the totals show there,
+  // Same cache as the WACC by stock panel below: if the totals show there,
   // this entry exists here too. No separate fetch, no separate failure mode.
   const report = useQuery(waccReportQuery());
 
