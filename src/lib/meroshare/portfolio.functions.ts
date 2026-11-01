@@ -329,7 +329,10 @@ export const getWaccReport = createServerFn({ method: "POST" }).handler(async ()
  * summary-style row lists under various keys), so every known variant is
  * tried defensively. Returns null when nothing usable is found.
  */
-function extractViewBasis(res: JsonRecord): { units: number; cost: number; rate: number } | null {
+function extractViewBasis(res: unknown): { units: number; cost: number; rate: number } | null {
+  // `myPurchase/view` answers with `null` or a bare string when a scrip has no
+  // rows; guard instead of trusting the declared record type.
+  if (!res || typeof res !== "object") return null;
   const rec = res as Record<string, unknown>;
   const listKeys = ["waccSummaryResponse", "waccResponse", "data", "object", "rows", "details"];
   for (const key of listKeys) {
@@ -459,44 +462,61 @@ export const getInvestmentSummary = createServerFn({ method: "GET" }).handler(as
         });
         return;
       }
-      const res = result.value as WaccSearchResponse;
-      const summary = Array.isArray(res.waccSummaryResponse) ? res.waccSummaryResponse : [];
-      const pending = Array.isArray(res.waccUpdateResponse) ? res.waccUpdateResponse : [];
-      const qtyOf = (r: PurchaseSourceItem) => Math.max(0, toNum(r.quantity ?? r.transactionQuantity));
-      const priceOf = (r: PurchaseSourceItem) => toNum(r.userPrice ?? r.rate ?? r.purchasePrice);
-      if (summary.length > 0) {
-        let units = 0;
-        let cost = 0;
-        for (const r of summary) {
-          const q = qtyOf(r);
-          units += q;
-          cost += Math.max(0, toNum(r.userCost)) || q * priceOf(r);
+      try {
+        const res = result.value as WaccSearchResponse;
+        const summary = Array.isArray(res.waccSummaryResponse) ? res.waccSummaryResponse : [];
+        const pending = Array.isArray(res.waccUpdateResponse) ? res.waccUpdateResponse : [];
+        const qtyOf = (r: PurchaseSourceItem) => Math.max(0, toNum(r.quantity ?? r.transactionQuantity));
+        const priceOf = (r: PurchaseSourceItem) => toNum(r.userPrice ?? r.rate ?? r.purchasePrice);
+        if (summary.length > 0) {
+          let units = 0;
+          let cost = 0;
+          for (const r of summary) {
+            const q = qtyOf(r);
+            units += q;
+            cost += Math.max(0, toNum(r.userCost)) || q * priceOf(r);
+          }
+          const safeCost = Math.max(0, cost);
+          byScrip.set(scrip, {
+            scrip,
+            units,
+            cost: safeCost,
+            waccRate: units > 0 ? safeCost / units : 0,
+            status: "calculated",
+          });
+        } else if (pending.length > 0) {
+          let units = 0;
+          let cost = 0;
+          for (const r of pending) {
+            const q = qtyOf(r);
+            units += q;
+            cost += q * priceOf(r);
+          }
+          const safeCost = Math.max(0, cost);
+          byScrip.set(scrip, {
+            scrip,
+            units,
+            cost: safeCost,
+            waccRate: units > 0 ? safeCost / units : 0,
+            status: "pending",
+          });
+        } else {
+          byScrip.set(scrip, {
+            scrip,
+            units: held.get(scrip) ?? 0,
+            cost: 0,
+            waccRate: 0,
+            status: "missing",
+          });
         }
-        const safeCost = Math.max(0, cost);
-        byScrip.set(scrip, {
+      } catch (error) {
+        // One unusable payload must not discard the whole summary: that used to
+        // reject the server function and left the page with only the account
+        // report, which stays empty while any scrip is still pending.
+        console.error("[wacc] unusable search payload", {
           scrip,
-          units,
-          cost: safeCost,
-          waccRate: units > 0 ? safeCost / units : 0,
-          status: "calculated",
+          message: error instanceof Error ? error.message : String(error),
         });
-      } else if (pending.length > 0) {
-        let units = 0;
-        let cost = 0;
-        for (const r of pending) {
-          const q = qtyOf(r);
-          units += q;
-          cost += q * priceOf(r);
-        }
-        const safeCost = Math.max(0, cost);
-        byScrip.set(scrip, {
-          scrip,
-          units,
-          cost: safeCost,
-          waccRate: units > 0 ? safeCost / units : 0,
-          status: "pending",
-        });
-      } else {
         byScrip.set(scrip, {
           scrip,
           units: held.get(scrip) ?? 0,

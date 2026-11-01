@@ -23,7 +23,7 @@ import { calculateWacc } from "@/lib/meroshare/portfolio.functions";
 import { errorMessage, formatDate, formatNpr, formatQty, toNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { ogImage, canonicalLink } from "@/lib/seo";
-import type { InvestmentScripSummary, PurchaseSourceItem } from "@/lib/meroshare/types";
+import type { PurchaseSourceItem } from "@/lib/meroshare/types";
 
 export const Route = createFileRoute("/_dash/wacc")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -474,26 +474,24 @@ function PendingTable({ scrip, rows }: { scrip: string; rows: PurchaseSourceItem
   );
 }
 
-/** One row of the account-wide table: a holding, complete or not. */
+/** One row of the account-wide table: a stock whose WACC is finished. */
 interface ReportRow {
   scrip: string;
   units: number;
   cost: number;
   rate: number;
   updated: string | null;
-  status: InvestmentScripSummary["status"];
 }
 
 function reportCsv(rows: ReportRow[]) {
   const lines = rows.map((h) => [
     h.scrip,
-    h.status,
     String(h.units),
     String(h.rate),
     String(h.cost),
     String(h.updated ?? ""),
   ]);
-  return buildCsv(["Stock", "Status", "Quantity", "WACC rate", "Total cost", "Last modified"], lines);
+  return buildCsv(["Stock", "Quantity", "WACC rate", "Total cost", "Last modified"], lines);
 }
 
 function WaccReportPanel({
@@ -513,9 +511,13 @@ function WaccReportPanel({
   const summary = useQuery(investmentSummaryQuery());
   const reportRows = report.data?.waccReportResponse ?? [];
   const summaryScrips = summary.data?.scrips ?? [];
+  // Finished scrips only. Pending and unset stocks have their own "Pending
+  // completion" list above; mixing estimates into this table made the finished
+  // rows look like the exception and buried them under rows with no basis.
   const holdings = useMemo<ReportRow[]>(() => {
     const byScrip = new Map<string, ReportRow>();
     for (const s of summaryScrips) {
+      if (s.status !== "calculated") continue;
       const scrip = String(s.scrip ?? "").toUpperCase();
       if (!scrip) continue;
       byScrip.set(scrip, {
@@ -524,7 +526,6 @@ function WaccReportPanel({
         cost: Math.max(0, toNumber(s.cost)),
         rate: Math.max(0, toNumber(s.waccRate)),
         updated: null,
-        status: s.status,
       });
     }
     // Report values win where they exist: they are CDSC's own numbers.
@@ -538,7 +539,6 @@ function WaccReportPanel({
         cost: Math.max(0, toNumber(r.totalCost)) || prev?.cost || 0,
         rate: Math.max(0, toNumber(r.averageBuyRate)) || prev?.rate || 0,
         updated: r.lastModifiedDate ?? prev?.updated ?? null,
-        status: "calculated",
       });
     }
     return [...byScrip.values()];
@@ -574,35 +574,38 @@ function WaccReportPanel({
       el.scrollIntoView({ behavior: "smooth", block: "center" });
     }
   });
+  if (holdings.length === 0 && (report.isError || summary.isError)) {
+    // Never swallow the failure: an empty table plus a blocked CDSC call looks
+    // identical to "nothing calculated yet", which is exactly what hid the
+    // finished scrips before.
+    return (
+      <ErrorBlock
+        error={report.error ?? summary.error}
+        retry={() => {
+          void report.refetch();
+          void summary.refetch();
+        }}
+      />
+    );
+  }
   if (holdings.length === 0) return null;
-  // Totals count finished scrips only: pending rows carry an estimate and
-  // missing rows carry nothing, so adding them would misstate the cost basis.
-  const calculated = holdings.filter((h) => h.status === "calculated");
-  const totalCost = calculated.reduce((s, h) => s + Math.max(0, h.cost), 0);
-  const totalUnits = calculated.reduce((s, h) => s + Math.max(0, h.units), 0);
+  const totalCost = holdings.reduce((s, h) => s + Math.max(0, h.cost), 0);
+  const totalUnits = holdings.reduce((s, h) => s + Math.max(0, h.units), 0);
   const avgWacc = totalUnits ? totalCost / totalUnits : 0;
-  const openCount = holdings.length - calculated.length;
   return (
     <section className="space-y-3 pt-4">
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className="font-display text-base font-semibold">WACC by stock</h2>
-        <span className="text-xs text-muted-foreground">all holdings</span>
-        {openCount > 0 ? (
-          <span className="rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs font-semibold text-amber-600">
-            {openCount} not calculated
-          </span>
-        ) : null}
-        <span
-          className="num ml-auto rounded-full border border-border/70 bg-card px-3 py-1.5 text-xs text-muted-foreground"
-          title="Finished scrips only: pending and missing rows are listed but not summed"
-        >
-          {holdings.length} stocks · {formatQty(totalUnits)} units · {formatNpr(totalCost)} invested
+        <h2 className="font-display text-base font-semibold">Calculated WACC</h2>
+        <span className="text-xs text-muted-foreground">all stocks</span>
+        <span className="num ml-auto rounded-full border border-border/70 bg-card px-3 py-1.5 text-xs text-muted-foreground">
+          {holdings.length} stock{holdings.length === 1 ? "" : "s"} · {formatQty(totalUnits)} units ·{" "}
+          {formatNpr(totalCost)} invested
         </span>
         <ExportButton
           formats={[
             {
               title: "CSV",
-              description: "Every stock with its WACC status",
+              description: "Calculated WACC for every stock",
               filename: "wacc-report",
               extension: "csv",
               build: () => reportCsv(holdings),
@@ -678,28 +681,7 @@ function WaccReportPanel({
                   className={cn("cursor-pointer hover:bg-accent/30", isHi && "bg-primary/10")}
                 >
                   <TableCell className="pl-4 text-xs text-muted-foreground">{idx + 1}</TableCell>
-                  <TableCell className="px-4 py-2.5">
-                    <span className="inline-flex items-center gap-1.5">
-                      <span className="font-semibold">{key}</span>
-                      {h.status !== "calculated" ? (
-                        <span
-                          className={cn(
-                            "rounded-full px-1.5 py-px text-[0.62rem] font-semibold",
-                            h.status === "pending"
-                              ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                              : "bg-muted text-muted-foreground",
-                          )}
-                          title={
-                            h.status === "pending"
-                              ? "CDSC has not finished this WACC yet; figures are an estimate"
-                              : "No purchase source on file for this stock yet"
-                          }
-                        >
-                          {h.status === "pending" ? "pending" : "not set"}
-                        </span>
-                      ) : null}
-                    </span>
-                  </TableCell>
+                  <TableCell className="px-4 py-2.5 font-semibold">{key}</TableCell>
                   <TableCell className="num px-4 py-2.5 text-right">
                     {h.units > 0 ? formatQty(h.units) : "-"}
                   </TableCell>
@@ -707,7 +689,7 @@ function WaccReportPanel({
                     {h.rate > 0 ? formatNpr(h.rate) : "-"}
                   </TableCell>
                   <TableCell className="num px-4 py-2.5 text-right">
-                    {h.cost > 0 ? `${h.status === "pending" ? "≈ " : ""}${formatNpr(h.cost)}` : "-"}
+                    {h.cost > 0 ? formatNpr(h.cost) : "-"}
                   </TableCell>
                   <TableCell className="hidden px-4 py-2.5 text-muted-foreground md:table-cell">
                     {h.updated ?? "-"}
@@ -719,13 +701,12 @@ function WaccReportPanel({
           <TableFooter>
             <TableRow className="border-t border-border/70 bg-muted/40 font-semibold">
               <TableCell className="px-4 py-2.5" colSpan={2}>
-                Total · {calculated.length} calculated
-                {openCount > 0 ? ` of ${holdings.length}` : ` stock${calculated.length === 1 ? "" : "s"}`}
+                Total · {holdings.length} stock{holdings.length === 1 ? "" : "s"}
               </TableCell>
               <TableCell className="num px-4 py-2.5 text-right">{formatQty(totalUnits)}</TableCell>
               <TableCell
                 className="num px-4 py-2.5 text-right"
-                title="Average WACC across all stocks (total cost / total units)"
+                title="Average WACC across calculated stocks (total cost / total units)"
               >
                 {formatNpr(Math.round(avgWacc * 100) / 100)}
               </TableCell>

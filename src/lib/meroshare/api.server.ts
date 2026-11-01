@@ -361,11 +361,19 @@ export async function fetchActivityLog(
 }
 
 export async function fetchWaccPending(auth: AuthContext, scrip: string): Promise<WaccSearchResponse> {
-  return cdscRequest<WaccSearchResponse>(CDSC_URLS.waccPending, {
+  const res = await cdscRequest<unknown>(CDSC_URLS.waccPending, {
     method: "POST",
     token: auth.token,
     body: { demat: auth.demat, scrip: scrip.toUpperCase() },
   });
+  // cdscRequest hands back whatever JSON.parse produced, so a `null` body or a
+  // bare string arrives here too. Normalize: a shape lie here used to throw
+  // `res.waccSummaryResponse` and take the whole account summary down with it.
+  const rec = res && typeof res === "object" ? (res as WaccSearchResponse) : ({} as WaccSearchResponse);
+  return {
+    waccSummaryResponse: Array.isArray(rec.waccSummaryResponse) ? rec.waccSummaryResponse : [],
+    waccUpdateResponse: Array.isArray(rec.waccUpdateResponse) ? rec.waccUpdateResponse : [],
+  };
 }
 
 /**
@@ -415,11 +423,12 @@ export async function fetchWaccPendingScrips(auth: AuthContext): Promise<WaccPen
 
 /** Account-wide calculated WACC summary (myPurchase/waccReport). */
 export async function fetchWaccReport(auth: AuthContext): Promise<WaccReport> {
-  const res = await cdscRequest<WaccReport>(CDSC_URLS.waccReport, {
+  const raw = await cdscRequest<unknown>(CDSC_URLS.waccReport, {
     method: "POST",
     token: auth.token,
     body: { demat: auth.demat },
   });
+  const res = raw && typeof raw === "object" ? (raw as WaccReport) : ({} as WaccReport);
   return {
     isWaccPending: res.isWaccPending === true,
     viewWaccSummaryReport: res.viewWaccSummaryReport === true,
