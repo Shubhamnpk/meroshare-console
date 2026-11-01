@@ -219,10 +219,20 @@ export const getHoldingSymbols = createServerFn({ method: "GET" }).handler(async
       ...new Set(DEMO_PORTFOLIO.meroShareMyPortfolio.map((p) => String(p.scrip ?? "").toUpperCase()).filter(Boolean)),
     ];
   }
-  const raw = await fetchHoldingSymbols(auth);
-  if (Array.isArray(raw)) {
-    const symbols = raw.filter((s): s is string => typeof s === "string" && s.trim().length > 0);
-    if (symbols.length > 0) return symbols;
+  // `holdingSymbols` is blocked by CDSC's security filter more often than the
+  // portfolio endpoint. A thrown block used to skip the fallback below and the
+  // WACC page rendered a red "security filter" block while everything else on
+  // the page still worked.
+  try {
+    const raw = await fetchHoldingSymbols(auth);
+    if (Array.isArray(raw)) {
+      const symbols = raw.filter((s): s is string => typeof s === "string" && s.trim().length > 0);
+      if (symbols.length > 0) return symbols;
+    }
+  } catch (error) {
+    console.error("[portfolio] holding symbols blocked, using portfolio", {
+      message: error instanceof Error ? error.message : String(error),
+    });
   }
   const portfolio = await fetchPortfolio(auth);
   return (portfolio.meroShareMyPortfolio ?? [])

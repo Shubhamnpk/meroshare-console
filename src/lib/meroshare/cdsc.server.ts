@@ -155,7 +155,20 @@ export async function cdscRequest<T = unknown>(url: string, options: RequestOpti
       throw new CdscError("Could not reach MeroShare. Please try again in a moment.", 503);
     }
 
-    const payload = await parseBody(res);
+    // CDSC's edge serves an HTML challenge for the first request in a while and
+    // the real JSON a moment later. parseBody throws before the status checks
+    // below, so without this the block surfaced as an error on the very calls
+    // that would have succeeded on a second try.
+    let payload: unknown;
+    try {
+      payload = await parseBody(res);
+    } catch (error) {
+      if (retry && attempt < MAX_ATTEMPTS) {
+        await sleep(250 * attempt);
+        continue;
+      }
+      throw error;
+    }
 
     if (res.status === 401 || res.status === 403) {
       // Login failures are 401 with XML <message> - show that, don't treat as session expiry.
@@ -186,26 +199,40 @@ export async function cdscRequestWithHeaders<T = unknown>(
   const headers: Record<string, string> = { ...BASE_HEADERS };
   if (token) headers["Authorization"] = token;
 
-  let res: Response;
-  try {
-    res = await fetch(url, {
-      method,
-      headers,
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    });
-  } catch {
-    throw new CdscError("Could not reach MeroShare. Please try again in a moment.", 503);
-  }
-
-  const payload = await parseBody(res);
-  if (res.status === 401 || res.status === 403) {
-    if (url.includes("/auth/")) {
-      throw new CdscError(messageFrom(payload, "Username or password invalid."), res.status, payload);
+  for (let attempt = 1; ; attempt++) {
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method,
+        headers,
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+    } catch {
+      throw new CdscError("Could not reach MeroShare. Please try again in a moment.", 503);
     }
-    throw new SessionExpiredError();
+
+    // Same transient edge challenge as cdscRequest: retry the bare HTML page
+    // once before telling the user to try again themselves.
+    let payload: unknown;
+    try {
+      payload = await parseBody(res);
+    } catch (error) {
+      if (attempt < MAX_ATTEMPTS) {
+        await sleep(250 * attempt);
+        continue;
+      }
+      throw error;
+    }
+
+    if (res.status === 401 || res.status === 403) {
+      if (url.includes("/auth/")) {
+        throw new CdscError(messageFrom(payload, "Username or password invalid."), res.status, payload);
+      }
+      throw new SessionExpiredError();
+    }
+    if (!res.ok) {
+      throw new CdscError(messageFrom(payload, `MeroShare request failed (${res.status})`), res.status, payload);
+    }
+    return { data: payload as T, headers: res.headers, status: res.status };
   }
-  if (!res.ok) {
-    throw new CdscError(messageFrom(payload, `MeroShare request failed (${res.status})`), res.status, payload);
-  }
-  return { data: payload as T, headers: res.headers, status: res.status };
 }
