@@ -735,14 +735,14 @@ export function yonepseIndexKey(indexName: string): string {
  * 0 means everything back to 1997. Bounded ranges are capped to 64 monthly
  * files (~5 years).
  */
-export async function getIndexDailyBars(indexName: string, days = 0): Promise<ChartBar[]> {
+export async function getIndexDailyBars(indexName: string, days = 0, maxMonths = 64): Promise<ChartBar[]> {
   const key = yonepseIndexKey(indexName);
   const { data: manifest } = await feedJson<Rec>(`${YONEPSE_BASE}/data/indices/manifest.json`, TTL.daily);
   const availableMonths = [...((manifest?.["availableMonths"] ?? []) as string[])].sort();
   const now = Math.floor(Date.now() / 1000);
   const tailMonth = days > 0 ? monthKeyFromEpoch(now - days * 86400) : "0000-00";
   let months = availableMonths.filter((m) => m >= tailMonth);
-  if (days > 0 && months.length > 64) months = months.slice(-64);
+  if (days > 0 && months.length > maxMonths) months = months.slice(-maxMonths);
   if (months.length === 0 && days > 0) {
     // Stale archive: the trailing window sits entirely past the manifest tip
     // (no file published for the current month yet). Serve the latest

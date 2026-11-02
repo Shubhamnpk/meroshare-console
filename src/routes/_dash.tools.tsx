@@ -13,6 +13,7 @@ import {
   Globe,
   Landmark,
   PiggyBank,
+  Repeat,
   Search,
   TrendingUp,
 } from "lucide-react";
@@ -67,6 +68,13 @@ const TOOLS = [
     icon: PiggyBank,
     title: "Mutual Funds",
     description: "Every mutual fund scheme listed on NEPSE with live price, distributions and yield in one table.",
+    tag: "Funds",
+  },
+  {
+    to: "/sip",
+    icon: Repeat,
+    title: "SIP",
+    description: "What a monthly SIP in any open-end fund becomes: XIRR, bank RD after tax, NEPSE on the same dates, inflation.",
     tag: "Funds",
   },
   {

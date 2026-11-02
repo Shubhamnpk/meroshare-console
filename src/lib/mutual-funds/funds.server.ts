@@ -208,7 +208,8 @@ function toNavPoint(row: Rec): MfNavPoint | null {
   return { date, nav, adjNav: num(row["adj_nav"]) ?? nav };
 }
 
-async function getMfNavHistory(symbol: string): Promise<MfNavPoint[]> {
+/** NAV history only, for pages that simulate on the series without the full bundle. */
+export async function getMfNavHistory(symbol: string): Promise<MfNavPoint[]> {
   const data = await mfJson<{ series?: Rec[] }>(`/schemes/${encodeURIComponent(symbol)}/nav-history`);
   const series = Array.isArray(data?.series) ? data!.series! : [];
   return series

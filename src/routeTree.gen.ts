@@ -33,6 +33,7 @@ import { Route as DashProfileRouteImport } from './routes/_dash.profile'
 import { Route as DashReportsRouteImport } from './routes/_dash.reports'
 import { Route as DashSectorHeatmapRouteImport } from './routes/_dash.sector-heatmap'
 import { Route as DashSettingsRouteImport } from './routes/_dash.settings'
+import { Route as DashSipRouteImport } from './routes/_dash.sip'
 import { Route as DashStockCompareRouteImport } from './routes/_dash.stock-compare'
 import { Route as DashTerminalRouteImport } from './routes/_dash.terminal'
 import { Route as DashTimeMachineRouteImport } from './routes/_dash.time-machine'
@@ -161,6 +162,11 @@ const DashSettingsRoute = DashSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => DashRoute,
 } as any)
+const DashSipRoute = DashSipRouteImport.update({
+  id: '/sip',
+  path: '/sip',
+  getParentRoute: () => DashRoute,
+} as any)
 const DashStockCompareRoute = DashStockCompareRouteImport.update({
   id: '/stock-compare',
   path: '/stock-compare',
@@ -226,6 +232,7 @@ export interface FileRoutesByFullPath {
   '/reports': typeof DashReportsRoute
   '/sector-heatmap': typeof DashSectorHeatmapRoute
   '/settings': typeof DashSettingsRoute
+  '/sip': typeof DashSipRoute
   '/stock-compare': typeof DashStockCompareRoute
   '/terminal': typeof DashTerminalRoute
   '/time-machine': typeof DashTimeMachineRoute
@@ -259,6 +266,7 @@ export interface FileRoutesByTo {
   '/reports': typeof DashReportsRoute
   '/sector-heatmap': typeof DashSectorHeatmapRoute
   '/settings': typeof DashSettingsRoute
+  '/sip': typeof DashSipRoute
   '/stock-compare': typeof DashStockCompareRoute
   '/terminal': typeof DashTerminalRoute
   '/time-machine': typeof DashTimeMachineRoute
@@ -294,6 +302,7 @@ export interface FileRoutesById {
   '/_dash/reports': typeof DashReportsRoute
   '/_dash/sector-heatmap': typeof DashSectorHeatmapRoute
   '/_dash/settings': typeof DashSettingsRoute
+  '/_dash/sip': typeof DashSipRoute
   '/_dash/stock-compare': typeof DashStockCompareRoute
   '/_dash/terminal': typeof DashTerminalRoute
   '/_dash/time-machine': typeof DashTimeMachineRoute
@@ -329,6 +338,7 @@ export interface FileRouteTypes {
     | '/reports'
     | '/sector-heatmap'
     | '/settings'
+    | '/sip'
     | '/stock-compare'
     | '/terminal'
     | '/time-machine'
@@ -362,6 +372,7 @@ export interface FileRouteTypes {
     | '/reports'
     | '/sector-heatmap'
     | '/settings'
+    | '/sip'
     | '/stock-compare'
     | '/terminal'
     | '/time-machine'
@@ -396,6 +407,7 @@ export interface FileRouteTypes {
     | '/_dash/reports'
     | '/_dash/sector-heatmap'
     | '/_dash/settings'
+    | '/_dash/sip'
     | '/_dash/stock-compare'
     | '/_dash/terminal'
     | '/_dash/time-machine'
@@ -583,6 +595,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashSettingsRouteImport
       parentRoute: typeof DashRoute
     }
+    '/_dash/sip': {
+      id: '/_dash/sip'
+      path: '/sip'
+      fullPath: '/sip'
+      preLoaderRoute: typeof DashSipRouteImport
+      parentRoute: typeof DashRoute
+    }
     '/_dash/stock-compare': {
       id: '/_dash/stock-compare'
       path: '/stock-compare'
@@ -664,6 +683,7 @@ interface DashRouteChildren {
   DashReportsRoute: typeof DashReportsRoute
   DashSectorHeatmapRoute: typeof DashSectorHeatmapRoute
   DashSettingsRoute: typeof DashSettingsRoute
+  DashSipRoute: typeof DashSipRoute
   DashStockCompareRoute: typeof DashStockCompareRoute
   DashTerminalRoute: typeof DashTerminalRoute
   DashTimeMachineRoute: typeof DashTimeMachineRoute
@@ -695,6 +715,7 @@ const DashRouteChildren: DashRouteChildren = {
   DashReportsRoute: DashReportsRoute,
   DashSectorHeatmapRoute: DashSectorHeatmapRoute,
   DashSettingsRoute: DashSettingsRoute,
+  DashSipRoute: DashSipRoute,
   DashStockCompareRoute: DashStockCompareRoute,
   DashTerminalRoute: DashTerminalRoute,
   DashTimeMachineRoute: DashTimeMachineRoute,

@@ -111,6 +111,7 @@ import {
   getMfSchemeDetail,
   getMfSchemeList,
 } from "./mutual-funds/funds.functions";
+import { getSipLandscape, getSipSimulation } from "./mutual-funds/sip.functions";
 import { isoDate } from "./format";
 
 export const marketSnapshotQuery = () =>
@@ -860,6 +861,29 @@ export const mfSchemeQuery = (symbol: string | null) =>
     queryFn: () => getMfSchemeDetail({ data: { symbol: symbol ?? "" } }),
     enabled: Boolean(symbol),
     staleTime: 30 * 60_000,
+  });
+
+/** Report card: every open-end fund run with the same SIP settings. */
+export const sipLandscapeQuery = (startMonth: string, amount: number, rdRate: number, fees: boolean) =>
+  queryOptions({
+    queryKey: ["sip-landscape", startMonth, amount, rdRate, fees],
+    queryFn: () => getSipLandscape({ data: { startMonth, amount, rdRate, fees } }),
+    staleTime: 10 * 60_000,
+  });
+
+/** Full simulation for one fund: series for the chart plus all benchmarks. */
+export const sipSimulationQuery = (
+  symbol: string | null,
+  startMonth: string,
+  amount: number,
+  rdRate: number,
+  fees: boolean,
+) =>
+  queryOptions({
+    queryKey: ["sip-simulation", symbol, startMonth, amount, rdRate, fees],
+    queryFn: () => getSipSimulation({ data: { symbol: symbol ?? "", startMonth, amount, rdRate, fees } }),
+    enabled: Boolean(symbol),
+    staleTime: 10 * 60_000,
   });
 
 export const mfPipelineQuery = () =>

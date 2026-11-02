@@ -10,58 +10,14 @@ const Table = React.forwardRef<
      * scrolling; at xl+ it stops being a scroll container so sticky
      * headers ride the page scroll (`clip` still guards against blowout).
      * Set false to force the legacy always-trapping wrapper (e.g. tables
-     * inside tight custom scrollers). Headers still need trap-free
-     * ancestors: prefer `overflow-clip` over `overflow-hidden` on hosts.
+     * inside tight custom scrollers).
      */
     viewportSticky?: boolean;
   }
 >(({ className, viewportSticky = true, ...props }, ref) => {
-  const tableRef = React.useRef<HTMLTableElement | null>(null);
-  React.useEffect(() => {
-    const table = tableRef.current;
-    if (!table) return;
-    const thead = table.querySelector("thead");
-    if (!(thead instanceof HTMLElement)) return;
-    if (table.closest('[role="dialog"]')) return;
-    const mq = window.matchMedia("(max-width: 1279.98px)");
-    const STUCK_TOP = 63;
-    let raf = 0;
-    const update = () => {
-      raf = 0;
-      if (!mq.matches) {
-        thead.style.transform = "";
-        return;
-      }
-      const r = table.getBoundingClientRect();
-      const y = Math.max(0, Math.min(STUCK_TOP - r.top, r.bottom - thead.offsetHeight - r.top));
-      thead.style.transform = y > 0 ? `translateY(${y}px)` : "";
-    };
-    const schedule = () => {
-      if (!raf) raf = requestAnimationFrame(update);
-    };
-    update();
-    window.addEventListener("scroll", schedule, { passive: true, capture: true });
-    window.addEventListener("resize", schedule);
-    mq.addEventListener("change", schedule);
-    return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener("scroll", schedule, { capture: true });
-      window.removeEventListener("resize", schedule);
-      mq.removeEventListener("change", schedule);
-      thead.style.transform = "";
-    };
-  }, []);
   return (
     <div className={cn("relative w-full overflow-x-auto", viewportSticky && "xl:overflow-x-clip")}>
-      <table
-        ref={(node) => {
-          tableRef.current = node;
-          if (typeof ref === "function") ref(node);
-          else if (ref) ref.current = node;
-        }}
-        className={cn("w-full caption-bottom text-sm", className)}
-        {...props}
-      />
+      <table ref={ref} className={cn("w-full caption-bottom text-sm", className)} {...props} />
     </div>
   );
 });
@@ -72,17 +28,8 @@ const TableHeader = React.forwardRef<HTMLTableSectionElement, React.HTMLAttribut
     <thead
       ref={ref}
       className={cn(
-        // Pure-CSS viewport sticky works only at xl (the wrapper clips there,
-        // so no scroll trap). Below xl the overflow-x-auto wrapper is a scroll
-        // container, so a CSS top offset would park the header 4rem inside
-        // the card (gap above, overlapping row 1) — hence `auto` here, while
-        // the Table effect nudges the thead under the navbar with translateY
-        // (verified: pins at 63px, zero column drift on horizontal swipe).
-        // Dialog/Drawer/Sheet set `[--sticky-top:0]` and scroll themselves,
-        // so the header sticks there at every breakpoint.
-        // The -1px pull hides the 1px collapse slit (tr borders don't paint
-        // in sticky context); the shadow is the bottom edge because shadows
-        // stick while collapse borders don't — same 1px look at rest.
+        // Sticky by default: parks under the navbar (4rem) on large screens
+        // or top of scroll container. Solid bg-card ensures rows never bleed through.
         "sticky top-[var(--sticky-top,auto)] xl:top-[calc(var(--sticky-top,4rem)-1px)] z-10 bg-card shadow-[0_1px_0_0_var(--color-border)]",
         className,
       )}
@@ -124,7 +71,7 @@ const TableHead = React.forwardRef<HTMLTableCellElement, React.ThHTMLAttributes<
       className={cn(
         // Canonical header cell: explicit per-cell classes (align, responsive
         // visibility, custom padding) always win via merge.
-        "h-10 px-4 py-2.5 text-left align-middle text-xs font-medium uppercase tracking-wider text-muted-foreground [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+        "h-10 px-4 py-2.5 text-left align-middle text-xs font-semibold uppercase tracking-wider text-muted-foreground [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
         className,
       )}
       {...props}

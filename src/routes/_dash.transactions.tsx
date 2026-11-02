@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ErrorBlock, LoadingBlock, EmptyBlock } from "@/components/states";
 import { useMemo, useState } from "react";
-import { ArrowDownRight, ArrowUpRight, FileUp, Pencil, Search, Trash2 } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Delete, FileUp, Icon, Pencil, Search, Trash2, X } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -528,7 +528,7 @@ function TransactionsPage() {
                 </Button>
               ) : (
                 <Button size="sm" variant="outline" onClick={() => setConfirmBulk(true)}>
-                  Delete ({selected.length})
+                  <Trash2 /> Delete ({selected.length})
                 </Button>
               )}
               <ExportButton
@@ -551,14 +551,17 @@ function TransactionsPage() {
                 ]}
               />
               <Button
-                size="sm"
+                size="icon"
                 variant="ghost"
+                aria-label="Clear selection"
+                title="Clear selection"
+                className="ml-auto size-8 rounded-full text-muted-foreground hover:text-foreground"
                 onClick={() => {
                   setSelected([]);
                   setConfirmBulk(false);
                 }}
               >
-                Clear
+                <X />
               </Button>
             </div>
           ) : null}
