@@ -139,6 +139,7 @@ export const getSipLandscape = createServerFn({ method: "POST" })
         nepseXirr: ranked ? nepseXirr : null,
         nepseValue: ranked && nepseSim ? Math.round(nepseSim.value) : 0,
         rdValue: Math.round(rd.value),
+        series: sim.series.map((p) => ({ date: p.date, value: Math.round(p.value) })),
       });
     }
 
@@ -284,6 +285,8 @@ export interface SipFundRow {
   nepseXirr: number | null;
   nepseValue: number;
   rdValue: number;
+  /** Monthly value series for the compare-all chart. Only populated by getSipLandscape. */
+  series?: { date: string; value: number }[];
 }
 
 export interface SipLandscape {

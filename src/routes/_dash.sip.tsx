@@ -104,6 +104,13 @@ const PRESETS: { label: string; months: number }[] = [
 
 const AMOUNT_PRESETS = [1000, 2500, 5000, 10000, 25000];
 
+/** One distinct color per fund slot (up to 14). */
+const FUND_COLORS = [
+  "#6366f1", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6",
+  "#06b6d4", "#ec4899", "#84cc16", "#f97316", "#14b8a6",
+  "#a855f7", "#0ea5e9", "#d946ef", "#22c55e",
+] as const;
+
 const MONTHS = [
   { val: "01", name: "Jan" },
   { val: "02", name: "Feb" },
@@ -165,6 +172,28 @@ function mergeChart(sim: SipSimulation | null): ChartPoint[] {
   return [...byDate.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
 }
 
+type ComparePoint = { date: string; _paid?: number } & Record<string, number | string | undefined>;
+
+function buildCompareData(rows: SipFundRow[], paidSeries?: { date: string; paid: number }[]): ComparePoint[] {
+  const byDate = new Map<string, ComparePoint>();
+  for (const row of rows) {
+    if (!row.series?.length) continue;
+    for (const p of row.series) {
+      const entry = byDate.get(p.date) ?? { date: p.date };
+      (entry as Record<string, number | string | undefined>)[row.symbol] = p.value;
+      byDate.set(p.date, entry);
+    }
+  }
+  if (paidSeries) {
+    for (const p of paidSeries) {
+      const entry = byDate.get(p.date) ?? { date: p.date };
+      entry._paid = p.paid;
+      byDate.set(p.date, entry);
+    }
+  }
+  return [...byDate.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
+}
+
 const AMC_PORTALS: Record<string, { name: string; url: string; portalName: string; guideNote: string }> = {
   NIBL: {
     name: "NIMB Ace Capital",
@@ -210,8 +239,7 @@ const AMC_PORTALS: Record<string, { name: string; url: string; portalName: strin
   },
 };
 
-function Verdict({ ok, text, title }: { ok: boolean; text: string; title?: string }) {
-  return (
+function Verdict({ ok, text, title }: { ok: boolean; text: string; title?: string }) {  return (
     <span
       title={title}
       className={cn(
@@ -287,8 +315,7 @@ function SipChart({
 }: {
   points: ChartPoint[];
   visibleSeries: { value: boolean; paid: boolean; rd: boolean; nepse: boolean };
-}) {
-  return (
+}) {  return (
     <div className="h-72 w-full sm:h-80">
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={points} margin={{ top: 12, right: 12, left: -4, bottom: 0 }}>
@@ -377,6 +404,127 @@ function SipChart({
   );
 }
 
+// ---- Compare-All chart components ----------------------------------------
+
+function CompareTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: { dataKey?: string | number; value?: number | string; color?: string }[];
+  label?: string | number;
+}) {
+  if (!active || !payload?.length) return null;
+  const paidEntry = payload.find((p) => p.dataKey === "_paid");
+  const items = [...payload]
+    .filter((p) => p.dataKey !== "_paid" && typeof p.value === "number" && Number(p.value) > 0)
+    .sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0));
+  return (
+    <div className="min-w-52 max-h-72 overflow-y-auto rounded-xl border border-border/80 bg-popover/95 p-3 text-xs shadow-xl backdrop-blur-md">
+      <div className="mb-2 border-b border-border/60 pb-1.5 font-semibold text-foreground">
+        {monthLabel(String(label))}
+      </div>
+      {paidEntry ? (
+        <div className="num mb-1.5 flex items-center justify-between gap-3 text-muted-foreground border-b border-border/40 pb-1.5">
+          <span>Paid In</span>
+          <span className="font-medium">{formatNpr(Number(paidEntry.value))}</span>
+        </div>
+      ) : null}
+      <div className="space-y-1">
+        {items.slice(0, 12).map((p, i) => (
+          <div key={String(p.dataKey)} className="num flex items-center justify-between gap-4">
+            <span className="flex items-center gap-1.5 font-medium" style={{ color: p.color }}>
+              <span className="size-1.5 rounded-full shrink-0" style={{ background: p.color }} />
+              <span className="text-muted-foreground w-4 shrink-0">{i + 1}.</span>
+              {String(p.dataKey)}
+            </span>
+            <span className="font-semibold text-foreground">{formatNpr(Number(p.value))}</span>
+          </div>
+        ))}
+        {items.length > 12 ? (
+          <p className="text-[10px] text-muted-foreground pt-1">+{items.length - 12} more funds…</p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function CompareChart({
+  rows,
+  selectedSymbol,
+  paidSeries,
+}: {
+  rows: SipFundRow[];
+  selectedSymbol: string;
+  paidSeries?: { date: string; paid: number }[];
+}) {
+  const fundsWithSeries = useMemo(() => rows.filter((r) => r.series?.length), [rows]);
+  const data = useMemo(() => buildCompareData(fundsWithSeries, paidSeries), [fundsWithSeries, paidSeries]);
+
+  return (
+    <div className="h-72 w-full sm:h-80">
+      <ResponsiveContainer width="100%" height="100%">
+        <ComposedChart data={data} margin={{ top: 12, right: 12, left: -4, bottom: 0 }}>
+          <defs>
+            <linearGradient id="cmpPayGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="var(--muted-foreground)" stopOpacity={0.1} />
+              <stop offset="95%" stopColor="var(--muted-foreground)" stopOpacity={0.0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" strokeOpacity={0.7} vertical={false} />
+          <XAxis
+            dataKey="date"
+            tickFormatter={monthLabel}
+            tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+            tickLine={false}
+            axisLine={{ stroke: "var(--border)" }}
+            minTickGap={35}
+          />
+          <YAxis
+            tickFormatter={axisRs}
+            tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+            tickLine={false}
+            axisLine={false}
+            width={60}
+            domain={[0, "auto"]}
+          />
+          <Tooltip content={<CompareTooltip />} />
+          {paidSeries ? (
+            <Area
+              type="monotone"
+              dataKey="_paid"
+              name="Paid In"
+              stroke="var(--muted-foreground)"
+              strokeDasharray="4 3"
+              fill="url(#cmpPayGrad)"
+              strokeWidth={1.5}
+              dot={false}
+            />
+          ) : null}
+          {fundsWithSeries.map((r, idx) => {
+            const isSelected = r.symbol === selectedSymbol;
+            return (
+              <Line
+                key={r.symbol}
+                type="monotone"
+                dataKey={r.symbol}
+                stroke={FUND_COLORS[idx % FUND_COLORS.length]}
+                strokeWidth={isSelected ? 3 : 1.5}
+                dot={false}
+                connectNulls
+                opacity={isSelected ? 1 : 0.55}
+              />
+            );
+          })}
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
 function IndicatorToggle({
   color,
   label,
@@ -389,10 +537,8 @@ function IndicatorToggle({
   dashed?: boolean;
   active: boolean;
   onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
+}) {  return (
+    <button      type="button"
       onClick={onClick}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-all select-none cursor-pointer",
@@ -563,6 +709,9 @@ function SipPage() {
     rd: true,
     nepse: true,
   });
+
+  // Individual vs compare-all chart mode
+  const [chartMode, setChartMode] = useState<"individual" | "compare">("individual");
 
   // Leaderboard filters
   const [tableSearch, setTableSearch] = useState("");
@@ -853,13 +1002,16 @@ function SipPage() {
           {/* Start Horizon Month & Year + Presets */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between text-xs font-semibold">
-              <Label className="text-xs font-semibold">Start Horizon</Label>
+              <Label className="text-xs font-semibold flex items-center gap-1.5">
+                <Calendar className="size-3.5 text-muted-foreground" />
+                Window (All Funds)
+              </Label>
               {landscape.isFetching ? (
                 <span className="flex items-center gap-1 text-[10px] text-primary animate-pulse font-medium">
-                  <RotateCcw className="size-2.5 animate-spin" /> Computing...
+                  <RotateCcw className="size-2.5 animate-spin" /> Recalculating…
                 </span>
               ) : (
-                <span className="text-[10px] text-muted-foreground">{monthLabel(startMonth)}</span>
+                <span className="text-[10px] text-muted-foreground">{monthLabel(startMonth)} → now</span>
               )}
             </div>
 
@@ -1134,14 +1286,49 @@ function SipPage() {
                   />
                 </div>
 
-                {/* Interactive Chart & On/Off Toggles */}
+                {/* Interactive Chart – mode toggle + conditional render */}
                 <div className="space-y-3 pt-2">
+                  {/* Row 1: title + mode toggle */}
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <h3 className="font-display text-sm font-semibold text-foreground">
-                      Growth Trajectory: Fund Value vs Capital & Benchmarks
+                      {chartMode === "individual"
+                        ? `Growth Trajectory: ${symbol} vs Capital & Benchmarks`
+                        : "All Funds — Value Comparison Over Window"}
                     </h3>
 
-                    {/* On/Off Series Indicator Toggles */}
+                    {/* Individual / Compare All toggle */}
+                    <div className="flex rounded-lg border border-border/70 p-0.5 bg-muted/30">
+                      <button
+                        type="button"
+                        onClick={() => setChartMode("individual")}
+                        className={cn(
+                          "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer",
+                          chartMode === "individual"
+                            ? "bg-background text-foreground shadow-xs"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        <TrendingUp className="size-3.5" />
+                        Individual
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setChartMode("compare")}
+                        className={cn(
+                          "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer",
+                          chartMode === "compare"
+                            ? "bg-background text-foreground shadow-xs"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        <Layers className="size-3.5" />
+                        Compare All
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Row 2: indicator toggles (individual) or fund color legend (compare) */}
+                  {chartMode === "individual" ? (
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="text-[11px] text-muted-foreground mr-1">Indicators:</span>
                       <IndicatorToggle
@@ -1171,9 +1358,46 @@ function SipPage() {
                         onClick={() => setVisibleSeries((s) => ({ ...s, nepse: !s.nepse }))}
                       />
                     </div>
-                  </div>
+                  ) : (
+                    /* Compare legend: click a pill to make that fund the selected one */
+                    <div className="flex flex-wrap gap-1.5">
+                      {rows
+                        .filter((r) => r.series?.length)
+                        .map((r, idx) => (
+                          <button
+                            key={r.symbol}
+                            type="button"
+                            onClick={() => handleSelectFund(r.symbol)}
+                            className={cn(
+                              "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-medium transition-all cursor-pointer",
+                              r.symbol === symbol
+                                ? "border-border bg-card shadow-xs text-foreground"
+                                : "border-transparent text-muted-foreground hover:text-foreground hover:border-border/60",
+                            )}
+                          >
+                            <span
+                              className="size-2 rounded-full shrink-0"
+                              style={{ background: FUND_COLORS[idx % FUND_COLORS.length] }}
+                            />
+                            {r.symbol}
+                            {r.xirr != null ? (
+                              <span className="text-[9px] opacity-80">({formatPercent(r.xirr)})</span>
+                            ) : null}
+                          </button>
+                        ))}
+                    </div>
+                  )}
 
-                  <SipChart points={chartPoints} visibleSeries={visibleSeries} />
+                  {/* Chart */}
+                  {chartMode === "individual" ? (
+                    <SipChart points={chartPoints} visibleSeries={visibleSeries} />
+                  ) : (
+                    <CompareChart
+                      rows={rows}
+                      selectedSymbol={symbol}
+                      paidSeries={sim?.series.map((p) => ({ date: p.date, paid: p.paid }))}
+                    />
+                  )}
                 </div>
 
                 {/* Deep Insights Strip: Real Value, DCA Advantage, Dividend Clarity */}
@@ -1242,9 +1466,15 @@ function SipPage() {
               <h2 className="font-display text-base font-semibold">
                 All Open-End Funds Leaderboard ({rows.length} Schemes)
               </h2>
+              {landscape.isFetching ? (
+                <span className="flex items-center gap-1 text-[10px] text-primary animate-pulse font-medium">
+                  <RotateCcw className="size-3 animate-spin" /> Recalculating…
+                </span>
+              ) : null}
             </div>
             <p className="text-xs text-muted-foreground">
-              Click any row to simulate that fund in the chart above. Valued {longDate(totals?.asOf ?? null)}.
+              Rankings recalculate live when you change the window above. Click any row to simulate in the chart.
+              Valued {longDate(totals?.asOf ?? null)}.
             </p>
           </div>
 
