@@ -468,12 +468,22 @@ export async function worldIntraday(
   return { ticks, source: ticks.length > 0 ? "yahoo" : null };
 }
 
+export interface GlobalHistoryBreakdownItem {
+  symbol: string;
+  units: number;
+  close: number;
+  currency?: string;
+  value: number;
+  cost: number;
+}
+
 export interface GlobalHistoryPoint {
   time: number;
   /** Portfolio value in NPR (current FX per symbol). */
   value: number;
   /** Cost basis in NPR (current FX per symbol). Profit = value − cost. */
   cost: number;
+  breakdown?: GlobalHistoryBreakdownItem[];
 }
 
 /**
@@ -491,6 +501,7 @@ export function mergeGlobalHistory(
     rate: number | null;
     lots: { date: string; side: string; qty: number; price: number }[];
     bars: { date: string; close: number }[];
+    currency?: string;
   }[],
 ): { points: GlobalHistoryPoint[]; failed: string[] } {
   const failed: string[] = [];
@@ -527,7 +538,8 @@ export function mergeGlobalHistory(
     let value = 0;
     let cost = 0;
     let covered = 0;
-    for (const { symbol, rate } of input) {
+    const breakdown: GlobalHistoryBreakdownItem[] = [];
+    for (const { symbol, rate, currency } of input) {
       const m = bySymbol.get(symbol);
       if (!m || !(rate != null && rate > 0)) continue;
       // Position + cost basis walked to this date (average-cost pools).
@@ -554,9 +566,19 @@ export function mergeGlobalHistory(
       if (close != null) m.set(`__last:${symbol}`, close);
       const last = close ?? m.get(`__last:${symbol}`);
       if (last != null) {
-        value += units * last;
-        cost += pool * (rate as number);
+        const itemVal = units * last;
+        const itemCost = pool * (rate as number);
+        value += itemVal;
+        cost += itemCost;
         covered += 1;
+        breakdown.push({
+          symbol,
+          units,
+          close: last / (rate as number),
+          currency,
+          value: itemVal,
+          cost: itemCost,
+        });
       }
     }
     if (covered > 0) {
@@ -564,6 +586,7 @@ export function mergeGlobalHistory(
         time: Math.floor(new Date(`${date}T00:00:00Z`).getTime() / 1000),
         value,
         cost,
+        breakdown,
       });
     }
   }

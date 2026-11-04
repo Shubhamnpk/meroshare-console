@@ -102,6 +102,7 @@ export function TerminalChart({
   orderLines,
   dayBase,
   focusLastHours,
+  selectedTime,
 }: {
   bars: ChartBar[];
   intraday: PricePoint[];
@@ -131,6 +132,8 @@ export function TerminalChart({
   orderLines?: { price: number; side: "BUY" | "SELL"; qty: number; amo: boolean }[] | undefined;
   /** Intraday only: open zoomed to the last N hours (user can still scroll out). */
   focusLastHours?: number | null | undefined;
+  /** Time selected by the user, highlighted with a marker. */
+  selectedTime?: string | number | null | undefined;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const hoverRef = useRef(onHover);
@@ -453,6 +456,16 @@ export function TerminalChart({
           chart.addSeries(LineSeries, opts).setData(toLine(bands.lower));
           chart.addSeries(LineSeries, { ...opts, lineStyle: LineStyle.Dotted }).setData(toLine(bands.middle));
         }
+      }
+
+      if (selectedTime != null && mainSeries) {
+        createSeriesMarkers(mainSeries, [{
+          time: selectedTime as Time,
+          position: "aboveBar",
+          color: "#f59e0b",
+          shape: "circle",
+          text: "Selected",
+        }]);
       }
 
       const liveCompares = (compares ?? []).filter((c) => c.points.length > 1).slice(0, 2);
@@ -787,6 +800,7 @@ export function TerminalChart({
     orderLines,
     dayBase,
     focusLastHours,
+    selectedTime,
   ]);
 
   // "+" quick-order follows the mouse anywhere over the chart body (the

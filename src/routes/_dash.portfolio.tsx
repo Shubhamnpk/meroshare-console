@@ -131,6 +131,14 @@ function formatShares(qty: number): string {
   return String(Number(qty.toFixed(8)));
 }
 
+function formatPlPct(unrealized: number, cost: number): string {
+  if (cost <= 0) return "-";
+  const pct = (unrealized / cost) * 100;
+  if (!Number.isFinite(pct)) return "-";
+  if (Math.abs(pct) < 0.005) return "0.00%";
+  return `${pct > 0 ? "+" : ""}${pct.toFixed(2)}%`;
+}
+
 function exportNetPl(
   h: EnrichedHolding,
   cost: { cost: number; waccRate: number } | undefined,
@@ -565,22 +573,21 @@ function PortfolioPage() {
     const weightOf = (h: (typeof globalEnriched.holdings)[number]) =>
       globalEnriched.totalValue > 0 ? h.value / globalEnriched.totalValue : 0;
     const getter = (h: (typeof globalEnriched.holdings)[number]): string | number => {
-      // Amount columns sort by the displayed native figures (what the eye
-      // checks), not the NPR books behind them. Single-currency books sort
-      // exactly; mixed books sort by face numbers — true worth stays in NPR.
+      // Amount columns sort by actual normalized value (NPR books behind them)
+      // so cross-currency assets and pence vs pounds are ranked by true worth.
       switch (sort.key) {
         case "scrip":
           return h.scrip;
         case "units":
           return h.units;
         case "ltp":
-          return h.ltpNative;
+          return h.ltp;
         case "previousClose":
-          return h.prevNative;
+          return h.previousClose;
         case "value":
-          return h.units * h.ltpNative;
+          return h.value;
         case "avgBuy":
-          return h.avgNative;
+          return h.avgBuy;
         case "unrealized":
           return h.avgBuy > 0 ? h.value - h.units * h.avgBuy : h.value;
         case "percentChange":
@@ -1149,7 +1156,7 @@ function PortfolioPage() {
                           value={brokerCost.unrealized}
                           title={`${brokerCost.unrealized >= 0 ? "+" : "-"}${formatNpr(Math.abs(brokerCost.unrealized))} net total`}
                         >
-                          {`${brokerCost.unrealized >= 0 ? "+" : ""}${((brokerCost.unrealized / brokerCost.cost) * 100).toFixed(2)}%`}
+                          {formatPlPct(brokerCost.unrealized, brokerCost.cost)}
                         </DeltaPill>
                       ) : (
                         <span className="text-xs text-muted-foreground">-</span>
@@ -1305,11 +1312,16 @@ function PortfolioPage() {
                   toDisplay == null ? null : formatDisplay(npr * toDisplay, displayCurrency);
                 const ltpText = formatNative(h.ltpNative, h.liveCcy);
                 const prevText = formatNative(h.prevNative, h.liveCcy);
-                const valueText = disp(h.value) ?? formatNative(h.units * h.ltpNative, h.liveCcy);
+                const nativeValueText = formatNative(h.units * h.ltpNative, h.liveCcy);
+                const convertedValueText = disp(h.value);
                 const dayText =
                   disp(Math.abs(h.dayChange)) ?? formatNative(Math.abs(dayNative), h.liveCcy);
-                const avgText = disp(h.avgBuy) ?? formatNative(h.avgNative, h.nativeCcy);
-                const plText = disp(Math.abs(pl)) ?? formatNative(Math.abs(nativeGain), h.nativeCcy);
+                const nativeAvgText = formatNative(h.avgNative, h.nativeCcy);
+                const convertedAvgText = disp(h.avgBuy);
+                const plConverted = disp(Math.abs(pl));
+                const plDisplay = plConverted
+                  ? `${pl >= 0 ? "+" : "-"}${plConverted}`
+                  : `${pl >= 0 ? "+" : "-"}${formatNpr(Math.abs(pl))}`;
                 return {
                   key: `${h.scrip}-${idx}`,
                   scrip: h.scrip,
@@ -1324,20 +1336,23 @@ function PortfolioPage() {
                   weight: globalEnriched.totalValue > 0 ? (h.value / globalEnriched.totalValue) * 100 : 0,
                   ltpDisplay: ltpText,
                   prevDisplay: prevText,
-                  valueDisplay: valueText,
+                  valueDisplay: nativeValueText,
+                  valueAltDisplay: convertedValueText ?? undefined,
                   dayDisplay: `${h.dayChange >= 0 ? "+" : "-"}${dayText}`,
                   avg: hasBasis
                     ? {
                         value: h.avgBuy,
-                        display: avgText,
-                        cellTitle: `Avg cost ${formatNative(h.avgNative, h.nativeCcy)}`,
+                        display: nativeAvgText,
+                        altDisplay: convertedAvgText ?? undefined,
+                        cellTitle: `Avg cost ${nativeAvgText}${convertedAvgText ? ` · Converted: ${convertedAvgText}` : ""}`,
                       }
                     : { value: null, cellTitle: "No cost data for this stock" },
                   pl: hasBasis
                     ? {
                         value: pl,
                         pct: plPct,
-                        title: `${pl >= 0 ? "+" : ""}${plText} net`,
+                        title: `${pl >= 0 ? "+" : "-"}${plConverted ?? formatNative(Math.abs(nativeGain), h.nativeCcy)} net`,
+                        display: plDisplay,
                       }
                     : null,
                 };
@@ -1367,9 +1382,9 @@ function PortfolioPage() {
                         {globalEnriched.totalCost > 0 ? (
                           <DeltaPill
                             value={globalEnriched.unrealized}
-                            title={`${globalEnriched.unrealized >= 0 ? "+" : "−"}${gMoney(Math.abs(globalEnriched.unrealized))} total`}
+                            title={`${globalEnriched.unrealized >= 0 ? "+" : "-"}${gMoney(Math.abs(globalEnriched.unrealized))} total`}
                           >
-                            {`${globalEnriched.unrealized >= 0 ? "+" : "−"}${((globalEnriched.unrealized / globalEnriched.totalCost) * 100).toFixed(2)}%`}
+                            {formatPlPct(globalEnriched.unrealized, globalEnriched.totalCost)}
                           </DeltaPill>
                         ) : (
                           <span className="text-xs text-muted-foreground">-</span>
@@ -1377,7 +1392,7 @@ function PortfolioPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <DeltaPill value={globalEnriched.dayChange}>
-                          {`${globalEnriched.dayChange >= 0 ? "+" : "−"}${gMoney(Math.abs(globalEnriched.dayChange))} (${globalEnriched.dayPct.toFixed(2)}%)`}
+                          {`${globalEnriched.dayChange >= 0 ? "+" : "-"}${gMoney(Math.abs(globalEnriched.dayChange))} (${globalEnriched.dayPct.toFixed(2)}%)`}
                         </DeltaPill>
                       </TableCell>
                       <TableCell className="num pr-4 text-right font-semibold">100%</TableCell>
@@ -1503,7 +1518,7 @@ function PortfolioPage() {
                         value={unrealizedPL}
                         title={`${unrealizedPL >= 0 ? "+" : "-"}${formatNpr(Math.abs(unrealizedPL))} net total`}
                       >
-                        {`${unrealizedPL >= 0 ? "+" : ""}${((unrealizedPL / totalBuyCost) * 100).toFixed(2)}%`}
+                        {formatPlPct(unrealizedPL, totalBuyCost)}
                       </DeltaPill>
                     ) : (
                       <span className="text-xs text-muted-foreground">-</span>

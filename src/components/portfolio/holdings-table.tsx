@@ -27,6 +27,8 @@ export interface HoldingTableRow {
   ltpDisplay?: string | undefined;
   prevDisplay?: string | undefined;
   valueDisplay?: string | undefined;
+  /** Converted display currency override for Value; clicking toggles between native and converted. */
+  valueAltDisplay?: string | undefined;
   /** Fractional-share display override (formatQty rounds to whole kitta). */
   unitsDisplay?: string | undefined;
   /** Full signed amount segment of the Day pill, e.g. "+£3.20". */
@@ -36,12 +38,26 @@ export interface HoldingTableRow {
     value: number | null;
     /** Raw display override (e.g. native purchase price); falls back to NPR. */
     display?: string | undefined;
+    /** Converted display currency override for Avg; clicking toggles between native and converted. */
+    altDisplay?: string | undefined;
     prefix?: string | undefined;
     title?: string | undefined;
     cellTitle?: string | undefined;
   } | null;
   /** Net P/L; null renders "-". Label is always the percent, amount goes in title. */
-  pl: { value: number; pct: number; title: string } | null;
+  pl: {
+    value: number;
+    pct: number;
+    title: string;
+    /** Formatted amount display override (e.g. dynamic display currency "+$25.40"); falls back to signed NPR. */
+    display?: string | undefined;
+  } | null;
+}
+
+function formatPct(pct: number): string {
+  if (!Number.isFinite(pct)) return "-";
+  if (Math.abs(pct) < 0.005) return "0.00%";
+  return `${pct > 0 ? "+" : ""}${pct.toFixed(2)}%`;
 }
 
 export function WeightBar({ pct, barClass }: { pct: number; barClass: string }) {
@@ -101,6 +117,8 @@ export function HoldingsTable({
   // Tap toggles the P/L pill between percent and amount (touch/keyboard path
   // to the hover-only amount).
   const [expandedPl, setExpandedPl] = useState<string | null>(null);
+  const [expandedValue, setExpandedValue] = useState<Record<string, boolean>>({});
+  const [expandedAvg, setExpandedAvg] = useState<Record<string, boolean>>({});
   return (
     <Panel padding="none" className="overflow-clip">
       <Table className="min-w-[760px]">
@@ -167,13 +185,54 @@ export function HoldingsTable({
               <TableCell className="num text-right text-muted-foreground">
                 {row.previousClose > 0 ? (row.prevDisplay ?? formatNpr(row.previousClose)) : "-"}
               </TableCell>
-              <TableCell className="num text-right font-medium">{row.valueDisplay ?? formatNpr(row.value)}</TableCell>
+              <TableCell className="num text-right font-medium">
+                {row.valueAltDisplay ? (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setExpandedValue((prev) => ({ ...prev, [row.key]: !prev[row.key] }));
+                    }}
+                    aria-label={`Toggle currency conversion for ${row.scrip} value`}
+                    title={
+                      expandedValue[row.key]
+                        ? `Converted (click for native: ${row.valueDisplay})`
+                        : `Native (click for converted: ${row.valueAltDisplay})`
+                    }
+                    className="cursor-pointer rounded px-1 -mx-1 transition-colors hover:text-primary hover:bg-muted/80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring underline decoration-dotted decoration-muted-foreground/40 underline-offset-4 hover:decoration-foreground"
+                  >
+                    {expandedValue[row.key] ? row.valueAltDisplay : (row.valueDisplay ?? formatNpr(row.value))}
+                  </button>
+                ) : (
+                  (row.valueDisplay ?? formatNpr(row.value))
+                )}
+              </TableCell>
               <TableCell className="num text-right text-muted-foreground" title={row.avg?.cellTitle}>
                 {row.avg && row.avg.value != null ? (
-                  <span title={row.avg.title}>
-                    {row.avg.prefix}
-                    {row.avg.display ?? formatNpr(row.avg.value)}
-                  </span>
+                  row.avg.altDisplay ? (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setExpandedAvg((prev) => ({ ...prev, [row.key]: !prev[row.key] }));
+                      }}
+                      aria-label={`Toggle currency conversion for ${row.scrip} avg buy`}
+                      title={
+                        expandedAvg[row.key]
+                          ? `Converted (click for native: ${row.avg.display})`
+                          : (row.avg.title ?? `Native (click for converted: ${row.avg.altDisplay})`)
+                      }
+                      className="cursor-pointer rounded px-1 -mx-1 transition-colors hover:text-foreground hover:bg-muted/80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring underline decoration-dotted decoration-muted-foreground/40 underline-offset-4 hover:decoration-foreground"
+                    >
+                      {row.avg.prefix}
+                      {expandedAvg[row.key] ? row.avg.altDisplay : (row.avg.display ?? formatNpr(row.avg.value))}
+                    </button>
+                  ) : (
+                    <span title={row.avg.title}>
+                      {row.avg.prefix}
+                      {row.avg.display ?? formatNpr(row.avg.value)}
+                    </span>
+                  )
                 ) : (
                   "-"
                 )}
@@ -189,12 +248,14 @@ export function HoldingsTable({
                       }}
                       aria-expanded
                       aria-label={`Show P/L percent for ${row.scrip}`}
-                      className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="cursor-pointer rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       <DeltaPill
                         value={row.pl.value}
                         title={row.pl.title}
-                      >{`${row.pl.value >= 0 ? "+" : ""}${formatNpr(Math.abs(row.pl.value))}`}</DeltaPill>
+                      >
+                        {row.pl.display ?? `${row.pl.value >= 0 ? "+" : "-"}${formatNpr(Math.abs(row.pl.value))}`}
+                      </DeltaPill>
                     </button>
                   ) : (
                     <button
@@ -206,10 +267,10 @@ export function HoldingsTable({
                       aria-expanded={false}
                       aria-label={`Show P/L amount for ${row.scrip}`}
                       title={row.pl.title}
-                      className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="cursor-pointer rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       <DeltaPill value={row.pl.value}>
-                        {`${row.pl.value >= 0 ? "+" : ""}${row.pl.pct.toFixed(2)}%`}
+                        {formatPct(row.pl.pct)}
                       </DeltaPill>
                     </button>
                   )

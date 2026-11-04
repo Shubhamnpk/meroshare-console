@@ -281,21 +281,21 @@ export const getGlobalHistory = createServerFn({ method: "POST" })
       })
       .parse(input),
   )
-  .handler(async ({ data }): Promise<{ points: { time: number; value: number; cost: number }[]; failed: string[] }> => {
+  .handler(async ({ data }): Promise<{ points: import("./feed.server").GlobalHistoryPoint[]; failed: string[] }> => {
     await requireAuth();
     const { toNpr } = await import("./fx");
     const series = await Promise.all(
       data.holdings.map(async (h) => {
         const base = normalizeWorldSymbol(h.symbol);
         const rate = h.currency ? await toNpr(1, h.currency).catch(() => null) : null;
-        if (!base) return { symbol: h.symbol, rate, lots: [], bars: [] };
+        if (!base) return { symbol: h.symbol, currency: h.currency, rate, lots: [], bars: [] };
         const first = yahooSymbolFor(base, h.currency);
         const candidates = [first, ...worldCandidates(base)].filter((c, i, arr) => arr.indexOf(c) === i);
         for (const candidate of candidates) {
           const { bars } = await worldHistory(candidate, data.range);
-          if (bars.length > 0) return { symbol: base, rate, lots: h.lots, bars };
+          if (bars.length > 0) return { symbol: base, currency: h.currency, rate, lots: h.lots, bars };
         }
-        return { symbol: base, rate, lots: h.lots, bars: [] };
+        return { symbol: base, currency: h.currency, rate, lots: h.lots, bars: [] };
       }),
     );
     return mergeGlobalHistory(series);
@@ -389,7 +389,7 @@ export const getGlobalDaySeries = createServerFn({ method: "POST" })
       })
       .parse(input),
   )
-  .handler(async ({ data }): Promise<{ points: { time: number; value: number }[]; failed: string[]; cost: number }> => {
+  .handler(async ({ data }): Promise<{ points: import("./feed.server").GlobalHistoryPoint[]; failed: string[]; cost: number }> => {
     await requireAuth();
     const { toNpr } = await import("./fx");
     const { worldIntraday } = await import("./feed.server");
@@ -397,7 +397,15 @@ export const getGlobalDaySeries = createServerFn({ method: "POST" })
     const cutoff = now - 24 * 3600;
     const failed: string[] = [];
     let cost = 0;
-    const legs: { times: number[]; closes: number[]; qty: number }[] = [];
+    const legs: {
+      symbol: string;
+      currency?: string;
+      times: number[];
+      closes: number[];
+      rate: number;
+      qty: number;
+      cost: number;
+    }[] = [];
     await Promise.all(
       data.holdings.map(async (h) => {
         if (!(h.qty > 0)) return;
@@ -409,7 +417,8 @@ export const getGlobalDaySeries = createServerFn({ method: "POST" })
         }
         // Today's cost basis in NPR — the Profit/Total toggle's anchor.
         const avgBuyNpr = await toNpr(h.avgPrice, h.currency).catch(() => null);
-        if (avgBuyNpr != null) cost += h.qty * avgBuyNpr;
+        const legCost = avgBuyNpr != null ? h.qty * avgBuyNpr : 0;
+        cost += legCost;
         const first = yahooSymbolFor(base, h.currency);
         const candidates = [first, ...worldCandidates(base)].filter((c, i, arr) => arr.indexOf(c) === i);
         let ticks: WorldTick[] = [];
@@ -420,10 +429,11 @@ export const getGlobalDaySeries = createServerFn({ method: "POST" })
             break;
           }
         }
-        // Pin the live quote on the tail — 15m bars lag the screen by design.
+        // Pin the live quote on the tail if the market traded recently (within 2 hours)
+        const latestTick = ticks.length > 0 ? ticks[ticks.length - 1]!.t : 0;
         try {
           const quote = await worldQuote(candidates[0]!);
-          if (quote && quote.ltp > 0 && (ticks.length === 0 || ticks[ticks.length - 1]!.t < now - 60)) {
+          if (quote && quote.ltp > 0 && latestTick > 0 && now - latestTick < 2 * 3600 && latestTick < now - 60) {
             ticks = [
               ...ticks,
               { t: now, close: quote.ltp, volume: 0, open: quote.ltp, high: quote.ltp, low: quote.ltp },
@@ -432,21 +442,29 @@ export const getGlobalDaySeries = createServerFn({ method: "POST" })
         } catch {
           // quote failure just skips the live tail
         }
+        // Anchor cutoff to the latest available tick's session so weekend/closed market sessions render
+        const effectiveLatest = ticks.length > 0 ? ticks[ticks.length - 1]!.t : 0;
+        const cutoff = effectiveLatest > 0 ? effectiveLatest - 24 * 3600 : now - 24 * 3600;
         const inWindow = ticks.filter((tk) => tk.t >= cutoff);
         if (inWindow.length === 0) {
           failed.push(base);
           return;
         }
         legs.push({
+          symbol: base,
+          currency: h.currency,
           times: inWindow.map((tk) => tk.t),
           closes: inWindow.map((tk) => tk.close * (rate as number)),
+          rate: rate as number,
           qty: h.qty,
+          cost: legCost,
         });
       }),
     );
     const stamps = [...new Set(legs.flatMap((l) => l.times))].sort((a, b) => a - b);
     const points = stamps.map((t) => {
       let value = 0;
+      const breakdown: import("./feed.server").GlobalHistoryBreakdownItem[] = [];
       for (const leg of legs) {
         let last = 0;
         for (let i = 0; i < leg.times.length; i += 1) {
@@ -455,9 +473,18 @@ export const getGlobalDaySeries = createServerFn({ method: "POST" })
         }
         // Before a leg's first print, hold it flat at that first print.
         if (last === 0 && leg.closes.length > 0) last = leg.closes[0]!;
-        value += leg.qty * last;
+        const itemVal = leg.qty * last;
+        value += itemVal;
+        breakdown.push({
+          symbol: leg.symbol,
+          units: leg.qty,
+          close: leg.rate > 0 ? last / leg.rate : last,
+          currency: leg.currency,
+          value: itemVal,
+          cost: leg.cost,
+        });
       }
-      return { time: t, value };
+      return { time: t, value, cost, breakdown };
     });
     // Thin to ~300 points for the wire; shape survives, payload doesn't bloat.
     const thin = points.length > 300 ? points.filter((_, i) => i % Math.ceil(points.length / 300) === 0) : points;

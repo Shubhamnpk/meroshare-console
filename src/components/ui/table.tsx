@@ -24,18 +24,20 @@ const Table = React.forwardRef<
 Table.displayName = "Table";
 
 const TableHeader = React.forwardRef<HTMLTableSectionElement, React.HTMLAttributes<HTMLTableSectionElement>>(
-  ({ className, ...props }, ref) => (
-    <thead
-      ref={ref}
-      className={cn(
-        // Sticky by default: parks under the navbar (4rem) on large screens
-        // or top of scroll container. Solid bg-card ensures rows never bleed through.
-        "sticky top-[var(--sticky-top,auto)] xl:top-[calc(var(--sticky-top,4rem)-1px)] z-10 bg-card shadow-[0_1px_0_0_var(--color-border)]",
-        className,
-      )}
-      {...props}
-    />
-  ),
+  ({ className, ...props }, ref) => {
+    const hasCustomTop = Boolean(className && /(^|\s)(static|relative|top-|xl:top-)/.test(className));
+    return (
+      <thead
+        ref={ref}
+        className={cn(
+          "z-10 bg-card shadow-[0_1px_0_0_var(--color-border)]",
+          hasCustomTop ? "" : "sticky top-[var(--sticky-top,auto)] xl:top-[calc(var(--sticky-top,4rem)-1px)]",
+          className,
+        )}
+        {...props}
+      />
+    );
+  },
 );
 TableHeader.displayName = "TableHeader";
 

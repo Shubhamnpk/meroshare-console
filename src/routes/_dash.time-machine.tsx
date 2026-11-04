@@ -1083,34 +1083,34 @@ Backtested with MeroShare Console 🇳🇵`;
                       setSymbol(p.symbol);
                       setSearchQuery("");
                     }}
-                    className="flex w-full items-center justify-between p-3 text-left hover:bg-muted/30 transition-colors cursor-pointer group"
+                    className="group flex w-full min-w-0 items-center justify-between gap-2 p-2.5 text-left transition-colors hover:bg-muted/30 sm:gap-3 sm:p-3"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="flex size-9 items-center justify-center rounded-lg bg-surface border border-border/60 font-mono font-bold text-xs text-foreground group-hover:text-primary transition-colors">
+                    <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+                      <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-surface border border-border/60 font-mono font-bold text-xs text-foreground group-hover:text-primary transition-colors">
                         {p.symbol.slice(0, 4)}
                       </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-sm text-foreground">{p.symbol}</span>
-                          <span className="rounded bg-muted/60 px-1.5 py-0.5 text-[0.65rem] text-muted-foreground">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex min-w-0 items-center gap-1.5 overflow-hidden sm:gap-2">
+                          <span className="shrink-0 font-mono text-sm font-bold text-foreground">{p.symbol}</span>
+                          <span className="max-w-24 shrink truncate rounded bg-muted/60 px-1.5 py-0.5 text-[0.65rem] text-muted-foreground sm:max-w-none">
                             {p.sector}
                           </span>
                           {p.category === "open_end_mf" && (
-                            <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[0.65rem] font-semibold text-primary">
+                            <span className="max-w-20 shrink truncate rounded bg-primary/10 px-1.5 py-0.5 text-[0.65rem] font-semibold text-primary sm:max-w-none">
                               Open-End NAV
                             </span>
                           )}
                           {p.face === 10 && (
-                            <span className="rounded bg-muted/40 px-1.5 py-0.5 text-[0.62rem] font-mono text-muted-foreground">
+                            <span className="shrink-0 rounded bg-muted/40 px-1.5 py-0.5 text-[0.62rem] font-mono text-muted-foreground">
                               Face 10
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-muted-foreground truncate max-w-sm">{p.name}</p>
+                        <p title={p.name} className="block w-full truncate text-xs text-muted-foreground">{p.name}</p>
                       </div>
                     </div>
 
-                    <div className="text-right font-mono text-xs">
+                    <div className="shrink-0 text-right font-mono text-xs">
                       <p className="font-semibold text-foreground">
                         {p.ltp ? formatNpr(p.ltp) : `Face ${formatNpr(p.face)}`}
                       </p>

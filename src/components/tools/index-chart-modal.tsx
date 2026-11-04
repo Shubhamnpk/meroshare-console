@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ChartCandlestick, SlidersHorizontal } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getIndexDailyHistory } from "@/lib/nepse/market.functions";
-import { indexGraphQuery } from "@/lib/queries";
+import { indexGraphQuery, marketSectorsQuery, marketSnapshotQuery } from "@/lib/queries";
 import {
   TerminalChart,
   type ChartStyle,
@@ -80,12 +80,43 @@ export function IndexChartModal({
   const indicators = chart.indicators;
   const setIndicators = (v: IndicatorConfig) => setChart({ indicators: v });
   const [showIndicatorMenu, setShowIndicatorMenu] = useState(false);
+  const [selectedSector, setSelectedSector] = useState(sectorName ?? "");
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const [pinnedBar, setPinnedBar] = useState<ChartBar | null>(null);
   const [pinnedPoint, setPinnedPoint] = useState<PricePoint | null>(null);
+  const [chartHeight, setChartHeight] = useState(420);
   const light = useResolvedLight();
 
-  const activeTargetName = indexName || sectorName || "";
+  useEffect(() => {
+    if (sectorName) setSelectedSector(sectorName);
+  }, [sectorName]);
+
+  useEffect(() => {
+    const resize = () => setChartHeight(Math.max(300, window.innerHeight - (window.innerWidth < 640 ? 330 : 300)));
+    resize();
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
+  }, []);
+
+  const activeTargetName = indexName || selectedSector || sectorName || "";
+  const market = useQuery({ ...marketSnapshotQuery(), enabled: open && Boolean(sectorName) });
+  const sectorsQuery = useQuery({ ...marketSectorsQuery(), enabled: open && Boolean(sectorName) });
+  const sectorLabel = selectedSector.replace(/\s*Index$/i, "").trim();
+  const sectorStocks = (market.data?.prices ?? []).filter((stock) =>
+    stock.sector?.toLowerCase().includes(sectorLabel.toLowerCase()),
+  );
+  const advancing = sectorStocks.filter((stock) => stock.percentChange > 0).length;
+  const declining = sectorStocks.filter((stock) => stock.percentChange < 0).length;
+  const breadth = advancing + declining;
+  const sentimentPct = breadth ? Math.round((advancing / breadth) * 100) : null;
+  const sectorIndex = sectorsQuery.data?.find((item) =>
+    `${item.name} ${item.sector ?? ""}`.toLowerCase().includes(sectorLabel.toLowerCase()),
+  );
+  const topSectorStocks = [...sectorStocks].sort((a, b) => b.turnover - a.turnover).slice(0, 3);
+  const otherSectors = (sectorsQuery.data ?? [])
+    .filter((item) => item.name !== sectorIndex?.name && item.percentChange != null)
+    .sort((a, b) => Math.abs(b.percentChange ?? 0) - Math.abs(a.percentChange ?? 0))
+    .slice(0, 5);
   // Cards query "NEPSE" / "Sensitive"; callers may pass "NEPSE Index". Strip
   // the suffix so the modal hits the same graph endpoint + React Query cache.
   const graphName = activeTargetName.replace(/\s*Index$/i, "").trim() || activeTargetName;
@@ -195,15 +226,16 @@ export function IndexChartModal({
         ? ((hoveredPt.value - dayBase) / dayBase) * 100
         : 0
       : restPct;
+  const hasPinnedSelection = Boolean(pinnedBar || pinnedPoint);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="h-dvh max-h-none w-full overflow-y-auto p-4 sm:h-auto sm:max-h-[92vh] sm:w-[calc(100vw-1.5rem)] sm:p-6">
-        <DialogHeader className="pr-8 text-left border-b border-border/50 pb-3">
+      <DialogContent className="!fixed !inset-0 !left-0 !top-0 !h-[100dvh] !max-h-none !w-screen !max-w-none !translate-x-0 !translate-y-0 !gap-0 !overflow-hidden !rounded-none !border-0 p-3 sm:p-6">
+        <DialogHeader className="shrink-0 pr-8 text-left border-b border-border/50 pb-3">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <DialogTitle className="truncate font-display text-lg font-bold sm:text-xl">{title}</DialogTitle>
+                <DialogTitle className="truncate font-display text-lg font-bold sm:text-xl">{sectorName ? `${sectorLabel} Index` : title}</DialogTitle>
               </div>
               <p className="mt-0.5 hidden text-xs text-muted-foreground sm:block">
                 Historical trading data &amp; technical performance across all ranges.
@@ -224,7 +256,7 @@ export function IndexChartModal({
           </div>
         </DialogHeader>
 
-        <div className="space-y-4 pt-2">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pt-3 sm:space-y-4 sm:pt-4">
           {/* Controls Bar: Range Selectors + Chart Mode + Indicators */}
           <div className="flex flex-wrap items-center justify-between gap-2">
             {/* Range Pills — single scrollable row on mobile */}
@@ -332,11 +364,11 @@ export function IndexChartModal({
 
           {/* Chart Display Area — stopPropagation keeps dialog overflow from stealing wheel/zoom */}
           <div
-            className="relative rounded-2xl border border-border/70 bg-card p-1 min-h-[360px] [&_canvas]:touch-none"
+            className="relative min-h-[300px] rounded-2xl border border-border/70 bg-card p-1 [&_canvas]:touch-none"
             onWheel={(e) => e.stopPropagation()}
           >
             {isLoading ? (
-              <div className="flex h-[360px] items-center justify-center text-sm text-muted-foreground">
+              <div className="flex items-center justify-center text-sm text-muted-foreground" style={{ height: chartHeight }}>
                 <span className="inline-block animate-pulse">Loading historical chart series…</span>
               </div>
             ) : usingIntraday ? (
@@ -347,8 +379,9 @@ export function IndexChartModal({
                 indicators={indicators}
                 logScale={false}
                 light={light}
-                height={360}
+                height={chartHeight}
                 dayBase={prevSessionClose}
+                selectedTime={pinnedPoint?.time ?? null}
                 onHover={setHover}
                 onSelectPoint={(p) => setPinnedPoint((cur) => (cur && p && cur.time === p.time ? null : p))}
                 onSelectBar={(d) => setPinnedBar(d ? (bars.find((b) => b.date === d) ?? null) : null)}
@@ -361,15 +394,14 @@ export function IndexChartModal({
                 indicators={indicators}
                 logScale={false}
                 light={light}
-                height={360}
+                height={chartHeight}
+                selectedTime={pinnedBar?.date ?? null}
                 onHover={setHover}
-                onSelectBar={(d) =>
-                  setPinnedBar((cur) => (cur && d === cur.date ? null : (bars.find((b) => b.date === d) ?? null)))
-                }
+                onSelectBar={(d) => setPinnedBar((cur) => (cur && d === cur.date ? null : bars.find((b) => b.date === d) ?? null))}
                 onSelectPoint={(p) => setPinnedPoint((cur) => (cur && p && cur.time === p.time ? null : p))}
               />
             ) : range === "1D" ? (
-              <div className="flex h-[360px] flex-col items-center justify-center gap-1.5 p-6 text-center text-muted-foreground">
+              <div className="flex flex-col items-center justify-center gap-1.5 p-6 text-center text-muted-foreground" style={{ height: chartHeight }}>
                 <p className="text-sm font-semibold text-foreground">Intraday session graph not published</p>
                 <p className="text-xs">
                   Real-time ticks stream during active NEPSE trading hours (11:00 AM – 3:00 PM NPT). Switch to 1W, 1M,
@@ -377,7 +409,7 @@ export function IndexChartModal({
                 </p>
               </div>
             ) : dailyQuery.isError ? (
-              <div className="flex h-[360px] flex-col items-center justify-center gap-2 p-6 text-center">
+              <div className="flex flex-col items-center justify-center gap-2 p-6 text-center" style={{ height: chartHeight }}>
                 <p className="text-sm font-semibold text-foreground">Couldn't load chart data</p>
                 <p className="text-xs text-muted-foreground">Check your connection and try again.</p>
                 <button
@@ -389,70 +421,102 @@ export function IndexChartModal({
                 </button>
               </div>
             ) : (
-              <div className="flex h-[360px] flex-col items-center justify-center p-6 text-center text-muted-foreground">
+              <div className="flex flex-col items-center justify-center p-6 text-center text-muted-foreground" style={{ height: chartHeight }}>
                 <p className="text-sm">No historical candles found for this range.</p>
+              </div>
+            )}
+            {(hoveredBar || hoveredPt) && (
+              <div className="pointer-events-none absolute left-3 top-3 z-10 min-w-40 rounded-xl border border-border/70 bg-popover/95 px-3 py-2.5 text-xs shadow-xl backdrop-blur-md sm:left-4 sm:top-4">
+                {hoveredBar ? (
+                  <>
+                    <div className="mb-2 flex items-center justify-between gap-4 border-b border-border/60 pb-1.5">
+                      <span className="font-semibold text-foreground">{hoveredBar.date}</span>
+                      {hasPinnedSelection && <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-300">Pinned · tap to clear</span>}
+                      <span className={cn("num font-semibold", hoveredBar.close >= hoveredBar.open ? "text-gain" : "text-loss")}>
+                        {hoveredBar.close >= hoveredBar.open ? "+" : ""}{(((hoveredBar.close - hoveredBar.open) / (hoveredBar.open || 1)) * 100).toFixed(2)}%
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-5 gap-y-1 text-muted-foreground">
+                      <span>Open <b className="num text-foreground">{hoveredBar.open.toFixed(2)}</b></span>
+                      <span>High <b className="num text-foreground">{hoveredBar.high.toFixed(2)}</b></span>
+                      <span>Low <b className="num text-foreground">{hoveredBar.low.toFixed(2)}</b></span>
+                      <span>Close <b className="num text-foreground">{hoveredBar.close.toFixed(2)}</b></span>
+                      {hoveredBar.volume > 0 && <span className="col-span-2">Volume <b className="num text-foreground">{hoveredBar.volume.toLocaleString()}</b></span>}
+                    </div>
+                  </>
+                ) : hoveredPt ? (
+                  <>
+                    <div className="mb-1 text-muted-foreground">
+                      {new Date(Number(hoveredPt.time) * 1000).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                    </div>
+                    {hasPinnedSelection && <div className="mb-1.5 inline-flex rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-300">Pinned · tap to clear</div>}
+                    <div className="num text-lg font-bold text-foreground">{formatNumber(hoveredPt.value)}</div>
+                    <div className={cn("num font-semibold", shownPct != null && shownPct >= 0 ? "text-gain" : "text-loss")}>
+                      {shownPct != null && shownPct >= 0 ? "+" : ""}{shownPct?.toFixed(2)}%
+                    </div>
+                  </>
+                ) : null}
               </div>
             )}
           </div>
 
-          {/* Details below chart — hover shows live, tap pins it. Always below chart with progress + terminal link */}
-          {(hoveredBar || hoveredPt) && (
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-border/60 bg-surface px-3 py-2 text-xs">
-              {(() => {
-                const bar = hoveredBar;
-                if (bar) {
-                  const pct = (() => {
-                    const r = bar.high - bar.low;
-                    if (r <= 0) return 50;
-                    return Math.max(4, Math.min(100, ((bar.close - bar.low) / r) * 100));
-                  })();
-                  return (
-                    <>
-                      <span className="num font-semibold">{bar.date}</span>
-                      <span>O:{bar.open.toFixed(2)}</span>
-                      <span>H:{bar.high.toFixed(2)}</span>
-                      <span>L:{bar.low.toFixed(2)}</span>
-                      <span>C:{bar.close.toFixed(2)}</span>
-                      <span className={bar.close >= bar.open ? "text-gain" : "text-loss"}>
-                        {(((bar.close - bar.open) / (bar.open || 1)) * 100).toFixed(2)}%
-                      </span>
-                      {bar.volume > 0 && <span>Vol:{bar.volume.toLocaleString()}</span>}
-                      <div className="h-1.5 w-12 overflow-hidden rounded-full bg-muted">
-                        <div
-                          className={bar.close >= bar.open ? "h-full bg-gain" : "h-full bg-loss"}
-                          style={{ width: `${pct}%` }}
-                        />
+          {sectorName ? (
+            <section className="space-y-3 rounded-2xl border border-border/70 bg-card p-3 sm:p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-display text-sm font-bold">{sectorLabel} at a glance</h3>
+                  <p className="mt-0.5 text-xs text-muted-foreground">Live breadth and the most active stocks in this sector.</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <div className="rounded-xl border border-border/60 bg-surface px-3 py-2">
+                    <div className="text-[10px] text-muted-foreground">Sector sentiment</div>
+                    <div className={cn("text-sm font-bold", sentimentPct == null ? "text-muted-foreground" : sentimentPct >= 50 ? "text-gain" : "text-loss")}>
+                      {sentimentPct == null ? "No breadth data" : `${sentimentPct >= 60 ? "Bullish" : sentimentPct <= 40 ? "Bearish" : "Mixed"} · ${sentimentPct}% advancing`}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-border/60 bg-surface px-3 py-2">
+                    <div className="text-[10px] text-muted-foreground">Index change</div>
+                    <div className={cn("num text-sm font-bold", (sectorIndex?.percentChange ?? 0) >= 0 ? "text-gain" : "text-loss")}>
+                      {sectorIndex?.percentChange == null ? "—" : `${sectorIndex.percentChange >= 0 ? "+" : ""}${sectorIndex.percentChange.toFixed(2)}%`}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-border/60 bg-surface px-3 py-2">
+                    <div className="text-[10px] text-muted-foreground">Advancing / declining</div>
+                    <div className="num text-sm font-bold text-foreground">{advancing} / {declining}</div>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div className="mb-2 text-xs font-semibold text-muted-foreground">Most active stocks by turnover</div>
+                {topSectorStocks.length ? (
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    {topSectorStocks.map((stock) => (
+                      <div key={stock.symbol} className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-surface px-3 py-2">
+                        <div className="min-w-0"><div className="truncate text-xs font-bold">{stock.symbol}</div><div className="truncate text-[10px] text-muted-foreground">{stock.name}</div></div>
+                        <div className="shrink-0 text-right"><div className="num text-xs font-semibold">{formatNumber(stock.ltp)}</div><div className={cn("num text-[10px] font-semibold", stock.percentChange >= 0 ? "text-gain" : "text-loss")}>{stock.percentChange >= 0 ? "+" : ""}{stock.percentChange.toFixed(2)}%</div></div>
                       </div>
-                    </>
-                  );
-                }
-                const pt = hoveredPt;
-                if (pt) {
-                  const first = sessionBase || pt.value;
-                  const ptPct = first ? ((pt.value - first) / first) * 100 : 0;
-                  return (
-                    <>
-                      <span className="num font-semibold">
-                        {new Date(Number(pt.time) * 1000).toLocaleString("en-GB", {
-                          day: "2-digit",
-                          month: "short",
-                          year: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </span>
-                      <span>Price: {pt.value.toFixed(2)}</span>
-                      <span className={ptPct >= 0 ? "text-gain" : "text-loss"}>
-                        {ptPct >= 0 ? "+" : ""}
-                        {ptPct.toFixed(2)}%
-                      </span>
-                    </>
-                  );
-                }
-                return null;
-              })()}
-            </div>
-          )}
+                    ))}
+                  </div>
+                ) : <p className="rounded-xl bg-surface px-3 py-2 text-xs text-muted-foreground">Stock level sector data is not available right now.</p>}
+              </div>
+
+              {otherSectors.length ? (
+                <div>
+                  <div className="mb-2 text-xs font-semibold text-muted-foreground">Explore other sectors</div>
+                  <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    {otherSectors.map((item) => (
+                      <button key={item.name} type="button" onClick={() => setSelectedSector(item.sector ?? item.name)} className="shrink-0 rounded-xl border border-border/60 bg-surface px-3 py-2 text-left transition-colors hover:border-primary/50 hover:bg-primary/5">
+                        <span className="block max-w-40 truncate text-xs font-semibold">{item.sector ?? item.name}</span>
+                        <span className={cn("num text-[11px] font-bold", (item.percentChange ?? 0) >= 0 ? "text-gain" : "text-loss")}>{(item.percentChange ?? 0) >= 0 ? "+" : ""}{item.percentChange?.toFixed(2)}%</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </section>
+          ) : null}
+
         </div>
       </DialogContent>
     </Dialog>

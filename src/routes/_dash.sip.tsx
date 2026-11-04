@@ -53,7 +53,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { WeightBar } from "@/components/portfolio/holdings-table";
 import { Badge } from "@/components/ui/badge";
 import { ErrorBlock, SkeletonCards } from "@/components/states";
 import { StatCard } from "@/components/stat-card";
@@ -1549,8 +1550,8 @@ function SipPage() {
 
         {/* The Table */}
         <Table className="min-w-[860px]">
-          <TableHeader className="bg-muted/90 backdrop-blur-xs">
-            <TableRow className="border-b border-border/70 hover:bg-transparent">
+          <TableHeader className="bg-card shadow-[0_1px_0_0_var(--color-border)]">
+            <TableRow className="border-b border-border/70 bg-muted/40 hover:bg-muted/40">
               <TableHead className="w-14 pl-4 text-center font-bold">Rank</TableHead>
               <SortableTh label="Scheme" active={sort.key === "fund"} dir={sort.dir} onClick={() => toggle("fund")} kind="text" />
               <TableHead className="text-right font-bold">Window</TableHead>
@@ -2014,15 +2015,15 @@ function SipPage() {
                 </div>
 
                 <div className="max-h-96 overflow-y-auto">
-                  <Table>
-                    <TableHeader className="sticky top-0 bg-muted/80 backdrop-blur-xs z-10">
-                      <TableRow>
-                        <TableHead className="w-16 pl-4">#</TableHead>
-                        <TableHead>Installment Date</TableHead>
-                        <TableHead className="text-right">Outflow (Paid)</TableHead>
-                        <TableHead className="text-right">NAV</TableHead>
-                        <TableHead className="text-right">Units Added</TableHead>
-                        <TableHead className="text-right pr-4">Total Units Held</TableHead>
+                  <Table className="min-w-[640px]">
+                    <TableHeader className="sticky top-0 z-10 bg-card shadow-[0_1px_0_0_var(--color-border)]">
+                      <TableRow className="bg-muted/40 hover:bg-muted/40 border-b border-border/70">
+                        <TableHead className="w-14 pl-4" scope="col">#</TableHead>
+                        <TableHead scope="col">Installment Date</TableHead>
+                        <TableHead className="text-right" scope="col">Outflow (Paid)</TableHead>
+                        <TableHead className="text-right" scope="col">NAV</TableHead>
+                        <TableHead className="text-right" scope="col">Units Added</TableHead>
+                        <TableHead className="text-right pr-4" scope="col">Total Units Held</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody className="divide-y divide-border/60">
@@ -2032,18 +2033,28 @@ function SipPage() {
                         return (sim.buys ?? []).map((b, i) => {
                           cumUnits += b.units;
                           return (
-                            <TableRow key={b.date} className="hover:bg-muted/30">
-                              <TableCell className="num pl-4 text-xs font-semibold text-muted-foreground">{i + 1}</TableCell>
+                            <TableRow key={b.date} className="hover:bg-muted/40 transition-colors">
+                              <TableCell className="w-14 pl-4 text-xs num text-muted-foreground">{i + 1}</TableCell>
                               <TableCell className="text-xs font-medium text-foreground">{longDate(b.date)}</TableCell>
                               <TableCell className="num text-right text-xs font-medium">{formatNpr(perOutflow)}</TableCell>
                               <TableCell className="num text-right text-xs font-medium">रु {b.nav.toFixed(2)}</TableCell>
-                              <TableCell className="num text-right text-xs font-medium text-gain">+{b.units.toFixed(2)}</TableCell>
+                              <TableCell className="num text-right text-xs font-semibold text-gain">+{b.units.toFixed(2)}</TableCell>
                               <TableCell className="num text-right pr-4 text-xs font-bold text-foreground">{cumUnits.toFixed(2)}</TableCell>
                             </TableRow>
                           );
                         });
                       })()}
                     </TableBody>
+                    <TableFooter>
+                      <TableRow className="bg-muted/50 font-medium">
+                        <TableCell className="w-14 pl-4 text-xs font-semibold text-muted-foreground" />
+                        <TableCell className="text-xs font-semibold">Total ({sim.installments} Installments)</TableCell>
+                        <TableCell className="num text-right text-xs font-semibold">{formatNpr(sim.paid)}</TableCell>
+                        <TableCell className="num text-right text-xs font-semibold text-muted-foreground">-</TableCell>
+                        <TableCell className="num text-right text-xs font-semibold text-gain">+{sim.units.toFixed(2)}</TableCell>
+                        <TableCell className="num text-right pr-4 text-xs font-bold">{sim.units.toFixed(2)}</TableCell>
+                      </TableRow>
+                    </TableFooter>
                   </Table>
                 </div>
 
@@ -2142,29 +2153,46 @@ function SipPage() {
                     <div className="py-8 text-center text-xs text-muted-foreground">Loading portfolio holdings...</div>
                   ) : fundHoldings.length > 0 ? (
                     <div className="max-h-80 overflow-y-auto">
-                      <Table>
-                        <TableHeader className="sticky top-0 bg-muted/80 backdrop-blur-xs z-10">
-                          <TableRow>
-                            <TableHead className="w-12 pl-4">#</TableHead>
-                            <TableHead>Scrip</TableHead>
-                            <TableHead className="text-right">Shares Held</TableHead>
-                            <TableHead className="text-right">Market Value</TableHead>
-                            <TableHead className="text-right pr-4">Portfolio Weight</TableHead>
+                      <Table className="min-w-[600px]">
+                        <TableHeader className="sticky top-0 z-10 bg-card shadow-[0_1px_0_0_var(--color-border)]">
+                          <TableRow className="bg-muted/40 hover:bg-muted/40 border-b border-border/70">
+                            <TableHead className="w-12 pl-4" scope="col">#</TableHead>
+                            <TableHead scope="col">Scrip</TableHead>
+                            <TableHead className="text-right" scope="col">Shares Held</TableHead>
+                            <TableHead className="text-right" scope="col">Market Value</TableHead>
+                            <TableHead className="text-right pr-4" scope="col">Weight</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody className="divide-y divide-border/60">
-                          {fundHoldings.slice(0, 15).map((h, i) => (
-                            <TableRow key={h.stockSymbol} className="hover:bg-muted/30">
-                              <TableCell className="num pl-4 text-xs text-muted-foreground">{i + 1}</TableCell>
-                              <TableCell className="text-xs font-semibold text-foreground">{h.stockSymbol}</TableCell>
+                          {fundHoldings.map((h, i) => (
+                            <TableRow key={h.stockSymbol} className="hover:bg-muted/40 transition-colors">
+                              <TableCell className="w-12 pl-4 text-xs num text-muted-foreground">{i + 1}</TableCell>
+                              <TableCell className="text-xs font-semibold text-foreground">
+                                <span className="font-semibold transition-colors hover:text-primary">{h.stockSymbol}</span>
+                              </TableCell>
                               <TableCell className="num text-right text-xs font-medium">{formatQty(h.units)}</TableCell>
                               <TableCell className="num text-right text-xs font-medium">{formatNpr(h.value)}</TableCell>
-                              <TableCell className="num text-right pr-4 text-xs font-bold text-primary">
-                                {formatPercent(h.weight)}
+                              <TableCell className="pr-4">
+                                <WeightBar pct={h.weight} barClass="bg-primary/70" />
                               </TableCell>
                             </TableRow>
                           ))}
                         </TableBody>
+                        <TableFooter>
+                          <TableRow className="bg-muted/50 font-medium">
+                            <TableCell className="w-12 pl-4 text-xs font-semibold text-muted-foreground" />
+                            <TableCell className="text-xs font-semibold">Total ({fundHoldings.length} Scrips)</TableCell>
+                            <TableCell className="num text-right text-xs font-semibold">
+                              {formatQty(fundHoldings.reduce((sum, h) => sum + h.units, 0))}
+                            </TableCell>
+                            <TableCell className="num text-right text-xs font-semibold">
+                              {formatNpr(fundHoldings.reduce((sum, h) => sum + h.value, 0))}
+                            </TableCell>
+                            <TableCell className="pr-4">
+                              <WeightBar pct={100} barClass="bg-primary/70" />
+                            </TableCell>
+                          </TableRow>
+                        </TableFooter>
                       </Table>
                     </div>
                   ) : (

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import type { PricePoint } from "@/lib/nepse/types";
@@ -22,6 +22,7 @@ export function AreaChart({
   selectedTime,
   showAxes = false,
   wacc,
+  waccSeries,
   includeWaccDomain = false,
   anchor,
   className,
@@ -38,8 +39,10 @@ export function AreaChart({
   selectedTime?: number | null;
   /** Whether to render X-axis time labels and Y-axis amount grid/ticks. */
   showAxes?: boolean;
-  /** Gray dashed avg-cost line (e.g. WACC) — drawn when in range */
+  /** Gray dashed avg-cost line (e.g. WACC or total investment) — drawn when in range */
   wacc?: number | null;
+  /** Historical cost series — drawn as a dashed line following cost changes over time */
+  waccSeries?: PricePoint[];
   /** When true, Y domain expands to include wacc (used for All/Max). Otherwise wacc clamps to edge. */
   includeWaccDomain?: boolean;
   /** Direction anchor (e.g. previous close): up = last >= anchor, else first point. Day charts. */
@@ -55,8 +58,14 @@ export function AreaChart({
     if (points.length < 2) return null;
     const values = points.map((p) => p.value);
     const hasWacc = includeWaccDomain && wacc != null && Number.isFinite(wacc);
-    const min = hasWacc ? Math.min(...values, wacc as number) : Math.min(...values);
-    const max = hasWacc ? Math.max(...values, wacc as number) : Math.max(...values);
+    const hasSeries = Boolean(waccSeries && waccSeries.length > 0);
+    const domainValues = hasSeries
+      ? [...values, ...waccSeries!.map((p) => p.value)]
+      : hasWacc
+        ? [...values, wacc as number]
+        : values;
+    const min = Math.min(...domainValues);
+    const max = Math.max(...domainValues);
     const range = max - min || 1;
     const pad = showAxes ? 8 : 6;
     const x = (i: number) => (i / (points.length - 1)) * W;
@@ -84,16 +93,22 @@ export function AreaChart({
       time: points[idx]!.time,
     }));
 
+    const effectiveAnchor = anchor ?? (wacc != null && Number.isFinite(wacc) ? wacc : values[0]!);
+    const lastRef = hasSeries ? waccSeries![waccSeries!.length - 1]!.value : effectiveAnchor;
     return {
-      up: values[values.length - 1]! >= (anchor ?? values[0]!),
+      up: values[values.length - 1]! >= lastRef,
+      effectiveAnchor,
       min,
       max,
       yTicks,
       xTicks,
       line: points.map((p, i) => `${x(i).toFixed(2)},${y(p.value).toFixed(2)}`),
+      waccLine: hasSeries
+        ? `M ${waccSeries!.map((p, i) => `${x(i).toFixed(2)},${y(p.value).toFixed(2)}`).join(" L ")}`
+        : null,
       pts: points.map((p, i) => ({ x: x(i), y: y(p.value), time: p.time, value: p.value })),
     };
-  }, [points, showAxes, wacc, includeWaccDomain, anchor]);
+  }, [points, showAxes, wacc, waccSeries, includeWaccDomain, anchor]);
 
   const waccY = useMemo(() => {
     if (!geom || wacc == null || !Number.isFinite(wacc)) return null;
@@ -103,6 +118,10 @@ export function AreaChart({
     const pad = showAxes ? 8 : 6;
     return pad + (1 - (wacc - geom.min) / range) * (H - pad * 2);
   }, [geom, wacc, showAxes, includeWaccDomain]);
+
+  // Keep hooks before the empty-chart return: points can load asynchronously,
+  // so this component may move between empty and populated states.
+  const chartId = useId().replace(/:/g, "_");
 
   if (!geom) {
     return (
@@ -114,7 +133,29 @@ export function AreaChart({
 
   const linePath = `M ${geom.line.join(" L ")}`;
   const areaPath = `${linePath} L ${W},${H} L 0,${H} Z`;
-  const stroke = geom.up ? "var(--gain)" : "var(--loss)";
+  const hasSeriesSplit = Boolean(waccSeries && waccSeries.length > 0);
+  const hasSplit = !hasSeriesSplit && waccY != null && waccY > 0 && waccY < H;
+  const splitRatio = waccY != null ? Math.max(0, Math.min(1, waccY / H)) : 0.5;
+  const solidStroke = geom.up ? "var(--gain)" : "var(--loss)";
+
+  let stroke = solidStroke;
+  if (hasSeriesSplit) {
+    stroke = `url(#split-x-stroke-${chartId})`;
+  } else if (hasSplit) {
+    stroke = `url(#split-stroke-${chartId})`;
+  }
+
+  let fill = hasSplit ? `url(#split-fill-${chartId})` : `url(#area-fill-${chartId})`;
+  if (hasSeriesSplit) {
+    fill = `url(#split-x-fill-${chartId})`;
+  }
+
+  const isPointUp = (val: number, idx?: number | null) => {
+    if (idx != null && waccSeries && waccSeries[idx] != null) {
+      return val >= waccSeries[idx]!.value;
+    }
+    return val >= geom.effectiveAnchor;
+  };
   const h = hover != null ? geom.pts[hover] : null;
   const svgRect = svgRef.current?.getBoundingClientRect();
   const selIdx = selectedTime != null ? geom.pts.findIndex((p) => p.time === selectedTime) : -1;
@@ -152,10 +193,51 @@ export function AreaChart({
         onClick={onPointerClick}
       >
         <defs>
-          <linearGradient id={`area-fill-${geom.up ? "up" : "down"}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={stroke} stopOpacity="0.28" />
-            <stop offset="100%" stopColor={stroke} stopOpacity="0" />
-          </linearGradient>
+          {hasSeriesSplit ? (
+            <>
+              <linearGradient id={`split-x-stroke-${chartId}`} x1="0" y1="0" x2={W} y2="0" gradientUnits="userSpaceOnUse">
+                {points.map((p, i) => {
+                  const isUp = p.value >= (waccSeries![i]?.value ?? 0);
+                  const frac = points.length <= 1 ? 0 : i / (points.length - 1);
+                  return <stop key={i} offset={`${(frac * 100).toFixed(2)}%`} stopColor={isUp ? "var(--gain)" : "var(--loss)"} />;
+                })}
+              </linearGradient>
+              <linearGradient id={`split-x-fill-${chartId}`} x1="0" y1="0" x2={W} y2="0" gradientUnits="userSpaceOnUse">
+                {points.map((p, i) => {
+                  const isUp = p.value >= (waccSeries![i]?.value ?? 0);
+                  const frac = points.length <= 1 ? 0 : i / (points.length - 1);
+                  return (
+                    <stop
+                      key={i}
+                      offset={`${(frac * 100).toFixed(2)}%`}
+                      stopColor={isUp ? "var(--gain)" : "var(--loss)"}
+                      stopOpacity="0.22"
+                    />
+                  );
+                })}
+              </linearGradient>
+            </>
+          ) : hasSplit ? (
+            <>
+              <linearGradient id={`split-stroke-${chartId}`} x1="0" y1="0" x2="0" y2={H} gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stopColor="var(--gain)" />
+                <stop offset={`${splitRatio * 100}%`} stopColor="var(--gain)" />
+                <stop offset={`${splitRatio * 100}%`} stopColor="var(--loss)" />
+                <stop offset="100%" stopColor="var(--loss)" />
+              </linearGradient>
+              <linearGradient id={`split-fill-${chartId}`} x1="0" y1="0" x2="0" y2={H} gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stopColor="var(--gain)" stopOpacity="0.28" />
+                <stop offset={`${splitRatio * 100}%`} stopColor="var(--gain)" stopOpacity="0.04" />
+                <stop offset={`${splitRatio * 100}%`} stopColor="var(--loss)" stopOpacity="0.04" />
+                <stop offset="100%" stopColor="var(--loss)" stopOpacity="0.28" />
+              </linearGradient>
+            </>
+          ) : (
+            <linearGradient id={`area-fill-${chartId}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={solidStroke} stopOpacity="0.28" />
+              <stop offset="100%" stopColor={solidStroke} stopOpacity="0" />
+            </linearGradient>
+          )}
         </defs>
         {showAxes
           ? geom.yTicks.map((tick, i) => (
@@ -173,7 +255,7 @@ export function AreaChart({
               />
             ))
           : null}
-        <path d={areaPath} fill={`url(#area-fill-${geom.up ? "up" : "down"})`} />
+        <path d={areaPath} fill={fill} />
         <path
           d={linePath}
           fill="none"
@@ -183,7 +265,17 @@ export function AreaChart({
           strokeLinecap="round"
           vectorEffect="non-scaling-stroke"
         />
-        {waccY != null ? (
+        {geom.waccLine ? (
+          <path
+            d={geom.waccLine}
+            fill="none"
+            stroke="#9ca3af"
+            strokeWidth="1.2"
+            strokeDasharray="6 4"
+            opacity="0.85"
+            vectorEffect="non-scaling-stroke"
+          />
+        ) : waccY != null ? (
           <line
             x1={0}
             y1={waccY}
@@ -192,7 +284,7 @@ export function AreaChart({
             stroke="#9ca3af"
             strokeWidth="1.2"
             strokeDasharray="6 4"
-            opacity="0.95"
+            opacity="0.85"
             vectorEffect="non-scaling-stroke"
           />
         ) : null}
@@ -231,7 +323,7 @@ export function AreaChart({
           style={{
             left: `${(h.x / W) * 100}%`,
             top: `${(h.y / H) * 100}%`,
-            backgroundColor: stroke,
+            backgroundColor: isPointUp(h.value, hover) ? "var(--gain)" : "var(--loss)",
             borderColor: "var(--background)",
           }}
         />
@@ -242,7 +334,7 @@ export function AreaChart({
           style={{
             left: `${(sel.x / W) * 100}%`,
             top: `${(sel.y / H) * 100}%`,
-            borderColor: stroke,
+            borderColor: isPointUp(sel.value, selIdx) ? "var(--gain)" : "var(--loss)",
           }}
         />
       ) : null}
@@ -257,7 +349,10 @@ export function AreaChart({
                 transform: "translate(-50%, -100%)",
               }}
             >
-              <p className="num whitespace-nowrap text-sm font-semibold" style={{ color: stroke }}>
+              <p
+                className="num whitespace-nowrap text-sm font-semibold"
+                style={{ color: isPointUp(h.value, hover) ? "var(--gain)" : "var(--loss)" }}
+              >
                 {formatValue(h.value)}
               </p>
               <p className="num whitespace-nowrap text-[0.65rem] text-muted-foreground">{formatLabel(h.time)}</p>

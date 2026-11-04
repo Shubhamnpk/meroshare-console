@@ -4,6 +4,7 @@ import { Link } from "@tanstack/react-router";
 import { ArrowUpRight } from "lucide-react";
 import { Panel } from "@/components/ui/panel";
 import { AreaChart } from "@/components/market/area-chart";
+import { DeltaPill } from "@/components/stat-card";
 import { ErrorBlock, LoadingBlock } from "@/components/states";
 import { chartTimeLabel } from "@/components/market/chart-modal";
 import {
@@ -63,6 +64,7 @@ function dayLabel(time: number): string {
  */
 export function PortfolioDayCard({ holdings }: { holdings: { scrip: string; units: number; price: number }[] }) {
   const [range, setRange] = useState<RangeKey>("1D");
+  const [mode, setMode] = useState<"profit" | "total">("profit");
   const isDay = range === "1D";
 
   const intraday = useQuery(portfolioIntradayQuery(holdings, isDay));
@@ -123,6 +125,21 @@ export function PortfolioDayCard({ holdings }: { holdings: { scrip: string; unit
   // bumps and closed stretches read as flat — a normal value-over-time line
   // that never blanks, even with zero prints (then it is flat at the live
   // total, which holdings alone price).
+  // Build a scrip→waccRate map from investment summary for NEPSE cost basis
+  const scripWaccMap = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const s of investment.data?.scrips ?? []) {
+      m.set(s.scrip.toUpperCase(), s.waccRate);
+    }
+    return m;
+  }, [investment.data?.scrips]);
+
+  // NEPSE cost = sum of each held scrip's waccRate * units (constant for a given session)
+  const nepseCost = useMemo(
+    () => holdings.reduce((s, h) => s + (scripWaccMap.get(h.scrip.toUpperCase()) ?? 0) * h.units, 0),
+    [holdings, scripWaccMap],
+  );
+
   const dayPoints = useMemo(() => {
     const nepsePts = intraday.data?.points ?? [];
     const globalPts = daySeries.data?.points ?? [];
@@ -137,7 +154,7 @@ export function PortfolioDayCard({ holdings }: { holdings: { scrip: string; unit
     let gi = 0;
     let nv = inNepse.length > 0 ? inNepse[0]!.value : nepseLive;
     let gv = inGlobal.length > 0 ? inGlobal[0]!.value : globalNow;
-    const pts: { time: number; value: number }[] = [];
+    const pts: { time: number; value: number; cost: number }[] = [];
     for (let t = Math.ceil(cutoff / 60) * 60; t <= now; t += 60) {
       while (ni < inNepse.length && inNepse[ni]!.time <= t) {
         nv = inNepse[ni]!.value;
@@ -147,16 +164,18 @@ export function PortfolioDayCard({ holdings }: { holdings: { scrip: string; unit
         gv = inGlobal[gi]!.value;
         gi += 1;
       }
-      pts.push({ time: t, value: nv + gv });
+      pts.push({ time: t, value: nv + gv, cost: invested });
     }
     return pts;
-  }, [intraday.data, daySeries.data, nepseLive, globalNow]);
+  }, [intraday.data, daySeries.data, nepseLive, globalNow, invested]);
 
   // Longer-range merge: each leg holds its last print, 0 before its first —
   // the line starts at the first position, never before it existed.
+  // Cost tracks: NEPSE cost is constant (waccRate × units); global cost walks
+  // forward through buy/sell lots (each GlobalHistoryPoint carries .cost).
   const historyPoints = useMemo(() => {
     const nepsePts = nepseHistory.data?.points ?? [];
-    const globalPts = globalHistory.data?.points ?? [];
+    const globalPts = (globalHistory.data?.points ?? []) as { time: number; value: number; cost: number }[];
     const at = (pts: { time: number; value: number }[], t: number) => {
       if (pts.length === 0 || t < pts[0]!.time) return 0;
       let v = pts[0]!.value;
@@ -166,13 +185,31 @@ export function PortfolioDayCard({ holdings }: { holdings: { scrip: string; unit
       }
       return v;
     };
+    const atCost = (pts: { time: number; cost: number }[], t: number) => {
+      if (pts.length === 0 || t < pts[0]!.time) return 0;
+      let v = pts[0]!.cost;
+      for (const p of pts) {
+        if (p.time <= t) v = p.cost;
+        else break;
+      }
+      return v;
+    };
     let stamps = [...new Set([...nepsePts.map((p) => p.time), ...globalPts.map((p) => p.time)])].sort((a, b) => a - b);
     if (range === "1W") {
       const cutoff = Date.now() / 1000 - 7 * 86400;
       stamps = stamps.filter((t) => t >= cutoff);
     }
-    return stamps.map((t) => ({ time: t, value: at(nepsePts, t) + at(globalPts, t) }));
-  }, [nepseHistory.data, globalHistory.data, range]);
+    // On dates where NEPSE is active, nepseCost applies; on dates where only global, just global cost
+    const hasNepse = nepsePts.length > 0;
+    return stamps.map((t) => {
+      const nepseVal = at(nepsePts, t);
+      const globalVal = at(globalPts, t);
+      // NEPSE cost is static (current WACC); global cost walks from history
+      const nc = hasNepse && t >= nepsePts[0]!.time ? nepseCost : 0;
+      const gc = atCost(globalPts, t);
+      return { time: t, value: nepseVal + globalVal, cost: nc + gc };
+    });
+  }, [nepseHistory.data, globalHistory.data, range, nepseCost]);
 
   // Session ticks print rough (one illiquid holding jumps the whole sum),
   // so the 1D trace is a trailing median of 5 instead of the raw spikes.
@@ -187,7 +224,7 @@ export function PortfolioDayCard({ holdings }: { holdings: { scrip: string; unit
         .slice(Math.max(0, i - n + 1), i + 1)
         .map((q) => q.value)
         .sort((a, b) => a - b);
-      return { time: p.time, value: vals[Math.floor(vals.length / 2)]! };
+      return { time: p.time, value: vals[Math.floor(vals.length / 2)]!, cost: p.cost };
     });
     // Anchor the end to the live total — the median would otherwise leave
     // the line's right edge floating away from the headline number.
@@ -195,6 +232,7 @@ export function PortfolioDayCard({ holdings }: { holdings: { scrip: string; unit
       smoothed[smoothed.length - 1] = {
         time: points[points.length - 1]!.time,
         value: points[points.length - 1]!.value,
+        cost: points[points.length - 1]!.cost,
       };
     }
     return smoothed;
@@ -206,17 +244,46 @@ export function PortfolioDayCard({ holdings }: { holdings: { scrip: string; unit
     if (line.length === 0) return line;
     const last = line[line.length - 1]!;
     if (last.time >= nowSec - 60) return line;
-    return [...line, { time: nowSec, value: last.value }];
+    return [...line, { time: nowSec, value: last.value, cost: last.cost }];
   }, [line, nowSec]);
-  // Cost baseline only earns its pixels when it lands inside the range —
-  // a far-away line would squash the whole chart flat.
-  const lo = tailed.length > 0 ? Math.min(...tailed.map((p) => p.value)) : 0;
-  const hi = tailed.length > 0 ? Math.max(...tailed.map((p) => p.value)) : 0;
-  const showCost = invested > 0 && invested >= lo && invested <= hi;
-  /** Window move: last vs first print of the drawn line (24h on 1D). Drives the pill and the line color. */
+  // Derive the drawn points and cost series based on mode
+  const drawnPoints = useMemo(
+    () =>
+      mode === "profit"
+        ? tailed.map((p) => ({ time: p.time, value: p.value - p.cost }))
+        : tailed.map((p) => ({ time: p.time, value: p.value })),
+    [tailed, mode],
+  );
+
+  const costSeries = useMemo(
+    () => tailed.map((p) => ({ time: p.time, value: p.cost })),
+    [tailed],
+  );
+
+  // Only show the dashed investment line when it falls within the chart's
+  // natural data range — otherwise it squashes the actual trace flat.
+  const drawnLo = drawnPoints.length > 0 ? Math.min(...drawnPoints.map((p) => p.value)) : 0;
+  const drawnHi = drawnPoints.length > 0 ? Math.max(...drawnPoints.map((p) => p.value)) : 0;
+
+  const showZeroLine = mode === "profit" && 0 >= drawnLo && 0 <= drawnHi;
+  const showCostSeries =
+    mode === "total" &&
+    costSeries.length > 0 &&
+    costSeries.some((p) => p.value >= drawnLo && p.value <= drawnHi);
+
+  const waccLine = showZeroLine ? 0 : null;
+  const waccSeriesData = showCostSeries ? costSeries : undefined;
+
+  /** Window move: last vs first print of the drawn line. Drives the pill and line color. */
   const windowPct =
-    tailed.length >= 2 && tailed[0]!.value > 0
-      ? ((tailed[tailed.length - 1]!.value - tailed[0]!.value) / tailed[0]!.value) * 100
+    drawnPoints.length >= 2 && drawnPoints[0]!.value !== 0
+      ? ((drawnPoints[drawnPoints.length - 1]!.value - drawnPoints[0]!.value) / Math.abs(drawnPoints[0]!.value)) * 100
+      : tailed.length >= 2 && tailed[0]!.value > 0
+        ? ((tailed[tailed.length - 1]!.value - tailed[0]!.value) / tailed[0]!.value) * 100
+        : null;
+  const windowChange =
+    drawnPoints.length >= 2
+      ? drawnPoints[drawnPoints.length - 1]!.value - drawnPoints[0]!.value
       : null;
 
   /** Leg census for the 1D merge: which holdings made it into today's line. */
@@ -264,11 +331,10 @@ export function PortfolioDayCard({ holdings }: { holdings: { scrip: string; unit
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <h2 className="font-display text-base font-semibold">Portfolio</h2>
-          {windowPct != null ? (
-            <span className={`num text-xs font-bold ${windowPct >= 0 ? "text-gain" : "text-loss"}`}>
-              {windowPct >= 0 ? "+" : ""}
-              {windowPct.toFixed(2)}%
-            </span>
+          {windowPct != null && windowChange != null ? (
+            <DeltaPill value={windowChange}>
+              {`${windowChange >= 0 ? "+" : "-"}${formatNpr(Math.abs(windowChange), { compact: true })} (${windowPct >= 0 ? "+" : ""}${windowPct.toFixed(2)}%)`}
+            </DeltaPill>
           ) : null}
           <Link
             to="/terminal"
@@ -306,7 +372,26 @@ export function PortfolioDayCard({ holdings }: { holdings: { scrip: string; unit
             </span>
           ) : null}
         </div>
-        <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Portfolio range">
+        <div className="flex flex-wrap items-center gap-1">
+          <div
+            role="group"
+            aria-label="Portfolio measure"
+            className="mr-1 flex overflow-hidden rounded-full border border-border/60"
+          >
+            {(["profit", "total"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                aria-pressed={mode === m}
+                onClick={() => setMode(m)}
+                className={`px-2.5 py-0.5 text-[0.68rem] font-medium capitalize transition-colors ${
+                  mode === m ? "bg-primary/15 text-primary" : "bg-surface text-muted-foreground"
+                }`}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
           {RANGES.map((r) => (
             <button
               key={r}
@@ -343,18 +428,53 @@ export function PortfolioDayCard({ holdings }: { holdings: { scrip: string; unit
           aria-label="Open net worth in terminal"
         >
           <AreaChart
-            points={tailed}
+            points={drawnPoints}
             height={144}
-            anchor={tailed.length > 0 ? tailed[0]!.value : null}
-            wacc={showCost ? invested : null}
-            formatValue={(v) => formatNpr(v)}
+            anchor={waccLine}
+            wacc={waccLine}
+            waccSeries={waccSeriesData}
+            includeWaccDomain
+            tooltipExtra={(pt) => {
+              const orig = tailed.find((p) => p.time === pt.time);
+              if (!orig) return null;
+              const pl = orig.value - orig.cost;
+              const plPct = orig.cost > 0 ? (pl / orig.cost) * 100 : 0;
+              return (
+                <div className="space-y-1 text-[0.68rem] text-muted-foreground">
+                  <div className="flex items-center justify-between gap-3">
+                    <span>Investment:</span>
+                    <span className="font-mono font-medium text-foreground">
+                      {formatNpr(orig.cost, { compact: true })}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span>Net P/L:</span>
+                    <span className={cn("font-mono font-medium", pl >= 0 ? "text-gain" : "text-loss")}>
+                      {pl >= 0 ? "+" : "-"}
+                      {formatNpr(Math.abs(pl), { compact: true })} ({plPct >= 0 ? "+" : ""}
+                      {plPct.toFixed(2)}%)
+                    </span>
+                  </div>
+                </div>
+              );
+            }}
+            formatValue={(v) => {
+              const absFormatted = formatNpr(Math.abs(v), { compact: true });
+              if (mode === "profit") {
+                if (Math.abs(v) < 0.01) return absFormatted;
+                return `${v >= 0 ? "+" : "-"}${absFormatted}`;
+              }
+              return absFormatted;
+            }}
             formatLabel={(t) => (isDay ? chartTimeLabel(t) : dayLabel(t))}
           />
           <p className="mt-2 text-[0.68rem] text-muted-foreground">
+            {mode === "profit"
+              ? "Profit = value minus what you paid (average cost). "
+              : "Total = portfolio value over time vs investment line (dashed). "}
             {isDay
               ? "Last day across every market you hold — flat while a market sleeps, global at current FX."
               : "Closes across every market you hold — starts at your first position, global at current FX."}
-            {showCost ? " Dotted line = what you paid in." : ""}
           </p>
         </Link>
       )}

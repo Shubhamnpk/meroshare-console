@@ -262,20 +262,26 @@ function PriceHistoryTab({
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <div className="rounded-xl border border-border/60 bg-surface px-3 py-2">
             <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-              Start ({formatLabel(timelinePoints[0]!.time)})
+              {activeMode === "profit" ? "Starting P/L" : "Start"} ({formatLabel(timelinePoints[0]!.time)})
             </p>
             <p className="num text-sm font-medium">{formatNpr(historyStats.start, { compact: compactNumbers })}</p>
           </div>
           <div className="rounded-xl border border-border/60 bg-surface px-3 py-2">
             <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-              End ({formatLabel(timelinePoints[timelinePoints.length - 1]!.time)})
+              {activeMode === "profit" ? "Current P/L" : "End"} ({formatLabel(timelinePoints[timelinePoints.length - 1]!.time)})
             </p>
-            <p className="num text-sm font-medium">{formatNpr(historyStats.end, { compact: compactNumbers })}</p>
+            <p className={cn("num text-sm font-medium", activeMode === "profit" && historyStats.end > 0 && "text-gain", activeMode === "profit" && historyStats.end < 0 && "text-loss")}>
+              {formatNpr(historyStats.end, { compact: compactNumbers })}
+            </p>
           </div>
           <div className="rounded-xl border border-border/60 bg-surface px-3 py-2">
-            <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">Change</p>
+            <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
+              {activeMode === "profit" ? "P/L change" : "Change"}
+            </p>
             <p className="text-sm font-medium">
-              <DeltaPill value={historyStats.change}>{formatPercent(historyStats.pct)}</DeltaPill>
+              <DeltaPill value={historyStats.change}>
+                {formatNpr(historyStats.change, { compact: compactNumbers })} ({formatPercent(historyStats.pct)})
+              </DeltaPill>
             </p>
           </div>
           <div className="rounded-xl border border-border/60 bg-surface px-3 py-2">
@@ -291,6 +297,8 @@ function PriceHistoryTab({
       <AreaChart
         points={displayPoints}
         height={240}
+        wacc={activeMode === "profit" ? 0 : null}
+        anchor={activeMode === "profit" ? 0 : null}
         formatValue={(v) => formatNpr(v, { compact: true })}
         formatLabel={formatLabel}
         selectedTime={selected}
@@ -591,6 +599,11 @@ function yearOf(value: unknown): string {
   return (m && m[1]) || "-";
 }
 
+/** Dividend eligibility is determined by the book-close date when the feed has it. */
+function dividendEligibilityEpoch(dividend: DividendRow): number | null {
+  return parseNptEpoch(dividend.bookCloseDate) ?? parseNptEpoch(dividend.announcementDate);
+}
+
 interface DivEntry {
   creditedUnits: number;
   bonusUnits: number;
@@ -621,7 +634,9 @@ const DIVIDEND_ROWS_INITIAL = 5;
 
 function DividendTable({ rows, scrip }: { rows: DivRow[]; scrip: string }) {
   const [expanded, setExpanded] = useState(false);
-  const { sort, toggle } = useSort<"year" | "cash" | "bonus" | "total" | "announced" | "estCash" | "estBonus">(
+  const { sort, toggle } = useSort<
+    "year" | "cash" | "bonus" | "total" | "announced" | "eligibleUnits" | "estCash" | "estBonus"
+  >(
     {
       key: "year",
       dir: "desc",
@@ -632,6 +647,7 @@ function DividendTable({ rows, scrip }: { rows: DivRow[]; scrip: string }) {
       bonus: "number",
       total: "number",
       announced: "number",
+      eligibleUnits: "number",
       estCash: "number",
       estBonus: "number",
     },
@@ -647,6 +663,8 @@ function DividendTable({ rows, scrip }: { rows: DivRow[]; scrip: string }) {
           return r.totalDividend;
         case "announced":
           return r.announcementDate ?? "";
+        case "eligibleUnits":
+          return r.held;
         case "estCash":
           return r.cashValue;
         case "estBonus":
@@ -659,7 +677,7 @@ function DividendTable({ rows, scrip }: { rows: DivRow[]; scrip: string }) {
   }, [rows, sort]);
   const th = (
     label: string,
-    key: "year" | "cash" | "bonus" | "total" | "announced" | "estCash" | "estBonus",
+    key: "year" | "cash" | "bonus" | "total" | "announced" | "eligibleUnits" | "estCash" | "estBonus",
     align: "left" | "right" = "right",
     className = "",
   ) => (
@@ -684,7 +702,8 @@ function DividendTable({ rows, scrip }: { rows: DivRow[]; scrip: string }) {
               {th("Cash", "cash")}
               {th("Bonus", "bonus")}
               {th("Total", "total")}
-              {th("Announced", "announced", "left", "hidden sm:table-cell")}
+              {th("Book close", "announced", "left", "hidden sm:table-cell")}
+              {th("Eligible units", "eligibleUnits")}
               {th("Est. cash (your units)", "estCash")}
               {th("Est. bonus (your units)", "estBonus", "right", "pr-3")}
             </TableRow>
@@ -703,7 +722,14 @@ function DividendTable({ rows, scrip }: { rows: DivRow[]; scrip: string }) {
                   {r.totalDividend > 0 ? `${r.totalDividend}%` : "-"}
                 </TableCell>
                 <TableCell className="num hidden text-left text-muted-foreground sm:table-cell">
-                  {r.announcementDate ? formatDate(r.announcementDate) : "-"}
+                  {r.bookCloseDate
+                    ? formatDate(r.bookCloseDate)
+                    : r.announcementDate
+                      ? formatDate(r.announcementDate)
+                      : "-"}
+                </TableCell>
+                <TableCell className="num text-right font-medium text-muted-foreground">
+                  {formatQty(r.held)}
                 </TableCell>
                 <TableCell className="num text-right font-medium">
                   {r.cashValue > 0 ? formatNpr(r.cashValue) : "-"}
@@ -852,7 +878,7 @@ function DividendHistoryTab({ onPickScrip }: { onPickScrip: (scrip: string) => v
   const faceValues = useQuery(faceValuesQuery(divSymbols));
 
   // Only years where this user actually has dividend activity: corporate credits
-  // received, or dividend announcements issued while they held the scrip.
+  // received, or dividend announcements whose book-close date found them holding the scrip.
   const years = useMemo(() => {
     const set = new Set<string>();
     for (const r of creditRows) {
@@ -864,7 +890,7 @@ function DividendHistoryTab({ onPickScrip }: { onPickScrip: (scrip: string) => v
       if (y === "-") continue;
       const key = String(d.symbol ?? "").toUpperCase();
       if (!key) continue;
-      const epoch = parseNptEpoch(d.announcementDate) ?? parseNptEpoch(d.bookCloseDate);
+      const epoch = dividendEligibilityEpoch(d);
       const held = epoch == null ? 0 : unitsHeldAt(snapshotsBySymbol.get(key) ?? [], epoch);
       if (held > 0) set.add(y);
     }
@@ -894,9 +920,9 @@ function DividendHistoryTab({ onPickScrip }: { onPickScrip: (scrip: string) => v
       if (year !== "all" && y !== year) continue;
       const key = String(d.symbol ?? "").toUpperCase();
       if (!key) continue;
-      const epoch = parseNptEpoch(d.announcementDate) ?? parseNptEpoch(d.bookCloseDate);
+      const epoch = dividendEligibilityEpoch(d);
       const held = epoch == null ? 0 : unitsHeldAt(snapshotsBySymbol.get(key) ?? [], epoch);
-      // Announcements count when you actually held the scrip then — not only
+      // Announcements count when you held the scrip at book close — not only
       // when you also received credited units that year. Zero rows are still
       // hidden by the render guard below.
       if (held <= 0 && !map.has(key)) continue;
@@ -951,7 +977,7 @@ function DividendHistoryTab({ onPickScrip }: { onPickScrip: (scrip: string) => v
       if (y === "-") continue;
       const key = String(d.symbol ?? "").toUpperCase();
       if (!key) continue;
-      const epoch = parseNptEpoch(d.announcementDate) ?? parseNptEpoch(d.bookCloseDate);
+      const epoch = dividendEligibilityEpoch(d);
       const held = epoch == null ? 0 : unitsHeldAt(snapshotsBySymbol.get(key) ?? [], epoch);
       if (held <= 0) continue;
       const e = map.get(y) ?? { year: y, cash: 0, bonus: 0, credited: 0 };
@@ -1105,8 +1131,8 @@ function DividendHistoryTab({ onPickScrip }: { onPickScrip: (scrip: string) => v
 
       <p className="text-[0.68rem] leading-relaxed text-muted-foreground">
         Units credited (bonus, mergers, rights) come straight from your MeroShare movement history; IPO allotments are
-        skipped. Cash dividend estimates apply the announced rate to the units you actually held on each announcement
-        date, on the company&apos;s face value (indicative, actual payouts depend on book-close records and 5% tax is
+        skipped. Cash dividend estimates apply the announced rate to units you held on each book-close date, on the
+        company&apos;s face value (indicative, actual payouts depend on the company&apos;s final records and 5% tax is
         withheld at source.
       </p>
     </div>

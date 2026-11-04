@@ -137,7 +137,7 @@ function ToolsPage() {
         </span>
         <div className="min-w-0">
           <h1 className="font-display text-2xl font-semibold sm:text-3xl">Tools</h1>
-          <p className="mt-0.5 hidden text-sm text-muted-foreground sm:block">
+          <p className="mt-0.5 text-xs text-muted-foreground sm:text-sm">
             Small helpers for researching the Nepali market. Informational only not financial advice.
           </p>
         </div>
