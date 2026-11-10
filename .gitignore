@@ -37,6 +37,9 @@ dist-ssr
 graphify-out/
 .lovable/
 
+# Local AI session context (never commit)
+CONTEXT.md
+
 # Local dev artifacts
 benchmarks/
 docs/meroshare-api.html

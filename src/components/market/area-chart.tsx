@@ -42,7 +42,7 @@ export function AreaChart({
   /** Gray dashed avg-cost line (e.g. WACC or total investment) — drawn when in range */
   wacc?: number | null;
   /** Historical cost series — drawn as a dashed line following cost changes over time */
-  waccSeries?: PricePoint[];
+  waccSeries?: PricePoint[] | undefined;
   /** When true, Y domain expands to include wacc (used for All/Max). Otherwise wacc clamps to edge. */
   includeWaccDomain?: boolean;
   /** Direction anchor (e.g. previous close): up = last >= anchor, else first point. Day charts. */
@@ -195,11 +195,24 @@ export function AreaChart({
         <defs>
           {hasSeriesSplit ? (
             <>
-              <linearGradient id={`split-x-stroke-${chartId}`} x1="0" y1="0" x2={W} y2="0" gradientUnits="userSpaceOnUse">
+              <linearGradient
+                id={`split-x-stroke-${chartId}`}
+                x1="0"
+                y1="0"
+                x2={W}
+                y2="0"
+                gradientUnits="userSpaceOnUse"
+              >
                 {points.map((p, i) => {
                   const isUp = p.value >= (waccSeries![i]?.value ?? 0);
                   const frac = points.length <= 1 ? 0 : i / (points.length - 1);
-                  return <stop key={i} offset={`${(frac * 100).toFixed(2)}%`} stopColor={isUp ? "var(--gain)" : "var(--loss)"} />;
+                  return (
+                    <stop
+                      key={i}
+                      offset={`${(frac * 100).toFixed(2)}%`}
+                      stopColor={isUp ? "var(--gain)" : "var(--loss)"}
+                    />
+                  );
                 })}
               </linearGradient>
               <linearGradient id={`split-x-fill-${chartId}`} x1="0" y1="0" x2={W} y2="0" gradientUnits="userSpaceOnUse">

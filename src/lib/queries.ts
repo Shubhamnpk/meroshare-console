@@ -63,7 +63,7 @@ import {
   getFxRates,
 } from "./world/market.functions";
 import type { GlobalValuationRow } from "./world/market.functions";
-import type { WorldRange, WorldTick } from "./world/feed.server";
+import type { GlobalHistoryPoint, WorldRange, WorldTick } from "./world/feed.server";
 import type { ChartRange, PortfolioGranularity } from "./nepse/types";
 import { brokerVaultStatus, listBrokerConnections } from "./brokers/brokers.functions";
 import {
@@ -1146,7 +1146,7 @@ export const fxRatesQuery = (sources: string[], to: string) =>
 export const globalDaySeriesQuery = (holdings: GlobalLotInput[], enabled = true) =>
   queryOptions({
     queryKey: ["global-day-series", JSON.stringify(holdings.map((h) => [h.symbol, h.qty]))],
-    queryFn: async (): Promise<{ points: { time: number; value: number }[]; failed: string[]; cost: number }> =>
+    queryFn: async (): Promise<{ points: GlobalHistoryPoint[]; failed: string[]; cost: number }> =>
       getGlobalDaySeries({ data: { holdings } }),
     enabled: enabled && holdings.length > 0,
     staleTime: 5 * 60_000,

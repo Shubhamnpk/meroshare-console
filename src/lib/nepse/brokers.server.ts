@@ -1,9 +1,3 @@
-// Server-only NEPSE broker directory + floor sheet aggregation, powered by the
-// community YONEPSE feed. Floor sheet shards are compact per-transaction arrays
-// ([contractId, stockId, buyer, seller, qty, rate, amount, time]); everything
-// heavy — joining lookups, per-broker/per-scrip tallies, hourly buckets — is
-// computed here and cached, so the browser only ever receives small summaries
-// plus a capped trade trail.
 import { feedJson } from "./feed.server";
 import type {
   BrokerDayStat,
@@ -25,13 +19,22 @@ const TTL = {
 
 const YONEPSE_BASE = process.env["YONEPSE_BASE_URL"];
 
+/**
+ * The yonepse Pages deploy deliberately excludes `data/floor_sheet` (~2.5 GB),
+ * so every floor-sheet file is served from raw.githubusercontent instead.
+ * Override with YONEPSE_FLOOR_SHEET_BASE_URL if the repo or branch moves.
+ */
+const FLOOR_SHEET_BASE =
+  process.env["YONEPSE_FLOOR_SHEET_BASE_URL"] ??
+  "https://raw.githubusercontent.com/Shubhamnpk/yonepse/main/data/floor_sheet";
+
 type Rec = Record<string, unknown>;
 
 const BROKERS_URL = "/data/other/brokers.json";
-const FLOOR_SHEET_MANIFEST_URL = "/data/floor_sheet/manifest.json";
-const FLOOR_SHEET_DAILY_URL = (date: string) => `/data/floor_sheet/daily/${date}.json`;
-const STOCKS_LOOKUP_URL = "/data/floor_sheet/lookups/stocks.json";
-const BROKERS_LOOKUP_URL = "/data/floor_sheet/lookups/brokers.json";
+const FLOOR_SHEET_MANIFEST_URL = "/manifest.json";
+const FLOOR_SHEET_DAILY_URL = (date: string) => `/daily/${date}.json`;
+const STOCKS_LOOKUP_URL = "/lookups/stocks.json";
+const BROKERS_LOOKUP_URL = "/lookups/brokers.json";
 
 /** One compact floor-sheet transaction row. */
 type TxRow = [string | number, number, number, number, number, number, number, string | number];
@@ -54,7 +57,7 @@ type BrokerLookup = Record<string, string>;
 
 /** The latest date the floor sheet knows about (cheap, cached 60s). */
 export async function getFloorSheetDates(): Promise<FloorSheetManifest> {
-  const { data } = await feedJson<Rec>(`${YONEPSE_BASE}${FLOOR_SHEET_MANIFEST_URL}`, TTL.fast);
+  const { data } = await feedJson<Rec>(`${FLOOR_SHEET_BASE}${FLOOR_SHEET_MANIFEST_URL}`, TTL.fast);
   const dates = Array.isArray(data?.["availableDates"])
     ? (data!["availableDates"] as unknown[]).map(String).sort()
     : [];
@@ -145,8 +148,8 @@ interface Lookups {
 /** Stock + broker id → name lookups for the floor sheet (cached daily). */
 async function getFloorSheetLookups(): Promise<Lookups> {
   const [stocks, brokers] = await Promise.all([
-    feedJson<StockLookup>(`${YONEPSE_BASE}${STOCKS_LOOKUP_URL}`, TTL.daily),
-    feedJson<BrokerLookup>(`${YONEPSE_BASE}${BROKERS_LOOKUP_URL}`, TTL.daily),
+    feedJson<StockLookup>(`${FLOOR_SHEET_BASE}${STOCKS_LOOKUP_URL}`, TTL.daily),
+    feedJson<BrokerLookup>(`${FLOOR_SHEET_BASE}${BROKERS_LOOKUP_URL}`, TTL.daily),
   ]);
   return {
     stocks: stocks.data ?? {},
@@ -162,7 +165,7 @@ async function getDailySheet(date: string): Promise<{ sheet: DailySheet | null; 
   const manifest = await getFloorSheetDates();
   const isLatest = date === manifest.latestDate;
   const { data, stale } = await feedJson<DailySheet>(
-    `${YONEPSE_BASE}${FLOOR_SHEET_DAILY_URL(date)}`,
+    `${FLOOR_SHEET_BASE}${FLOOR_SHEET_DAILY_URL(date)}`,
     isLatest ? TTL.fast : TTL.daily,
   );
   if (!data || !Array.isArray(data.transactions)) return { sheet: null, stale: true };

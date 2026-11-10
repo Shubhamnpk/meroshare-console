@@ -50,6 +50,7 @@ export const ACCOUNT_NAV: NavItem[] = [
 export const MOBILE_NAV: NavItem[] = [
   { to: "/dashboard", label: "Home", icon: LayoutDashboard },
   { to: "/portfolio", label: "Portfolio", icon: Briefcase },
+  { to: "/transactions", label: "Transactions", icon: History },
   { to: "/market", label: "Market", icon: LineChart },
   { to: "/ipo", label: "IPO", icon: Rocket },
   { to: "/tools", label: "Tools", icon: Blocks },
@@ -163,7 +164,7 @@ export function MobileNav() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border/70 bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
-      <div className="grid grid-cols-5">
+      <div className="grid grid-cols-6">
         {MOBILE_NAV.map((item) => {
           const active = pathname === item.to;
           return (
@@ -171,12 +172,12 @@ export function MobileNav() {
               key={item.to}
               to={item.to}
               className={cn(
-                "flex flex-col items-center gap-1 py-2.5 text-[0.68rem] font-medium transition-colors",
+                "flex min-w-0 flex-col items-center gap-1 px-0.5 py-2.5 text-[0.62rem] font-medium leading-none tracking-tight transition-colors sm:text-[0.68rem]",
                 active ? "text-primary" : "text-muted-foreground",
               )}
             >
               <item.icon className="size-5" aria-hidden />
-              {item.label}
+              <span className="max-w-full truncate">{item.label}</span>
             </Link>
           );
         })}

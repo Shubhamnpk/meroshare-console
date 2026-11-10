@@ -54,13 +54,13 @@ function trimNum(amount: number, maxDp: number): string {
   return String(Number(amount.toFixed(maxDp)));
 }
 
-export function native(amount: number, currency: string): string {
+export function native(amount: number, currency: string, maxDp = 2): string {
   if (!Number.isFinite(amount)) return "-";
-  if (currency === "GBX" || currency === "GBp") return `${trimNum(amount, 2)}p`;
-  if (currency === "GBP") return `£${trimNum(amount, 2)}`;
-  if (currency === "USD") return `$${trimNum(amount, 2)}`;
-  if (currency === "INR") return `₹${trimNum(amount, 2)}`;
-  if (currency === "EUR") return `€${trimNum(amount, 2)}`;
+  if (currency === "GBX" || currency === "GBp") return `${trimNum(amount, maxDp)}p`;
+  if (currency === "GBP") return `£${trimNum(amount, maxDp)}`;
+  if (currency === "USD") return `$${trimNum(amount, maxDp)}`;
+  if (currency === "INR") return `₹${trimNum(amount, maxDp)}`;
+  if (currency === "EUR") return `€${trimNum(amount, maxDp)}`;
   if (!currency) return String(Number(amount.toFixed(8)));
   return `${trimNum(amount, 6)} ${currency}`;
 }

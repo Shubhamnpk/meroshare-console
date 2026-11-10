@@ -1,6 +1,9 @@
 /** At most 2 decimals, dropping a useless ".00" everywhere (universal rule). */
 const NUM = new Intl.NumberFormat("en-NP", { maximumFractionDigits: 2 });
 
+/** Quantities keep whatever fraction they carry (0.4444 shares, not 0.44). */
+const QTY = new Intl.NumberFormat("en-NP", { maximumFractionDigits: 8 });
+
 export function toNumber(value: unknown): number {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
   if (typeof value === "string") {
@@ -53,7 +56,8 @@ export function formatQty(value: unknown, opts?: { compact?: boolean }): string 
     if (abs >= 1_00_000) return `${NUM.format(n / 1_00_000)} L`;
     if (abs >= 1_000) return `${NUM.format(n / 1_000)} K`;
   }
-  return NUM.format(Math.round(n));
+  // Units keep every decimal they carry (0.4444 stays 0.4444); money stays 2dp.
+  return Number.isInteger(n) ? NUM.format(n) : QTY.format(Number(n.toFixed(8)));
 }
 
 export function formatPercent(value: number): string {

@@ -104,7 +104,7 @@ export function GlobalHistoryPanel({ txns }: { txns: GlobalTxn[] }) {
   const waccSeries = mode === "total" ? costSeries : undefined;
 
   const selectedPoint = useMemo(
-    () => (selectedTime != null ? rawPoints.find((p) => p.time === selectedTime) ?? null : null),
+    () => (selectedTime != null ? (rawPoints.find((p) => p.time === selectedTime) ?? null) : null),
     [selectedTime, rawPoints],
   );
 
@@ -211,7 +211,9 @@ export function GlobalHistoryPanel({ txns }: { txns: GlobalTxn[] }) {
                   <div className="flex items-center justify-between gap-3">
                     <span>Net P/L:</span>
                     <span className={cn("font-mono font-medium", pl >= 0 ? "text-gain" : "text-loss")}>
-                      {pl >= 0 ? "+" : "-"}{fmt(Math.abs(pl))} ({plPct >= 0 ? "+" : ""}{plPct.toFixed(2)}%)
+                      {pl >= 0 ? "+" : "-"}
+                      {fmt(Math.abs(pl))} ({plPct >= 0 ? "+" : ""}
+                      {plPct.toFixed(2)}%)
                     </span>
                   </div>
                   {count > 0 ? (
@@ -354,7 +356,9 @@ function GlobalPointBreakdown({
             <span className="text-muted-foreground mr-1">Value:</span>
             <span className="font-medium mr-2">{fmt(totalValue)}</span>
             <span className={cn("font-semibold", tone(totalProfit))}>
-              {sign(totalProfit)}{fmt(Math.abs(totalProfit))} ({sign(totalProfitPct)}{Math.abs(totalProfitPct).toFixed(2)}%)
+              {sign(totalProfit)}
+              {fmt(Math.abs(totalProfit))} ({sign(totalProfitPct)}
+              {Math.abs(totalProfitPct).toFixed(2)}%)
             </span>
           </div>
           <button

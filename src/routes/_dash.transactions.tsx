@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Money } from "@/components/ui/money";
 import { GlobalImportDialog } from "@/components/world/global-import-dialog";
+import { GlobalDividendsPanel } from "@/components/world/global-dividends-panel";
 import { GlobalPositionSheet } from "@/components/world/global-position-sheet";
 import { GlobalTxnEditDialog } from "@/components/world/global-txn-edit-dialog";
 import { deleteGlobalTxn, deriveHoldings, useGlobalTxns } from "@/lib/world/store";
@@ -739,6 +740,7 @@ function TransactionsPage() {
               </Table>
             </div>
           )}
+          <GlobalDividendsPanel txns={globalTxns} onPickSymbol={setPositionSymbol} />
           <GlobalImportDialog open={importOpen} onOpenChange={setImportOpen} />
           <GlobalTxnEditDialog txn={editingTxn} onOpenChange={() => setEditingTxn(null)} />
           <EarnedBreakdownDialog open={earnedOpen} onOpenChange={setEarnedOpen} txns={globalTxns} />

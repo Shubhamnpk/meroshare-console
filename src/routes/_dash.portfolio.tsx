@@ -21,6 +21,7 @@ import { ScripSheet } from "@/components/market/scrip-sheet";
 import { GlobalPositionSheet, native as formatNative } from "@/components/world/global-position-sheet";
 import { HistoryPanel } from "@/components/portfolio/history-panel";
 import { GlobalHistoryPanel } from "@/components/world/global-history-panel";
+import { GlobalDividendsPanel } from "@/components/world/global-dividends-panel";
 import { HoldingsTable, toPaperRows, type HoldingsSortKey as SortKey } from "@/components/portfolio/holdings-table";
 import {
   brokerConnectionsQuery,
@@ -1314,8 +1315,7 @@ function PortfolioPage() {
                 const prevText = formatNative(h.prevNative, h.liveCcy);
                 const nativeValueText = formatNative(h.units * h.ltpNative, h.liveCcy);
                 const convertedValueText = disp(h.value);
-                const dayText =
-                  disp(Math.abs(h.dayChange)) ?? formatNative(Math.abs(dayNative), h.liveCcy);
+                const dayText = disp(Math.abs(h.dayChange)) ?? formatNative(Math.abs(dayNative), h.liveCcy);
                 const nativeAvgText = formatNative(h.avgNative, h.nativeCcy);
                 const convertedAvgText = disp(h.avgBuy);
                 const plConverted = disp(Math.abs(pl));
@@ -1554,6 +1554,8 @@ function PortfolioPage() {
       {view === "global" && globalSectors.length > 0 ? <SectorAllocationPanel sectors={globalSectors} /> : null}
 
       {view === "global" && globalEnriched.holdings.length > 0 ? <GlobalHistoryPanel txns={globalTxns} /> : null}
+
+      {view === "global" ? <GlobalDividendsPanel txns={globalTxns} onPickSymbol={setGlobalPicked} /> : null}
 
       {view === "yobroker" && yoEnriched && yoEnriched.holdings.length > 0 ? (
         <HistoryPanel holdings={yoEnriched.holdings as unknown as EnrichedHolding[]} onPickScrip={setPicked} />
