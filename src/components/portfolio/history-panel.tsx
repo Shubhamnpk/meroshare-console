@@ -11,6 +11,8 @@ import { dividendsQuery, faceValuesQuery, portfolioHistoryQuery, transactionsQue
 import { useSettings } from "@/lib/settings";
 import { parseNptEpoch, unitsHeldAt, type UnitSnapshot } from "@/lib/nepse/timeline";
 import { formatDate, formatNpr, formatPercent, formatQty, toNumber } from "@/lib/format";
+import { GlobalDividendsPanel } from "@/components/world/global-dividends-panel";
+import { useGlobalTxns } from "@/lib/world/store";
 import { cn } from "@/lib/utils";
 import type { DividendRow, EnrichedHolding, PortfolioGranularity, PortfolioHistoryPoint } from "@/lib/nepse/types";
 import type { TransactionItem } from "@/lib/meroshare/types";
@@ -268,9 +270,16 @@ function PriceHistoryTab({
           </div>
           <div className="rounded-xl border border-border/60 bg-surface px-3 py-2">
             <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">
-              {activeMode === "profit" ? "Current P/L" : "End"} ({formatLabel(timelinePoints[timelinePoints.length - 1]!.time)})
+              {activeMode === "profit" ? "Current P/L" : "End"} (
+              {formatLabel(timelinePoints[timelinePoints.length - 1]!.time)})
             </p>
-            <p className={cn("num text-sm font-medium", activeMode === "profit" && historyStats.end > 0 && "text-gain", activeMode === "profit" && historyStats.end < 0 && "text-loss")}>
+            <p
+              className={cn(
+                "num text-sm font-medium",
+                activeMode === "profit" && historyStats.end > 0 && "text-gain",
+                activeMode === "profit" && historyStats.end < 0 && "text-loss",
+              )}
+            >
               {formatNpr(historyStats.end, { compact: compactNumbers })}
             </p>
           </div>
@@ -728,9 +737,7 @@ function DividendTable({ rows, scrip }: { rows: DivRow[]; scrip: string }) {
                       ? formatDate(r.announcementDate)
                       : "-"}
                 </TableCell>
-                <TableCell className="num text-right font-medium text-muted-foreground">
-                  {formatQty(r.held)}
-                </TableCell>
+                <TableCell className="num text-right font-medium text-muted-foreground">{formatQty(r.held)}</TableCell>
                 <TableCell className="num text-right font-medium">
                   {r.cashValue > 0 ? formatNpr(r.cashValue) : "-"}
                 </TableCell>
@@ -844,6 +851,8 @@ function DividendHistoryTab({ onPickScrip }: { onPickScrip: (scrip: string) => v
   const dividends = useQuery(dividendsQuery());
   const items: TransactionItem[] = q.data?.items ?? [];
   const [year, setYear] = useState<string>("all");
+  const globalTxns = useGlobalTxns();
+  const hasForeignDivs = useMemo(() => globalTxns.some((t) => t.side === "DIV"), [globalTxns]);
 
   // Carry-forward snapshots per scrip, from the actual transaction balances.
   const snapshotsBySymbol = useMemo(() => {
@@ -996,7 +1005,7 @@ function DividendHistoryTab({ onPickScrip }: { onPickScrip: (scrip: string) => v
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="num rounded-full bg-gain/15 px-2 py-0.5 text-xs font-semibold text-gain">
-            Est. cash {formatNpr(totals.cash, { compact: true })}
+            Est. demat cash {formatNpr(totals.cash, { compact: true })}
           </span>
           {totals.bonus > 0 ? (
             <span className="num rounded-full bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary">
@@ -1064,7 +1073,7 @@ function DividendHistoryTab({ onPickScrip }: { onPickScrip: (scrip: string) => v
 
       <div className="space-y-2">
         {grouped.length === 0 ? (
-          year !== "all" ? (
+          hasForeignDivs ? null : year !== "all" ? (
             <EmptyBlock
               title={`No dividends in ${year}`}
               description="Nothing matched this year. Pick another year above or tap a stat card to filter."
@@ -1135,6 +1144,14 @@ function DividendHistoryTab({ onPickScrip }: { onPickScrip: (scrip: string) => v
         company&apos;s face value (indicative, actual payouts depend on the company&apos;s final records and 5% tax is
         withheld at source.
       </p>
+
+      {hasForeignDivs ? (
+        <GlobalDividendsPanel
+          txns={globalTxns}
+          title="Foreign dividends"
+          description="Cash your broker statements show for imported global holdings, converted at current FX"
+        />
+      ) : null}
     </div>
   );
 }

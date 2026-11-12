@@ -393,24 +393,26 @@ function DashboardPage() {
       tone="brand"
       icon={<Briefcase className="size-4" />}
       sub={
-        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="flex items-center gap-2">
           <DeltaPill value={change}>
             {change > 0 ? <TrendingUp className="size-3" /> : change < 0 ? <TrendingDown className="size-3" /> : null}
             {formatPercent(changePct)}
           </DeltaPill>
-          <span className="num text-foreground">
-            {change > 0 ? "+" : change < 0 ? "-" : ""}
-            <AdaptiveNpr value={Math.abs(change)} />
-          </span>
-          <span>vs previous close</span>
+          vs previous close
         </span>
       }
     />,
     <StatCard
-      key="prev"
-      label="Value at previous close"
-      value={<AdaptiveNpr value={totPrev} />}
-      sub="Yesterday's closing valuation"
+      key="change"
+      label="Day change"
+      value={
+        <>
+          {change > 0 ? "+" : change < 0 ? "-" : ""}
+          <AdaptiveNpr value={Math.abs(change)} />
+        </>
+      }
+      tone={change > 0 ? "gain" : change < 0 ? "loss" : "neutral"}
+      sub={change > 0 ? "Unrealised gain today" : change < 0 ? "Unrealised loss today" : "No change today"}
     />,
     <StatCard
       key="scrips"
@@ -681,7 +683,7 @@ function DashboardPage() {
             <div className="flex snap-x gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {watchlist.symbols.map((symbol) => {
                 const price = market.data?.prices.find((p) => p.symbol === symbol);
-                const wq = price ? null : dashWorldQuotes.get(symbol.toUpperCase()) ?? null;
+                const wq = price ? null : (dashWorldQuotes.get(symbol.toUpperCase()) ?? null);
                 return (
                   <button
                     key={symbol}

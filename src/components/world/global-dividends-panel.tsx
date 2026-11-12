@@ -108,10 +108,14 @@ type DivKey = "date" | "symbol" | "quarter" | "shares" | "perShare" | "amount";
 export function GlobalDividendsPanel({
   txns,
   onPickSymbol,
+  title = "Dividends",
+  description = "Cash received from your foreign holdings: yearly, quarterly, every payout",
 }: {
   txns: GlobalTxn[];
   /** Opens the global position sheet for the tapped payout's stock. */
   onPickSymbol?: (symbol: string) => void;
+  title?: string;
+  description?: string;
 }) {
   const rows = useMemo(() => dividendPayouts(txns), [txns]);
   const currencies = useMemo(() => [...new Set(rows.map((r) => r.currency))].sort(), [rows]);
@@ -236,10 +240,8 @@ export function GlobalDividendsPanel({
     <Panel as="section" padding="none" className="overflow-clip">
       <div className="flex flex-wrap items-end justify-between gap-2 p-4 pb-0 sm:px-5 sm:pt-5">
         <div>
-          <h2 className="font-display text-base font-semibold">Dividends</h2>
-          <p className="text-xs text-muted-foreground">
-            Cash received from your foreign holdings: yearly, quarterly, every payout
-          </p>
+          <h2 className="font-display text-base font-semibold">{title}</h2>
+          <p className="text-xs text-muted-foreground">{description}</p>
         </div>
         {rows.length > 0 ? (
           <span className="num inline-flex items-center gap-1.5 rounded-full bg-gain/15 px-2.5 py-1 text-xs font-semibold text-gain">

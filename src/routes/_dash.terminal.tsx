@@ -1683,16 +1683,16 @@ function TerminalPage() {
           </div>
 
           {quickSymbols.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
+            <div className="-mx-1 flex snap-x gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0 [&::-webkit-scrollbar]:hidden">
               {quickSymbols.map((s) => {
                 const inList = s !== "NEPSE" && watchlist.has(s);
                 return (
-                  <span key={s} className="group relative inline-flex">
+                  <span key={s} className="group relative inline-flex shrink-0 snap-start">
                     <button
                       type="button"
                       onClick={() => setState((prev) => ({ ...prev, symbol: s }))}
                       className={cn(
-                        "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                        "rounded-full border px-3 py-1 text-xs font-medium whitespace-nowrap transition-colors",
                         state.symbol === s
                           ? "border-primary/50 bg-primary/15 text-primary"
                           : "border-border/60 bg-surface text-muted-foreground hover:border-primary/30",
@@ -1710,11 +1710,11 @@ function TerminalPage() {
                         aria-label={inList ? `Remove ${s} from watchlist` : `Add ${s} to watchlist`}
                         title={inList ? `Remove ${s} from watchlist` : `Add ${s} to watchlist`}
                         className={cn(
-                          "absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full border bg-card shadow-sm transition-all",
-                          "sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100",
+                          "absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full border bg-card shadow-sm transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100",
                           inList
                             ? "border-amber-500/50 text-amber-600 dark:text-amber-400"
-                            : "border-border/70 text-muted-foreground hover:border-primary/40 hover:text-primary",
+                            : "border-border/70 text-muted-foreground hover:border-primary/40 hover:text-primary focus-visible:opacity-100 sm:group-hover:opacity-100 sm:focus-visible:opacity-100",
+                          !inList && state.symbol !== s && "opacity-0",
                         )}
                       >
                         <Star className={cn("size-3", inList && "fill-warning text-warning")} />
