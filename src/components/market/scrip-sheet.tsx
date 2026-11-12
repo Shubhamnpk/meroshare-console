@@ -173,7 +173,7 @@ function PositionCard({
           </div>
           {!live ? (
             <p className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[0.7rem] leading-relaxed text-amber-700 dark:text-amber-300">
-              No live market price right now — value and returns are paused, not zero.
+              No live market price right now. Value and returns are paused, not zero.
             </p>
           ) : null}
           <div className="mt-3 rounded-xl border border-border/40 overflow-hidden">
@@ -1227,7 +1227,7 @@ export function ScripSheet({
                 {ltpIsEstimate ? (
                   <span
                     className="mt-1 inline-block rounded-full bg-warning/15 px-2 py-0.5 text-[0.65rem] font-semibold text-warning"
-                    title="Face-value estimate — no market price available right now"
+                    title="Face-value estimate: no market price available right now"
                   >
                     est. · no live price
                   </span>

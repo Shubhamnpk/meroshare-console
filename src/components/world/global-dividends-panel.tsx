@@ -238,7 +238,7 @@ export function GlobalDividendsPanel({
         <div>
           <h2 className="font-display text-base font-semibold">Dividends</h2>
           <p className="text-xs text-muted-foreground">
-            Cash received from your foreign holdings — yearly, quarterly, every payout
+            Cash received from your foreign holdings: yearly, quarterly, every payout
           </p>
         </div>
         {rows.length > 0 ? (
@@ -519,7 +519,7 @@ export function GlobalDividendsPanel({
             Amounts are what the broker file states you received, in {display} at current FX
             {currencies.length > 1 ? ` (${currencies.join(", ")} rows)` : ""}. Tap an amount or a per-share figure to
             see the file's own currency.
-            {activeQuarter > 0 ? ` Showing Q${activeQuarter} of ${active} only — tap the card again to clear.` : ""}
+            {activeQuarter > 0 ? ` Showing Q${activeQuarter} of ${active} only. Tap the card again to clear.` : ""}
           </p>
         </>
       )}

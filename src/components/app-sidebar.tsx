@@ -1,4 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeftRight,
@@ -12,6 +13,7 @@ import {
   History,
   LayoutDashboard,
   LineChart,
+  Menu,
   Rocket,
   Send,
   Settings,
@@ -21,6 +23,7 @@ import { cn } from "@/lib/utils";
 import { useSettings } from "@/lib/settings";
 import { brokerConnectionsQuery } from "@/lib/queries";
 import { loadYoWallet } from "@/lib/yobroker/store";
+import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 
 export type NavItem = { to: string; label: string; icon: typeof LayoutDashboard };
 
@@ -47,13 +50,12 @@ export const ACCOUNT_NAV: NavItem[] = [
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
+/** The four tabs that stay pinned on a phone. Everything else lives behind "More". */
 export const MOBILE_NAV: NavItem[] = [
   { to: "/dashboard", label: "Home", icon: LayoutDashboard },
   { to: "/portfolio", label: "Portfolio", icon: Briefcase },
-  { to: "/transactions", label: "Transactions", icon: History },
   { to: "/market", label: "Market", icon: LineChart },
-  { to: "/ipo", label: "IPO", icon: Rocket },
-  { to: "/tools", label: "Tools", icon: Blocks },
+  { to: "/transactions", label: "Transactions", icon: History },
 ];
 
 function NavGroup({
@@ -162,27 +164,126 @@ function Brand({ collapsed, onToggle }: { collapsed: boolean; onToggle?: () => v
 
 export function MobileNav() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const { edisBeta } = useSettings();
+  const connections = useQuery(brokerConnectionsQuery());
+  const [moreOpen, setMoreOpen] = useState(false);
+
+  const yoActive = (() => {
+    try {
+      return loadYoWallet(null).active;
+    } catch {
+      return false;
+    }
+  })();
+  const brokerLinked = (connections.data?.length ?? 0) > 0 || yoActive;
+
+  // Same order as the desktop sidebar, minus the pinned tabs.
+  const moreNav: NavItem[] = [
+    { to: "/terminal", label: "Terminal", icon: ChartCandlestick },
+    { to: "/analytics", label: "Analytics", icon: BarChart3 },
+    { to: "/tools", label: "Tools", icon: Blocks },
+    ...IPO_NAV.filter((item) => item.to !== "/edis" || edisBeta),
+    ...(brokerLinked ? TRADE_NAV : []),
+    ...ACCOUNT_NAV,
+  ];
+  const moreActive = MOBILE_NAV.every((item) => pathname !== item.to);
+
+  // Close the sheet whenever navigation lands somewhere new.
+  useEffect(() => {
+    setMoreOpen(false);
+  }, [pathname]);
+
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border/70 bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
-      <div className="grid grid-cols-6">
-        {MOBILE_NAV.map((item) => {
-          const active = pathname === item.to;
-          return (
-            <Link
-              key={item.to}
-              to={item.to}
+    <>
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border/70 bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
+        <div className="grid grid-cols-5">
+          {MOBILE_NAV.map((item) => (
+            <MobileTab key={item.to} item={item} active={pathname === item.to} />
+          ))}
+          <button
+            type="button"
+            onClick={() => setMoreOpen(true)}
+            aria-expanded={moreOpen}
+            aria-haspopup="dialog"
+            className={cn("flex min-w-0 flex-col items-center gap-1 py-1.5", moreActive && "text-primary")}
+          >
+            <span
               className={cn(
-                "flex min-w-0 flex-col items-center gap-1 px-0.5 py-2.5 text-[0.62rem] font-medium leading-none tracking-tight transition-colors sm:text-[0.68rem]",
-                active ? "text-primary" : "text-muted-foreground",
+                "flex h-7 items-center justify-center rounded-full px-3.5 transition-colors",
+                moreActive ? "bg-primary/12 text-primary" : "text-muted-foreground",
               )}
             >
-              <item.icon className="size-5" aria-hidden />
-              <span className="max-w-full truncate">{item.label}</span>
-            </Link>
-          );
-        })}
-      </div>
-    </nav>
+              <Menu className="size-5" aria-hidden />
+            </span>
+            <span
+              className={cn(
+                "max-w-full truncate text-[0.65rem] leading-none tracking-tight",
+                moreActive ? "font-semibold" : "font-medium text-muted-foreground",
+              )}
+            >
+              More
+            </span>
+          </button>
+        </div>
+      </nav>
+
+      <Drawer open={moreOpen} onOpenChange={setMoreOpen} shouldScaleBackground={false}>
+        <DrawerContent className="max-h-[85dvh]">
+          <DrawerHeader className="pb-1 text-left">
+            <DrawerTitle className="font-display text-base">All pages</DrawerTitle>
+            <DrawerDescription className="text-xs">Everything else in the console.</DrawerDescription>
+          </DrawerHeader>
+          <div className="grid grid-cols-3 gap-2 overflow-y-auto p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+            {moreNav.map((item) => {
+              const active = pathname === item.to;
+              return (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "flex min-h-20 flex-col items-center justify-center gap-2 rounded-2xl border px-2 py-3 text-center text-[0.7rem] leading-tight transition-colors",
+                    active
+                      ? "border-primary/40 bg-primary/10 font-semibold text-primary"
+                      : "border-border/60 bg-card/60 font-medium text-muted-foreground hover:border-border hover:text-foreground",
+                  )}
+                >
+                  <item.icon className="size-5" aria-hidden />
+                  <span className="line-clamp-2">{item.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </DrawerContent>
+      </Drawer>
+    </>
+  );
+}
+
+function MobileTab({ item, active }: { item: NavItem; active: boolean }) {
+  return (
+    <Link
+      to={item.to}
+      aria-current={active ? "page" : undefined}
+      className="flex min-w-0 flex-col items-center gap-1 py-1.5"
+    >
+      <span
+        className={cn(
+          "flex h-7 items-center justify-center rounded-full px-3.5 transition-colors",
+          active ? "bg-primary/12 text-primary" : "text-muted-foreground",
+        )}
+      >
+        <item.icon className="size-5" aria-hidden />
+      </span>
+      <span
+        className={cn(
+          "max-w-full truncate text-[0.65rem] leading-none tracking-tight",
+          active ? "font-semibold text-primary" : "font-medium text-muted-foreground",
+        )}
+      >
+        {item.label}
+      </span>
+    </Link>
   );
 }
 

@@ -433,7 +433,7 @@ export function IpoDetailSheet({
           crnNumber: crn.trim(),
           amount: Number(kitta) * unitPrice,
         });
-        toast.success("Demo application updated — nothing was sent to CDSC.");
+        toast.success("Demo application updated. Nothing was sent to CDSC.");
       } else {
         recordDemoApplication({
           companyShareId: issue.companyShareId,
@@ -447,7 +447,7 @@ export function IpoDetailSheet({
           crnNumber: crn.trim(),
           amount: Number(kitta) * unitPrice,
         });
-        toast.success("Demo application recorded — nothing was sent to CDSC.");
+        toast.success("Demo application recorded. Nothing was sent to CDSC.");
       }
       onDemoChange?.();
       close();
@@ -691,9 +691,7 @@ export function IpoDetailSheet({
                     className="mt-0"
                   />
                   <span>
-                    <span className="block text-[11px] opacity-80">
-                    Auto-remember CRN on this device
-                    </span>
+                    <span className="block text-[11px] opacity-80">Auto-remember CRN on this device</span>
                   </span>
                 </label>
               </div>
@@ -734,7 +732,7 @@ export function IpoDetailSheet({
               ) : null}
               {demo ? (
                 <p className="rounded-lg border border-primary/25 bg-primary/10 px-3 py-2 text-xs text-muted-foreground">
-                  Demo mode — this application is simulated on your device and never reaches CDSC.
+                  Demo mode. This application is simulated on your device and never reaches CDSC.
                 </p>
               ) : null}
               <div className="flex justify-end gap-2 pt-1">

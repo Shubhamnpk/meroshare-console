@@ -347,7 +347,7 @@ export function PortfolioDayCard({ holdings }: { holdings: { scrip: string; unit
             <span
               title={
                 census.mapping
-                  ? "Still pulling today's ticks — the line fills in as legs arrive"
+                  ? "Still pulling today's ticks, the line fills in as legs arrive"
                   : `Not in today's line: ${census.missing.slice(0, 6).join(", ")}${census.missing.length > 6 ? ` +${census.missing.length - 6} more` : ""}`
               }
               className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-surface px-1.5 py-0.5 text-[0.68rem] text-muted-foreground"
@@ -473,8 +473,8 @@ export function PortfolioDayCard({ holdings }: { holdings: { scrip: string; unit
               ? "Profit = value minus what you paid (average cost). "
               : "Total = portfolio value over time vs investment line (dashed). "}
             {isDay
-              ? "Last day across every market you hold — flat while a market sleeps, global at current FX."
-              : "Closes across every market you hold — starts at your first position, global at current FX."}
+              ? "Last day across every market you hold: flat while a market sleeps, global at current FX."
+              : "Closes across every market you hold: starts at your first position, global at current FX."}
           </p>
         </Link>
       )}

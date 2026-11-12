@@ -252,7 +252,7 @@ export function GlobalHistoryPanel({ txns }: { txns: GlobalTxn[] }) {
               : "Total = portfolio value over time vs your actual total investment line (dashed). "}
             {range === "1D"
               ? "Today's sessions · 15-min bars. "
-              : "Follows your actual buys and sells — starts at your first buy, not a backcast. "}
+              : "Follows your actual buys and sells, starting at your first buy, not a backcast. "}
             Converted at current FX rates. Click any point on the chart to inspect holdings and allocation on that date.
             {failed.length > 0 ? ` Excludes ${failed.join(", ")} (no history).` : ""}
           </p>

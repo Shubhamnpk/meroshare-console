@@ -277,8 +277,8 @@ export function OrderTicket({
                     className="mt-1 text-[0.68rem] font-medium text-warning"
                     title={
                       wsStatus === "error"
-                        ? "The live broker feed failed — this is the last fetched quote, refreshing periodically."
-                        : "The live broker feed is reconnecting — this is the last fetched quote, refreshing periodically."
+                        ? "The live broker feed failed. This is the last fetched quote, refreshing periodically."
+                        : "The live broker feed is reconnecting. This is the last fetched quote, refreshing periodically."
                     }
                   >
                     {wsStatus === "error" ? "Feed unavailable · last quote" : "Feed connected · last quote"}
@@ -437,9 +437,9 @@ export function OrderTicket({
 
         {isOpenEnd ? (
           <p className="mt-3 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2.5 text-xs leading-relaxed">
-            <span className="font-semibold">Not tradable.</span> {symbol} is an open-end mutual fund — it has no market
-            price and can&apos;t be bought or sold through a broker. Transact directly with the fund manager at NAV
-            instead.
+            <span className="font-semibold">Not tradable.</span> {symbol} is an open-end mutual fund, so it has no
+            market price and can&apos;t be bought or sold through a broker. Transact directly with the fund manager at
+            NAV instead.
           </p>
         ) : null}
         <Button
@@ -465,7 +465,7 @@ export function OrderTicket({
               <DialogDescription>
                 {brokerId === "yobroker" ? (
                   <>
-                    This is a <strong>paper order</strong> via Yo Broker. No real money moves — fills against live NEPSE
+                    This is a <strong>paper order</strong> via Yo Broker. No real money moves. Fills against live NEPSE
                     prices.
                   </>
                 ) : (

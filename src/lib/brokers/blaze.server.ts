@@ -249,7 +249,7 @@ export async function modifyBlazeOrder(
   session: NaasaSession,
   input: BlazeModifyInput,
 ): Promise<{ ok: boolean; message: string; tranId: string | null }> {
-  if (!input.tranId || !input.orderId) throw new Error("Order identity missing — refresh the book.");
+  if (!input.tranId || !input.orderId) throw new Error("Order identity missing. Refresh the book.");
   if (!Number.isFinite(input.remainingQty) || input.remainingQty < 1) {
     throw new Error("Nothing left to modify on this order.");
   }

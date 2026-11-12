@@ -9,7 +9,7 @@ const DEMO_TOASTS: { label: string; run: () => void }[] = [
   { label: "Success", run: () => toast.success("Order placed", { description: "ALI100 × 50 @ NPR 412.50" }) },
   {
     label: "Error",
-    run: () => toast.error("Order rejected", { description: "Insufficient balance — required NPR 5,400" }),
+    run: () => toast.error("Order rejected", { description: "Insufficient balance. Required NPR 5,400" }),
   },
   { label: "Warning", run: () => toast.warning("Price alert", { description: "NABIL crossed NPR 1,205" }) },
   { label: "Info", run: () => toast.info("Market opens soon", { description: "Session 11:00–15:00 NPT" }) },

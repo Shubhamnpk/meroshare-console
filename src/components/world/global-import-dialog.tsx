@@ -65,11 +65,11 @@ export function GlobalImportDialog({ open, onOpenChange }: { open: boolean; onOp
       const added = appendGlobalTxns(parsed.txns);
       const dupes = parsed.txns.length - added;
       if (added === 0) {
-        toast.info("Those rows are already imported — nothing changed.");
+        toast.info("Those rows are already imported. Nothing changed.");
       } else if (parsed.errors.length > 0) {
         toast.warning(`Added ${added} rows, skipped ${parsed.errors.length} bad lines.`);
       } else if (dupes > 0) {
-        toast.success(`Added ${added} new rows — ${dupes} duplicate${dupes === 1 ? "" : "s"} skipped.`);
+        toast.success(`Added ${added} new rows, ${dupes} duplicate${dupes === 1 ? "" : "s"} skipped.`);
       } else {
         toast.success(`Added ${added} rows.`);
       }
@@ -104,7 +104,7 @@ export function GlobalImportDialog({ open, onOpenChange }: { open: boolean; onOp
         <DialogHeader className="border-b border-border/60 px-5 pb-4 pt-5 pr-12">
           <DialogTitle>Import global data</DialogTitle>
           <DialogDescription>
-            Trading 212 statements or our standard CSV. Foreign holdings only — NEPSE demat data is never touched.
+            Trading 212 statements or our standard CSV. Foreign holdings only. NEPSE demat data is never touched.
           </DialogDescription>
         </DialogHeader>
 
@@ -171,7 +171,7 @@ export function GlobalImportDialog({ open, onOpenChange }: { open: boolean; onOp
             <div className="flex gap-2 rounded-xl border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
               <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
               <p>
-                Unrecognized file — expected a Trading 212 statement or the standard{" "}
+                Unrecognized file. Expected a Trading 212 statement or the standard{" "}
                 <span className="font-mono">symbol,name,side,…</span> CSV.
               </p>
             </div>

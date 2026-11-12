@@ -415,7 +415,7 @@ function AmoOrderRow({
       refresh();
       if (r.ok) {
         toast.success(r.message);
-      } else toast.error(`${r.message} — AMO list refreshed.`);
+      } else toast.error(`${r.message} AMO list refreshed.`);
     },
     onError: (err) => {
       setArmed(false);
@@ -673,7 +673,7 @@ function AmoOrderRow({
         </div>
       ) : (
         <p className="mt-2 border-t border-border/60 pt-2 text-[0.7rem] text-muted-foreground">
-          {a.status ? `No actions — order is ${a.status}.` : "No actions available."}
+          {a.status ? `No actions. Order is ${a.status}.` : "No actions available."}
         </p>
       )}
     </div>
@@ -929,7 +929,7 @@ function OrderHistoryBox({
       <div className="mt-2 border-t border-border/60 pt-2">
         <DetailGrid rows={detailRows} />
         <p className="mt-2 text-[0.7rem] text-muted-foreground">
-          No lifecycle events returned — details above are from the order book.
+          No lifecycle events returned. Details above are from the order book.
         </p>
       </div>
     );
@@ -1211,7 +1211,7 @@ function BrokerPage() {
         toast.success(r.message);
         if (brokerId === "yobroker") setYoTick((v) => v + 1);
       } else {
-        toast.error(`${r.message} — order list refreshed.`);
+        toast.error(`${r.message} Order list refreshed.`);
       }
     },
     onError: (err) => {
@@ -1251,7 +1251,7 @@ function BrokerPage() {
         toast.success(r.message);
         setModKey(null);
       } else {
-        toast.error(`${r.message} — order list refreshed.`);
+        toast.error(`${r.message} Order list refreshed.`);
       }
     },
     onError: (err) => {
@@ -1740,7 +1740,7 @@ function BrokerPage() {
               <FlaskConical className="size-5" />
             </span>
             <div>
-              <p className="text-sm font-semibold">Yo Broker — paper trading</p>
+              <p className="text-sm font-semibold">Yo Broker · paper trading</p>
               <p className="text-xs text-muted-foreground">
                 Practice with virtual Rs 1,000,000. No real money, no settlement.
                 {yoActive ? " Active on this device." : ""}
@@ -1978,7 +1978,7 @@ function BrokerPage() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm font-semibold">Carried orders · {carriedLive.length}</p>
                 <p className="text-[0.7rem] text-muted-foreground">
-                  Still live from previous days (long-lived validity) — today&apos;s book never returns these.
+                  Still live from previous days (long-lived validity). Today&apos;s book never returns these.
                 </p>
               </div>
               <div className="space-y-2">{carriedLive.map((o) => renderTmsRow(o))}</div>
@@ -2020,7 +2020,7 @@ function BrokerPage() {
               </div>
               {tab === "orders" && !(range.fromDate === todayStr && range.toDate === todayStr) ? (
                 <p className="rounded-xl border border-border/60 bg-surface px-3 py-2 text-xs text-muted-foreground">
-                  History mode — modify and cancel work on today&apos;s live orders only.{" "}
+                  History mode. Modify and cancel work on today&apos;s live orders only.{" "}
                   <button
                     type="button"
                     onClick={() => setPreset("today")}

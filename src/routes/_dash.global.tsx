@@ -88,7 +88,7 @@ function GlobalPage() {
           {holdings.length === 0 ? (
             <EmptyBlock
               title="No open positions"
-              description="Everything is sold — your past transactions stay in history."
+              description="Everything is sold. Your past transactions stay in history."
             />
           ) : valuation.isPending ? (
             <LoadingBlock label="Valuing holdings" />

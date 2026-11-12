@@ -461,7 +461,7 @@ function IndexCard({
                 }}
                 className="cursor-pointer rounded px-2 py-1 hover:text-foreground hover:underline"
               >
-                Couldn&apos;t load — tap to retry
+                Couldn&apos;t load, tap to retry
               </span>
             </div>
           ) : (
@@ -722,7 +722,7 @@ function BenchmarksSection({
               key={o.key}
               type="button"
               onClick={() => toggle(o.key)}
-              title={`${o.label} · ${formatPercent(pct)} — click to ${isOn ? "remove" : "add"}`}
+              title={`${o.label} · ${formatPercent(pct)} · click to ${isOn ? "remove" : "add"}`}
               className={cn(
                 "flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors cursor-pointer",
                 isOn
@@ -791,7 +791,7 @@ function BenchmarksSection({
             <div>
               <SheetTitle className="text-sm">All benchmarks</SheetTitle>
               <p className="text-[11px] text-muted-foreground">
-                {activeKeys.length} of {options.length} showing — tap to add or remove
+                {activeKeys.length} of {options.length} showing. Tap to add or remove
               </p>
             </div>
           </SheetHeader>
@@ -857,7 +857,7 @@ function BenchmarksSection({
       </Sheet>
       {active.length === 0 && (
         <p className="rounded-xl border border-dashed border-border/60 p-4 text-center text-xs text-muted-foreground">
-          No benchmarks selected — pick from the chips above.
+          No benchmarks selected. Pick from the chips above.
         </p>
       )}
     </div>
@@ -1651,7 +1651,7 @@ export function MarketOverview({
                               className="num font-bold text-foreground"
                               title={
                                 s.sectorPoints == null
-                                  ? "NEPSE publishes no official sub-index for this group — % is the average of its stocks"
+                                  ? "NEPSE publishes no official sub-index for this group, so % is the average of its stocks"
                                   : undefined
                               }
                             >

@@ -259,15 +259,15 @@ function TransactionsPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
+      <div className="flex items-center justify-between gap-2 sm:items-end">
+        <div className="min-w-0">
           <h1 className="font-display text-2xl font-semibold sm:text-3xl">Transactions</h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1.5">
           {txTab === "meroshare" ? (
             <>
               <Select value={symbol} onValueChange={setSymbol}>
-                <SelectTrigger className="w-44">
+                <SelectTrigger className="h-10 w-24 sm:h-9 sm:w-44">
                   <SelectValue placeholder="All stocks" />
                 </SelectTrigger>
                 <SelectContent>
@@ -281,6 +281,8 @@ function TransactionsPage() {
               </Select>
               <ExportButton
                 disabled={filtered.length === 0}
+                className="min-h-10 px-2.5 sm:min-h-11 sm:px-3"
+                labelClassName="hidden sm:inline"
                 formats={[
                   {
                     title: "CSV",
@@ -321,11 +323,19 @@ function TransactionsPage() {
             </>
           ) : (
             <>
-              <Button variant="outline" size="sm" onClick={() => setImportOpen(true)} className="gap-1.5">
-                <FileUp className="size-3.5" /> Import
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setImportOpen(true)}
+                className="min-h-10 gap-1.5 px-2.5 sm:min-h-11 sm:px-3"
+                aria-label="Import global transactions"
+              >
+                <FileUp className="size-3.5" /> <span className="hidden sm:inline">Import</span>
               </Button>
               <ExportButton
                 disabled={gFiltered.length === 0}
+                className="min-h-10 px-2.5 sm:min-h-11 sm:px-3"
+                labelClassName="hidden sm:inline"
                 formats={[
                   {
                     title: "CSV",
@@ -506,7 +516,7 @@ function TransactionsPage() {
                 value={chip.value}
                 {...(chip.flat ? {} : { valueClass: chip.up ? "text-gain" : "text-loss" })}
                 onClick={() => setEarnedOpen(true)}
-                title={`${chip.label} — tap for original amounts`}
+                title={`${chip.label} · tap for original amounts`}
               />
             ))}
           </ChipRow>

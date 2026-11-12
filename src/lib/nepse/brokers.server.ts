@@ -1,4 +1,4 @@
-import { feedJson } from "./feed.server";
+import { feedJson, YONEPSE_BASE } from "./feed.server";
 import type {
   BrokerDayStat,
   BrokerRow,
@@ -17,24 +17,13 @@ const TTL = {
   daily: 6 * 60 * 60_000,
 } as const;
 
-const YONEPSE_BASE = process.env["YONEPSE_BASE_URL"];
-
-/**
- * The yonepse Pages deploy deliberately excludes `data/floor_sheet` (~2.5 GB),
- * so every floor-sheet file is served from raw.githubusercontent instead.
- * Override with YONEPSE_FLOOR_SHEET_BASE_URL if the repo or branch moves.
- */
-const FLOOR_SHEET_BASE =
-  process.env["YONEPSE_FLOOR_SHEET_BASE_URL"] ??
-  "https://raw.githubusercontent.com/Shubhamnpk/yonepse/main/data/floor_sheet";
-
 type Rec = Record<string, unknown>;
 
 const BROKERS_URL = "/data/other/brokers.json";
-const FLOOR_SHEET_MANIFEST_URL = "/manifest.json";
-const FLOOR_SHEET_DAILY_URL = (date: string) => `/daily/${date}.json`;
-const STOCKS_LOOKUP_URL = "/lookups/stocks.json";
-const BROKERS_LOOKUP_URL = "/lookups/brokers.json";
+const FLOOR_SHEET_MANIFEST_URL = "/data/floor_sheet/manifest.json";
+const FLOOR_SHEET_DAILY_URL = (date: string) => `/data/floor_sheet/daily/${date}.json`;
+const STOCKS_LOOKUP_URL = "/data/floor_sheet/lookups/stocks.json";
+const BROKERS_LOOKUP_URL = "/data/floor_sheet/lookups/brokers.json";
 
 /** One compact floor-sheet transaction row. */
 type TxRow = [string | number, number, number, number, number, number, number, string | number];
@@ -57,7 +46,7 @@ type BrokerLookup = Record<string, string>;
 
 /** The latest date the floor sheet knows about (cheap, cached 60s). */
 export async function getFloorSheetDates(): Promise<FloorSheetManifest> {
-  const { data } = await feedJson<Rec>(`${FLOOR_SHEET_BASE}${FLOOR_SHEET_MANIFEST_URL}`, TTL.fast);
+  const { data } = await feedJson<Rec>(`${YONEPSE_BASE}${FLOOR_SHEET_MANIFEST_URL}`, TTL.fast);
   const dates = Array.isArray(data?.["availableDates"])
     ? (data!["availableDates"] as unknown[]).map(String).sort()
     : [];
@@ -148,8 +137,8 @@ interface Lookups {
 /** Stock + broker id → name lookups for the floor sheet (cached daily). */
 async function getFloorSheetLookups(): Promise<Lookups> {
   const [stocks, brokers] = await Promise.all([
-    feedJson<StockLookup>(`${FLOOR_SHEET_BASE}${STOCKS_LOOKUP_URL}`, TTL.daily),
-    feedJson<BrokerLookup>(`${FLOOR_SHEET_BASE}${BROKERS_LOOKUP_URL}`, TTL.daily),
+    feedJson<StockLookup>(`${YONEPSE_BASE}${STOCKS_LOOKUP_URL}`, TTL.daily),
+    feedJson<BrokerLookup>(`${YONEPSE_BASE}${BROKERS_LOOKUP_URL}`, TTL.daily),
   ]);
   return {
     stocks: stocks.data ?? {},
@@ -165,7 +154,7 @@ async function getDailySheet(date: string): Promise<{ sheet: DailySheet | null; 
   const manifest = await getFloorSheetDates();
   const isLatest = date === manifest.latestDate;
   const { data, stale } = await feedJson<DailySheet>(
-    `${FLOOR_SHEET_BASE}${FLOOR_SHEET_DAILY_URL(date)}`,
+    `${YONEPSE_BASE}${FLOOR_SHEET_DAILY_URL(date)}`,
     isLatest ? TTL.fast : TTL.daily,
   );
   if (!data || !Array.isArray(data.transactions)) return { sheet: null, stale: true };

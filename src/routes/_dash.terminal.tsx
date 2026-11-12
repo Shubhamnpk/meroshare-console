@@ -386,7 +386,7 @@ function TerminalPage() {
       qty: draft.qty,
       nonce: Date.now(),
     });
-    toast.success("Ticket filled from order — review and place");
+    toast.success("Ticket filled from order, review and place");
     requestAnimationFrame(() =>
       document.getElementById("order-ticket")?.scrollIntoView({ behavior: "smooth", block: "start" }),
     );
@@ -483,7 +483,7 @@ function TerminalPage() {
       if (r.ok) {
         toast.success(r.message);
       } else {
-        toast.error(`${r.message} — order list refreshed.`);
+        toast.error(`${r.message} Order list refreshed.`);
       }
     },
     onError: (err) => {
@@ -532,7 +532,7 @@ function TerminalPage() {
         toast.success(r.message);
         setModKey(null);
       } else {
-        toast.error(`${r.message} — order list refreshed.`);
+        toast.error(`${r.message} Order list refreshed.`);
       }
     },
     onError: (err) => {
@@ -603,7 +603,7 @@ function TerminalPage() {
       if (r.ok) {
         toast.success(r.message);
       } else {
-        toast.error(`${r.message} — AMO list refreshed.`);
+        toast.error(`${r.message} AMO list refreshed.`);
       }
     },
     onError: (err) => {
@@ -1650,7 +1650,7 @@ function TerminalPage() {
                   setQuery("");
                 }
               }}
-              placeholder="Search stocks, crypto or gold — NABIL, BTC-USD, GC=F…"
+              placeholder="Search stocks, crypto or gold: NABIL, BTC-USD, GC=F…"
               className="h-10 rounded-xl pl-9"
             />
             {results.length > 0 && (
@@ -1853,7 +1853,7 @@ function TerminalPage() {
                     key={r}
                     type="button"
                     disabled={unavailable}
-                    title={unavailable ? "1D unavailable — showing 1W" : undefined}
+                    title={unavailable ? "1D unavailable, showing 1W" : undefined}
                     onClick={() => setState((prev) => ({ ...prev, range: r }))}
                     className={cn(
                       "shrink-0 rounded-lg px-2 py-1 text-xs font-medium transition-colors",
@@ -1915,7 +1915,7 @@ function TerminalPage() {
                 <span
                   title={
                     legCensus.mapping
-                      ? "Still pulling today's ticks — the line fills in as legs arrive"
+                      ? "Still pulling today's ticks, the line fills in as legs arrive"
                       : `Not in today's line: ${legCensus.missing.slice(0, 6).join(", ")}${legCensus.missing.length > 6 ? ` +${legCensus.missing.length - 6} more` : ""}`
                   }
                   className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border/60 bg-surface px-2 py-1 text-[11px] text-muted-foreground"
@@ -2132,7 +2132,7 @@ function TerminalPage() {
                   const raw = err instanceof Error ? err.message : "Feed request failed.";
                   return (
                     <p className="max-w-md text-xs">
-                      {/^\s*<!doctype html/i.test(raw) ? "Server request crashed — reload the app and try again." : raw}
+                      {/^\s*<!doctype html/i.test(raw) ? "Server request crashed. Reload the app and try again." : raw}
                     </p>
                   );
                 })()}

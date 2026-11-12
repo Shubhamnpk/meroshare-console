@@ -135,10 +135,10 @@ function MarketDepthPage() {
               <TriangleAlert className="size-4 shrink-0 text-amber-400" />
               <span className="min-w-0 flex-1 text-muted-foreground">
                 {snapshotQuery.isError && sectorsQuery.isError
-                  ? "Market indices and sub-indices failed to load — charts and points may be incomplete."
+                  ? "Market indices and sub-indices failed to load, so charts and points may be incomplete."
                   : snapshotQuery.isError
-                    ? "Market indices failed to load — benchmarks may be incomplete."
-                    : "Sub-indices failed to load — sector points may be incomplete."}
+                    ? "Market indices failed to load, so benchmarks may be incomplete."
+                    : "Sub-indices failed to load, so sector points may be incomplete."}
               </span>
               <button
                 type="button"

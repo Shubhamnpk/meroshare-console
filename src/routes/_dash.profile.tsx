@@ -399,16 +399,16 @@ function BrokerKycHero({
     <div className="space-y-4">
       {/* Hero */}
       <div className="overflow-hidden rounded-2xl border border-border/70 bg-card">
-        <div className="flex flex-wrap items-center gap-4 p-5">
+        <div className="flex items-start gap-3 p-4 sm:items-center sm:gap-4 sm:p-5">
           {photoUrl ? (
-            <img src={photoUrl} alt={name} className="size-16 shrink-0 rounded-2xl object-cover" />
+            <img src={photoUrl} alt={name} className="size-14 shrink-0 rounded-2xl object-cover sm:size-16" />
           ) : (
-            <div className="flex size-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-info font-display text-xl font-bold text-primary-foreground">
+            <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-info font-display text-lg font-bold text-primary-foreground sm:size-16 sm:text-xl">
               {initials(name)}
             </div>
           )}
           <div className="min-w-0 flex-1">
-            <p className="truncate font-display text-xl font-semibold">{name}</p>
+            <p className="truncate font-display text-lg font-semibold sm:text-xl">{name}</p>
             <p className="num mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
               {code ? (
                 <span className="inline-flex items-center">
@@ -441,7 +441,7 @@ function BrokerKycHero({
               ))}
             </div>
           </div>
-          <div className="flex flex-col items-start gap-1.5 sm:items-end">
+          <div className="flex w-full flex-wrap items-center gap-1.5 sm:w-auto sm:flex-col sm:items-end">
             {kyc ? (
               <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${toneFor(kyc)}`}>{kyc}</span>
             ) : null}
@@ -994,44 +994,58 @@ function ProfilePage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
           <h1 className="font-display text-2xl font-semibold sm:text-3xl">My Account</h1>
           <p className="mt-1 hidden text-sm text-muted-foreground sm:block">
             Every detail MeroShare and your depository participant hold about you.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="outline" onClick={() => setReveal((r) => !r)}>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setReveal((r) => !r)}
+            aria-pressed={reveal}
+            className="min-h-10 gap-1.5 px-2.5 sm:min-h-9 sm:px-3"
+          >
             {reveal ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-            {reveal ? "Hide sensitive" : "Reveal sensitive"}
+            <span className="sm:hidden">{reveal ? "Hide" : "Reveal"}</span>
+            <span className="hidden sm:inline">{reveal ? "Hide sensitive" : "Reveal sensitive"}</span>
           </Button>
-          <ExportButton formats={exportFormats} />
-          <Button size="sm" variant="ghost" onClick={() => void signOut()}>
-            <LogOut className="size-4" /> Sign out
-          </Button>
+          <ExportButton
+            formats={exportFormats}
+            className="min-h-10 px-2.5 sm:min-h-9 sm:px-3"
+            labelClassName="hidden sm:inline"
+          />
         </div>
       </div>
 
-      <div className="relative flex flex-wrap items-center gap-4 rounded-2xl border border-border/70 bg-card p-5">
-        {avatarUrl ? (
-          <img src={avatarUrl} alt={`${name} profile photo`} className="size-14 shrink-0 rounded-2xl object-cover" />
-        ) : (
-          <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-info font-display text-lg font-bold text-primary-foreground">
-            {initials(name)}
+      <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-card p-4 sm:flex-row sm:items-center sm:gap-4 sm:p-5">
+        <div className="flex min-w-0 items-center gap-3">
+          {avatarUrl ? (
+            <img
+              src={avatarUrl}
+              alt={`${name} profile photo`}
+              className="size-12 shrink-0 rounded-2xl object-cover sm:size-14"
+            />
+          ) : (
+            <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-info font-display text-base font-bold text-primary-foreground sm:size-14 sm:text-lg">
+              {initials(name)}
+            </div>
+          )}
+          <div className="min-w-0">
+            <p className="truncate font-display text-lg font-semibold sm:text-xl">{name}</p>
+            <p className="num truncate text-xs text-muted-foreground sm:text-sm">
+              {data.session.username} · {data.session.demat}
+            </p>
           </div>
-        )}
-        <div className="min-w-0 flex-1 pr-10">
-          <p className="truncate font-display text-xl font-semibold">{name}</p>
-          <p className="num truncate text-sm text-muted-foreground">
-            {data.session.username} · {data.session.demat}
-          </p>
         </div>
         <Link
           to="/activity"
           title="Activity log: recent sign-ins, devices and locations"
           aria-label="View activity log"
-          className="absolute right-4 top-4 inline-flex items-center gap-1.5 rounded-xl border border-border/70 bg-secondary px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+          className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-border/70 bg-secondary px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary sm:ml-auto sm:w-auto sm:shrink-0 sm:py-1.5"
         >
           <History className="size-3.5" />
           Recent activity
@@ -1049,12 +1063,12 @@ function ProfilePage() {
 
       {(!realBrokerId || tab === "meroshare") && (
         <>
-          <nav className="flex flex-wrap gap-2">
+          <nav className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden">
             {sections.map((section) => (
               <a
                 key={section.id}
                 href={`#${section.id}`}
-                className="rounded-full border border-border/70 bg-card px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                className="shrink-0 rounded-full border border-border/70 bg-card px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
               >
                 {section.title}
               </a>
@@ -1270,10 +1284,20 @@ function ProfilePage() {
         </div>
       )}
 
-      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <CalendarClock className="size-3.5" />
-        Renew your demat and MeroShare account before the expiry dates to keep applying for issues.
-      </p>
+      <div className="flex flex-col gap-3 border-t border-border/60 pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+          <CalendarClock className="mt-0.5 size-3.5 shrink-0" />
+          Renew your demat and MeroShare account before the expiry dates to keep applying for issues.
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => void signOut()}
+          className="w-full shrink-0 gap-1.5 text-destructive hover:text-destructive sm:w-auto"
+        >
+          <LogOut className="size-4" /> Sign out
+        </Button>
+      </div>
     </div>
   );
 }

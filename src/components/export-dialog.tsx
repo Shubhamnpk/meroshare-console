@@ -213,6 +213,7 @@ export function ExportButton({
   variant = "outline",
   size = "sm",
   className,
+  labelClassName,
   disabled,
 }: {
   formats: ExportFormat[];
@@ -220,6 +221,7 @@ export function ExportButton({
   variant?: ButtonProps["variant"];
   size?: ButtonProps["size"];
   className?: string;
+  labelClassName?: string;
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -247,7 +249,7 @@ export function ExportButton({
   return (
     <>
       <Button variant={variant} size={size} className={className} disabled={disabled} onClick={() => setOpen(true)}>
-        <FileDown /> {label}
+        <FileDown /> <span className={labelClassName}>{label}</span>
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-lg">

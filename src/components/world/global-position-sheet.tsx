@@ -225,7 +225,7 @@ export function GlobalLotsDialog({
           {hasClosed ? (
             <div className="rounded-xl border border-border/60 bg-surface px-4 py-2.5">
               <p className="text-xs font-semibold text-muted-foreground">
-                Total return — earned up till now
+                Total return, earned up till now
                 <span className="ml-1.5 font-normal opacity-70">
                   {earned.brokerStated ? "· broker file totals" : "· computed from prices"}
                 </span>
@@ -288,7 +288,7 @@ export function GlobalLotsDialog({
               </div>
               <div className="overflow-hidden rounded-xl border border-border/60">
                 <p className="sticky top-0 z-10 bg-muted/60 px-4 py-2 text-xs font-semibold text-muted-foreground backdrop-blur-sm">
-                  Per-lot age &amp; gain — {sortLabel}
+                  Per-lot age &amp; gain · {sortLabel}
                 </p>
                 <div className="max-h-72 divide-y divide-border/30 overflow-y-auto">
                   {sortedRows.map((r, i) => (
@@ -326,7 +326,7 @@ export function GlobalLotsDialog({
             </div>
           ) : (
             <p className="text-xs text-muted-foreground">
-              No dated buy lots for this symbol — the average above still applies.
+              No dated buy lots for this symbol, so the average above still applies.
             </p>
           )}
         </div>

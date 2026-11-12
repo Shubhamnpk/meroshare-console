@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { TrendingUp, TrendingDown, Play, Pause, Layers, Flame, LineChart } from "lucide-react";
+import { TrendingUp, TrendingDown, Layers, Flame, LineChart } from "lucide-react";
 import type { LivePrice, MarketIndex, SectorIndex } from "@/lib/nepse/types";
 import { formatNumber, formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -37,7 +37,6 @@ export function MarketMarquee({
   className?: string;
 }) {
   const [filter, setFilter] = useState<MarqueeFilter>("all");
-  const [isPaused, setIsPaused] = useState(false);
   const snapshot = useQuery(marketSnapshotQuery());
   const marketOpen = snapshot.data?.status.isOpen ?? null;
 
@@ -131,7 +130,7 @@ export function MarketMarquee({
         className,
       )}
     >
-      {/* Top control bar: category filter tabs & play/pause */}
+      {/* Top control bar: category filter tabs */}
       <div className="flex items-center justify-between gap-2 px-1 text-xs">
         <div className="flex items-center gap-1.5">
           <span
@@ -139,8 +138,8 @@ export function MarketMarquee({
               marketOpen === null
                 ? "Checking market status…"
                 : marketOpen
-                  ? "Market OPEN — live trading"
-                  : "Market CLOSED — NEPSE 11 AM – 3 PM NPT"
+                  ? "Market OPEN, live trading"
+                  : "Market CLOSED, NEPSE 11 AM – 3 PM NPT"
             }
             className="relative flex size-2 items-center justify-center"
           >
@@ -196,7 +195,7 @@ export function MarketMarquee({
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
-              <LineChart className="size-2.5" />
+              <LineChart className="hidden size-2.5 sm:block" />
               Indices
             </button>
             <button
@@ -209,7 +208,7 @@ export function MarketMarquee({
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
-              <Layers className="size-2.5" />
+              <Layers className="hidden size-2.5 sm:block" />
               Sectors
             </button>
             <button
@@ -222,20 +221,10 @@ export function MarketMarquee({
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
-              <Flame className="size-2.5" />
+              <Flame className="hidden size-2.5 sm:block" />
               Movers
             </button>
           </div>
-
-          <button
-            type="button"
-            onClick={() => setIsPaused((p) => !p)}
-            className="flex size-6 items-center justify-center rounded-lg border border-border/50 bg-surface text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-            title={isPaused ? "Resume ticker" : "Pause ticker"}
-            aria-label={isPaused ? "Resume ticker" : "Pause ticker"}
-          >
-            {isPaused ? <Play className="size-2.5" /> : <Pause className="size-2.5" />}
-          </button>
         </div>
       </div>
 
@@ -243,7 +232,6 @@ export function MarketMarquee({
       <div className="relative overflow-hidden py-1 [mask-image:linear-gradient(to_right,transparent,black_3%,black_97%,transparent)]">
         <div
           className="animate-marquee-scroll flex gap-2.5"
-          data-paused={isPaused}
           style={{ "--marquee-duration": `${durationSeconds}s` } as React.CSSProperties}
         >
           {tickerItems.map((item, idx) => {

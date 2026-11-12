@@ -379,7 +379,7 @@ export function HoldingAgeDialog({
                 {lots.length} lot{lots.length === 1 ? "" : "s"} still held
               </>
             ) : (
-              <>No purchase dates found — tax shown at the assumed long-term rate</>
+              <>No purchase dates found, so tax is shown at the assumed long-term rate</>
             )}
           </p>
         </DialogHeader>
@@ -388,7 +388,7 @@ export function HoldingAgeDialog({
             <div className="rounded-xl bg-muted/10 border border-border/40 px-4 py-3">
               <p className="text-xs font-medium text-muted-foreground">Average holding</p>
               <p className="num mt-1 text-base font-bold">{ageKnown ? formatHoldingTime(avgHoldingDays) : "—"}</p>
-              <p className="text-[0.68rem] text-muted-foreground">display only — tax uses oldest</p>
+              <p className="text-[0.68rem] text-muted-foreground">display only, tax uses oldest</p>
             </div>
             <div className="rounded-xl bg-muted/10 border border-border/40 px-4 py-3">
               <p className="text-xs font-medium text-muted-foreground">Oldest lot (tax)</p>
@@ -401,7 +401,7 @@ export function HoldingAgeDialog({
           {lots.length > 0 ? (
             <div className="rounded-xl border border-border/60 overflow-hidden">
               <p className="bg-muted/20 px-4 py-2 text-xs font-semibold text-muted-foreground">
-                Per-lot age — which lot needs how long
+                Per-lot age: which lot needs how long
               </p>
               <div className="divide-y divide-border/30 max-h-64 overflow-y-auto">
                 {lots.map((lot, i) => (
@@ -422,7 +422,7 @@ export function HoldingAgeDialog({
               </div>
             </div>
           ) : (
-            <p className="text-xs text-muted-foreground">No per-lot dates available — showing tax holding only.</p>
+            <p className="text-xs text-muted-foreground">No per-lot dates available, showing tax holding only.</p>
           )}
         </div>
       </DialogContent>

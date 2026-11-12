@@ -45,7 +45,7 @@ export function CompareModal({
               <GitCompareArrows className="size-4 text-primary" /> Compare against {current}
             </SheetTitle>
             <p className="text-[11px] text-muted-foreground">
-              {selected.length} of {max} picked — tap to add or remove
+              {selected.length} of {max} picked. Tap to add or remove
             </p>
           </SheetHeader>
           <div className="min-h-0 flex-1 overflow-y-auto">

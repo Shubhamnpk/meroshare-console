@@ -123,8 +123,8 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
               marketOpen === null
                 ? "Checking market status…"
                 : marketOpen
-                  ? "Market is OPEN — NEPSE is trading"
-                  : "Market is CLOSED — NEPSE 11:00 AM – 3:00 PM NPT"
+                  ? "Market is OPEN, NEPSE is trading"
+                  : "Market is CLOSED, NEPSE 11:00 AM – 3:00 PM NPT"
             }
             aria-label={marketOpen === null ? "Checking market" : marketOpen ? "Market open" : "Market closed"}
             className={cn(

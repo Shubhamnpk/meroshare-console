@@ -1294,7 +1294,7 @@ function SipPage() {
                     <h3 className="font-display text-sm font-semibold text-foreground">
                       {chartMode === "individual"
                         ? `Growth Trajectory: ${symbol} vs Capital & Benchmarks`
-                        : "All Funds — Value Comparison Over Window"}
+                        : "All Funds · Value Comparison Over Window"}
                     </h3>
 
                     {/* Individual / Compare All toggle */}

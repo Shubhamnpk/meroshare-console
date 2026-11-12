@@ -180,7 +180,7 @@ export async function testNaasaLogin(username: string, password: string): Promis
     if (!tl.clientCode) {
       throw new BrokerLoginError(
         "Trading account not activated.",
-        "Signed in, but no client code came back — the trading account may not be activated.",
+        "Signed in, but no client code came back. The trading account may not be activated.",
       );
     }
     base.steps.push("trading-ok");
@@ -292,7 +292,7 @@ export async function establishNaasaSession(username: string, password: string):
   if (loginRes.status === 200)
     throw new BrokerLoginError(
       "Broker rejected the credentials.",
-      "Saved password no longer works — reconnect with the new one.",
+      "Saved password no longer works. Reconnect with the new one.",
     );
   let next = loginRes.headers.get("location");
   let hops = 0;
@@ -389,7 +389,7 @@ async function establishWalletAccessToken(username: string, password: string): P
   if (loginRes.status === 200)
     throw new BrokerLoginError(
       "Wallet rejected the credentials.",
-      "Saved password no longer works — reconnect with the new one.",
+      "Saved password no longer works. Reconnect with the new one.",
     );
   let next = loginRes.headers.get("location");
   let hops = 0;
@@ -846,9 +846,9 @@ export async function cancelNaasaAmo(
     .toUpperCase()
     .replace(/^25\.1!/, "")
     .replace(/^NEPSE\./, "");
-  if (!sym) throw new Error("Stock missing — refresh the AMO list.");
+  if (!sym) throw new Error("Stock missing. Refresh the AMO list.");
   if (!Number.isInteger(input.quantity) || input.quantity < 1) {
-    throw new Error("Quantity missing — refresh the AMO list.");
+    throw new Error("Quantity missing. Refresh the AMO list.");
   }
   const body = {
     AlertName: input.alertName ?? "",
@@ -970,7 +970,7 @@ export interface NaasaModifyInput extends NaasaPlaceInput {
  * book. Callers must confirm with the user first.
  */
 export async function modifyNaasaOrder(session: NaasaSession, input: NaasaModifyInput): Promise<NaasaPlaceResult> {
-  if (!input.tranId || !input.orderId) throw new Error("Order identity missing — refresh the book.");
+  if (!input.tranId || !input.orderId) throw new Error("Order identity missing. Refresh the book.");
   if (!Number.isFinite(input.remainingQty) || input.remainingQty < 1) {
     throw new Error("Nothing left to modify on this order.");
   }

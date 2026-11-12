@@ -27,6 +27,8 @@ export interface HeatTile {
   title?: string;
   /** Category region (e.g. sector). Tiles without one share a single pool. */
   group?: string;
+  /** Non-NEPSE tiles (e.g. global scrips) that have no drill-down sheet. */
+  disabled?: boolean;
 }
 
 interface Rect {
@@ -291,9 +293,12 @@ export function Heatmap({
             <button
               type="button"
               title={renderTooltip ? undefined : (t.title ?? `${t.label} · ${t.detail}`)}
-              onClick={() => onPick?.(t.key)}
+              onClick={() => {
+                if (!t.disabled) onPick?.(t.key);
+              }}
               className={cn(
-                "absolute flex cursor-pointer flex-col items-center justify-center overflow-hidden text-center transition-transform hover:brightness-110 active:scale-[0.98]",
+                "absolute flex flex-col items-center justify-center overflow-hidden text-center transition-transform",
+                t.disabled ? "cursor-default" : "cursor-pointer hover:brightness-110 active:scale-[0.98]",
                 isFlat && "bg-muted/60",
                 isDimmed && "opacity-30 saturate-50",
                 isAccented && !isSelected && "z-20 scale-[1.02] shadow-lg ring-2 ring-primary",

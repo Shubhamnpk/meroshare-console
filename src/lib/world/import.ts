@@ -208,7 +208,7 @@ function parseTrading212(text: string): ImportResult {
       });
       return;
     }
-    errors.push({ line: lineNo, message: `Unknown action "${cell(0)}" — row skipped` });
+    errors.push({ line: lineNo, message: `Unknown action "${cell(0)}", row skipped` });
   });
   return { format: "trading212", txns, errors };
 }

@@ -58,7 +58,7 @@ export function WatchlistFloat({ count, onOpen }: { count: number; onOpen: () =>
       role="button"
       tabIndex={0}
       aria-label={count > 0 ? `Open watchlist, ${count} symbols` : "Open watchlist"}
-      title="Watchlist — drag to move, click to open"
+      title="Watchlist: drag to move, click to open"
       onPointerDown={(e) => {
         if (e.pointerType === "mouse" && e.button !== 0) return;
         (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);

@@ -273,9 +273,16 @@ function FloorSheetTab({
     };
   }, [dayQuery.data, avgByCode]);
 
-  if (datesQuery.isLoading || (date && dayQuery.isLoading)) return <LoadingBlock />;
+  if (datesQuery.isLoading) return <LoadingBlock />;
   if (datesQuery.isError) return <ErrorBlock error={datesQuery.error} />;
-  if (!date) return <EmptyBlock title="No floor sheet yet" description="No trading days published." />;
+  if (!date) {
+    if (dates.length === 0) {
+      return <EmptyBlock title="No floor sheet yet" description="No trading days published." />;
+    }
+    // Dates are in; the effect above is about to select the latest one.
+    return <LoadingBlock />;
+  }
+  if (dayQuery.isLoading) return <LoadingBlock />;
   if (dayQuery.isError) return <ErrorBlock error={dayQuery.error} />;
   const day = dayQuery.data;
   if (!day)

@@ -158,7 +158,7 @@ export const retestBrokerConnection = createServerFn({ method: "POST" })
   .validator((input: unknown) => z.object({ brokerId: z.enum(["naasa-x", "tms"]) }).parse(input))
   .handler(async ({ data }): Promise<BrokerTestResult> => {
     if (data.brokerId === "tms") {
-      throw new Error("TMS needs a fresh captcha — reconnect it in Settings → Advanced.");
+      throw new Error("TMS needs a fresh captcha. Reconnect it in Settings → Advanced.");
     }
     const creds = await loadCredentials(data.brokerId);
     if (!creds) throw new Error("No saved connection for this broker.");

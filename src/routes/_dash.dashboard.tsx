@@ -213,6 +213,25 @@ function DashboardPage() {
   const change = totValue - totPrev;
   const changePct = totPrev > 0 ? (change / totPrev) * 100 : 0;
 
+  // Sector allocation spans both books: NEPSE weights from the feed, foreign
+  // rows from the world valuation, all in NPR so one bar chart tells the truth.
+  const allSectors = useMemo(() => {
+    const bySector = new Map<string, number>();
+    const nepseValue = data?.totalValue ?? 0;
+    for (const s of data?.sectors ?? []) {
+      bySector.set(s.sector, (bySector.get(s.sector) ?? 0) + (s.weight / 100) * nepseValue);
+    }
+    for (const r of globalRows) {
+      const key = r.sector?.trim() || "Unclassified";
+      bySector.set(key, (bySector.get(key) ?? 0) + r.valueNpr);
+    }
+    const total = [...bySector.values()].reduce((a, b) => a + b, 0);
+    if (total <= 0) return [];
+    return [...bySector.entries()]
+      .map(([sector, value]) => ({ sector, weight: (value / total) * 100 }))
+      .sort((a, b) => b.weight - a.weight);
+  }, [data, globalRows]);
+
   const totalInvestment = investment.data?.totalInvestment ?? 0;
   const pendingCount = investment.data?.pendingCount ?? 0;
 
@@ -374,12 +393,16 @@ function DashboardPage() {
       tone="brand"
       icon={<Briefcase className="size-4" />}
       sub={
-        <span className="flex items-center gap-2">
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <DeltaPill value={change}>
             {change > 0 ? <TrendingUp className="size-3" /> : change < 0 ? <TrendingDown className="size-3" /> : null}
             {formatPercent(changePct)}
           </DeltaPill>
-          vs previous close
+          <span className="num text-foreground">
+            {change > 0 ? "+" : change < 0 ? "-" : ""}
+            <AdaptiveNpr value={Math.abs(change)} />
+          </span>
+          <span>vs previous close</span>
         </span>
       }
     />,
@@ -388,18 +411,6 @@ function DashboardPage() {
       label="Value at previous close"
       value={<AdaptiveNpr value={totPrev} />}
       sub="Yesterday's closing valuation"
-    />,
-    <StatCard
-      key="change"
-      label="Day change"
-      value={
-        <>
-          {change > 0 ? "+" : change < 0 ? "-" : ""}
-          <AdaptiveNpr value={Math.abs(change)} />
-        </>
-      }
-      tone={change > 0 ? "gain" : change < 0 ? "loss" : "neutral"}
-      sub={change > 0 ? "Unrealised gain today" : change < 0 ? "Unrealised loss today" : "No change today"}
     />,
     <StatCard
       key="scrips"
@@ -464,7 +475,7 @@ function DashboardPage() {
         <ErrorBlock error={portfolio.error} retry={() => void portfolio.refetch()} />
       ) : (
         <>
-          <div className="hidden gap-3 sm:grid sm:grid-cols-2 xl:grid-cols-5">{statCards}</div>
+          <div className="hidden gap-3 sm:grid sm:grid-cols-2 xl:grid-cols-4">{statCards}</div>
           <div className="sm:hidden">
             <div className="flex snap-x gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {statCards.map((card, i) => (
@@ -492,20 +503,20 @@ function DashboardPage() {
                       <span
                         title={
                           market.data?.status.isOpen
-                            ? "Live trading — NEPSE is open today"
+                            ? "Live trading, NEPSE is open today"
                             : (() => {
                                 const raw = nepse?.generatedTime;
-                                if (!raw) return "Market is closed — no session data";
+                                if (!raw) return "Market is closed, no session data";
                                 const d = new Date(String(raw).replace(" ", "T"));
                                 const dateStr = formatDate(raw);
-                                if (Number.isNaN(d.getTime())) return `Last session: ${dateStr} — market is closed`;
+                                if (Number.isNaN(d.getTime())) return `Last session: ${dateStr}, market is closed`;
                                 const today0 = new Date();
                                 today0.setHours(0, 0, 0, 0);
                                 const gen0 = new Date(d);
                                 gen0.setHours(0, 0, 0, 0);
                                 const diff = Math.round((today0.getTime() - gen0.getTime()) / 86_400_000);
                                 const rel = diff <= 0 ? "today" : diff === 1 ? "1 day ago" : `${diff} days ago`;
-                                return `Last session: ${dateStr} · ${rel} — market is closed`;
+                                return `Last session: ${dateStr} · ${rel}, market is closed`;
                               })()
                         }
                       >
@@ -618,12 +629,12 @@ function DashboardPage() {
             </Panel>
           </Widget>
 
-          {data && data.sectors.length > 0 ? (
+          {allSectors.length > 0 ? (
             <Widget label="Sector allocation">
               <Panel as="section">
                 <h2 className="mb-3 font-display text-base font-semibold">Sector allocation</h2>
                 <ul className="space-y-2">
-                  {data.sectors.slice(0, 6).map((s) => (
+                  {allSectors.slice(0, 6).map((s) => (
                     <li key={s.sector} className="flex items-center gap-3 text-sm">
                       <span className="w-40 truncate font-medium">{s.sector}</span>
                       <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted" aria-hidden>
@@ -938,7 +949,7 @@ function DashboardPage() {
                                   ...(issue.maxUnit != null ? { maxUnit: issue.maxUnit } : {}),
                                 })
                               }
-                              title={`${item.title} — view full details`}
+                              title={`${item.title} · view full details`}
                               className="block w-full cursor-pointer rounded-xl p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             >
                               <div className="flex items-start justify-between gap-3">

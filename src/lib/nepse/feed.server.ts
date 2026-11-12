@@ -36,7 +36,15 @@ import { vendoredSectorMap } from "./sectors";
 import { canonicalSymbol, matchSymbols } from "./aliases";
 
 const NEPSE_API = process.env["NEPSE_API_URL"];
-const YONEPSE_BASE = process.env["YONEPSE_BASE_URL"];
+
+/**
+ * Every YONEPSE request — market feeds, LTP history, dividends and the
+ * floor-sheet archive — goes to raw.githubusercontent. The Pages deploy skips
+ * `data/floor_sheet` (~2.5 GB), so raw is the only base that serves the whole
+ * dataset. Override with YONEPSE_BASE_URL only if the repo or branch moves.
+ */
+export const YONEPSE_BASE =
+  process.env["YONEPSE_BASE_URL"] ?? "https://raw.githubusercontent.com/Shubhamnpk/yonepse/main";
 
 export const FEED_ATTRIBUTION = "Live NEPSE mirror + community YONEPSE feed (indicative, unofficial data).";
 

@@ -662,8 +662,8 @@ function PortfolioPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
+      <div className="flex items-center justify-between gap-2 sm:items-end">
+        <div className="min-w-0">
           <h1 className="font-display text-2xl font-semibold sm:text-3xl">Portfolio</h1>
           <p className="mt-1 hidden text-sm text-muted-foreground sm:block">
             {view === "yobroker" && yoEnriched
@@ -675,10 +675,11 @@ function PortfolioPage() {
                   : `${holdings.length} stock${holdings.length === 1 ? "" : "s"} · ${liveCount} valued at live NEPSE prices.`}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1.5">
           <ExportButton
             disabled={expItems.length === 0}
-            className="min-h-11"
+            className="min-h-10 px-2.5 sm:min-h-11 sm:px-3"
+            labelClassName="hidden sm:inline"
             formats={[
               {
                 title: "CSV",
@@ -773,13 +774,13 @@ function PortfolioPage() {
               if (view === "global") void globalValuation.refetch();
             }}
             disabled={q.isFetching || investment.isFetching || globalValuation.isFetching}
-            className="min-h-11 gap-1.5"
+            className="min-h-10 gap-1.5 px-2.5 sm:min-h-11 sm:px-3"
             aria-label="Refresh portfolio"
           >
             <RefreshCw
               className={`size-3.5 ${q.isFetching || investment.isFetching || globalValuation.isFetching ? "animate-spin" : ""}`}
-            />{" "}
-            Refresh
+            />
+            <span className="hidden sm:inline">Refresh</span>
           </Button>
         </div>
       </div>
@@ -1473,7 +1474,7 @@ function PortfolioPage() {
                       cellTitle:
                         basis?.status === "pending"
                           ? "Estimated from purchase price (WACC not confirmed yet)"
-                          : "CDSC-calculated WACC — hover for all-in",
+                          : "CDSC-calculated WACC, hover for all-in",
                     }
                   : {
                       value: null,

@@ -380,7 +380,6 @@ html.light[data-color="pink"] {
   will-change: transform;
 }
 
-.animate-marquee-scroll:hover,
-.animate-marquee-scroll[data-paused="true"] {
+.animate-marquee-scroll:hover {
   animation-play-state: paused;
 }

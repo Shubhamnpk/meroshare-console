@@ -63,7 +63,7 @@ export function GlobalTxnEditDialog({ txn, onOpenChange }: { txn: GlobalTxn | nu
             Edit {txn?.side} {txn?.symbol || ""}
           </DialogTitle>
           <DialogDescription>
-            Quantity, price ({txn?.currency || "—"}), date and notes. Side, symbol and currency are fixed — delete and
+            Quantity, price ({txn?.currency || "—"}), date and notes. Side, symbol and currency are fixed. Delete and
             re-import to change those.
           </DialogDescription>
         </DialogHeader>

@@ -120,7 +120,7 @@ function UpcomingSection({
               <button
                 type="button"
                 onClick={() => onPick(issue)}
-                title={`${issue.companyName} — view full details`}
+                title={`${issue.companyName} · view full details`}
                 className="block w-full cursor-pointer p-3 text-left"
               >
                 <div className="flex items-start justify-between gap-3">
@@ -161,7 +161,7 @@ function UpcomingSection({
               <button
                 type="button"
                 onClick={() => setArchRow(row)}
-                title={`${row.company} — view details`}
+                title={`${row.company} · view details`}
                 className="block w-full cursor-pointer p-3 text-left"
               >
                 <div className="flex items-start justify-between gap-3">
@@ -694,8 +694,8 @@ function IpoPage() {
         <TabsContent value="apply" className="mt-4">
           {demoIpoOn ? (
             <p className="mb-3 rounded-xl border border-primary/25 bg-primary/10 px-3 py-2 text-xs text-muted-foreground">
-              Demo IPO playground — these issues are fake. Apply, edit and withdraw to test the forms; nothing is sent
-              to CDSC. Turn it off in Settings → Advanced.
+              Demo IPO playground. These issues are fake. Apply, edit and withdraw to test the forms; nothing is sent to
+              CDSC. Turn it off in Settings → Advanced.
             </p>
           ) : null}
           {issues.isLoading ? (

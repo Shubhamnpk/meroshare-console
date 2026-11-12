@@ -600,8 +600,8 @@ function DemoIpoCard() {
         <div className="space-y-0.5">
           <p className="text-sm font-semibold">Show demo IPO issues</p>
           <p className="text-xs text-muted-foreground">
-            Adds fake open issues to the IPO page. Applications are simulated on this device and
-            never reach CDSC. Off hides them again.
+            Adds fake open issues to the IPO page. Applications are simulated on this device and never reach CDSC. Off
+            hides them again.
           </p>
         </div>
         <Switch checked={demoIpoEnabled} onCheckedChange={setDemoIpoEnabled} aria-label="demo-ipo" />
@@ -827,7 +827,7 @@ function BrokerConnectionsCard() {
                     </div>
                     <div>
                       <p className="text-[0.68rem] uppercase tracking-wide text-muted-foreground">Mode</p>
-                      <p className="font-medium">Paper — no email needed</p>
+                      <p className="font-medium">Paper, no email needed</p>
                     </div>
                   </div>
                 ) : null}
@@ -1524,8 +1524,8 @@ function SettingsPage() {
                       <p className="text-xs text-muted-foreground">
                         {numberFormat === "np"
                           ? "Nepali: 1,00,000 • Rs 12,34,567"
-                          : "International: 100,000 • Rs 1,234,567"}{" "}
-                        — affects all amount inputs.
+                          : "International: 100,000 • Rs 1,234,567"}
+                        . Applies to every amount input.
                       </p>
                     </div>
                     <div className="flex items-center gap-1 rounded-lg border border-border/60 bg-secondary/60 p-1">
@@ -1557,7 +1557,8 @@ function SettingsPage() {
                         <p className="text-sm font-semibold">Display Currency</p>
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        Earned totals and other mixed-currency figures convert here — affects transaction summaries.
+                        Earned totals and other mixed-currency figures convert here, which affects transaction
+                        summaries.
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center justify-end gap-1 rounded-lg border border-border/60 bg-secondary/60 p-1">
