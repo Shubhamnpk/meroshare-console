@@ -1,8 +1,49 @@
+/** Digit grouping for every number the app prints: Nepali lakh/crore, US, or EU. */
+export type NumberFormatMode = "np" | "us" | "eu";
+
+const LOCALES: Record<NumberFormatMode, string> = {
+  np: "en-IN", // latin digits, South Asian grouping: 1,23,45,678
+  us: "en-US", // 12,345,678
+  eu: "de-DE", // 12.345.678
+};
+
+/**
+ * Active grouping, kept in sync with Settings by PrefsProvider. Module-level so
+ * every `format*` helper (tables, charts, toasts, exports) picks it up without
+ * each component wiring the preference again.
+ */
+let activeMode: NumberFormatMode = "np";
+const FORMATTERS = new Map<string, Intl.NumberFormat>();
+
+export function setNumberFormatMode(mode: NumberFormatMode): void {
+  activeMode = mode;
+}
+
+export function getNumberFormatMode(): NumberFormatMode {
+  return activeMode;
+}
+
+/** Locale string for a grouping mode (also used by amount inputs). */
+export function numberFormatLocale(mode: NumberFormatMode = activeMode): string {
+  return LOCALES[mode];
+}
+
+/** Cached formatter so grouping changes never rebuild on each cell. */
+function nf(maximumFractionDigits: number): Intl.NumberFormat {
+  const key = `${activeMode}:${maximumFractionDigits}`;
+  let formatter = FORMATTERS.get(key);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat(LOCALES[activeMode], { maximumFractionDigits });
+    FORMATTERS.set(key, formatter);
+  }
+  return formatter;
+}
+
 /** At most 2 decimals, dropping a useless ".00" everywhere (universal rule). */
-const NUM = new Intl.NumberFormat("en-NP", { maximumFractionDigits: 2 });
+const num = (value: number) => nf(2).format(value);
 
 /** Quantities keep whatever fraction they carry (0.4444 shares, not 0.44). */
-const QTY = new Intl.NumberFormat("en-NP", { maximumFractionDigits: 8 });
+const qty = (value: number) => nf(8).format(value);
 
 export function toNumber(value: unknown): number {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
@@ -17,17 +58,17 @@ export function formatNpr(value: unknown, opts?: { compact?: boolean }): string 
   const n = toNumber(value);
   if (opts?.compact) {
     const abs = Math.abs(n);
-    if (abs >= 1_00_00_00_00_000) return `रु ${NUM.format(n / 1_00_00_00_00_000)} Kharba`;
-    if (abs >= 1_00_00_00_000) return `रु ${NUM.format(n / 1_00_00_00_000)} Arba`;
-    if (abs >= 1_00_00_000) return `रु ${NUM.format(n / 1_00_00_000)} Cr`;
-    if (abs >= 1_00_000) return `रु ${NUM.format(n / 1_00_000)} L`;
-    if (abs >= 1_000) return `रु ${NUM.format(n / 1_000)} K`;
+    if (abs >= 1_00_00_00_00_000) return `रु ${num(n / 1_00_00_00_00_000)} Kharba`;
+    if (abs >= 1_00_00_00_000) return `रु ${num(n / 1_00_00_00_000)} Arba`;
+    if (abs >= 1_00_00_000) return `रु ${num(n / 1_00_00_000)} Cr`;
+    if (abs >= 1_00_000) return `रु ${num(n / 1_00_000)} L`;
+    if (abs >= 1_000) return `रु ${num(n / 1_000)} K`;
   }
-  return `रु ${NUM.format(n)}`;
+  return `रु ${num(n)}`;
 }
 
 export function formatNumber(value: unknown): string {
-  return NUM.format(toNumber(value));
+  return num(toNumber(value));
 }
 
 /**
@@ -52,21 +93,21 @@ export function formatQty(value: unknown, opts?: { compact?: boolean }): string 
   const n = toNumber(value);
   if (opts?.compact) {
     const abs = Math.abs(n);
-    if (abs >= 1_00_00_000) return `${NUM.format(n / 1_00_00_000)} Cr`;
-    if (abs >= 1_00_000) return `${NUM.format(n / 1_00_000)} L`;
-    if (abs >= 1_000) return `${NUM.format(n / 1_000)} K`;
+    if (abs >= 1_00_00_000) return `${num(n / 1_00_00_000)} Cr`;
+    if (abs >= 1_00_000) return `${num(n / 1_00_000)} L`;
+    if (abs >= 1_000) return `${num(n / 1_000)} K`;
   }
   // Units keep every decimal they carry (0.4444 stays 0.4444); money stays 2dp.
-  return Number.isInteger(n) ? NUM.format(n) : QTY.format(Number(n.toFixed(8)));
+  return Number.isInteger(n) ? num(n) : qty(Number(n.toFixed(8)));
 }
 
 export function formatPercent(value: number): string {
   if (!Number.isFinite(value) || value === 0) return "0%";
-  return `${value > 0 ? "+" : "-"}${NUM.format(Math.abs(value))}%`;
+  return `${value > 0 ? "+" : "-"}${num(Math.abs(value))}%`;
 }
 
 export function formatSignedNpr(value: number): string {
-  return `${value >= 0 ? "+" : "-"}\u0930\u0941 ${NUM.format(Math.abs(value))}`;
+  return `${value >= 0 ? "+" : "-"}\u0930\u0941 ${num(Math.abs(value))}`;
 }
 
 export function formatDate(value: unknown): string {

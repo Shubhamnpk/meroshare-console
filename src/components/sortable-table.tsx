@@ -74,7 +74,7 @@ export function SortableTh({
     <th
       scope="col"
       className={cn(
-        "px-4 py-2.5 text-xs font-medium uppercase tracking-wider",
+        "px-4 py-2.5 text-xs font-medium uppercase tracking-wider whitespace-nowrap",
         align === "right" ? "text-right" : "text-left",
         className,
       )}
@@ -84,7 +84,7 @@ export function SortableTh({
         onClick={onClick}
         aria-label={`Sort by ${label}`}
         className={cn(
-          "inline-flex items-center gap-1 transition-colors",
+          "inline-flex items-center gap-1 transition-colors whitespace-nowrap",
           align === "right" ? "w-full justify-end" : "justify-start",
           highlighted ? "text-foreground" : "text-muted-foreground hover:text-foreground",
         )}

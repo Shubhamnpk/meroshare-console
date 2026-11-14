@@ -1,7 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { BarChart3, Coins, Filter, Flame, Target, TrendingDown, TrendingUp, Zap } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  BarChart3,
+  Coins,
+  Filter,
+  Flame,
+  Target,
+  TrendingDown,
+  TrendingUp,
+  Zap,
+} from "lucide-react";
 import { BackButton } from "@/components/back-button";
 import { ErrorBlock, LoadingBlock } from "@/components/states";
 import { DeltaPill } from "@/components/stat-card";
@@ -45,6 +56,28 @@ export const Route = createFileRoute("/_dash/best-shares")({
   }),
   component: BestSharesPage,
 });
+
+const MOBILE_SORT_KEYS: Record<"short" | "long" | "dividends", SortKey[]> = {
+  short: ["score", "ltp", "change", "rsi", "volume", "symbol"],
+  long: ["score", "pe", "pb", "roe", "yield", "streak", "ltp", "change", "symbol"],
+  dividends: ["yield", "streak", "records", "ltp", "change", "symbol"],
+};
+
+const SORT_LABELS: Record<SortKey, string> = {
+  symbol: "Stock",
+  ltp: "Price",
+  change: "Change %",
+  score: "Score",
+  rsi: "RSI",
+  volume: "Volume",
+  pe: "P/E",
+  pb: "P/B",
+  roe: "ROE",
+  yield: "Dividend yield",
+  streak: "Dividend streak",
+  signal: "Signal",
+  records: "Dividend records",
+};
 
 // ---------------------------------------------------------------------------
 // Signal badge colors
@@ -253,6 +286,10 @@ function BestSharesPage() {
     return sortBy(filtered, getter, sort.dir);
   }, [filtered, sort, tab, dividends]);
 
+  // Phones show an arrow toggle instead of a table header: up still means the
+  // app's "top-heavy" order (A to Z for text, biggest first for numbers).
+  const mobileArrowUp = SORT_KINDS[sort.key] === "number" ? sort.dir === "desc" : sort.dir === "asc";
+
   // Stats
   const stats = useMemo(() => {
     if (!ranked.length) return null;
@@ -277,12 +314,12 @@ function BestSharesPage() {
   }, [ranked]);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3 sm:space-y-5">
       <BackButton fallback="/tools" />
       {/* Header */}
       <div>
-        <h1 className="font-display text-2xl font-semibold sm:text-3xl">Best Shares</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <h1 className="font-display text-xl font-semibold sm:text-3xl">Best Shares</h1>
+        <p className="mt-1 hidden text-sm text-muted-foreground sm:block">
           Discover top-ranked NEPSE stocks by short-term momentum and long-term fundamentals.
         </p>
       </div>
@@ -297,11 +334,11 @@ function BestSharesPage() {
             reset({ key: "score", dir: "desc" });
           }}
           className={cn(
-            "flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors",
+            "flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-medium transition-colors sm:gap-2 sm:px-4 sm:py-2.5 sm:text-sm",
             tab === "short" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
           )}
         >
-          <Zap className="size-4" />
+          <Zap className="size-3.5 sm:size-4" />
           Short-Term
           <span className="hidden text-xs opacity-70 sm:inline">(Momentum)</span>
         </button>
@@ -313,11 +350,11 @@ function BestSharesPage() {
             reset({ key: "score", dir: "desc" });
           }}
           className={cn(
-            "flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors",
+            "flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-medium transition-colors sm:gap-2 sm:px-4 sm:py-2.5 sm:text-sm",
             tab === "long" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
           )}
         >
-          <BarChart3 className="size-4" />
+          <BarChart3 className="size-3.5 sm:size-4" />
           Long-Term
           <span className="hidden text-xs opacity-70 sm:inline">(Quality)</span>
         </button>
@@ -329,12 +366,13 @@ function BestSharesPage() {
             reset({ key: "yield", dir: "desc" });
           }}
           className={cn(
-            "flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors",
+            "flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-medium transition-colors sm:gap-2 sm:px-4 sm:py-2.5 sm:text-sm",
             tab === "dividends" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
           )}
         >
-          <Coins className="size-4" />
-          Best Dividends
+          <Coins className="size-3.5 sm:size-4" />
+          <span className="sm:hidden">Dividends</span>
+          <span className="hidden sm:inline">Best Dividends</span>
         </button>
       </div>
 
@@ -367,14 +405,14 @@ function BestSharesPage() {
             : null}
 
           {/* Signal filter chips */}
-          <div className="flex flex-wrap gap-2">
+          <div className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
             {activeSignals.map((sig) => (
               <button
                 key={sig}
                 type="button"
                 onClick={() => setSignalFilter(sig)}
                 className={cn(
-                  "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                  "shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
                   signalFilter === sig
                     ? "border-primary bg-primary/10 text-primary"
                     : "border-border/70 bg-card text-muted-foreground hover:text-foreground",
@@ -413,9 +451,9 @@ function BestSharesPage() {
             ))}
           </div>
 
-          {/* Stats bar */}
+          {/* Stats bar: one swipeable strip on phones, 4 cards on desktop */}
           {stats && (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="no-scrollbar flex divide-x divide-border/60 overflow-x-auto rounded-xl border border-border/70 bg-card sm:grid sm:grid-cols-4 sm:gap-3 sm:divide-x-0 sm:overflow-visible sm:rounded-none sm:border-0 sm:bg-transparent">
               {tab === "short" ? (
                 <>
                   <StatCard icon={<Target className="size-4" />} label="Stocks Scored" value={String(stats.total)} />
@@ -482,8 +520,147 @@ function BestSharesPage() {
             </div>
           )}
 
+          {/* Phone list: same rows, app-style cards instead of a wide table */}
+          <div className="sm:hidden">
+            {sorted.length > 0 && (
+              <div className="mb-2 flex items-center gap-2">
+                <p className="text-[11px] font-medium text-muted-foreground">
+                  {sorted.length} {sorted.length === 1 ? "stock" : "stocks"}
+                </p>
+                <div className="ml-auto flex items-center gap-1.5">
+                  <select
+                    value={sort.key}
+                    onChange={(event) => {
+                      const key = event.target.value as SortKey;
+                      reset({ key, dir: SORT_KINDS[key] === "number" ? "desc" : "asc" });
+                    }}
+                    aria-label="Sort stocks by"
+                    className="h-8 rounded-lg border border-border/70 bg-card px-2 text-xs font-medium text-foreground"
+                  >
+                    {MOBILE_SORT_KEYS[tab].map((key) => (
+                      <option key={key} value={key}>
+                        {SORT_LABELS[key]}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => reset({ key: sort.key, dir: sort.dir === "asc" ? "desc" : "asc" })}
+                    aria-label="Reverse sort direction"
+                    className="flex size-8 items-center justify-center rounded-lg border border-border/70 bg-card text-muted-foreground transition-colors active:bg-accent/20"
+                  >
+                    {mobileArrowUp ? <ArrowUp className="size-3.5" /> : <ArrowDown className="size-3.5" />}
+                  </button>
+                </div>
+              </div>
+            )}
+            <div className="space-y-2">
+              {sorted.slice(0, 100).map((stock, i) => {
+                const isDividendTab = tab === "dividends";
+                const divHistory = isDividendTab ? (dividends[stock.symbol] ?? []) : [];
+                const score = tab === "short" ? stock.shortTerm?.score : stock.longTerm?.score;
+                const signal = isDividendTab
+                  ? stock.longTerm?.signal
+                  : tab === "short"
+                    ? stock.shortTerm?.signal
+                    : stock.longTerm?.signal;
+                const highlight = isDividendTab && (simulatorStock ? simulatorStock === stock.symbol : i === 0);
+                return (
+                  <button
+                    key={stock.symbol}
+                    type="button"
+                    onClick={() => {
+                      setPicked(stock.symbol);
+                      if (isDividendTab) setSimulatorStock(stock.symbol);
+                    }}
+                    className={cn(
+                      "w-full rounded-xl border border-border/70 bg-card p-3 text-left transition-colors active:bg-accent/20",
+                      highlight && "border-primary/50 bg-accent/20",
+                    )}
+                  >
+                    <div className="flex items-start gap-2.5">
+                      <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-[10px] font-bold text-muted-foreground">
+                        {i + 1}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="truncate text-sm font-semibold">{stock.symbol}</span>
+                          {signal ? (
+                            <span
+                              className={cn(
+                                "shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-medium leading-none",
+                                isDividendTab || tab === "long"
+                                  ? LONG_SIGNAL_COLORS[signal]
+                                  : SHORT_SIGNAL_COLORS[signal],
+                              )}
+                            >
+                              {signal}
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{stock.name}</p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="num text-sm font-semibold">{formatNpr(stock.ltp)}</p>
+                        <DeltaPill value={stock.percentChange} className="mt-0.5 inline-flex">
+                          {formatPercent(stock.percentChange)}
+                        </DeltaPill>
+                      </div>
+                    </div>
+                    <div className="no-scrollbar mt-2 flex items-center gap-1 overflow-x-auto pl-8">
+                      {isDividendTab ? (
+                        <>
+                          <Metric
+                            label="Yield"
+                            value={stock.longTerm?.dividendYield != null ? `${stock.longTerm.dividendYield}%` : "-"}
+                            tone="text-amber-400"
+                          />
+                          <Metric
+                            label="Streak"
+                            value={stock.longTerm?.dividendStreak ? `${stock.longTerm.dividendStreak}y` : "-"}
+                          />
+                          <Metric label="Records" value={divHistory.length} />
+                        </>
+                      ) : tab === "short" ? (
+                        <>
+                          <Metric label="Score" value={score ?? "-"} tone={scoreTone(score ?? 0)} />
+                          <Metric
+                            label="RSI"
+                            value={stock.shortTerm?.rsi ?? "-"}
+                            tone={rsiTone(stock.shortTerm?.rsi)}
+                          />
+                          <Metric label="Vol" value={formatQty(stock.volume)} />
+                        </>
+                      ) : (
+                        <>
+                          <Metric label="Score" value={score ?? "-"} tone={scoreTone(score ?? 0)} />
+                          <Metric label="P/E" value={stock.longTerm?.pe ?? "-"} tone={peTone(stock.longTerm?.pe)} />
+                          <Metric
+                            label="ROE"
+                            value={stock.longTerm?.roe != null ? `${stock.longTerm.roe}%` : "-"}
+                            tone={roeTone(stock.longTerm?.roe)}
+                          />
+                          <Metric
+                            label="Yield"
+                            value={stock.longTerm?.dividendYield != null ? `${stock.longTerm.dividendYield}%` : "-"}
+                            tone="text-amber-400"
+                          />
+                        </>
+                      )}
+                      {tab === "long" && stock.longTerm?.redFlags?.length ? (
+                        <span className="shrink-0 rounded-md bg-red-500/15 px-1.5 py-1 text-[10px] font-medium leading-none text-red-400">
+                          {stock.longTerm.redFlags.map((flag) => RED_FLAG_SHORT[flag]).join(" · ")}
+                        </span>
+                      ) : null}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Table (headers sort via the shared SortableTh) */}
-          <Panel padding="none" className="overflow-clip">
+          <Panel padding="none" className="hidden overflow-clip sm:block">
             <Table className="min-w-[760px]">
               <TableHeader className="bg-muted">
                 <TableRow className="bg-muted/40 hover:bg-muted/40">
@@ -929,12 +1106,49 @@ function StatCard({
   accent?: string;
 }) {
   return (
-    <div className="rounded-xl border border-border/70 bg-card p-3">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        {icon}
-        {label}
+    <div className="min-w-[94px] flex-1 px-3 py-2.5 sm:min-w-0 sm:rounded-xl sm:border sm:border-border/70 sm:bg-card sm:p-3">
+      <div className="flex items-center gap-1 text-[10px] leading-tight text-muted-foreground sm:gap-2 sm:text-xs">
+        <span className="hidden shrink-0 sm:inline-flex">{icon}</span>
+        <span className="line-clamp-2">{label}</span>
       </div>
-      <p className={cn("mt-1 font-display text-xl font-semibold", accent)}>{value}</p>
+      <p className={cn("mt-1 font-display text-base font-semibold sm:text-xl", accent)}>{value}</p>
     </div>
   );
+}
+
+/** One compact stat inside a phone card (yield, RSI, P/E...). */
+function Metric({ label, value, tone }: { label: string; value: React.ReactNode; tone?: string | undefined }) {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-muted/50 px-1.5 py-1 text-[10px] leading-none">
+      <span className="text-muted-foreground">{label}</span>
+      <span className={cn("font-semibold", tone)}>{value}</span>
+    </span>
+  );
+}
+
+function scoreTone(score: number): string {
+  if (score >= 70) return "text-emerald-400";
+  if (score >= 40) return "text-blue-400";
+  return "text-muted-foreground";
+}
+
+function rsiTone(rsi: number | null | undefined): string | undefined {
+  if (rsi == null) return undefined;
+  if (rsi < 30) return "text-amber-400";
+  if (rsi > 70) return "text-red-400";
+  return "text-muted-foreground";
+}
+
+function peTone(pe: number | null | undefined): string | undefined {
+  if (pe == null) return undefined;
+  if (pe < 12) return "text-emerald-400";
+  if (pe > 20) return "text-red-400";
+  return "text-muted-foreground";
+}
+
+function roeTone(roe: number | null | undefined): string | undefined {
+  if (roe == null) return undefined;
+  if (roe > 15) return "text-emerald-400";
+  if (roe > 9) return "text-blue-400";
+  return "text-red-400";
 }

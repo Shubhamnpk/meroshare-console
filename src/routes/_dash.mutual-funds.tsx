@@ -204,14 +204,14 @@ function MutualFundsPage() {
       </div>
 
       {!picked && !pickedManager ? (
-        <div className="flex items-center gap-1 rounded-full border border-border/60 bg-surface p-1 self-start">
+        <div className="no-scrollbar -mx-1 flex items-center gap-1 self-start overflow-x-auto rounded-full border border-border/60 bg-surface p-1 px-1 sm:mx-0">
           {(["schemes", "heatmap", "managers", "market"] as const).map((t) => (
             <button
               key={t}
               type="button"
               onClick={() => setTab(t)}
               className={cn(
-                "rounded-full px-4 py-1.5 text-xs font-medium capitalize transition-colors",
+                "shrink-0 rounded-full px-3 py-1.5 text-xs font-medium capitalize transition-colors sm:px-4",
                 tab === t ? "bg-primary/15 text-primary" : "text-muted-foreground",
               )}
             >

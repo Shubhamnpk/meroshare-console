@@ -51,7 +51,7 @@ import {
 import { useWatchlist } from "@/lib/prefs";
 import { buildCsv, downloadText } from "@/components/export-dialog";
 import type { BrokerId } from "@/lib/brokers/types";
-import { errorMessage, formatNpr, formatQty } from "@/lib/format";
+import { errorMessage, formatNpr, formatQty, formatNumber } from "@/lib/format";
 import {
   ORDER_OUTCOME_LABEL,
   ORDER_PAGE_SIZE,
@@ -280,8 +280,7 @@ function FundsMoveRow({
                 <div className="flex items-baseline justify-between gap-2">
                   <Label htmlFor="withdraw-amount">Amount (NPR)</Label>
                   <span className="num text-[0.68rem] text-muted-foreground">
-                    Max{" "}
-                    {method === "quick" ? formatNpr(QUICK_MAX) : (withdrawable ?? 1_000_000).toLocaleString("en-NP")}
+                    Max {method === "quick" ? formatNpr(QUICK_MAX) : formatNumber(withdrawable ?? 1_000_000)}
                   </span>
                 </div>
                 <Input
@@ -307,7 +306,7 @@ function FundsMoveRow({
                 </p>
               ) : over ? (
                 <p className="text-xs font-medium text-destructive">
-                  Above the withdrawable {withdrawable!.toLocaleString("en-NP")}.
+                  Above the withdrawable {formatNumber(withdrawable!)}.
                 </p>
               ) : quickOver ? (
                 <p className="text-xs font-medium text-destructive">
@@ -488,11 +487,9 @@ function AmoOrderRow({
         >
           <span className="min-w-0 text-sm">
             <span className="font-bold text-muted-foreground">{a.side}</span>{" "}
-            <span className="num font-semibold">{a.quantity.toLocaleString("en-NP")}</span>{" "}
+            <span className="num font-semibold">{formatQty(a.quantity)}</span>{" "}
             <span className="font-semibold">{a.scrip}</span>{" "}
-            <span className="num text-muted-foreground">
-              @ {a.price !== null ? a.price.toLocaleString("en-NP") : "-"}
-            </span>{" "}
+            <span className="num text-muted-foreground">@ {a.price !== null ? formatNumber(a.price) : "-"}</span>{" "}
             <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[0.68rem] font-semibold text-warning">
               AMO
             </span>
@@ -516,9 +513,7 @@ function AmoOrderRow({
             </div>
             <div className="flex justify-between gap-2">
               <dt className="text-muted-foreground">Trigger</dt>
-              <dd className="num font-medium">
-                {a.triggerPrice !== null ? a.triggerPrice.toLocaleString("en-NP") : "-"}
-              </dd>
+              <dd className="num font-medium">{a.triggerPrice !== null ? formatNumber(a.triggerPrice) : "-"}</dd>
             </div>
             <div className="flex justify-between gap-2">
               <dt className="text-muted-foreground">Valid till</dt>
@@ -554,11 +549,9 @@ function AmoOrderRow({
           >
             {a.side}
           </span>{" "}
-          <span className="num font-semibold">{a.quantity.toLocaleString("en-NP")}</span>{" "}
+          <span className="num font-semibold">{formatQty(a.quantity)}</span>{" "}
           <span className="font-semibold">{a.scrip}</span>{" "}
-          <span className="num text-muted-foreground">
-            @ {a.price !== null ? a.price.toLocaleString("en-NP") : "-"}
-          </span>{" "}
+          <span className="num text-muted-foreground">@ {a.price !== null ? formatNumber(a.price) : "-"}</span>{" "}
           <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[0.68rem] font-semibold text-warning">AMO</span>
           <span className="num mt-0.5 block text-[0.7rem] text-muted-foreground">
             till {a.validTill ?? "-"}
@@ -576,9 +569,7 @@ function AmoOrderRow({
           </div>
           <div className="flex justify-between gap-2">
             <dt className="text-muted-foreground">Trigger</dt>
-            <dd className="num font-medium">
-              {a.triggerPrice !== null ? a.triggerPrice.toLocaleString("en-NP") : "-"}
-            </dd>
+            <dd className="num font-medium">{a.triggerPrice !== null ? formatNumber(a.triggerPrice) : "-"}</dd>
           </div>
           <div className="flex justify-between gap-2">
             <dt className="text-muted-foreground">Valid till</dt>
@@ -704,14 +695,14 @@ function TriggerPanel({ brokerId }: { brokerId: BrokerId }) {
             >
               <p className="text-sm">
                 <span className={cn("font-bold", t.side === "BUY" ? "text-gain" : "text-destructive")}>{t.side}</span>{" "}
-                <span className="num font-semibold">{t.orderQty.toLocaleString("en-NP")}</span>{" "}
+                <span className="num font-semibold">{formatQty(t.orderQty)}</span>{" "}
                 <span className="font-semibold">{t.symbol}</span>{" "}
                 <span className="num text-muted-foreground">
-                  @ {t.orderPrice !== null ? t.orderPrice.toLocaleString("en-NP") : "-"}
+                  @ {t.orderPrice !== null ? formatNumber(t.orderPrice) : "-"}
                 </span>
               </p>
               <p className="mt-0.5 text-[0.7rem] text-muted-foreground">
-                Trigger {t.triggerPrice !== null ? t.triggerPrice.toLocaleString("en-NP") : "-"} · {t.status || "-"}
+                Trigger {t.triggerPrice !== null ? formatNumber(t.triggerPrice) : "-"} · {t.status || "-"}
                 {t.validTill ? ` · till ${t.validTill}` : ""}
               </p>
             </div>
@@ -948,9 +939,7 @@ function OrderHistoryBox({
               <p className="font-semibold">
                 {e.status || "Update"}
                 {e.price !== null && e.price !== undefined ? (
-                  <span className="num font-normal text-muted-foreground">
-                    {` @ ${e.price.toLocaleString("en-NP")}`}
-                  </span>
+                  <span className="num font-normal text-muted-foreground">{` @ ${formatNumber(e.price)}`}</span>
                 ) : null}
               </p>
               <p className="num text-muted-foreground">
@@ -1491,15 +1480,13 @@ function BrokerPage() {
           <div className="min-w-0">
             <p className="text-sm">
               <span className={cn("font-bold", o.side === "BUY" ? "text-gain" : "text-destructive")}>{o.side}</span>{" "}
-              <span className="num font-semibold">{o.quantity.toLocaleString("en-NP")}</span>{" "}
+              <span className="num font-semibold">{formatQty(o.quantity)}</span>{" "}
               <span className="font-semibold">{o.symbol}</span>{" "}
-              <span className="num text-muted-foreground">
-                @ {o.price !== null ? o.price.toLocaleString("en-NP") : "MKT"}
-              </span>
+              <span className="num text-muted-foreground">@ {o.price !== null ? formatNumber(o.price) : "MKT"}</span>
             </p>
             <p className="text-[0.7rem] text-muted-foreground">
               {o.status} · {o.orderType} · {o.validity}
-              {o.tradedQty != null && o.tradedQty > 0 ? ` · filled ${o.tradedQty.toLocaleString("en-NP")}` : ""}
+              {o.tradedQty != null && o.tradedQty > 0 ? ` · filled ${formatQty(o.tradedQty)}` : ""}
               {o.date ? ` · ${o.date}` : ""}
               {o.time ? ` ${o.time}` : ""}
             </p>
@@ -1587,7 +1574,7 @@ function BrokerPage() {
           <div className="mt-2 grid grid-cols-2 gap-2 border-t border-border/60 pt-2">
             <div className="space-y-1">
               <Label htmlFor={`mod-qty-${key}`}>
-                Quantity (max {Math.floor(o.remainingQty || o.quantity).toLocaleString("en-NP")})
+                Quantity (max {formatQty(Math.floor(o.remainingQty || o.quantity))})
               </Label>
               <Input
                 id={`mod-qty-${key}`}
@@ -1621,8 +1608,8 @@ function BrokerPage() {
               </div>
             ) : null}
             <p className="col-span-2 text-[0.7rem] text-muted-foreground">
-              Sends a real modify for the remaining {Math.floor(o.remainingQty || o.quantity).toLocaleString("en-NP")}{" "}
-              units. If the order changed at the broker meanwhile, you&apos;ll be asked to refresh.
+              Sends a real modify for the remaining {formatQty(Math.floor(o.remainingQty || o.quantity))} units. If the
+              order changed at the broker meanwhile, you&apos;ll be asked to refresh.
             </p>
             <div className="col-span-2">
               <Button
@@ -1914,7 +1901,7 @@ function BrokerPage() {
                   {holdingRows.map((h) => (
                     <TableRow key={h.symbol}>
                       <TableCell className="py-2 font-semibold">{h.symbol}</TableCell>
-                      <TableCell className="num py-2 text-right">{h.availableQty.toLocaleString("en-NP")}</TableCell>
+                      <TableCell className="num py-2 text-right">{formatQty(h.availableQty)}</TableCell>
                       <TableCell className="num py-2 text-right">
                         {h.closePrice !== null ? money(h.closePrice) : "-"}
                       </TableCell>
@@ -1990,8 +1977,8 @@ function BrokerPage() {
                 <p className="text-sm font-semibold">Orders · {orderSummary.total + amoShown}</p>
                 <div className="flex items-center gap-2">
                   <p className="text-[0.7rem] text-muted-foreground">
-                    {orderSummary.open} open · {orderSummary.buy} buy ({orderSummary.buyQty.toLocaleString("en-NP")}) ·{" "}
-                    {orderSummary.sell} sell ({orderSummary.sellQty.toLocaleString("en-NP")})
+                    {orderSummary.open} open · {orderSummary.buy} buy ({formatQty(orderSummary.buyQty)}) ·{" "}
+                    {orderSummary.sell} sell ({formatQty(orderSummary.sellQty)})
                     {amoShown > 0 ? ` · includes ${amoShown} AMO (${amoBuyCount} buy · ${amoSellCount} sell)` : ""}
                   </p>
                   {orderSummary.open + carriedLive.length > 0 ? (
@@ -2081,9 +2068,8 @@ function BrokerPage() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm font-semibold">Trades · {tradeSummary.count}</p>
                 <p className="text-[0.7rem] text-muted-foreground">
-                  Bought {tradeSummary.buyQty.toLocaleString("en-NP")} ({money(tradeSummary.buyVal)}) · Sold{" "}
-                  {tradeSummary.sellQty.toLocaleString("en-NP")} ({money(tradeSummary.sellVal)}) · Net{" "}
-                  {money(tradeSummary.net)}
+                  Bought {formatQty(tradeSummary.buyQty)} ({money(tradeSummary.buyVal)}) · Sold{" "}
+                  {formatQty(tradeSummary.sellQty)} ({money(tradeSummary.sellVal)}) · Net {money(tradeSummary.net)}
                 </p>
               </div>
               <QueryNote query={trades} />
@@ -2167,9 +2153,9 @@ function BrokerPage() {
                           >
                             {t.side}
                           </TableCell>
-                          <TableCell className="num py-2 text-right">{t.quantity.toLocaleString("en-NP")}</TableCell>
+                          <TableCell className="num py-2 text-right">{formatQty(t.quantity)}</TableCell>
                           <TableCell className="num py-2 text-right">
-                            {t.price !== null ? t.price.toLocaleString("en-NP") : "-"}
+                            {t.price !== null ? formatNumber(t.price) : "-"}
                           </TableCell>
                           <TableCell className="num py-2 text-right font-semibold">{money(t.amount)}</TableCell>
                           <TableCell className="whitespace-nowrap py-2 text-xs" title={`${t.date} ${t.time}`}>

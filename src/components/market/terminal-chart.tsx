@@ -21,6 +21,7 @@ import {
 } from "lightweight-charts";
 import type { ChartBar, PricePoint } from "@/lib/nepse/types";
 import { bollinger, ema, macd, rsi, sma, vwap, type Bar, type LinePoint } from "@/lib/nepse/indicators";
+import { formatNumber } from "@/lib/format";
 
 export type ChartStyle = "candles" | "line" | "area";
 
@@ -459,13 +460,15 @@ export function TerminalChart({
       }
 
       if (selectedTime != null && mainSeries) {
-        createSeriesMarkers(mainSeries, [{
-          time: selectedTime as Time,
-          position: "aboveBar",
-          color: "#f59e0b",
-          shape: "circle",
-          text: "Selected",
-        }]);
+        createSeriesMarkers(mainSeries, [
+          {
+            time: selectedTime as Time,
+            position: "aboveBar",
+            color: "#f59e0b",
+            shape: "circle",
+            text: "Selected",
+          },
+        ]);
       }
 
       const liveCompares = (compares ?? []).filter((c) => c.points.length > 1).slice(0, 2);
@@ -921,7 +924,7 @@ export function TerminalChart({
               }}
               className="num flex items-center gap-1.5 rounded-full border border-primary/50 bg-card/95 py-1 pl-2.5 pr-1 text-[0.68rem] font-bold text-primary shadow-lg backdrop-blur transition-colors hover:border-primary hover:bg-primary/10"
             >
-              <span>{orderAt.price.toLocaleString("en-NP", { maximumFractionDigits: 2 })}</span>
+              <span>{formatNumber(orderAt.price)}</span>
               <span className="flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
                 <Plus className="size-3.5" />
               </span>
@@ -945,9 +948,7 @@ export function TerminalChart({
                         className="flex w-full items-center justify-between px-3 py-2 text-xs font-semibold transition-colors hover:bg-muted/60"
                       >
                         <span className={cls}>{side} limit</span>
-                        <span className="num text-muted-foreground">
-                          @ {orderAt.price.toLocaleString("en-NP", { maximumFractionDigits: 2 })}
-                        </span>
+                        <span className="num text-muted-foreground">@ {formatNumber(orderAt.price)}</span>
                       </button>
                     ))
                   : null}
@@ -963,9 +964,7 @@ export function TerminalChart({
                     <span className="inline-flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
                       <BellPlus className="size-3.5" /> Remind
                     </span>
-                    <span className="num text-muted-foreground">
-                      @ {orderAt.price.toLocaleString("en-NP", { maximumFractionDigits: 2 })}
-                    </span>
+                    <span className="num text-muted-foreground">@ {formatNumber(orderAt.price)}</span>
                   </button>
                 ) : null}
               </div>

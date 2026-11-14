@@ -21,7 +21,7 @@ import {
 import { useIsOpenEnd } from "@/components/market/use-holding-age";
 import { placeBrokerAmo, placeBrokerOrder } from "@/lib/brokers/brokers.functions";
 import type { BrokerId } from "@/lib/brokers/types";
-import { errorMessage, formatNpr } from "@/lib/format";
+import { errorMessage, formatNpr, formatNumber, formatQty } from "@/lib/format";
 import { loadYoWallet, saveYoWallet } from "@/lib/yobroker/store";
 import { placeYoOrder } from "@/lib/yobroker/engine";
 import { cn } from "@/lib/utils";
@@ -30,7 +30,7 @@ import { useBrokerMarketWs } from "@/hooks/use-broker-ws";
 const VALIDITIES = ["DAY", "GTD", "GTC", "IOC", "FOK"] as const;
 
 function num(v: number | null | undefined): string {
-  return typeof v === "number" && Number.isFinite(v) ? v.toLocaleString("en-NP", { maximumFractionDigits: 2 }) : "-";
+  return typeof v === "number" && Number.isFinite(v) ? formatNumber(v) : "-";
 }
 
 /** Plain-language read of top-of-book imbalance (share of visible size on the bid side). */
@@ -330,7 +330,7 @@ export function OrderTicket({
             />
             {holding ? (
               <p className="text-[0.7rem] text-muted-foreground">
-                You hold {holding.availableQty.toLocaleString("en-NP")} {symbol}
+                You hold {formatQty(holding.availableQty)} {symbol}
               </p>
             ) : null}
           </div>
@@ -460,7 +460,7 @@ export function OrderTicket({
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle className={cn(side === "BUY" ? "text-gain" : "text-destructive")}>
-                Confirm {side} {qty.toLocaleString("en-NP")} × {symbol}
+                Confirm {side} {formatQty(qty)} × {symbol}
               </DialogTitle>
               <DialogDescription>
                 {brokerId === "yobroker" ? (
@@ -481,7 +481,7 @@ export function OrderTicket({
               <span className="text-muted-foreground">Stock</span>
               <span className="num text-right font-semibold">{symbol}</span>
               <span className="text-muted-foreground">Quantity</span>
-              <span className="num text-right font-semibold">{validQty ? qty.toLocaleString("en-NP") : "-"}</span>
+              <span className="num text-right font-semibold">{validQty ? formatQty(qty) : "-"}</span>
               <span className="text-muted-foreground">Price</span>
               <span className="num text-right font-semibold">
                 {orderType === "MKT" ? "MARKET" : validPx ? num(px) : "-"}
@@ -545,7 +545,7 @@ export function OrderTicket({
             ) : (
               depth.data!.bids.map((r, i) => (
                 <div key={i} className="flex justify-between py-0.5 num">
-                  <span>{r.quantity !== null ? r.quantity.toLocaleString("en-NP") : "-"}</span>
+                  <span>{r.quantity !== null ? formatQty(r.quantity) : "-"}</span>
                   <span className="font-semibold text-gain">{r.price !== null ? num(r.price) : "-"}</span>
                 </div>
               ))
@@ -553,7 +553,7 @@ export function OrderTicket({
             {(depth.data?.bids ?? []).length > 0 ? (
               <div className="num mt-1 flex justify-between border-t border-border/60 pt-1 text-xs font-semibold">
                 <span className="text-muted-foreground">Total</span>
-                <span className="text-gain">{depthTotals.bidQty.toLocaleString("en-NP")}</span>
+                <span className="text-gain">{formatQty(depthTotals.bidQty)}</span>
               </div>
             ) : null}
           </div>
@@ -565,14 +565,14 @@ export function OrderTicket({
               depth.data!.asks.map((r, i) => (
                 <div key={i} className="flex justify-between py-0.5 num">
                   <span className="font-semibold text-destructive">{r.price !== null ? num(r.price) : "-"}</span>
-                  <span>{r.quantity !== null ? r.quantity.toLocaleString("en-NP") : "-"}</span>
+                  <span>{r.quantity !== null ? formatQty(r.quantity) : "-"}</span>
                 </div>
               ))
             )}
             {(depth.data?.asks ?? []).length > 0 ? (
               <div className="num mt-1 flex justify-between border-t border-border/60 pt-1 text-xs font-semibold">
                 <span className="text-muted-foreground">Total</span>
-                <span className="text-destructive">{depthTotals.askQty.toLocaleString("en-NP")}</span>
+                <span className="text-destructive">{formatQty(depthTotals.askQty)}</span>
               </div>
             ) : null}
           </div>
@@ -648,9 +648,7 @@ export function OrderTicket({
           <div className="mt-3 flex justify-between">
             <span>Volume</span>
             <span className="num">
-              {quote.data?.volume !== null && quote.data?.volume !== undefined
-                ? quote.data.volume.toLocaleString("en-NP")
-                : "-"}
+              {quote.data?.volume !== null && quote.data?.volume !== undefined ? formatNumber(quote.data.volume) : "-"}
             </span>
           </div>
         </div>

@@ -231,6 +231,16 @@ table .num {
   white-space: nowrap;
 }
 
+/* Horizontal swipe rows (stat strips, filter chips) should look like a native
+   segmented strip, not a desktop scrollbar. */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 @utility brand-gradient-text {
   background: var(--gradient-brand);
   -webkit-background-clip: text;

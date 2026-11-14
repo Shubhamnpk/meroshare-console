@@ -64,7 +64,7 @@ import {
 } from "./world/market.functions";
 import type { GlobalValuationRow } from "./world/market.functions";
 import type { GlobalHistoryPoint, WorldRange, WorldTick } from "./world/feed.server";
-import type { ChartRange, PortfolioGranularity } from "./nepse/types";
+import type { ChartRange, FloorSheetTrail, PortfolioGranularity } from "./nepse/types";
 import { brokerVaultStatus, listBrokerConnections } from "./brokers/brokers.functions";
 import {
   getBrokerBanks,
@@ -1020,6 +1020,13 @@ export const floorSheetTrailQuery = (
     contractId?: string | null;
     dateTo?: string | null;
   },
+  /** Allow a lookup with no broker/symbol/contract filter (whole floor sheet log). */
+  allowUnfiltered = false,
+  /**
+   * Paging options. `limit` caps the response; `order: "oldest"` keeps the
+   * first trades of the range (10:00 onward) instead of the newest ones.
+   */
+  opts?: { limit?: number; order?: "newest" | "oldest" },
 ) =>
   queryOptions({
     queryKey: [
@@ -1029,6 +1036,8 @@ export const floorSheetTrailQuery = (
       filter.symbol,
       filter.contractId ?? null,
       filter.dateTo ?? null,
+      opts?.limit ?? null,
+      opts?.order ?? null,
     ],
     queryFn: () =>
       getFloorSheetTrailData({
@@ -1038,9 +1047,13 @@ export const floorSheetTrailQuery = (
           brokerCode: filter.brokerCode,
           symbol: filter.symbol,
           contractId: filter.contractId ?? null,
+          limit: opts?.limit ?? null,
+          order: opts?.order ?? null,
         },
       }),
-    enabled: Boolean(date) && Boolean(filter.brokerCode || filter.symbol || filter.contractId),
+    enabled: Boolean(date) && (allowUnfiltered || Boolean(filter.brokerCode || filter.symbol || filter.contractId)),
+    // The log grows from a small page to the whole range; keep the rows on screen meanwhile.
+    ...(allowUnfiltered ? { placeholderData: (prev: FloorSheetTrail | null | undefined) => prev } : {}),
     staleTime: 60_000,
   });
 

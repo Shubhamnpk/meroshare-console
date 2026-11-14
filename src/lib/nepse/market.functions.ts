@@ -472,15 +472,22 @@ export const getFloorSheetTrailData = createServerFn({ method: "POST" })
         brokerCode: z.string().trim().max(12).nullish(),
         symbol: z.string().trim().max(24).nullish(),
         contractId: z.string().trim().max(32).nullish(),
+        limit: z.number().int().min(1).max(60_000).nullish(),
+        order: z.enum(["newest", "oldest"]).nullish(),
       })
       .parse(input),
   )
   .handler(async ({ data }): Promise<FloorSheetTrail | null> => {
     await requireAuth();
-    return fetchFloorSheetTrail(data.date, {
-      dateTo: data.dateTo ?? null,
-      brokerCode: data.brokerCode ?? null,
-      symbol: data.symbol ?? null,
-      contractId: data.contractId ?? null,
-    });
+    return fetchFloorSheetTrail(
+      data.date,
+      {
+        dateTo: data.dateTo ?? null,
+        brokerCode: data.brokerCode ?? null,
+        symbol: data.symbol ?? null,
+        contractId: data.contractId ?? null,
+      },
+      data.limit ?? undefined,
+      data.order ?? undefined,
+    );
   });

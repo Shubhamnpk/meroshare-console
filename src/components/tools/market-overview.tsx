@@ -366,9 +366,7 @@ function IndexCard({
 
         {data && (
           <div className="mt-1 flex items-baseline gap-2">
-            <p className="num text-xl font-bold text-foreground">
-              {close.toLocaleString("en-NP", { maximumFractionDigits: 2 })}
-            </p>
+            <p className="num text-xl font-bold text-foreground">{formatNumber(close)}</p>
             <span className={cn("num text-xs font-medium", isUp ? "text-emerald-400/80" : "text-red-400/80")}>
               {isUp ? "+" : ""}
               {formatNumber(pointChange)}

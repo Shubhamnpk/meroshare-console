@@ -3,10 +3,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   ArrowRight,
   ArrowUpRight,
-  Bitcoin,
   Blocks,
   Building2,
-  Calculator,
   ClipboardList,
   Clock,
   GitCompareArrows,
@@ -57,13 +55,6 @@ const TOOLS = [
     tag: "Compare",
   },
   {
-    to: "/dividend-vs-fd",
-    icon: Calculator,
-    title: "Dividend vs FD",
-    description: "Compare dividend investing with fixed deposit returns over your time horizon.",
-    tag: "Calculator",
-  },
-  {
     to: "/mutual-funds",
     icon: PiggyBank,
     title: "Mutual Funds",
@@ -74,7 +65,8 @@ const TOOLS = [
     to: "/sip",
     icon: Repeat,
     title: "SIP",
-    description: "What a monthly SIP in any open-end fund becomes: XIRR, bank RD after tax, NEPSE on the same dates, inflation.",
+    description:
+      "What a monthly SIP in any open-end fund becomes: XIRR, bank RD after tax, NEPSE on the same dates, inflation.",
     tag: "Funds",
   },
   {
@@ -104,13 +96,6 @@ const TOOLS = [
     title: "Time Machine",
     description: "What if you had bought then? Backtest SIP, bonus and cash dividends against every close.",
     tag: "Backtester",
-  },
-  {
-    to: "/global",
-    icon: Bitcoin,
-    title: "Global Stocks",
-    description: "US stocks, crypto and gold at live prices, with your imported lots and per-lot gains.",
-    tag: "World",
   },
 ] as const;
 
@@ -191,31 +176,33 @@ function ToolsPage() {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-2 sm:gap-3 xl:grid-cols-3">
           {visible.map((tool) => (
             <Link
               key={tool.to}
               to={tool.to}
-              className="group relative flex flex-col overflow-hidden rounded-2xl border border-border/70 bg-card p-4 shadow-xs transition-all hover:border-primary/40 hover:shadow-md sm:p-5"
+              className="group relative flex min-h-[104px] flex-col overflow-hidden rounded-2xl border border-border/70 bg-card p-3 shadow-xs transition-all hover:border-primary/40 hover:shadow-md focus-visible:border-primary/50 focus-visible:outline-hidden active:scale-[0.99] sm:min-h-0 sm:p-5"
             >
               {/* Hover glow */}
               <div className="pointer-events-none absolute inset-0 opacity-0 transition-opacity group-hover:opacity-100 bg-[radial-gradient(ellipse_at_top_right,hsl(var(--primary)/0.08),transparent_70%)]" />
-              <div className="relative flex items-start justify-between gap-2">
-                <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary shadow-xs">
-                  <tool.icon className="size-5" />
+              <div className="relative flex items-start justify-between gap-1.5">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary shadow-xs sm:size-11 sm:rounded-2xl">
+                  <tool.icon className="size-4 sm:size-5" />
                 </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-muted-foreground sm:px-2 sm:text-[10px] sm:tracking-wider">
                     {tool.tag}
                   </span>
-                  <ArrowUpRight className="size-4 text-muted-foreground opacity-0 transition-all group-hover:opacity-100 group-hover:text-primary" />
+                  <ArrowUpRight className="hidden size-4 text-muted-foreground opacity-0 transition-all group-hover:opacity-100 group-hover:text-primary sm:block" />
                 </span>
               </div>
-              <div className="relative mt-3 min-w-0 flex-1">
-                <p className="font-display text-base font-semibold sm:text-lg">{tool.title}</p>
-                <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-muted-foreground">{tool.description}</p>
+              <div className="relative mt-2.5 min-w-0 flex-1 sm:mt-3">
+                <p className="font-display text-sm font-semibold leading-snug sm:text-lg">{tool.title}</p>
+                <p className="mt-1 hidden line-clamp-2 text-sm leading-relaxed text-muted-foreground sm:block">
+                  {tool.description}
+                </p>
               </div>
-              <span className="relative mt-3 flex items-center gap-1 text-xs font-semibold text-primary opacity-0 transition-opacity group-hover:opacity-100">
+              <span className="relative mt-3 hidden items-center gap-1 text-xs font-semibold text-primary opacity-0 transition-opacity group-hover:opacity-100 sm:flex">
                 Open tool <ArrowRight className="size-3.5" />
               </span>
             </Link>

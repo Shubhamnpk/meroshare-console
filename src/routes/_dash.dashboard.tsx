@@ -527,7 +527,7 @@ function DashboardPage() {
                     </p>
                     {nepse ? (
                       <p className="num mt-1.5 flex flex-wrap items-center gap-2 text-2xl font-semibold">
-                        {nepse.close != null ? nepse.close.toLocaleString("en-NP") : "-"}
+                        {nepse.close != null ? formatNumber(nepse.close) : "-"}
                         <DeltaPill value={nepse.percentChange}>{formatPercent(nepse.percentChange)}</DeltaPill>
                       </p>
                     ) : market.isError || nepseGraph.isError ? (

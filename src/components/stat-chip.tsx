@@ -27,7 +27,7 @@ export function StatChip({
   );
   if (!onClick) {
     return (
-      <div className="flex shrink-0 items-center gap-2 rounded-xl border border-border/70 bg-card px-3.5 py-2">
+      <div className="flex shrink-0 items-center gap-2 rounded-xl border border-border/70 bg-card px-3 py-1.5 sm:px-3.5 sm:py-2">
         {body}
       </div>
     );
@@ -37,7 +37,7 @@ export function StatChip({
       type="button"
       onClick={onClick}
       title={title ?? label}
-      className="flex shrink-0 cursor-pointer items-center gap-2 rounded-xl border border-border/70 bg-card px-3.5 py-2 text-left transition-colors hover:border-primary/40"
+      className="flex shrink-0 cursor-pointer items-center gap-2 rounded-xl border border-border/70 bg-card px-3 py-1.5 text-left transition-colors hover:border-primary/40 sm:px-3.5 sm:py-2"
     >
       {body}
     </button>
@@ -45,14 +45,16 @@ export function StatChip({
 }
 
 /**
- * Chip rail. Default is a single scrolling row (portfolio); `wrap` switches
- * to a wrapping grid (activity / funds / debentures / pipeline pages).
+ * Chip rail. Default is a single scrolling row (portfolio); `wrap` keeps the
+ * desktop wrapping grid but stays one swipeable strip on phones, where a
+ * 2-line stat block would eat half the screen.
  */
 export function ChipRow({ children, wrap = false }: { children: ReactNode; wrap?: boolean }) {
-  return wrap ? (
-    <div className="flex flex-wrap gap-2">{children}</div>
-  ) : (
-    <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+  if (!wrap) {
+    return <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">{children}</div>;
+  }
+  return (
+    <div className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
       {children}
     </div>
   );

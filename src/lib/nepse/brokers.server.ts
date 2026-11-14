@@ -494,9 +494,12 @@ const TRAIL_MAX_DAYS = 93;
 
 /**
  * The trade trail for one broker (as buyer or seller), one scrip and/or one
- * contract across a date range — newest first, capped with the true totals
- * included. Days are scanned sequentially and dropped so memory stays flat no
- * matter how wide the range is.
+ * contract across a date range, capped with the true totals included.
+ *
+ * `order: "newest"` (default) keeps the newest N trades and returns them in
+ * chronological order. `order: "oldest"` keeps the first N of the range, which
+ * is what the whole floor sheet log wants: it reads 10:00 → 15:00 from the top.
+ * Days are scanned sequentially and dropped so memory stays flat.
  */
 export async function getFloorSheetTrail(
   date: string,
@@ -507,6 +510,7 @@ export async function getFloorSheetTrail(
     dateTo?: string | null;
   },
   limit = TRAIL_LIMIT,
+  order: "newest" | "oldest" = "newest",
 ): Promise<FloorSheetTrail | null> {
   const manifest = await getFloorSheetDates();
   const available = manifest.dates.filter((d) => d >= date && (!filter.dateTo || d <= filter.dateTo));
@@ -524,14 +528,22 @@ export async function getFloorSheetTrail(
   let totalAmount = 0;
   let stale = false;
 
-  // Newest day first so the kept slice is the most recent trading.
-  for (let di = days.length - 1; di >= 0; di--) {
+  // Walk days from the newest end for newest-first slices, or from the oldest
+  // end when the caller wants the start of the range.
+  const newest = order === "newest";
+  const dayStart = newest ? days.length - 1 : 0;
+  const dayEnd = newest ? -1 : days.length;
+  const dayStep = newest ? -1 : 1;
+  for (let di = dayStart; di !== dayEnd; di += dayStep) {
     const day = days[di]!;
     const { sheet, stale: dayStale } = await getDailySheet(day);
     stale = stale || dayStale;
     if (!sheet) continue;
-    for (let i = sheet.transactions.length - 1; i >= 0; i--) {
-      const tx = sheet.transactions[i]! as TxRow;
+    // The stored sheet is newest-first; walk it backwards for the oldest end.
+    const rows = sheet.transactions;
+    for (let step = 0; step < rows.length; step++) {
+      const i = newest ? step : rows.length - 1 - step;
+      const tx = rows[i]! as TxRow;
       const [, stockId, buyerId, sellerId, , , amount] = tx;
       if (brokerCode) {
         const isParty = String(buyerId) === brokerCode || String(sellerId) === brokerCode;
@@ -562,6 +574,10 @@ export async function getFloorSheetTrail(
       if (trades.length < limit) trades.push({ ...reconstruct(tx, lookups), date: sheet.date ?? day });
     }
   }
+
+  // Newest-first slices are collected in reverse and flipped back so the
+  // response always reads chronologically: 10:00 at the top, 15:00 at the bottom.
+  if (newest) trades.reverse();
 
   const rank = (m: Map<string, { name: string; amount: number; trades: number }>) =>
     [...m.entries()]

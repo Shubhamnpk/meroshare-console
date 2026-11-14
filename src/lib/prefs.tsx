@@ -2,6 +2,7 @@
 // All persisted in a single localStorage key (ms-prefs.v1).
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { fetchServerWatchlist, pushWatchlist } from "@/lib/meroshare/watchlist.functions";
+import { setNumberFormatMode } from "@/lib/format";
 import type { ChartStyle, IndicatorConfig } from "@/components/market/terminal-chart";
 import type { BarAgg } from "@/lib/charts/aggregate";
 
@@ -490,6 +491,10 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
     }),
     [prefs, toggleWatchlist, removeFromWatchlist, hasInWatchlist],
   );
+
+  // One module-level switch feeds every format helper, so tables never wire
+  // the grouping preference again. Client only: prefs live in localStorage.
+  if (typeof window !== "undefined") setNumberFormatMode(prefs.numberFormat);
 
   return <PrefsContext.Provider value={{ ...api, passwordOpen, pinOpen }}>{children}</PrefsContext.Provider>;
 }

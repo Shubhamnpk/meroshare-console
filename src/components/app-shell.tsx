@@ -34,14 +34,12 @@ const FLOAT_PATHS = [
   "/tools",
   "/time-machine",
   "/stock-compare",
-  "/dividend-vs-fd",
   "/best-shares",
   "/market-depth",
   "/mutual-funds",
   "/brokers",
   "/ipo-pipeline",
   "/debentures",
-  "/global",
 ];
 import { usePrefs } from "@/lib/prefs";
 

@@ -79,7 +79,7 @@ import { TmsReauthModal } from "@/components/brokers/tms-reauth-modal";
 import { useTmsReauth } from "@/hooks/use-tms-reauth";
 import { useBrokerMarketWs } from "@/hooks/use-broker-ws";
 import type { ChartBar, ChartRange, PortfolioHistoryPoint, PricePoint } from "@/lib/nepse/types";
-import { errorMessage, formatNpr, formatNumber, formatPercent } from "@/lib/format";
+import { errorMessage, formatNpr, formatNumber, formatPercent, formatQty } from "@/lib/format";
 import {
   ORDER_PAGE_SIZE,
   amoIsActiveRow,
@@ -260,10 +260,7 @@ function TmsOrderDetails({ o, onReuse }: { o: BrokerOrder; onReuse?: () => void 
       <DetailField label="Type" value={`${o.orderType} · ${o.validity}`} />
       <DetailField label="Date" value={o.date || "—"} />
       <DetailField label="Time" value={o.time || "—"} />
-      <DetailField
-        label="Filled"
-        value={`${(o.tradedQty ?? 0).toLocaleString("en-NP")} / ${o.quantity.toLocaleString("en-NP")}`}
-      />
+      <DetailField label="Filled" value={`${formatNumber(o.tradedQty ?? 0)} / ${formatQty(o.quantity)}`} />
       <DetailField label="Exch. order no." value={o.exchangeOrderNo || "—"} />
       {o.orderId ? (
         <DetailField label="Order ID" value={o.orderId} wide onCopy={() => copyText(o.orderId, "Order ID")} />
@@ -2207,7 +2204,7 @@ function TerminalPage() {
               <span>H {num(spot!.high)}</span>
               <span>L {num(spot!.low)}</span>
               <span className="font-semibold text-foreground">C {num(spot!.close)}</span>
-              {spot!.volume > 0 && <span>Vol {spot!.volume.toLocaleString("en-NP")}</span>}
+              {spot!.volume > 0 && <span>Vol {formatNumber(spot!.volume)}</span>}
               {spot!.pinned ? (
                 <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[0.68rem] font-semibold text-primary">
                   Pinned · click again to release
@@ -2291,7 +2288,7 @@ function TerminalPage() {
         <div className="grid grid-cols-2 gap-3 rounded-2xl border border-border/60 bg-surface p-3 sm:grid-cols-4">
           <div>
             <p className="text-xs text-muted-foreground">Your units</p>
-            <p className="num font-semibold">{position.units.toLocaleString("en-NP")}</p>
+            <p className="num font-semibold">{formatQty(position.units)}</p>
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Market value</p>
@@ -2373,10 +2370,10 @@ function TerminalPage() {
                           >
                             <span className="text-sm">
                               <span className="font-bold text-muted-foreground">{a.side}</span>{" "}
-                              <span className="num font-semibold">{a.quantity.toLocaleString("en-NP")}</span>{" "}
+                              <span className="num font-semibold">{formatQty(a.quantity)}</span>{" "}
                               <span className="font-semibold">{a.scrip}</span>{" "}
                               <span className="num text-muted-foreground">
-                                @ {a.price !== null ? a.price.toLocaleString("en-NP") : "-"}
+                                @ {a.price !== null ? formatNumber(a.price) : "-"}
                               </span>{" "}
                               <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[0.68rem] font-semibold text-warning">
                                 AMO
@@ -2445,10 +2442,10 @@ function TerminalPage() {
                             <span className={cn("font-bold", a.side === "BUY" ? "text-gain" : "text-destructive")}>
                               {a.side}
                             </span>{" "}
-                            <span className="num font-semibold">{a.quantity.toLocaleString("en-NP")}</span>{" "}
+                            <span className="num font-semibold">{formatQty(a.quantity)}</span>{" "}
                             <span className="font-semibold">{a.scrip}</span>{" "}
                             <span className="num text-muted-foreground">
-                              @ {a.price !== null ? a.price.toLocaleString("en-NP") : "-"}
+                              @ {a.price !== null ? formatNumber(a.price) : "-"}
                             </span>{" "}
                             <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[0.68rem] font-semibold text-warning">
                               AMO
@@ -2581,13 +2578,11 @@ function TerminalPage() {
                 // Slim meta line: outcome lives in the pill, full detail behind the chevron.
                 const slimMeta =
                   terminalKind === "filled"
-                    ? `Filled ${(o.tradedQty ?? o.quantity).toLocaleString("en-NP")}${o.date ? ` · ${o.date}` : ""}`
+                    ? `Filled ${formatNumber(o.tradedQty ?? o.quantity)}${o.date ? ` · ${o.date}` : ""}`
                     : terminalKind
                       ? o.date
                       : `${o.orderType} · ${o.validity}${
-                          o.tradedQty != null && o.tradedQty > 0
-                            ? ` · filled ${o.tradedQty.toLocaleString("en-NP")}`
-                            : ""
+                          o.tradedQty != null && o.tradedQty > 0 ? ` · filled ${formatQty(o.tradedQty)}` : ""
                         }`;
                 return (
                   <li
@@ -2609,10 +2604,10 @@ function TerminalPage() {
                           <span className={cn("font-bold", o.side === "BUY" ? "text-gain" : "text-destructive")}>
                             {o.side}
                           </span>{" "}
-                          <span className="num font-semibold">{o.quantity.toLocaleString("en-NP")}</span>{" "}
+                          <span className="num font-semibold">{formatQty(o.quantity)}</span>{" "}
                           <span className="font-semibold">{o.symbol}</span>{" "}
                           <span className="num text-muted-foreground">
-                            @ {o.price !== null ? o.price.toLocaleString("en-NP") : "MKT"}
+                            @ {o.price !== null ? formatNumber(o.price) : "MKT"}
                           </span>
                         </span>
                         {slimMeta ? (

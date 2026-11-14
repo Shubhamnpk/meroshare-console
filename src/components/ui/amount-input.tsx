@@ -5,12 +5,9 @@ import { Label } from "@/components/ui/label";
 import { forwardRef, useEffect, useState } from "react";
 import type { ComponentPropsWithoutRef } from "react";
 import { useSettings, type NumberFormatPref } from "@/lib/settings";
+import { numberFormatLocale } from "@/lib/format";
 
 export type { NumberFormatPref as NumberFormat };
-
-function localeFor(format: NumberFormatPref): string {
-  return format === "us" ? "en-US" : format === "eu" ? "de-DE" : "en-NP";
-}
 
 interface AmountInputProps extends Omit<ComponentPropsWithoutRef<typeof Input>, "value" | "onChange" | "type"> {
   value: string | number;
@@ -28,11 +25,11 @@ export const AmountInput = forwardRef<HTMLInputElement, AmountInputProps>(
     const { numberFormat } = useSettings();
     const locale = numberFormat;
 
-    const getLocaleString = () => localeFor(locale);
+    const getLocaleString = () => numberFormatLocale(locale);
 
     useEffect(() => {
       const stringValue = typeof value === "number" ? value.toString() : value;
-      setDisplayAmount(formatDisplayAmount(stringValue, localeFor(locale)));
+      setDisplayAmount(formatDisplayAmount(stringValue, numberFormatLocale(locale)));
     }, [value, locale]);
 
     const formatDisplayAmount = (rawValue: string, loc = getLocaleString()) => {
